@@ -39,6 +39,7 @@ import type { AppDeps } from "../lib/appDeps";
 import { MOON_API_PREFIXES, MOON_REVIEW_MODULE, MOON_ROUTES, type GatherResponse, type SendInvoiceResponse } from "../../shared/moonRecap";
 import { civilDateKey } from "../../shared/lunar";
 import { requireModule, effectiveLifecycle } from "../lib/modules";
+import { providePathFacts } from "../lib/pathFacts";
 import { preflight } from "../lib/saberraSync";
 import { askSera } from "../lib/moonRecapSera";
 import { importPack, nextGoals, putNextGoals, scoreOneGoal, sendInvoice, type KeyHolders } from "../lib/moonReview";
@@ -120,6 +121,18 @@ export function register(app: Express, deps: Deps): void {
   const today = () => civilDateKey(new Date(), timeZone());
 
   const fail = (res: Response, out: { status: number; error: string }) => res.status(out.status).json({ error: out.error });
+
+  // The path's moon: the open moon's walkthrough and send-by days and where the holder's recap stands (server/lib/pathFacts.ts).
+  // An older moon still in Draft or Returned speaks first, the way the member's own page opens on it.
+  providePathFacts("moon", async (uid) => {
+    if (effectiveLifecycle(MOON_REVIEW_MODULE) === "off") return { moon: null };
+    const pool = getPool();
+    const rhythm = await rhythmDoc(pool).catch(() => undefined);
+    const moon = resolveMoon(activeClock(), defaultCycleId(activeClock(), await store.recapsOf(pool, uid)), timeZone(), new Date(), rhythm);
+    if (!moon) return { moon: null };
+    const recap = await store.recapFor(pool, uid, moon.ref.cycleId);
+    return { moon: { today: today(), walkthroughDay: moon.ref.endOfMoonFriday, sendBy: moon.ref.sendBy, recap: recap?.status ?? "none", returnedNote: recap?.status === "returned" } };
+  });
 
   app.get(MOON_ROUTES.myMoon, async (req, res) => {
     const uid = await member(req, res);

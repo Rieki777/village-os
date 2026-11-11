@@ -21,8 +21,19 @@
  *
  * That file may not grow (scripts/check-server-index-size.mjs). It gathers the
  * member's facts and hands them here.
+ *
+ * ── THE ROLE JOURNEY (the Root, 11 Nov 2026) ───────────────────────────────
+ *
+ * The rules in GAME_CONFIG know the member game and nothing of a role: a
+ * holder with agreements waiting was told to finish the community training
+ * (docs/journey/STATE_MAP.md, C1). The one conductor is now shared/yourPath.ts,
+ * which puts agreements waiting, the start day, the first days and the moon
+ * recap above the member rules, and `me.nextAction` is that answer in the old
+ * shape (`nextActionOf` below), kept for one release so an older client still
+ * reads a step. `pickNextAction` stays for the rule table's own test.
  */
 import type { NextActionRule } from "../../shared/gameConfig";
+import type { PathAnswer, SaidPath } from "../../shared/yourPath";
 import { signingOf } from "../../shared/membershipSigning";
 
 /**
@@ -85,4 +96,15 @@ export function founderStepFor(role: unknown, founderPowerStands: boolean): type
 /** The first rule that applies, in order; the last rule when none does. */
 export function pickNextAction<R extends NextActionRule>(rules: readonly R[], facts: NextActionFacts): R {
   return rules.find((rule) => applies(rule.when, facts)) ?? rules[rules.length - 1];
+}
+
+/**
+ * `me.nextAction` from the path: the same step, under the id the old rules
+ * used where one existed, so nothing that keyed on an id reads a stranger. A
+ * step with no door of its own (an invitation that lives in an email) points
+ * at the whole path.
+ */
+export function nextActionOf(path: Pick<PathAnswer, "state" | "step"> & { said: Pick<SaidPath, "step"> }): { id: string; label: string; href: string } {
+  const id = path.state === "thank" ? "send-gratitude" : path.state === "lines" ? "gene-keys" : path.state;
+  return { id, label: path.said.step, href: path.step.href ?? "/path" };
 }

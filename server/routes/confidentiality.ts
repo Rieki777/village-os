@@ -44,6 +44,10 @@ import { installRoleStartGate, makeRoleStartGate, roleStartDials, stepHref, step
 import { seatNamesFor } from "../lib/alignmentSubjects";
 import { seasonSaved } from "../lib/seasonTurn";
 import { applicationsOfCandidates, inApplicationTransaction, seatingsEverHolding } from "../repos/seatApplications";
+import { firstDayOf } from "../lib/seatApplicationCloser";
+import type { SeatCalendar } from "../../shared/seatTerms";
+import { providePathFacts } from "../lib/pathFacts";
+import { civilDayOf, type ApplicationFacts } from "../../shared/yourPath";
 
 type Deps = Pick<AppDeps, "authedUser" | "getPool" | "overLimit" | "members" | "guardCapability"> & {
   /**
@@ -59,6 +63,8 @@ type Deps = Pick<AppDeps, "authedUser" | "getPool" | "overLimit" | "members" | "
   authSecret: string;
   /** Tests hand in a fixed instant. */
   now?: () => Date;
+  /** The season calendar, so the path can say the day a role starts (server/lib/pathFacts.ts). */
+  calendar?: () => SeatCalendar;
 };
 
 const ASKS = 10;
@@ -239,13 +245,11 @@ export function register(app: Express, deps: Deps): void {
    * asked; the notice in the bell says the same thing. Yours alone: nobody
    * reads another member's steps.
    */
-  app.get("/api/profile/role-start-steps", async (req, res) => {
-    res.setHeader("Cache-Control", "no-store");
-    const user = await authedUser(req);
-    if (!user) return res.status(401).json({ error: "auth_required" });
+  /** Every role of the member's that was adopted and has not started, with the agreements it still waits on. */
+  async function waitingStarts(userId: string) {
     const pool = getPool();
-    const waiting = (await applicationsOfCandidates(pool, [String(user.id)])).filter((a) => a.status === "adopted" || a.status === "held-full");
-    const out: Array<{ applicationId: string; roles: string[]; steps: Array<{ step: StartStep; href: string }>; waitsForSeat: boolean }> = [];
+    const waiting = (await applicationsOfCandidates(pool, [userId])).filter((a) => a.status === "adopted" || a.status === "held-full");
+    const out: Array<{ applicationId: string; roles: string[]; steps: Array<{ step: StartStep; href: string }>; waitsForSeat: boolean; firstDay: string | null }> = [];
     // A village that has written no agreement has no door to draw for that step, so the holder is not
     // asked for it (audit M18). The admins are told by the closer (seatApplicationCloser.ts).
     const hasAgreement = waiting.length > 0 && (await agreement()) !== null;
@@ -257,14 +261,30 @@ export function register(app: Express, deps: Deps): void {
           const steps = (await stepsBeforeStart(conn, app, now())).filter((s) => s !== "confidentiality" || hasAgreement);
           // Held because every seat is taken: shown even with no step left, so the card says the role starts when a seat opens (audit B3).
           const waitsForSeat = app.status === "held-full";
-          if (!steps.length && !waitsForSeat) continue;
-          out.push({ applicationId: app.id, roles: await seatNamesFor(conn, app.seatIds), steps: steps.map((step) => ({ step, href: stepHref(step, app) })), waitsForSeat });
+          const calendar = deps.calendar?.();
+          const first = calendar ? firstDayOf(app, calendar) : (app.startsAt ?? null);
+          // A start that has come is "now": only a day still ahead is worth saying (STATE_MAP C2).
+          const firstDay = first && first.getTime() > now().getTime() ? civilDayOf(first, calendar?.timezone || "UTC") : null;
+          out.push({ applicationId: app.id, roles: await seatNamesFor(conn, app.seatIds), steps: steps.map((step) => ({ step, href: stepHref(step, app) })), waitsForSeat, firstDay });
         }
       } finally {
         conn.release();
       }
     }
-    res.json({ waiting: out });
+    return out;
+  }
+
+  // The path conductor reads the same answer the card does, so the two cannot disagree (server/lib/pathFacts.ts).
+  providePathFacts("applications", async (userId) => ({
+    applications: (await waitingStarts(userId)).map((w): ApplicationFacts => ({ id: w.applicationId, roles: w.roles, status: w.waitsForSeat ? "held-full" : "adopted", steps: w.steps, firstDay: w.firstDay })),
+  }));
+
+  app.get("/api/profile/role-start-steps", async (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    const user = await authedUser(req);
+    if (!user) return res.status(401).json({ error: "auth_required" });
+    // The card draws a role that still waits on a step, or on a place; one that only waits for its day is the path's to say.
+    res.json({ waiting: (await waitingStarts(String(user.id))).filter((w) => w.steps.length > 0 || w.waitsForSeat) });
   });
 
   app.post("/api/profile/confidentiality", async (req, res) => {
