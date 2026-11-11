@@ -29,6 +29,7 @@
  * gate's caches in server/index.ts, and `checkVoiceSecret` is passed so this
  * file does not import the voice-claim module and its chain reader.
  */
+import { settingsPulseLine } from "./pulseWords";
 import type express from "express";
 import type { Pool } from "mysql2/promise";
 import type { Capability } from "../../shared/capabilities";
@@ -62,7 +63,7 @@ export interface DialWriteDeps {
   addActivity(
     kind: string,
     text: string,
-    extra?: { actorUserId?: string | null; entityType?: string | null; entityRef?: string | null },
+    extra?: { actorUserId?: string | null; entityType?: string | null; entityRef?: string | null; audience?: "public" | "admin" },
   ): Promise<unknown>;
   checkVoiceSecret(): { ok: boolean; fatal?: boolean; error?: string };
 }
@@ -222,7 +223,9 @@ export async function writeDial(
      * weaker one, because it needs a list of what looks secret and a URL with
      * a key in the path defeats most such lists.
      */
-    await addActivity("settings", `A game rule changed: ${key}`, { actorUserId: actor, entityType: "variable", entityRef: key });
+    // Public news in the setting's own words; a setting with no label, or a sensitive one, is admin-only (server/lib/pulseWords.ts).
+    const line = settingsPulseLine(key);
+    await addActivity("settings", line.text, { actorUserId: actor, entityType: "variable", entityRef: key, audience: line.audience });
   }
   return { status: 200, body: result as unknown as Record<string, unknown> };
 }

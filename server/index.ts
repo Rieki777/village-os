@@ -2875,7 +2875,7 @@ function mergedConfig() {
 function addActivity(
   kind: string,
   text: string,
-  extra?: { actorUserId?: string | null; entityType?: string | null; entityRef?: string | null },
+  extra?: { actorUserId?: string | null; entityType?: string | null; entityRef?: string | null; audience?: "public" | "admin" },
 ): Promise<void> {
   return recordEvent(getPool(), { kind, text, ...extra });
 }

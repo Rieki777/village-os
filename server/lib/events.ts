@@ -9,6 +9,7 @@
  * that already happened, and failing the mutation because its trace failed
  * would invert their importance. Failures are logged loudly instead.
  */
+import { publicPulseText } from "./pulseWords";
 import type { Pool, RowDataPacket } from "mysql2/promise";
 import { SEAT_JOURNAL_ROWS_SQL } from "../repos/orgSeatErasure";
 
@@ -176,7 +177,13 @@ export async function recentEvents(
       " ORDER BY at DESC, id DESC LIMIT ?",
     [audience, Math.max(1, Math.min(500, limit))],
   );
-  return rows.map(rowToEvent);
+  const events = rows.map(rowToEvent);
+  if (audience !== "public") return events;
+  // Old settings lines name a key. A public reader gets the label, or no line.
+  return events.flatMap((e) => {
+    const text = publicPulseText(e);
+    return text === null ? [] : [text === e.text ? e : { ...e, text }];
+  });
 }
 
 /*
