@@ -297,3 +297,12 @@ describe("lunar months anchored to a solar event", () => {
     expect(q.month.index).toBe(5);
   });
 });
+
+describe("daysOfSpan", () => {
+  it("counts both end days in the village's zone: 21 June to 31 December is 194", async () => {
+    const { daysOfSpan, zonedTimeToUtc } = await import("./lunar");
+    const tz = "America/Costa_Rica";
+    const r = daysOfSpan(zonedTimeToUtc(2026, 6, 21, 0, 0, tz), zonedTimeToUtc(2026, 12, 31, 0, 0, tz), zonedTimeToUtc(2026, 6, 21, 12, 0, tz), tz);
+    expect(r).toEqual({ day: 1, of: 194 });
+  });
+});

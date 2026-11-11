@@ -30,7 +30,7 @@
  * Pure: the clock is `input.now`, the zone is `input.timeZone`.
  */
 import { LUNAR_CLOCK } from "./cycleClock";
-import { civilDate, civilDaysBetween, fullMoonsBetween, newMoonsBetween, zonedTimeToUtc } from "./lunar";
+import { civilDate, daysOfSpan, fullMoonsBetween, newMoonsBetween, zonedTimeToUtc } from "./lunar";
 import { CARD_WORDS as W } from "./playerCardWords";
 import { FULL_SEASON_HOURS, hoursAWeek } from "./roleProposalLoad";
 import { formatDay, joinList, type Read } from "./roleSheet";
@@ -208,8 +208,8 @@ export function heroOf(input: HeroIn): HeroOut {
   const inside = !!span && nowMs >= span.start.getTime() && nowMs < span.end.getTime() + (span.over === "term" ? 86_400_000 : 1);
   const seasonName = input.proposal ? clean(season?.name ?? null) : null;
   if (span && inside && span.end.getTime() >= span.start.getTime()) {
-    const of = civilDaysBetween(span.start, span.end, tz) + 1;
-    const d = Math.min(of, Math.max(1, civilDaysBetween(span.start, input.now, tz) + 1));
+    // The season counts its `endsOn` day too, as the role chart's header does (`daysOfSpan`); a term's end is already its last day.
+    const { day: d, of } = daysOfSpan(span.start, span.over === "season" && seasonEndsAt ? seasonEndsAt : span.end, input.now, tz);
     const source = span.over === "term" ? "applications.starts_at, applications.term_ends_at" : "season.startsOn, season.endsOn";
     moon = { words: W.moonPill(name, d, of), name, day: { n: d, source }, of: { n: of, source }, over: span.over };
   } else if (seasonName) {
