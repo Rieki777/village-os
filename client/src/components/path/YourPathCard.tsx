@@ -31,7 +31,6 @@ import { guideNameAtSentenceStart } from "@shared/guideName";
 import { sayPath, sayPathLine, type PathAnswer } from "@shared/yourPath";
 import type { PathView } from "@/lib/usePath";
 import NextAct from "./NextAct";
-import { WHOLE_PATH_HREF } from "./RootLine";
 import { companionFor, seedOf } from "./pathView";
 
 export default function YourPathCard({ path, children, className = "" }: { path: PathView; children?: ReactNode; className?: string }) {
@@ -50,7 +49,7 @@ export default function YourPathCard({ path, children, className = "" }: { path:
     <section id="your-path" aria-labelledby="your-path-h" data-your-path="" data-path-state={path.state} className={`scroll-mt-28 ${CARD_FEATURED} ${className}`.trim()}>
       <div className="flex items-center justify-between gap-3">
         <p className={EYEBROW}>{t({ message: `Your path`, context: "your path, the profile card" })}</p>
-        <Link href={WHOLE_PATH_HREF} className={`${LINK} inline-flex min-h-11 items-center text-sm`}>
+        <Link href="/path" className={`${LINK} inline-flex min-h-11 items-center text-sm`}>
           {t({ message: `See your whole path`, context: "your path, the profile card" })}
         </Link>
       </div>
@@ -85,7 +84,7 @@ export default function YourPathCard({ path, children, className = "" }: { path:
                   <li key={`${a.state}-${i}`} className="flex min-h-11 items-center gap-2 text-sm text-foreground">
                     <span aria-hidden="true" className="size-2 shrink-0 rounded-full border border-border" />
                     {a.step.href ? (
-                      <Link href={a.step.href} className="underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-ring">
+                      <Link href={a.step.href} className="inline-flex min-h-11 items-center underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-ring">
                         {sayPathLine(a.step, i18n.locale)}
                       </Link>
                     ) : (

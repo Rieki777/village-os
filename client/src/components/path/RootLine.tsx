@@ -26,7 +26,6 @@ import { usePath } from "@/lib/usePath";
 import { WHOLE_PATH_WORDS, pathLanguage, sayPath } from "@shared/yourPath";
 import { chaptersOf, companionFor, noteVisitorScreen, seedOf } from "./pathView";
 
-export const WHOLE_PATH_HREF = "/path";
 
 export default function RootLine({ quiet }: { quiet: (path: string, stepHref?: string | null) => boolean }) {
   const { t, i18n } = useLingui();
@@ -53,7 +52,7 @@ export default function RootLine({ quiet }: { quiet: (path: string, stepHref?: s
   return (
     <aside aria-label={eyebrow} data-root-line="" data-path-state={path.state}>
       {/* Phone: one line, one target, the whole path a thumb away. */}
-      <Link href={WHOLE_PATH_HREF} aria-label={`${eyebrow}: ${said.step}. ${openWords}`} className="block focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring sm:hidden" data-root-phone="">
+      <Link href="/path" aria-label={`${eyebrow}: ${said.step}. ${openWords}`} className="block focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring sm:hidden" data-root-phone="">
         <RootStrip seed={glyph}>{said.step}</RootStrip>
       </Link>
       {/* Desktop: the step is its own door, with what comes after, the companion and the stops. */}
@@ -71,7 +70,7 @@ export default function RootLine({ quiet }: { quiet: (path: string, stepHref?: s
                   </li>
                 ))}
               </ol>
-              <Link href={WHOLE_PATH_HREF} className="inline-flex min-h-11 items-center text-sm font-medium text-notice underline underline-offset-2 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring">
+              <Link href="/path" className="inline-flex min-h-11 items-center text-sm font-medium text-notice underline underline-offset-2 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring">
                 {openWords}
               </Link>
             </>
