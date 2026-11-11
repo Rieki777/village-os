@@ -39,7 +39,9 @@ import type mysql from "mysql2/promise";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { OutgoingEmail, PostResult } from "../../shared/comms/contracts";
 import { consentClosesAt, CONSENT_WORDS } from "../../shared/roleProposalConsent";
-import { DECIDE_WORDS, openInviteId } from "../../shared/openProposalDecide";
+import { DECIDE_WORDS, openInviteId, roleStartsOn } from "../../shared/openProposalDecide";
+import { civilDateKey } from "../../shared/lunar";
+import { wordsIn } from "../../shared/applicantWords";
 import { userParty } from "../../shared/alignments";
 import { whoMayPutHandToVillage } from "../../shared/powerHands";
 import { provisionTestDb, testDbConfigured, type TestDb, testPool } from "../db/testDb";
@@ -793,6 +795,11 @@ describe.skipIf(!configured)("open role proposals, the decision, on a real schem
         const mail = state.sent.find((m) => m.origin === "open_proposal.adopted");
         expect(mail?.text).toContain("this moon");
         expect(mail?.text).not.toContain("next season");
+        // The role runs from the day it was adopted, never from the moon's first day when that is already past (verify B153).
+        const today = civilDateKey(new Date(before), "UTC");
+        const adoptedOn = today > moon.startsOn ? today : moon.startsOn;
+        expect(roleStartsOn(moon.startsOn, today)).toBe(adoptedOn);
+        expect(mail?.text).toContain(`Your roles run from ${wordsIn("en").day(adoptedOn)} to the next new moon`);
       } finally {
         await call("PUT", "/api/admin/open-proposals/settings", { term: "season" }, FOUNDER.id);
       }
@@ -869,7 +876,7 @@ describe.skipIf(!configured)("open role proposals, the decision, on a real schem
       expect(invites[0].to.email).toBe("invite-me@example.test");
       expect(invites[0].html).toContain(`<a href="${linkOf(r.body)}"`);
       expect(invites[0].html).toContain("Create your profile");
-      expect(invites[0].text).toContain("Then check your profile. Your tasks for the moon appear there, and it is where we run our sessions and track our work together.");
+      expect(invites[0].text).toContain("Then check your profile. Your tasks appear there once your role starts, and it is where we run our sessions and track our work together.");
       // A retried adoption is refused and sends nothing more.
       expect((await call("POST", `/api/governance/open-proposals/${id}/adopt`, {}, FOUNDER.id)).status).toBe(409);
       expect(state.sent.filter((m) => m.origin === "open_proposal.adopted")).toHaveLength(1);
@@ -925,7 +932,7 @@ describe.skipIf(!configured)("open role proposals, the decision, on a real schem
       await door.welcome(inviter as string, "u-arrives2");
       const bell = state.notices.filter((n) => n.type === "applicant_update" && n.userId === "u-arrives2");
       expect(bell.map((n) => n.dedupeKey).sort()).toEqual([`op:${id}:update:adopted:u-arrives2`, `op:${id}:update:confirmed:u-arrives2`, `op:${id}:update:consent:u-arrives2`]);
-      expect(bell.find((n) => n.dedupeKey.includes(":adopted:"))?.body).toContain("Your tasks for the moon appear there");
+      expect(bell.find((n) => n.dedupeKey.includes(":adopted:"))?.body).toContain("Your tasks appear there once your role starts");
     });
   });
 

@@ -11,7 +11,11 @@
  * WHO. A signed-in member at the member rung (`terms.read`, as the member
  * door asks) who is a person. An agent account is refused: an agent never
  * proposes on its own say. The keeper says "I keep this agent", and is
- * recorded on the proposal as its keeper.
+ * recorded on the proposal as its keeper. The form offers, and the door
+ * accepts, only an agent this member keeps by the record, or one nobody is
+ * recorded as keeping yet (`recordedKeepers`, server/lib/agentRoleProposals.ts).
+ * The same agent is never proposed twice for one role while the first waits,
+ * nor for a role it already holds.
  *
  * WHAT IT SKIPS. References, the background check, the confidentiality
  * signature, the character picker and personal details are a person's. An
@@ -31,6 +35,7 @@ import { OPEN_AIM_MAX, OPEN_NAME_MAX, OPEN_NOTE_MAX, OPEN_PROPOSAL_MAX_ROLES, OP
 import { openProposalHref } from "../../shared/openProposalDecide";
 import type { OpenProposalTerm } from "../../shared/openProposalTerm";
 import type { AppDeps } from "../lib/appDeps";
+import { mayKeep, recordedKeepers, rolesAlreadyAsked } from "../lib/agentRoleProposals";
 import { confirmAndAsk, tellTheCircle } from "../lib/openProposalDecide";
 import { listOrgRoles } from "../lib/orgChart";
 import { agentsWithReach, isAgentAccount } from "../repos/agentAccounts";
@@ -82,7 +87,10 @@ export function registerAgentProposals(app: Express, deps: Deps, h: AgentProposa
     const pool = getPool();
     const t = await h.target();
     const roles = (await rolesForAgents(pool)).filter((r) => r.agentMayHold);
-    const agents = (await agentsWithReach(pool)).map((a) => ({ id: a.id, name: a.name, reach: a.scopes.map((s) => ({ scope: s, words: scopeWords(s) })) }));
+    // Only the agents this member keeps, or that nobody is recorded as keeping yet (audit B8c).
+    const kept: Awaited<ReturnType<typeof agentsWithReach>> = [];
+    for (const a of await agentsWithReach(pool)) if (mayKeep(await recordedKeepers(pool, a), String(user.id))) kept.push(a);
+    const agents = kept.map((a) => ({ id: a.id, name: a.name, reach: a.scopes.map((s) => ({ scope: s, words: scopeWords(s) })) }));
     res.set("Cache-Control", "no-store").json({
       season: t?.season ?? null,
       term: t?.term ?? null,
@@ -115,6 +123,15 @@ export function registerAgentProposals(app: Express, deps: Deps, h: AgentProposa
     // The agent is an agent account here, read now; its name is the account's.
     const [agent] = await agentsWithReach(pool, v.agentUserId);
     if (!agent) return res.status(400).json({ error: W.notAnAgent, field: "agent" });
+    // Keeping is read from the record, never only said (audit B8c): another member's agent is refused.
+    if (!mayKeep(await recordedKeepers(pool, agent), keeperId)) return res.status(403).json({ error: W.keptByAnother, field: "agent" });
+    // One proposal per agent and role at a time, and none for a role it already holds (audit B8b).
+    const again = await rolesAlreadyAsked(pool, agent, v.roles.map((r) => r.roleId));
+    if (again.length) {
+      const offered = await h.offered();
+      const names = again.map((id) => offered.find((r) => r.id === id)?.name ?? id);
+      return res.status(409).json({ error: W.alreadyAsked(names.join(", ")), field: "roles", roles: again });
+    }
     const at = h.now();
     const id = `op-${crypto.randomBytes(10).toString("hex")}`;
     const confirmHash = crypto.createHash("sha256").update(crypto.randomBytes(24)).digest("hex");

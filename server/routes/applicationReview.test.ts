@@ -701,7 +701,7 @@ describe.skipIf(!configured)("application review, on a real schema", () => {
       const ivs = await interviews(id);
       await call("POST", `/api/governance/applications/${id}/first-reply`, {}, FOUNDER.id);
       await score(id, Number(ivs[0].id), IA.id, "strong");
-      const mail = state.sent.find((m) => m.to.email === "letterlink@example.test" && m.subject === "A conversation is asked for");
+      const mail = state.sent.find((m) => m.to.email === "letterlink@example.test" && m.subject === "We would love to talk with you");
       expect(mail, "the conversation letter was sent").toBeTruthy();
       // The audit's finding: this letter used to say the link was "in the first email".
       const link = /https?:\/\/\S+\/application-status\/\S+/.exec(mail!.text)?.[0];

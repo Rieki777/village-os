@@ -274,11 +274,13 @@ export default function OpenProposal() {
 
   const record = p?.consent.record ?? null;
   // Adopt waits on open talks not yet acknowledged, conversations still open, or a full role not chosen on purpose.
-  const adoptWaits = !!p && ((!!p.offer?.openTalks.length && !knowsOpenTalks) || !!p.beforeAdopt?.conversations.length || (!!p.beforeAdopt?.seatsFull.length && !forASeat));
+  const adoptWaits = !!p && ((!!p.offer?.openTalks.length && !knowsOpenTalks && !p.agent) || !!p.beforeAdopt?.conversations.length || (!!p.beforeAdopt?.seatsFull.length && !forASeat));
+  // On a wide screen the decision sits in a panel beside the proposal, held in view while the steward reads (lead, 11 Nov 2026).
+  const side = state === "ready" && !!p && (p.status === "confirmed" || (p.status === "adopted" && !!p.invitation) || !!said);
 
   return (
     <Layout><div className={WORLD}>
-      <div className="container max-w-3xl px-4 py-8">
+      <div className={`container max-w-3xl px-4 py-8${side ? " lg:max-w-6xl" : ""}`}>
         {back}
         {state === "loading" && (
           <div className="flex justify-center py-16">
@@ -292,7 +294,8 @@ export default function OpenProposal() {
           </p>
         )}
         {state === "ready" && p && (
-          <article className="mt-3 space-y-8" data-open-proposal={p.status}>
+          <article className={`mt-3${side ? " lg:grid lg:grid-cols-[minmax(0,1fr)_26rem] lg:items-start lg:gap-10" : ""}`} data-open-proposal={p.status}>
+            <div className="min-w-0 space-y-8">
             <header>
               <p className="text-sm font-semibold text-notice">{p.statusWords}</p>
               <h1 className="mt-1 font-display text-3xl font-bold text-foreground">
@@ -340,7 +343,8 @@ export default function OpenProposal() {
               <CardSideBySide roles={p.roles} card={p.card ?? null} membershipAligned={!!p.membership?.aligned} />
             </section>}
 
-            {p.offer && <TermsWeOffer offer={p.offer} mayEdit={!!p.you.mayEditTerms} savePath={`${base(p.id)}/terms`} onSaved={() => void load()} />}
+            {/* An agent is offered no pay, allowance or commitment (verify B153, B8): a person's terms never show for one. */}
+            {p.offer && !p.agent && <TermsWeOffer offer={p.offer} mayEdit={!!p.you.mayEditTerms} savePath={`${base(p.id)}/terms`} onSaved={() => void load()} />}
 
             <section aria-labelledby="op-words">
               <h2 id="op-words" className="text-lg font-bold text-foreground">
@@ -384,12 +388,26 @@ export default function OpenProposal() {
                 nobodyAtTheDoor={p.door.because !== DOOR.aRoleHolds}
               />
             )}
+            </div>
+
+            {side && (
+            <aside
+              aria-label={DECIDE_WORDS.deciderHeading}
+              className="mt-8 space-y-6 lg:sticky lg:top-28 lg:mt-0 lg:max-h-[calc(100vh-8rem)] lg:overflow-y-auto lg:pb-1"
+              data-decide-panel=""
+            >
 
             {p.status === "confirmed" && (
               <section aria-labelledby="op-decide" className="rounded-xl border-2 border-notice/40 bg-card p-5" data-decider-card="">
                 <h2 id="op-decide" className="text-lg font-bold text-foreground">
                   {DECIDE_WORDS.deciderHeading}
                 </h2>
+                {/* Beside the read on a wide screen: who and which roles, so the panel stands on its own once the heading has scrolled away. */}
+                <p className="hidden text-sm text-muted-foreground lg:block" data-decide-summary="">
+                  <span className="font-semibold text-foreground">{p.agent ? p.agent.name : (p.proposer ?? t({ message: "Somebody from outside the village", context: "open proposal: the side panel when the proposer has no name" }))}</span>
+                  {" · "}
+                  {p.roles.map((r) => r.name ?? DECIDE_WORDS.roleGone).join(", ")}
+                </p>
                 {p.you.mayAdopt || p.you.mayDecline ? (
                   <>
                     <p className="mt-1 text-foreground">{p.you.formerMember ? DECIDE_WORDS.formerMember : record ? CONSENT_WORDS.recordLine : DECIDE_WORDS.deciderLine}</p>
@@ -410,10 +428,11 @@ export default function OpenProposal() {
                         {t`Optional. Plain text. They read it on their status page and in our email. It is part of their own application, and nobody else sees it.`}
                       </p>
                     </div>
-                    {p.you.mayAdopt && p.offer && <div className="mt-3"><OpenTalksWarning settings={p.offer.openTalks} confirmed={knowsOpenTalks} onConfirm={setKnowsOpenTalks} /></div>}
+                    {p.you.mayAdopt && p.offer && !p.agent && <div className="mt-3"><OpenTalksWarning settings={p.offer.openTalks} confirmed={knowsOpenTalks} onConfirm={setKnowsOpenTalks} /></div>}
                     {p.you.mayAdopt && <BeforeAdopt left={p.beforeAdopt ?? null} forASeat={forASeat} onForASeat={setForASeat} />}
                     {!declining ? (
-                      <div className="mt-4">
+                      // On a wide screen the row stays at the foot of the side panel while its note and checks scroll above it.
+                      <div className="mt-4 lg:sticky lg:bottom-0 lg:-mx-5 lg:-mb-5 lg:rounded-b-xl lg:bg-card lg:px-5 lg:py-4">
                       <DecideDock
                         label={DECIDE_WORDS.deciderHeading}
                         note={adoptWaits ? t({ message: "Something waits before you can adopt. It is in the card further down.", context: "open proposal: the floating decision row on a phone" }) : undefined}
@@ -531,6 +550,8 @@ export default function OpenProposal() {
                   </div>
                 )}
               </div>
+            )}
+            </aside>
             )}
           </article>
         )}

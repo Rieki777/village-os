@@ -197,6 +197,42 @@ describe("the open proposal page", () => {
     expect(JSON.parse(String(call?.[1]?.body))).toMatchObject({ whenASeatOpens: true });
   });
 
+  it("verify B153 B8: an agent's proposal never shows a person's terms (pay, allowance, commitment), a person's does", async () => {
+    const offer = {
+      revision: 0,
+      rows: [{ key: "allowance", label: "Allowance", suggested: "Paid for.", current: null, theirs: null, state: "waiting", changed: false }],
+      theirCommitment: 60,
+      roleCommitment: 100,
+      ourCommitment: null,
+      history: [],
+      openTalks: ["Allowance"],
+    };
+    const agent = { name: "Scribe", what: "Keeps the minutes.", keeper: "Kai", reach: [], stillAnAgent: true, switchOff: "Revoke its token.", switchOffPlatform: "An admin can end it." };
+    answer = () => json({ proposal: served({ you: { ...POWER, mayEditTerms: true }, offer, agent }) });
+    const { container, unmount } = render(<OpenProposal />);
+    const adopt = (await screen.findByRole("button", { name: DECIDE_WORDS.adopt })) as HTMLButtonElement;
+    expect(container.querySelector("[data-terms-we-offer]")).toBeNull();
+    expect(container.querySelector("[data-open-talks]")).toBeNull();
+    // Nothing about terms holds Adopt back for an agent.
+    expect(adopt.disabled).toBe(false);
+    unmount();
+    answer = () => json({ proposal: served({ you: { ...POWER, mayEditTerms: true }, offer }) });
+    const person = render(<OpenProposal />);
+    await screen.findByRole("button", { name: DECIDE_WORDS.adopt });
+    expect(person.container.querySelector("[data-terms-we-offer]")).not.toBeNull();
+  });
+
+  it("the decision sits in one side panel, with one set of buttons, beside the proposal", async () => {
+    answer = () => json({ proposal: served({ you: POWER }) });
+    const { container } = render(<OpenProposal />);
+    await screen.findByRole("button", { name: DECIDE_WORDS.adopt });
+    const panel = container.querySelector("[data-decide-panel]");
+    expect(panel?.tagName).toBe("ASIDE");
+    expect(panel?.querySelector("[data-decider-card]")).not.toBeNull();
+    expect(screen.getAllByRole("button", { name: DECIDE_WORDS.adopt })).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: DECIDE_WORDS.decline })).toHaveLength(1);
+  });
+
   it("once the circle has consented, the same click reads Record the adoption", async () => {
     answer = () => json({ proposal: served({ you: POWER }, "consented") });
     render(<OpenProposal />);
