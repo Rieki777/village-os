@@ -133,12 +133,12 @@ export async function neighbour(w, ctx) {
     const commit = page.locator("#propose-terms-commitment");
     if (await commit.count()) await commit.selectOption({ label: "30%" }).catch(() => {});
     await stoneNext(page, "about");
-    await check(page, /agree to the background check/i);
-    const tz = page.getByLabel(/time zone/i).first();
+    await check(page, /agree to the background check|acepto la verificación de antecedentes/i);
+    const tz = page.getByLabel(/time zone|zona horaria/i).first();
     if (await tz.count()) await tz.fill("America/Costa_Rica").catch(() => {});
     await stoneNext(page, "send");
     await check(page, /I align with the Membership agreement/i);
-    await check(page, /confidentiality agreement/i);
+    await check(page, /confidentiality agreement|acuerdo de confidencialidad/i);
     await page.fill("#propose-name", "Lucía Mora");
     await page.fill("#propose-email", email);
   });

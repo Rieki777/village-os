@@ -177,7 +177,9 @@ export class Walk {
 
   async axe() {
     const page = this.page;
-    await page.addScriptTag({ content: this.axeSource }).catch(() => {});
+    // The village's CSP refuses an inline <script>, so addScriptTag never ran axe and every
+    // page read "axe-error" (counted as 0). evaluate() runs outside the page's CSP.
+    await page.evaluate(this.axeSource).catch(() => {});
     return page
       .evaluate(async (rules) => {
         const r = await window.axe.run(document, { runOnly: { type: "rule", values: rules } });
