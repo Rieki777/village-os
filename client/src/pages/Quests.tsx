@@ -1,5 +1,7 @@
 import Layout from "@/components/Layout";
 import { BTN_PRIMARY, H1, RING, WORLD } from "@/components/journey/look";
+import QuietEmpty from "@/components/quiet/QuietEmpty";
+import { useLingui } from "@lingui/react/macro";
 import WorkPayBlock from "@/components/WorkPayBlock";
 import { Link } from "wouter";
 import { m } from "framer-motion";
@@ -111,6 +113,7 @@ export default function Quests() {
     "All"
   );
   const { user } = useAuth();
+  const { t } = useLingui();
   /*
    * WHAT HAPPENS TO THE VALUE TOKEN, IN THE FOUNDER'S OWN WORDS.
    *
@@ -490,18 +493,38 @@ export default function Quests() {
             })}
           </div>
 
-          {filtered.length === 0 && (
-            <div className="text-center py-16 text-muted-foreground">
-              <Compass className="w-12 h-12 mx-auto mb-4 opacity-30" />
-              <p>
-                {boardFailed
-                  ? "The Quest Board didn't load. Reload to try again."
-                  : quests.length === 0
-                    ? "No Quests posted yet. Post the first one."
-                    : "No Quests match. Clear a filter to see more."}
-              </p>
-            </div>
-          )}
+          {/* Empty is a resting meadow with one door (components/quiet). A
+              failure stays plain words: no drawing beside a problem. */}
+          {filtered.length === 0 &&
+            (boardFailed ? (
+              <div className="text-center py-16 text-muted-foreground" role="alert">
+                <p>{t`The Quest Board didn't load. Reload to try again.`}</p>
+              </div>
+            ) : quests.length === 0 ? (
+              <QuietEmpty
+                drawing="meadow"
+                title={t`The meadow is resting`}
+                door={{ label: t({ message: "Propose a Quest", context: "empty quest board: the one door" }), href: "/propose-quest" }}
+                className="max-w-3xl mx-auto mb-16 justify-center"
+              >
+                {t`No Quests posted yet. Post the first one.`}
+              </QuietEmpty>
+            ) : (
+              <QuietEmpty
+                drawing="meadow"
+                title={t`Nothing here with these filters`}
+                door={{
+                  label: t({ message: "Show every Quest", context: "empty quest board: clears the circle and difficulty filters" }),
+                  onClick: () => {
+                    setActiveCircle("All");
+                    setActiveDifficulty("All");
+                  },
+                }}
+                className="max-w-3xl mx-auto mb-16 justify-center"
+              >
+                {t`No Quests match. Clear a filter to see more.`}
+              </QuietEmpty>
+            ))}
 
           {/* Life signs: recent consented completions. Absent when there are
               none — an empty feed renders as silence, never as a zero. */}

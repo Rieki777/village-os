@@ -15,7 +15,7 @@ comms module's "rehearsal inbox", which is a mode for real email.)
 
 | id | who | what they do |
 |---|---|---|
-| `neighbour` | A Spanish-speaking neighbour, sent a link on a messaging app (`es-CR`) | Reads /roles, picks the Land Steward, fills the open proposal form, sends it, opens the confirm link from her email, reads her status page. |
+| `neighbour` | A Spanish-speaking neighbour, sent a link on a messaging app (`es-CR`) | Taps an old link first and lands on the 404, takes its one door home, then reads /roles, picks the Land Steward, fills the open proposal form, sends it, opens the confirm link from her email, reads her status page. |
 | `professional` | A professional from the newsletter (`en-GB`) | Arrives on /steward, finds a role, opens the Finance Steward's full card, proposes with two terms to talk about, confirms, reads the status page. |
 | `member` | An existing member | Opens the member's door (/role-proposals/new), answers each step, adds a seasonal goal when asked, submits for next season and confirms. |
 | `steward` | The steward who decides | Opens the professional's proposal, offers different terms (allowance and bonus), saves the revision, then adopts. Checks the applicant was emailed both times. |

@@ -2,8 +2,10 @@
  * The five made-up people, each walked once at 390 and once at 1280.
  *
  *   1. neighbour     A Spanish-speaking neighbour on a phone, sent a link on a
- *                    messaging app. Proposes for the Land Steward, confirms by
- *                    email, reads her status page.
+ *                    messaging app. The first link she taps is an old one and
+ *                    lands on the 404, whose one door takes her home. Then she
+ *                    proposes for the Land Steward, confirms by email, reads
+ *                    her status page.
  *   2. professional  A professional from the newsletter on a desktop. Reads the
  *                    steward page, opens the Finance Steward's full card,
  *                    proposes with two terms to talk about, confirms, reads the
@@ -100,6 +102,19 @@ async function stoneNext(page, want) {
 export async function neighbour(w, ctx) {
   const page = await w.open();
   const email = emailFor("neighbour", w.vp);
+  // An old link from the chat lands on the 404: the night world, one lit door
+  // home, inside the first screen on a phone (Phase B, quiet states).
+  await w.step("follow an old link and land off the trail", async () => {
+    await w.goto("/roles/an-old-link-from-the-chat");
+    await page.getByRole("heading", { level: 1, name: /Fuera del sendero|Off the trail/i }).waitFor();
+  });
+  await w.look("off-trail", { next: page.getByRole("link", { name: /Volver a la aldea|Back to the village/i }) });
+  await w.step("take the one door home", async () => {
+    const home = page.getByRole("link", { name: /Volver a la aldea|Back to the village/i });
+    if ((await home.count()) !== 1) throw new Error("the 404 should offer exactly one door home");
+    await home.click();
+    await page.waitForURL((u) => new URL(u).pathname !== "/roles/an-old-link-from-the-chat");
+  });
   await w.step("arrive on the roles page", async () => {
     await w.goto("/roles?utm_source=whatsapp");
     await page.locator("main").waitFor();

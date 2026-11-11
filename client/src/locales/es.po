@@ -120,6 +120,12 @@ msgctxt "signing key"
 msgid "You asked for a new key at {askedAt}. It waits for another admin to co-sign it, until {lapsesAt}."
 msgstr ""
 
+#: client/src/App.tsx
+#: client/src/pages/NotFound.tsx
+msgctxt "loading: a page is on its way"
+msgid "Gathering your page"
+msgstr "Reuniendo tu página"
+
 #: client/src/pages/RoleDraft.tsx
 #~ msgid "Your draft holds three. Take one off to draft another."
 #~ msgstr ""
@@ -1744,6 +1750,11 @@ msgstr "Explora los roles abiertos"
 msgctxt "open proposal attachments"
 msgid "Link {0}: web address"
 msgstr "Enlace {0}: dirección web"
+
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "empty thanks wall: door to the thank-you form"
+msgid "Carry a thanks"
+msgstr "Llevar unas gracias"
 
 #: client/src/pages/RoleDraft.tsx
 msgid "Your role runs from adoption to the next new moon, {moonEnds}. Each moon you lay out what you will contribute."
@@ -3722,6 +3733,10 @@ msgctxt "open proposal card"
 msgid "What this role asks"
 msgstr "Lo que pide este rol"
 
+#: client/src/components/quiet/OffTheTrail.tsx
+msgid "Back to the village"
+msgstr "Volver a la aldea"
+
 #: client/src/components/review/SeraBulk.tsx
 msgctxt "sera answers"
 msgid "Take {n}"
@@ -3827,6 +3842,11 @@ msgstr ""
 msgctxt "roles page, role link"
 msgid "Link to {seatName}"
 msgstr "Enlace a {seatName}"
+
+#: client/src/pages/Quests.tsx
+msgctxt "empty quest board: the one door"
+msgid "Propose a Quest"
+msgstr "Proponer una misión"
 
 #: client/src/pages/RequestMembership.tsx
 msgctxt "voice field label: join request"
@@ -4993,6 +5013,10 @@ msgstr ""
 msgid "They have not chosen"
 msgstr "Todavía no ha elegido"
 
+#: client/src/pages/Quests.tsx
+msgid "The meadow is resting"
+msgstr "El prado descansa"
+
 #: client/src/components/admin/OrgChartTab.tsx
 msgctxt "org chart, a sample circle or role"
 msgid "Standing example"
@@ -5963,6 +5987,10 @@ msgctxt "a canvas block is loading"
 msgid "Reading {name}"
 msgstr ""
 
+#: client/src/pages/GratitudeWall.tsx
+msgid "The wall is waiting for its first appreciation."
+msgstr "El muro espera su primer agradecimiento."
+
 #: client/src/components/roleDraft/IkigaiDoor.tsx
 msgid "This browser blocks saving, so your answers last for this visit only."
 msgstr "Este navegador bloquea el guardado, así que tus respuestas duran solo esta visita."
@@ -6190,6 +6218,10 @@ msgstr "Nuestra redacción para esta propuesta"
 #: client/src/components/roleDraft/HumanDesignStep.tsx
 msgid "Your type is {0}, with lines {1} and {2}."
 msgstr "Tu tipo es {0}, con las líneas {1} y {2}."
+
+#: client/src/pages/Quests.tsx
+msgid "No Quests posted yet. Post the first one."
+msgstr "Todavía no hay misiones publicadas. Publica la primera."
 
 #: client/src/pages/StewardJourney.tsx
 msgctxt "steward front door"
@@ -8270,6 +8302,11 @@ msgstr ""
 msgid "The economy conserves: every token sums to zero, no drift, no illegal negatives."
 msgstr ""
 
+#: client/src/pages/Quests.tsx
+msgctxt "empty quest board: clears the circle and difficulty filters"
+msgid "Show every Quest"
+msgstr "Ver todas las misiones"
+
 #: client/src/components/ClosingPolicyCard.tsx
 msgid "Putting a change to the whole village opens a vote every member is rung about, and this account does not open those yet. Say what you would change to whoever keeps the exit policy."
 msgstr ""
@@ -8283,6 +8320,11 @@ msgctxt "the closing policy is being saved"
 msgid "Saving..."
 msgstr ""
 
+#: client/src/components/quiet/OffTheTrail.tsx
+msgctxt "404 page heading"
+msgid "Off the trail"
+msgstr "Fuera del sendero"
+
 #: client/src/pages/OpenProposal.tsx
 msgctxt "open proposal: an agent's proposal"
 msgid "It holds no live access token, so it reaches nothing through the village's connector today."
@@ -8292,6 +8334,10 @@ msgstr ""
 #~ msgctxt "open proposal section"
 #~ msgid "About you"
 #~ msgstr "Sobre ti"
+
+#: client/src/pages/Quests.tsx
+msgid "Nothing here with these filters"
+msgstr "Nada aquí con estos filtros"
 
 #: client/src/components/TimeZoneField.tsx
 msgctxt "time zone field"
@@ -9005,6 +9051,10 @@ msgstr ""
 msgctxt "sera changes"
 msgid "Small changes {nSmall}"
 msgstr ""
+
+#: client/src/components/quiet/OffTheTrail.tsx
+msgid "There is no page at this address. It may have moved, or it may never have existed. The land is still here, and the way home is short."
+msgstr "No hay ninguna página en esta dirección. Quizá se movió, o nunca existió. La tierra sigue aquí y el camino a casa es corto."
 
 #: client/src/components/openProposal/TermsWeOffer.tsx
 msgctxt "reviewer's terms panel for a proposal"
@@ -10832,6 +10882,10 @@ msgstr "Ningún idioma coincide"
 msgid "You can withdraw a pledge until choosing closes. Then it is firm and lowers what the pot pays. Nothing is collected yet."
 msgstr ""
 
+#: client/src/pages/GratitudeWall.tsx
+msgid "No thanks on the wall yet"
+msgstr "Todavía no hay gracias en el muro"
+
 #: client/src/components/canvas/CanvasBlockFrames.tsx
 msgid "Nothing the village runs speaks to {name} yet."
 msgstr ""
@@ -11207,6 +11261,10 @@ msgstr "Lo sé, y quiero adoptarla de todos modos"
 msgctxt "journal guide tasks"
 msgid "That task is no longer open on your list."
 msgstr ""
+
+#: client/src/pages/Quests.tsx
+msgid "No Quests match. Clear a filter to see more."
+msgstr "Ninguna misión coincide. Quita un filtro para ver más."
 
 #: client/src/pages/StewardJourney.tsx
 msgid "Roles run from new moon to new moon. Each moon you and your circle agree what you will deliver, and we pay for the work delivered, never for hours."
@@ -11584,6 +11642,10 @@ msgstr ""
 msgctxt "roles page archetypes"
 msgid "Start as {0}"
 msgstr "Empezar como “{0}”"
+
+#: client/src/pages/Quests.tsx
+msgid "The Quest Board didn't load. Reload to try again."
+msgstr "El tablero de misiones no cargó. Recarga para intentar de nuevo."
 
 #: client/src/components/openProposal/RoleCardBridge.tsx
 msgctxt "open proposal conversations"
