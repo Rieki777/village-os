@@ -25,6 +25,8 @@
  * terms on offer in the terms step (`roleApplicationStart`), which is where a
  * seat card's raised hand sends a member who reads terms.
  */
+import { aboutYouBody, aboutYouOf } from "@/components/openProposal/AboutYou";
+import { aboutYouStepProblem } from "./AboutYouField";
 import { UserPlus } from "lucide-react";
 import { parseSeatSettings } from "@shared/seatSettings";
 import { MAX_SEATS } from "@shared/seatApplications";
@@ -81,6 +83,8 @@ export function doorAnswers(a: Record<string, unknown>): Record<string, unknown>
     servesGoal: goal && goal !== NO_SEASON_GOALS ? goal : null,
     terms: t ? { choice: t.choice, note: t.note.trim() } : null,
     goals: goalsForRoute(a),
+    // About you (PR 2): judged again by the route, which knows which roles are always checked.
+    ...aboutYouBody(aboutYouOf(a.aboutYou)),
   };
 }
 
@@ -229,6 +233,21 @@ export const ROLE_APPLICATION_TYPE: WizardTypeConfig = {
           required: true,
           showWhen: isDoor,
           problem: (v, a) => (isDoor(a) && !String(v ?? "").trim() ? "Pick the village goal your work serves." : null),
+        },
+      ],
+    },
+    about: {
+      label: "About you",
+      intro: "A few facts, up to three references, and how a background check works. Your time zone is on your profile and your earliest start is the first day on the next step, so we don't ask them again.",
+      fields: [
+        {
+          key: "aboutYou",
+          kind: "aboutYou",
+          label: "About you",
+          help: "Only the people who decide your proposal see this. No AI reads it.",
+          // The member door only: a renewal or a season plan carries on a seat, so it asks no references.
+          showWhen: isDoor,
+          problem: aboutYouStepProblem,
         },
       ],
     },

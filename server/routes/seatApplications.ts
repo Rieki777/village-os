@@ -127,7 +127,9 @@ import {
   type SeatForCapacity,
   type StoredApplication,
   goalsOfRoles,
+  alwaysCheckedAmong,
 } from "../repos/seatApplications";
+import { parseAboutYou } from "../../shared/proposalAbout";
 import { readTexts } from "../repos/alignments";
 import { asksFor, proposalsForApplications, setDecidedWords, type StoredAsk, type StoredProposal } from "../repos/roleProposals";
 import { changesRoles } from "../../shared/roleProposals";
@@ -433,6 +435,12 @@ export function register(app: Express, deps: Deps): void {
         : null,
       note: a.note,
       // The goals the member listed, or the older words as one goal; `deliverables` is what is left beside them (joining lane PR 1).
+      // About you (joining lane PR 2): references and the check are for the people who decide it. The candidate sees a count of their own, nobody else sees anything.
+      aboutYou:
+        viewerId && !isCandidate && ((rule?.who === "live-holders" && rule.holders.includes(viewerId)) || asks.some((k) => k.userId === viewerId))
+          ? { references: a.answers?.references ?? [], about: a.answers?.about ?? {}, backgroundCheck: a.answers?.backgroundCheck ?? null }
+          : null,
+      referencesGiven: isCandidate && a.answers?.backgroundCheck ? (a.answers.references ?? []).length : null,
       goals: goalsOfApplication(a),
       deliverables: deliverablesBesideGoals(a),
       settings: a.settings,
@@ -599,6 +607,17 @@ export function register(app: Express, deps: Deps): void {
       const own = await goalsOfRoles(pool, input.seatIds);
       const judged = parseGoals(input.answers.goals.map((g) => ({ ...g, roleId: g.roleId || input.seatIds[0] })), { roleIds: new Set(input.seatIds), roleGoalsOf: (id) => own.get(id) ?? [], today: now.toISOString().slice(0, 10) });
       if (!judged.ok) return answer(400, { error: judged.error, field: "goals" });
+    }
+    // About you (joining lane PR 2): judged here because only here do we know which roles are always checked.
+    if (input.aboutYouRaw) {
+      const judged = parseAboutYou(input.aboutYouRaw, { alwaysChecked: (await alwaysCheckedAmong(pool, input.seatIds)).length > 0, at: now });
+      if (!judged.ok) return answer(400, { error: judged.error, field: judged.field });
+      input.answers = {
+        ...(input.answers ?? { aim: null, servesGoal: null, timeZone: null, windows: [], earliestStart: null, terms: null, goals: [] }),
+        ...(judged.value.references.length ? { references: judged.value.references } : {}),
+        ...(Object.keys(judged.value.about).length ? { about: judged.value.about } : {}),
+        backgroundCheck: judged.value.backgroundCheck,
+      };
     }
     const live = await liveSeatingsOf(pool, input.seatIds);
     const lapseNow = { ...lapse(), now };

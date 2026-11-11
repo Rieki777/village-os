@@ -1,0 +1,11 @@
+-- 0370: a role can be marked always background-checked (joining lane PR 2).
+--
+-- Roles that hold money or work near children carry a check whatever the
+-- applicant's references say. The flag is a role parameter beside the others
+-- of 0362, set by whoever edits the role card (shared/roleParams.ts).
+--
+-- EXPAND ONLY. One new column with a DEFAULT of 0 on a table every writer
+-- reaches with raw SQL naming its own columns. The previous release names
+-- none of them, so it keeps reading and writing org_roles unchanged if it is
+-- put back over a migrated database.
+ALTER TABLE org_roles ADD COLUMN always_checked TINYINT(1) NOT NULL DEFAULT 0;

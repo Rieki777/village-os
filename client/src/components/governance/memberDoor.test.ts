@@ -68,6 +68,8 @@ describe("a door start", () => {
     expect(body.answers).toEqual({ aim: "Food grows here.", servesGoal: "Food grown on the land", terms: { choice: "talk", note: "The hours" },
       // The goals ride in the answers, each tied to the first picked role when the list left it open.
       goals: [{ title: "Plant three beds", doneWhen: "they are planted", moves: "", serves: "", date: "", roleId: "garden" }],
+      // About you (PR 2): nothing filled yet, so the route asks for the background-check consent.
+      references: [], about: {},
     });
     expect((ROLE_APPLICATION_TYPE.publish.body({ ...RENEWAL.answers, deliverables: "x" }) as Record<string, unknown>).answers).toBeUndefined();
     expect(body.seatIds).toEqual(["garden", "host"]);

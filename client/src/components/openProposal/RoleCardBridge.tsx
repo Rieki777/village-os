@@ -459,7 +459,11 @@ export interface Practical {
  * reviewer sees flagged. Conversations are booked across time zones, so the zone
  * leads.
  */
-export function Practicalities({ value, onChange }: { value: Practical; onChange: (next: Practical) => void }) {
+/**
+ * `part` splits it across the form's sections (joining lane PR 2): "about" is the time zone and the earliest start,
+ * which sit in About you; "rest" is the usual times and the terms. The default draws everything.
+ */
+export function Practicalities({ value, onChange, part = "all" }: { value: Practical; onChange: (next: Practical) => void; part?: "all" | "about" | "rest" }) {
   const { t } = useLingui();
   const zones = knownZones();
   const windowWords: Record<(typeof CARD_WINDOWS)[number], string> = {
@@ -472,6 +476,7 @@ export function Practicalities({ value, onChange }: { value: Practical; onChange
   };
   return (
     <div className="grid gap-5">
+      {part !== "rest" && (
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
           <label htmlFor="card-tz" className="mb-2 block text-sm font-semibold text-card-foreground">
@@ -493,6 +498,9 @@ export function Practicalities({ value, onChange }: { value: Practical; onChange
           <input id="card-start" type="date" value={value.earliestStart} onChange={(e) => onChange({ ...value, earliestStart: e.target.value })} className={FIELD} />
         </div>
       </div>
+      )}
+      {part !== "about" && (
+      <>
       <fieldset className="grid gap-1">
         <legend className="mb-1 text-sm font-semibold text-card-foreground">{t`When you can usually meet (optional)`}</legend>
         <div className="grid gap-1 sm:grid-cols-3">
@@ -531,6 +539,8 @@ export function Practicalities({ value, onChange }: { value: Practical; onChange
           />
         )}
       </fieldset>
+      </>
+      )}
     </div>
   );
 }

@@ -39,6 +39,7 @@
  *
  * Money in an application is a RECORD. Nothing here pays, posts or settles.
  */
+import { aboutOf, backgroundCheckOf, referencesOf, type BackgroundCheck, type ProposalAbout, type ProposalReference } from "./proposalAbout";
 import { goalsAsText, goalsOf, legacyGoals, parseGoals, type ProposalGoal } from "./proposalGoals";
 import { looksLikePaymentDetails, PAYMENT_DETAIL_MESSAGE, parseSeatSettings, type SeatSettings } from "./seatSettings";
 import type { HandOpenerRule } from "./powerHands";
@@ -129,6 +130,13 @@ export interface ApplicationAnswers {
    * it, whose `deliverables` words are then read as one goal (`goalsOfApplication`).
    */
   goals: ProposalGoal[];
+  /**
+   * About you (joining lane PR 2): third-party data, for the deciders only, never read by an AI,
+   * and cleared with the rest of `answers` when the member is erased (shared/proposalAbout.ts).
+   */
+  references?: ProposalReference[];
+  about?: ProposalAbout;
+  backgroundCheck?: BackgroundCheck;
 }
 
 const ANSWER_LIMITS = { aim: 300, goal: 300, timeZone: 64, window: 40, windows: 6, termsNote: 600 } as const;
@@ -156,14 +164,19 @@ export function parseApplicationAnswers(raw: unknown): ApplicationAnswers | null
     earliestStart: typeof r.earliestStart === "string" && /^\d{4}-\d{2}-\d{2}$/.test(r.earliestStart) ? r.earliestStart : null,
     terms: choice ? { choice, note: text(t?.note, ANSWER_LIMITS.termsNote) ?? "" } : null,
     goals: goalsOf(r.goals),
+    ...(referencesOf(r.references).length ? { references: referencesOf(r.references) } : {}),
+    ...(Object.keys(aboutOf(r.about)).length ? { about: aboutOf(r.about) } : {}),
+    ...(backgroundCheckOf(r.backgroundCheck) ? { backgroundCheck: backgroundCheckOf(r.backgroundCheck) as BackgroundCheck } : {}),
   };
-  const empty = !answers.goals.length && !answers.aim && !answers.servesGoal && !answers.timeZone && !answers.windows.length && !answers.earliestStart && !answers.terms;
+  const empty = !answers.references && !answers.about && !answers.backgroundCheck && !answers.goals.length && !answers.aim && !answers.servesGoal && !answers.timeZone && !answers.windows.length && !answers.earliestStart && !answers.terms;
   return empty ? null : answers;
 }
 
 export interface ApplicationInput {
   /** The member door's answers (0369), or null. */
   answers?: ApplicationAnswers | null;
+  /** The About-you section as the door sent it, judged by the route once the roles are known (it needs to know which are always checked). */
+  aboutYouRaw?: { references?: unknown; about?: unknown; consent?: unknown } | null;
   seatIds: string[];
   /** Why this member. Stored, read by members on the page, never on a ballot. */
   note: string | null;
@@ -235,6 +248,11 @@ export function parseApplicationInput(body: unknown): ParsedApplication {
   if (supersedesId && !APPLICATION_ID.test(supersedesId)) return { ok: false, field: "supersedesId", error: "That is not the id of an application." };
   // The goals list, when the door sent one: judged whole, so a malformed goal is refused and never quietly dropped.
   let answers = parseApplicationAnswers(b.answers);
+  // About you is judged by the route, with the roles in hand; whatever the door sent for it is never stored as it came.
+  if (answers) {
+    const { references: _r, about: _a, backgroundCheck: _b, ...rest } = answers;
+    answers = rest;
+  }
   let deliverablesOut = deliverables;
   const sentAnswers = b.answers && typeof b.answers === "object" && !Array.isArray(b.answers) ? (b.answers as Record<string, unknown>) : null;
   if (sentAnswers && sentAnswers.goals !== undefined && sentAnswers.goals !== null) {
@@ -249,7 +267,8 @@ export function parseApplicationInput(body: unknown): ParsedApplication {
     // Older readers still show `deliverables`: the goals as lines, unless the door wrote its own.
     deliverablesOut = deliverables ?? goalsAsText(listed.goals, WORDS_MAX);
   }
-  return { ok: true, input: { seatIds, note, deliverables: deliverablesOut, settings: parsed.settings, startsOn: startsRaw, seasonId, supersedesId, answers } };
+  const aboutYouRaw = sentAnswers && (sentAnswers.references !== undefined || sentAnswers.about !== undefined || sentAnswers.checkConsent !== undefined) ? { references: sentAnswers.references, about: sentAnswers.about, consent: sentAnswers.checkConsent } : null;
+  return { ok: true, input: { seatIds, note, deliverables: deliverablesOut, settings: parsed.settings, startsOn: startsRaw, seasonId, supersedesId, answers, aboutYouRaw } };
 }
 
 // ── Who adopts ───────────────────────────────────────────────────────────────

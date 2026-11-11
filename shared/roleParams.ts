@@ -58,6 +58,8 @@ export interface RoleParams {
   reviewAfterDays: number | null;
   accessBundle: string[] | null;
   bookingUrl: string | null;
+  /** A check happens for this role whatever the references say (0370). */
+  alwaysChecked: boolean;
 }
 
 export const ROLE_PARAM_KEYS = [
@@ -73,6 +75,7 @@ export const ROLE_PARAM_KEYS = [
   "reviewAfterDays",
   "accessBundle",
   "bookingUrl",
+  "alwaysChecked",
 ] as const satisfies readonly (keyof RoleParams)[];
 export type RoleParamKey = (typeof ROLE_PARAM_KEYS)[number];
 
@@ -90,6 +93,7 @@ export const ROLE_PARAM_COLUMNS: Record<RoleParamKey, string> = {
   reviewAfterDays: "review_after_days",
   accessBundle: "access_bundle",
   bookingUrl: "booking_url",
+  alwaysChecked: "always_checked",
 };
 
 export const ROLE_PARAM_LABELS: Record<RoleParamKey, string> = {
@@ -105,6 +109,7 @@ export const ROLE_PARAM_LABELS: Record<RoleParamKey, string> = {
   reviewAfterDays: "Review",
   accessBundle: "Access it needs",
   bookingUrl: "Booking link",
+  alwaysChecked: "Always background-checked",
 };
 
 // ── Parsing ──────────────────────────────────────────────────────────────────
@@ -217,6 +222,7 @@ export function parseRoleParams(body: unknown): Parsed<Partial<RoleParams>> {
   if (o.reviewAfterDays !== undefined) problems.push(put("reviewAfterDays", parseDays(o.reviewAfterDays)));
   if (o.accessBundle !== undefined) problems.push(put("accessBundle", parseTextList(asJson(o.accessBundle), "The access list", 12, 120)));
   if (o.bookingUrl !== undefined) problems.push(put("bookingUrl", parseBooking(o.bookingUrl)));
+  if (o.alwaysChecked !== undefined) problems.push(put("alwaysChecked", typeof o.alwaysChecked === "boolean" ? ok(o.alwaysChecked) : bad<boolean>("Say whether the role is always background-checked.")));
   const first = problems.find((p): p is string => !!p);
   return first ? bad(first) : ok(value);
 }
@@ -233,7 +239,7 @@ export function roleParamColumns(value: Partial<RoleParams>): Array<[string, str
   for (const key of ROLE_PARAM_KEYS) {
     if (!(key in value)) continue;
     const v = value[key];
-    const bound = v === null || v === undefined ? null : Array.isArray(v) ? JSON.stringify(v) : (v as string | number);
+    const bound = v === null || v === undefined ? (key === "alwaysChecked" ? 0 : null) : typeof v === "boolean" ? (v ? 1 : 0) : Array.isArray(v) ? JSON.stringify(v) : (v as string | number);
     out.push([ROLE_PARAM_COLUMNS[key], bound]);
   }
   return out;
@@ -265,6 +271,7 @@ export function roleParamsFromRow(r: Record<string, unknown>): RoleParams {
     reviewAfterDays: days.ok ? days.value : null,
     accessBundle: list(r.access_bundle, 12, 120),
     bookingUrl: url.ok ? url.value : null,
+    alwaysChecked: r.always_checked === 1 || r.always_checked === true || r.always_checked === "1",
   };
 }
 

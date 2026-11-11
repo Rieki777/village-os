@@ -24,6 +24,7 @@
  *                         nobody has used it. Once the village holds the power,
  *                         or nobody holds it, the card says so and offers nothing.
  */
+import { AboutYouView, type ServedAboutYou } from "@/components/openProposal/AboutYou";
 import { AttachedView, type ServedAttachments } from "@/components/openProposal/ProposalAttachments";
 import { useLingui } from "@lingui/react/macro";
 import { CardSideBySide } from "@/components/openProposal/RoleCardBridge";
@@ -70,6 +71,8 @@ export interface ServedOpenProposal {
   invitation: { state: "open" | "used" | "closed"; sentAt?: string | null; emailed?: boolean | null } | null;
   /** Links and files, sent to the people who decide it and nobody else (Rye, 10 Nov 2026). */
   attached?: ServedAttachments | null;
+  /** About you: references, facts and the check, for the deciders only. */
+  aboutYou?: ServedAboutYou | null;
   you: { holdsThePower: boolean; own: boolean; mayAdopt: boolean; mayDecline: boolean; mayReissue: boolean; formerMember?: boolean };
 }
 
@@ -265,6 +268,7 @@ export default function OpenProposal() {
             </section>
 
             <AttachedView attached={p.attached} />
+            <AboutYouView about={p.aboutYou} />
 
             {/* The circle's answer while it waits and once adopted. A declined one has no adoption to record, and its line says so above. */}
             {(p.status === "confirmed" || p.status === "adopted") && (

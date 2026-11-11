@@ -27,6 +27,7 @@
  *   - DECLINING sets decided_at, so the tidy job finds it, and sends a kind no.
  *   - The task board: an asked holder's consent row, a decider's adopt row.
  */
+import { checkConsentVersion } from "../../shared/proposalAbout";
 import { moonTermFor } from "../../shared/openProposalTerm";
 import { activeClock } from "../lib/gratitude-cycles";
 import fs from "node:fs";
@@ -436,6 +437,56 @@ describe.skipIf(!configured)("open role proposals, the decision, on a real schem
       expect(own.body.proposal.attached).toBeNull();
       const href = (await page(id, FOUNDER.id)).body.proposal.attached.files[0].href as string;
       expect((await download(href, HAS.id)).status).toBe(404);
+    });
+
+    /** Send with two references and a background-check consent, as somebody with no account, and confirm. */
+    const withReferences = async (email: string) => {
+      const before = state.sent.length;
+      const res = await fetch(`${base}/api/open-proposals`, { // module-review-ok: a test calling its own local server, never an outside host
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          name: "Rowan Field",
+          email,
+          roles: [{ roleId: gate, note: "I open gates for a living." }],
+          why: "I live up the road and the gate is always shut.",
+          aim: "The gate opens at dawn every day.",
+          references: [
+            { name: "Ines Vargas", how: "We built the Pavones fence together", contact: "ines.vargas@example.org" },
+            { name: "Tomas Rey", how: "My neighbour for ten years", contact: "+506 8888 1234" },
+          ],
+          about: { based: "Uvita", languages: "Spanish, English", story: "I came to a workday in March." },
+          checkConsent: { given: true, version: checkConsentVersion() },
+        }),
+      }); // module-review-ok: a test calling its own local server
+      expect(res.status, await res.clone().text()).toBe(200);
+      const mail = state.sent[before];
+      const id = mail.idempotencyKey.split(":")[1];
+      expect((await call("POST", "/api/open-proposals/confirm", { token: tokenOf(mail) }, null)).status).toBe(200);
+      return id;
+    };
+
+    it("ABOUT YOU: the holder of the power and the circle's asked holders read the references and the check; another member and a visitor read nothing", async () => {
+      const id = await withReferences("refs1@example.test");
+      const founder = (await page(id, FOUNDER.id)).body.proposal.aboutYou;
+      expect(founder.references.map((r: any) => r.name)).toEqual(["Ines Vargas", "Tomas Rey"]);
+      expect(founder.about).toMatchObject({ based: "Uvita" });
+      expect(founder.backgroundCheck).toMatchObject({ needed: false, consent: { version: checkConsentVersion() } });
+      expect((await page(id, ANA.id)).body.proposal.aboutYou.references).toHaveLength(2);
+      // CONTROL for the gate: Mo reads the page, so a nothing here is the gate and not a missing page.
+      const mo = await page(id, MO.id);
+      expect(mo.status).toBe(200);
+      expect(mo.body.proposal.aboutYou).toBeNull();
+      for (const secret of ["Ines Vargas", "ines.vargas", "Tomas Rey", "8888 1234", "Pavones", "Uvita"]) expect(JSON.stringify(mo.body), secret).not.toContain(secret);
+      // A visitor with no session reads no page at all.
+      expect((await page(id, null)).status).toBe(401);
+    });
+
+    it("ABOUT YOU: a holder of the power reads none of their own proposal's references", async () => {
+      state.powerHolders = [FOUNDER.id, HAS.id];
+      const id = await withReferences(HAS.email);
+      expect((await page(id, HAS.id)).body.proposal.aboutYou).toBeNull();
+      expect((await page(id, FOUNDER.id)).body.proposal.aboutYou.references).toHaveLength(2);
     });
 
     it("a file changed on disk since it was sent is not served", async () => {
