@@ -22,7 +22,7 @@ import { ALL_CAPABILITIES, isDeniable } from "@shared/capabilities";
 import BreathingLoader from "@/components/natural/BreathingLoader";
 import { SeatSomebody } from "@/components/power/SeatSomebody";
 import { OrgChartTab } from "@/components/admin/OrgChartTab";
-import { confirmLeave } from "@/lib/unsavedChanges";
+import { changedKeys, confirmLeave } from "@/lib/unsavedChanges";
 import SaveBar, { type SaveResult } from "@/components/SaveBar";
 import SeasonPlanWindowFields, { type PlanWindowValue } from "@/components/admin/SeasonPlanWindowFields";
 import { AppointToRole } from "@/components/admin/AppointToRole";
@@ -6722,18 +6722,21 @@ const CADENCES = [
 
 export function SeasonTab({ password }: { password: string }) {
   const [cfg, setCfg] = useState<any>(null);
+  // What the server holds; the floating save bar counts what differs from it.
+  const [base, setBase] = useState<any>(null);
   const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
     try {
       const res = await fetch(`${API_BASE}/admin/seasons`, { headers: authHeaders(password) });
-      setCfg(await res.json());
+      const d = await res.json();
+      setCfg(d); setBase(d);
     } catch { /* silent */ }
   }, [password]);
 
   useEffect(() => { load(); }, [load]);
 
-  const save = async (extra: Record<string, unknown> = {}) => {
+  const save = async (extra: Record<string, unknown> = {}): Promise<SaveResult> => {
     setSaving(true);
     try {
       const res = await fetch(`${API_BASE}/admin/seasons`, {
@@ -6741,14 +6744,16 @@ export function SeasonTab({ password }: { password: string }) {
         headers: authHeaders(password, { "Content-Type": "application/json" }),
         body: JSON.stringify({ seasons: cfg.seasons, cadence: cfg.cadence, timezone: cfg.timezone, ...extra }),
       });
-      if (!res.ok) throw new Error();
-      toast.success("Seasons saved");
+      setSaving(false);
+      if (!res.ok) return { ok: false, reason: refusal(await res.json().catch(() => ({})), "The seasons did not save.") };
       load();
-    } catch { toast.error("Save failed"); }
-    setSaving(false);
+      return { ok: true };
+    } catch { setSaving(false); return { ok: false, reason: "The seasons did not reach the server." }; }
   };
 
   if (!cfg) return <div className="text-center py-12 text-gray-400">Loading...</div>;
+  const seasonChanges = changedKeys(base, cfg, ["cadence", "timezone"]).length + Math.abs((cfg.seasons ?? []).length - (base.seasons ?? []).length) +
+    (cfg.seasons ?? []).filter((x: any, i: number) => JSON.stringify(x) !== JSON.stringify((base.seasons ?? [])[i])).length;
 
   const seasons: SeasonRow[] = cfg.seasons ?? [];
   const setSeasons = (next: SeasonRow[]) => setCfg({ ...cfg, seasons: next });
@@ -6773,10 +6778,6 @@ export function SeasonTab({ password }: { password: string }) {
             whichever season covers today. Queue the next one and it hands over by itself.
           </p>
         </div>
-        {/* Arrow, not `save` itself: it takes body fields now, and onClick would pass the event as one. */}
-        <button onClick={() => save()} disabled={saving} className="px-4 py-2 bg-teal-deep text-white rounded-lg text-sm font-medium disabled:opacity-50 shrink-0">
-          {saving ? "Saving..." : "Save"}
-        </button>
       </div>
 
       {cfg.needsNextSeason && (
@@ -6803,7 +6804,7 @@ export function SeasonTab({ password }: { password: string }) {
           answered={!!cfg.timezoneAnswer}
           saving={saving}
           onChange={(timezone) => setCfg({ ...cfg, timezone })}
-          onConfirm={() => save({ confirmTimezone: true })}
+          onConfirm={() => { void save({ confirmTimezone: true }).then((r) => { if (r.ok) toast.success("Seasons saved"); else toast.error(r.reason ?? "Save failed"); }); }}
         />
       </div>
 
@@ -6872,6 +6873,7 @@ export function SeasonTab({ password }: { password: string }) {
           <span className="text-xs text-gray-400">({cfg.suggestion.startsOn} → {cfg.suggestion.endsOn})</span>
         )}
       </button>
+      <SaveBar count={saving ? Math.max(seasonChanges, 1) : seasonChanges} onSave={() => save()} onDiscard={() => setCfg(base)} />
     </div>
   );
 }
