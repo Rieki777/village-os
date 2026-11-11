@@ -3019,7 +3019,7 @@ async function recordStageEvent(user: any, from: string, to: string, reason: str
     at: new Date().toISOString(),
   });
   commsSink.fire({ type: "stage_advanced", userId: user.id, stage: to });
-  await addActivity("stage", `${firstName(user.name)} advanced to ${stageName(to)}`, { actorUserId: user.id, entityType: "stage", entityRef: to });
+  await addActivity("stage", `${firstName(user.name)} advanced to ${stageName(to)}`, { actorUserId: user.id, entityType: "stage", entityRef: to, audience: "admin" });
   await notify({
     userId: user.id,
     type: "stage_advanced",
