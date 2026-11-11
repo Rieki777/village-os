@@ -664,6 +664,9 @@ export default function Roles() {
                 <PeopleLockNote people={people} seats={seatCounts.seats} held={seatCounts.held} />
               </div>
             )}
+            {/* SLOT FOR LANE A4 (PR 1193, wt/a4-roots): <RootsFilterToggle noun="roles" /> renders here, and
+                `directory` above is filtered by useRootsFilter(user?.id).apply(directory, (r) => r.raw?.archetypes ?? []).
+                Left for the integrator: those imports are not on this branch's base. */}
             {/* The admin view: only a reader the server sent unlisted roles to has anything to switch on. */}
             {unlistedCount > 0 && (
               <label className="mb-8 flex min-h-11 items-center gap-3 rounded-xl border border-border bg-card px-4 py-2 text-sm text-foreground" data-show-unlisted="">

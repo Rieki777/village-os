@@ -43,6 +43,7 @@ import { Fireflies } from "@/components/journey/nature";
 import RoleCardParams from "@/components/power/RoleCardParams";
 import EditRoleButton from "@/components/roleEdit/EditRoleButton";
 import RootsSlot from "./RootsSlot";
+import { useWide } from "./useWide";
 import { readRoleCard, type RoleCardAnswer } from "./roleCardApi";
 
 export type CardRegister = "founding" | "game";
@@ -167,6 +168,7 @@ export default function FullRoleCard({ seat, circleName = null, register = "game
   const roots = Array.isArray(seat.archetypes) ? seat.archetypes.map(String) : [];
   const apply = mayApply(seat);
   const last = answer?.lastEdited ?? null;
+  const wide = useWide();
 
   const act = apply ? (
     <Fireflies block>
@@ -195,7 +197,7 @@ export default function FullRoleCard({ seat, circleName = null, register = "game
         </p>
       )}
       <RoleCardParams seat={params} />
-      {act}
+      {wide && act}
     </div>
   );
 
@@ -288,6 +290,9 @@ export default function FullRoleCard({ seat, circleName = null, register = "game
         <div className="lg:sticky lg:top-28 lg:self-start">{side}</div>
       </div>
 
+      {/* A PHONE'S THUMB: the one act rides at the bottom of the screen while the card is read
+          (rehearsal, 11 Nov: it sat three screens down). On a desktop it stays in the side column. */}
+      {!wide && act && <div className="sticky bottom-[calc(var(--tabbar-h,0px)+0.75rem)] z-20 mt-6">{act}</div>}
       <footer className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
         <p className={HINT} data-testid="last-edited">
           {last ? SECTION_WORDS.lastEdited(last.by, civilDayWords(last.on)) : ""}

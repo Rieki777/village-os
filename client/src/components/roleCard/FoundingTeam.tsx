@@ -14,12 +14,13 @@
  * in a column beside the open card, so a reader moves between the roles
  * without losing the card they are reading.
  */
-import { useEffect, useId, useState } from "react";
+import { useId, useState } from "react";
 import { ChevronRight } from "lucide-react";
 import { useLingui } from "@lingui/react/macro";
 import { SECTION_WORDS, type RoleCardSections, type VillagePay } from "@shared/roleCardSections";
 import { seedOfLifeCentres, fx } from "@/components/journey/nature";
 import FullRoleCard from "./FullRoleCard";
+import { useWide } from "./useWide";
 
 /** The Seed of Life as quiet line work: structure, never ornament that moves. */
 function SeedLines({ className = "" }: { className?: string }) {
@@ -32,21 +33,6 @@ function SeedLines({ className = "" }: { className?: string }) {
       <circle cx={60} cy={60} r={40} fill="none" stroke="currentColor" strokeWidth={0.4} />
     </svg>
   );
-}
-
-/** From lg up the open card sits beside the list; below it, under its row. One card is mounted, never two. */
-function useWide(): boolean {
-  const query = "(min-width: 1024px)";
-  const [wide, setWide] = useState(() => typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia(query).matches);
-  useEffect(() => {
-    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
-    const mql = window.matchMedia(query);
-    const on = () => setWide(mql.matches);
-    on();
-    mql.addEventListener?.("change", on);
-    return () => mql.removeEventListener?.("change", on);
-  }, []);
-  return wide;
 }
 
 export interface FoundingRole {

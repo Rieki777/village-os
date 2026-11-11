@@ -419,6 +419,7 @@ export default function RoleEditor({ roleId, onClose, onSaved }: { roleId: strin
 
         {base.sections && <SectionsFields value={form.sections} start={start.sections} onChange={(v) => set("sections", v)} />}
 
+        {/* SLOT FOR LANE A4 (PR 1193): RootPicker (1 to 3 roots) replaces CharacterTags here; same value and onChange. */}
         <CharacterTags value={form.tags} onChange={(v) => set("tags", v)} changed={!same([...form.tags].sort(), [...start.tags].sort())} />
 
         {error && <p role="alert" className="text-sm font-semibold text-coral">{error}</p>}
