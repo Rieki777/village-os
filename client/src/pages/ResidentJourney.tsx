@@ -27,8 +27,6 @@ import {
   Award,
   Key,
   Building,
-  Shield,
-  Crown,
   ChevronDown,
   ExternalLink,
   Sparkles,
@@ -77,7 +75,18 @@ const STEP_ICONS = [Calendar, Users, Sprout, BookOpen, Heart, Home, Wallet, File
  * the default words may say or imply that years alone grow anybody's voice,
  * and the heading that did say so ("Growing Your Voice") is gone.
  */
-const TITLE_ICONS = [Home, Shield, Users, Crown];
+/** One ring per title, from the heart outward: the drawing for long presence on the land. */
+function TreeRings({ rings }: { rings: number }) {
+  const n = Math.max(1, Math.min(6, rings));
+  return (
+    <svg viewBox="0 0 40 40" aria-hidden="true" data-rings={n} className="h-10 w-10 text-notice">
+      <circle cx="20" cy="20" r="2" fill="currentColor" />
+      {Array.from({ length: n }, (_, i) => (
+        <circle key={i} cx="20" cy="20" r={5 + i * 3} fill="none" stroke="currentColor" strokeOpacity={0.85 - i * 0.1} strokeWidth="1.1" />
+      ))}
+    </svg>
+  );
+}
 
 interface VillageDues {
   amount?: string;
@@ -237,12 +246,7 @@ export default function ResidentJourney() {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
           >
-            <m.div
-              animate={{ y: [0, -5, 0] }}
-              transition={{ duration: 2, repeat: Infinity }}
-            >
-              <Key className="w-12 h-12 text-notice mx-auto mb-4" />
-            </m.div>
+            <Key className="w-12 h-12 text-notice mx-auto mb-4" aria-hidden="true" />
             <h2 className="font-display text-2xl md:text-3xl font-semibold text-foreground mb-4 break-words">
               {page.tenure.fields.heading}
             </h2>
@@ -440,7 +444,6 @@ export default function ResidentJourney() {
 
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6 max-w-4xl mx-auto">
             {page.titles.lists.items.map((level, index) => {
-              const LevelIcon = TITLE_ICONS[index % TITLE_ICONS.length];
               return (
               <m.div
                 key={`${index}-${level.level}`}
@@ -448,16 +451,13 @@ export default function ResidentJourney() {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ delay: index * 0.1 }}
-                whileHover={{ y: -8, scale: 1.02 }}
                 className="bg-muted border border-border p-6 rounded-xl text-center min-w-0"
               >
-                <m.div
-                  className="w-14 h-14 rounded-full bg-card border border-border flex items-center justify-center mx-auto mb-4"
-                  whileHover={{ rotate: 360 }}
-                  transition={{ duration: 0.5 }}
-                >
-                  <LevelIcon className="w-7 h-7" />
-                </m.div>
+                {/* TREE RINGS (the prune, wave 2, C4): a title for time here grows a ring, never a badge
+                    or a crown. Quiet, never compared, and nothing reads a member's years. */}
+                <div className="w-14 h-14 rounded-full bg-card border border-border flex items-center justify-center mx-auto mb-4">
+                  <TreeRings rings={index + 1} />
+                </div>
                 <h3 className="font-display text-xl font-semibold mb-2 break-words">
                   {level.level}
                 </h3>

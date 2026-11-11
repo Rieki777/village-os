@@ -7,22 +7,19 @@
  * their counts and the Outside my roles list with the role each item belongs
  * to (check 23).
  *
- * The score is two rings, task score and role coverage, each with its A4
- * reading: the band's name, its sentence and its context lines. It is the
- * member's alone, so the whole block sits inside `MemberOnly` and Room view
- * removes it.
+ * The score is drawn as a garden bed (see ScoreBlock). It is the member's
+ * alone, so the whole block sits inside `MemberOnly` and Room view removes it.
  */
 import {
   MOON_WORDS,
   MY_MOON_WORDS,
   OUTSIDE_MY_ROLES,
-  scoreWords,
   type Coverage,
   type MyMoonResponse,
   type Reading,
   type RecapItem,
 } from "@shared/moonRecap";
-import { CHIP, MemberOnly, MUTED, Ring, Section } from "./moonUi";
+import { CHIP, MemberOnly, MUTED, Section } from "./moonUi";
 
 export function RoleCardsBlock({ coverage, items, outsideRoles }: { coverage: Coverage; items: readonly RecapItem[]; outsideRoles: MyMoonResponse["outsideRoles"] }) {
   const textOf = (id: string) => items.find((i) => i.id === id)?.text ?? "";
@@ -112,29 +109,123 @@ function ReadingLines({ reading }: { reading: Reading | null }) {
   );
 }
 
+/** The garden's own words (the prune, wave 2, C11). Member only, never on the approvers' queue. */
+export const GARDEN_WORDS = {
+  heading: "Your garden this moon",
+  tasks: "What you tended",
+  roles: "Your role cards",
+  flowered: "flowered",
+  bud: "in bud",
+  seed: "seed kept",
+  tended: "tended",
+  resting: "resting",
+  nothingYet: "Nothing to count yet",
+  note: "A gentle note on this moon",
+  onlyYou: "Only you see this garden. It never sets pay and is never ranked.",
+} as const;
+
+export type Plant = "flowered" | "bud" | "seed";
+
+/** One plant per counted item, in the order a bed fills: flowers, then buds, then seeds kept. */
+export function gardenBed(score: Pick<MyMoonResponse["taskScore"], "done" | "partly" | "carry">): Plant[] {
+  const n = (v: number) => Math.max(0, Math.floor(Number(v) || 0));
+  return [
+    ...Array<Plant>(n(score.done)).fill("flowered"),
+    ...Array<Plant>(n(score.partly)).fill("bud"),
+    ...Array<Plant>(n(score.carry)).fill("seed"),
+  ];
+}
+
+function PlantGlyph({ kind }: { kind: Plant | "tended" | "resting" }) {
+  return (
+    <svg viewBox="0 0 20 24" aria-hidden="true" data-plant={kind} className="h-6 w-5 shrink-0">
+      <path d="M2 22 H18" stroke="currentColor" strokeOpacity="0.3" strokeWidth="1.5" className="text-muted-foreground" />
+      {kind === "seed" || kind === "resting" ? (
+        <ellipse cx="10" cy="19.5" rx="2.2" ry="1.6" className="fill-muted-foreground" />
+      ) : (
+        <>
+          <path d="M10 22 V11" className="stroke-open" strokeWidth="1.5" fill="none" />
+          <path d="M10 16 C7 15, 6 13, 6.5 12 C8 12.5, 9.5 14, 10 16 Z" className="fill-open" />
+          {kind === "flowered" || kind === "tended" ? (
+            <g className="fill-notice">
+              <circle cx="10" cy="6" r="2.4" />
+              <circle cx="6.8" cy="8.2" r="2.4" />
+              <circle cx="13.2" cy="8.2" r="2.4" />
+              <circle cx="8" cy="11" r="2.1" />
+              <circle cx="12" cy="11" r="2.1" />
+              <circle cx="10" cy="8.7" r="1.6" className="fill-background" />
+            </g>
+          ) : (
+            <ellipse cx="10" cy="8.5" rx="2.4" ry="3.4" className="fill-open" />
+          )}
+        </>
+      )}
+    </svg>
+  );
+}
+
+/**
+ * THE SCORE, REDRAWN AS A GARDEN BED (the prune, wave 2, C11; member's own view only).
+ *
+ * The two rings and the percent are gone. What was tended this moon grows as a
+ * bed: a flower for each thing done, a bud for each thing partly done, a seed
+ * kept for each thing carried, the same three words The Gathering reads back
+ * on a Friday. The role cards are beds too, tended or resting. The band
+ * sentences stay, folded under a gentle note the member can open. The server's
+ * score is unchanged and so is the approvers' queue, which is the lead's
+ * decision (D3) and is untouched here.
+ */
 export function ScoreBlock({ data }: { data: Pick<MyMoonResponse, "taskScore" | "taskReading" | "seatCoverage" | "seatReading"> }) {
   const seat = data.seatCoverage;
+  const plants = gardenBed(data.taskScore);
+  const tendedBeds = Math.max(0, Math.min(seat.total, seat.on));
+  const beds = [
+    ...Array<"tended">(tendedBeds).fill("tended"),
+    ...Array<"resting">(Math.max(0, seat.total - tendedBeds)).fill("resting"),
+  ];
+  const said = (n: number, w: string) => (n > 0 ? `${n} ${w}` : "");
+  const plantWords = [
+    said(data.taskScore.done, GARDEN_WORDS.flowered),
+    said(data.taskScore.partly, GARDEN_WORDS.bud),
+    said(data.taskScore.carry, GARDEN_WORDS.seed),
+  ].filter(Boolean).join(", ");
   return (
     <MemberOnly>
-      <Section title={MY_MOON_WORDS.scoreHeading}>
-        <div className="flex flex-col gap-4" data-testid="moon-score">
-          <div className="flex items-start gap-3">
-            <Ring pct={data.taskScore.pct} label={MY_MOON_WORDS.taskScore} />
-            <div className="flex min-w-0 flex-col gap-1">
-              <p className="m-0 text-xs uppercase tracking-wide text-muted-foreground">{MY_MOON_WORDS.taskScore}</p>
-              <p className="m-0 text-sm text-foreground">{scoreWords(data.taskScore)}</p>
-              <ReadingLines reading={data.taskReading} />
-            </div>
+      <Section title={GARDEN_WORDS.heading}>
+        <div className="flex flex-col gap-5" data-testid="moon-score">
+          <div className="flex flex-col gap-2">
+            <p className="m-0 text-xs uppercase tracking-wide text-muted-foreground">{GARDEN_WORDS.tasks}</p>
+            {plants.length === 0 ? (
+              <p className={MUTED}>{GARDEN_WORDS.nothingYet}</p>
+            ) : (
+              <div role="img" aria-label={plantWords} data-testid="garden-bed" className="flex flex-wrap items-end gap-1 rounded-xl border border-border bg-muted px-3 py-2">
+                {plants.map((p, i) => <PlantGlyph key={i} kind={p} />)}
+              </div>
+            )}
           </div>
-          <div className="flex items-start gap-3">
-            <Ring pct={seat.pct} label={MY_MOON_WORDS.roleCoverage} />
-            <div className="flex min-w-0 flex-col gap-1">
-              <p className="m-0 text-xs uppercase tracking-wide text-muted-foreground">{MY_MOON_WORDS.roleCoverage}</p>
-              <p className="m-0 text-sm text-foreground">{seat.total > 0 ? `${seat.on} of ${seat.total}` : MY_MOON_WORDS.noLines}</p>
-              <ReadingLines reading={data.seatReading} />
+          {seat.total > 0 ? (
+            <div className="flex flex-col gap-2">
+              <p className="m-0 text-xs uppercase tracking-wide text-muted-foreground">{GARDEN_WORDS.roles}</p>
+              <div
+                role="img"
+                aria-label={[said(tendedBeds, GARDEN_WORDS.tended), said(seat.total - tendedBeds, GARDEN_WORDS.resting)].filter(Boolean).join(", ")}
+                data-testid="role-beds"
+                className="flex flex-wrap items-end gap-1 rounded-xl border border-border bg-muted px-3 py-2"
+              >
+                {beds.map((b, i) => <PlantGlyph key={i} kind={b} />)}
+              </div>
             </div>
-          </div>
-          <p className={MUTED}>{MY_MOON_WORDS.onlyYou}</p>
+          ) : null}
+          {data.taskReading || data.seatReading ? (
+            <details className="rounded-lg border border-border p-3">
+              <summary className="min-h-11 cursor-pointer text-sm font-medium text-foreground">{GARDEN_WORDS.note}</summary>
+              <div className="mt-2 flex flex-col gap-3">
+                <ReadingLines reading={data.taskReading} />
+                <ReadingLines reading={data.seatReading} />
+              </div>
+            </details>
+          ) : null}
+          <p className={MUTED}>{GARDEN_WORDS.onlyYou}</p>
         </div>
       </Section>
     </MemberOnly>

@@ -7,75 +7,10 @@
  * `null`, and the component draws nothing for a null. Whole numbers only
  * (Rye, 2026-09-04), so every count is rounded once, here.
  */
-import type { StageRule } from "@shared/gameConfig";
-
-export interface RungLike {
-  id: string;
-  name: string;
-  rule: StageRule;
-}
 
 /** A whole number, grouped for the reader's locale: 1240 reads "1,240". */
 export const whole = (n: number): string =>
   new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(Math.round(n));
-
-/**
- * How far along the NEXT rung this member is, as steps.
- *
- * Only two rungs have a countable distance: consented quests and the community
- * training. Every other rule (membership, being paid, a grant) is one act with
- * no steps in it, and drawing a bar across it would invent a fraction, so those
- * answer null and the page names the rule in words instead.
- */
-export function nextRungProgress(
-  next: RungLike | null | undefined,
-  standing: { consentedQuests: number | null; training?: { done: number; required: number } | null },
-): { done: number; total: number } | null {
-  if (!next) return null;
-  if (next.rule.type === "quests" && typeof standing.consentedQuests === "number") {
-    const total = Math.max(1, Math.round(next.rule.min));
-    return { done: Math.min(total, Math.max(0, Math.round(standing.consentedQuests))), total };
-  }
-  if (next.rule.type === "training-complete" && standing.training && standing.training.required > 0) {
-    const total = Math.round(standing.training.required);
-    return { done: Math.min(total, Math.max(0, Math.round(standing.training.done))), total };
-  }
-  return null;
-}
-
-export type RungState = "reached" | "current" | "next" | "ahead";
-
-/** The Path of Growth as the strip draws it: every rung, and where this member stands on it. */
-export function rungStates(stages: ReadonlyArray<{ id: string; name: string }>, stageIndex: number) {
-  return stages.map((s, i) => ({
-    id: s.id,
-    name: s.name,
-    state: (i < stageIndex ? "reached" : i === stageIndex ? "current" : i === stageIndex + 1 ? "next" : "ahead") as RungState,
-  }));
-}
-
-/**
- * The abilities this rung opened, in the catalogue's own order.
- *
- * A held power whose effective rung is the one this member stands on. A power
- * that a role or a badge granted is not an ability the RUNG unlocked, so it is
- * left out here and shown with the roles instead.
- */
-export function abilitiesAtStage(
-  catalogue: ReadonlyArray<{ label: string; held: boolean; opens: { via: "stage"; stage: string } | { via: "appointment" } }>,
-  stageId: string,
-): string[] {
-  return catalogue.filter((c) => c.held && c.opens.via === "stage" && c.opens.stage === stageId).map((c) => c.label);
-}
-
-/**
- * The stage pill under the portrait: "Stage 5 · Member". Null until both the
- * ladder and the position are known, so it never flashes "Stage 1".
- */
-export function stagePill(stages: ReadonlyArray<{ name: string }> | null | undefined, stageIndex: number | null | undefined): string | null {
-  if (!stages || typeof stageIndex !== "number" || !stages[stageIndex]) return null;
-  return `Stage ${stageIndex + 1} · ${stages[stageIndex].name}`;
-}
 
 /** Whole days from `now` until `iso`, never below zero. Null for a date that does not parse. */
 export function daysUntil(iso: string | null | undefined, now: Date = new Date()): number | null {

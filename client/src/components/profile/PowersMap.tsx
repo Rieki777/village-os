@@ -1,6 +1,17 @@
 /**
  * POWERS: the climb, and what the village entrusts.
  *
+ * ── THE PRUNE: MYCELIUM, AND NO TALLY (waves 1 and 2, display only) ────────
+ *
+ * Drawn now as mycelium: each stage is a node on one thread, lit where the
+ * member has walked, a firefly ring where they are, an open node ahead, and
+ * the powers hang off it as the doors that node opened. Entrusted powers are
+ * the threads the village extends through roles. The tallies are gone ("8 of
+ * 31 open to you now", "13 open by climbing", the count beside Entrusted), and
+ * so is the allowance beside each rung, because the next rung's multiplier was
+ * being put as a reason to climb. Nothing scores or ranks a person. The
+ * catalogue, the gate and every multiplier are untouched.
+ *
  * ── WHAT THE DATA ACTUALLY SAYS, WHICH IS NOT WHAT A SKILL TREE ASSUMES ─────
  *
  * The brief was "make this feel like an MMORPG skill tree". Reading the real
@@ -77,7 +88,7 @@
  * without ever granting it.
  */
 import { useState } from "react";
-import { Check, Circle, Lock, UserCheck } from "lucide-react";
+import { UserCheck } from "lucide-react";
 import type { GameStagePublic, ProgressionCapability } from "@/lib/gameApi";
 import type { StageRule } from "@shared/gameConfig";
 import PowerHand from "./PowerHand";
@@ -128,13 +139,6 @@ function requirementOf(
   return `${Math.min(consented, rule.min)} of ${rule.min} ${unit}`;
 }
 
-/** What a rung pays, in the terms the allowance is actually spent in. */
-function allowanceOf(multiplier: number): string {
-  if (multiplier <= 0) return "No sending allowance";
-  if (multiplier === 1) return "Base sending allowance";
-  return `${multiplier}x the sending allowance`;
-}
-
 type RungState = "walked" | "here" | "ahead";
 
 interface Rung {
@@ -142,7 +146,6 @@ interface Rung {
   name: string;
   description: string;
   requirement: string;
-  allowance: string | null;
   state: RungState;
   powers: ProgressionCapability[];
 }
@@ -172,13 +175,6 @@ function buildClimb(
     name: s.name,
     description: s.description,
     requirement: requirementOf(s.rule, consentedQuests, training),
-    // The allowance earns its line only where it MOVES. Printed on every rung
-    // it was "Base sending allowance" five times running, which buries the two
-    // rungs where the number actually rises. Shown only on the change, the
-    // column reads as the reward curve it is.
-    allowance: i === 0 || s.gratitudeMultiplier !== stages[i - 1]!.gratitudeMultiplier
-      ? allowanceOf(s.gratitudeMultiplier)
-      : null,
     state: i < stageIndex ? "walked" : i === stageIndex ? "here" : "ahead",
     powers: byRung.get(s.id) ?? [],
   }));
@@ -269,8 +265,6 @@ export default function PowersMap({
 
   const climb = buildClimb(catalogue, stages, stageIndex, consentedQuests, training);
   const appointed = catalogue.filter((c) => c.opens.via === "appointment");
-  const openCount = catalogue.filter((c) => c.held).length;
-  const climbCount = catalogue.length - appointed.length;
 
   // A rung ABOVE the member with a capability still closed at or below it is
   // the gate's doing, never the ladder's: `admin -> badgeDenies -> role ->
@@ -307,13 +301,9 @@ export default function PowersMap({
           <h2 id="powers-h" className="font-display text-2xl font-bold text-card-foreground">
             Powers
           </h2>
-          {/* Every figure comes off the payload. `catalogue.length` is what
-              this village RUNS, which is smaller than the platform's full set
-              whenever a module is off, because an off module's keys are left
-              out entirely. */}
+          {/* No tally (the prune): what is open is drawn on the thread below, never counted. */}
           <p className="mt-1 text-sm text-muted-foreground">
-            <span className="font-semibold text-foreground">{openCount}</span> of {catalogue.length} open to you now.{" "}
-            {climbCount} open by climbing, {appointed.length} by appointment.
+            Doors open as you walk, and the village entrusts the rest through its roles.
           </p>
         </div>
         {/* No `aria-pressed`. This button's NAME changes to describe what the
@@ -335,13 +325,13 @@ export default function PowersMap({
           when the button above changes the two lists underneath it. */}
       <p aria-live="polite" className="sr-only">
         {showClosed
-          ? `Showing all ${catalogue.length} powers.`
-          : `Showing the ${openCount} powers open to you.`}
+          ? "Showing every power."
+          : "Showing the powers open to you."}
       </p>
 
       <h3 className="mt-8 font-semibold text-card-foreground">The climb</h3>
       <p className="mt-0.5 text-sm text-muted-foreground">
-        Every rung of the ladder, and what each one opens.
+        One thread through the village, and the doors each node opens.
       </p>
 
       {/* An ordered list because the order IS the information: these rungs are
@@ -349,7 +339,6 @@ export default function PowersMap({
       <ol className="mt-4">
         {rungs.map((rung, i) => {
           const last = i === rungs.length - 1;
-          const Marker = rung.state === "walked" ? Check : rung.state === "here" ? Circle : Lock;
           const tone =
             rung.state === "walked" ? "text-open" : rung.state === "here" ? "text-notice" : "text-muted-foreground";
           return (
@@ -360,15 +349,25 @@ export default function PowersMap({
             >
               {/* The spine itself. It stops at the last rung shown, so the
                   line never dangles past the end of the climb. */}
+              {/* The hypha: a soft thread from this node to the next, drawn with a gentle sway
+                  so the spine reads as something grown. It stops at the last node shown. */}
               {last ? null : (
-                <span aria-hidden="true" className="absolute bottom-0 left-[9px] top-6 w-px bg-border" />
+                <svg aria-hidden="true" viewBox="0 0 8 40" preserveAspectRatio="none" className={`absolute bottom-0 left-[6px] top-6 h-auto w-2 ${rung.state === "walked" ? "text-open/60" : "text-border"}`}>
+                  <path d="M4 0 C1 12, 7 24, 4 40" fill="none" stroke="currentColor" strokeWidth="1.25" vectorEffect="non-scaling-stroke" />
+                </svg>
               )}
-              <span
-                aria-hidden="true"
-                className={`absolute left-0 top-1 flex h-5 w-5 items-center justify-center rounded-full border border-border bg-card ${tone}`}
-              >
-                <Marker className="h-3 w-3" />
-              </span>
+              <svg aria-hidden="true" viewBox="0 0 20 20" data-node={rung.state} className={`absolute left-0 top-1 h-5 w-5 ${tone}`}>
+                {rung.state === "here" ? <circle cx="10" cy="10" r="9" fill="currentColor" fillOpacity="0.15" /> : null}
+                <circle
+                  cx="10"
+                  cy="10"
+                  r={rung.state === "ahead" ? 4.5 : 5.5}
+                  fill={rung.state === "ahead" ? "none" : "currentColor"}
+                  fillOpacity={rung.state === "walked" ? 0.85 : 1}
+                  stroke="currentColor"
+                  strokeWidth="1.25"
+                />
+              </svg>
 
               <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
                 <span className={`font-semibold ${rung.state === "ahead" ? "text-muted-foreground" : "text-card-foreground"}`}>
@@ -392,7 +391,6 @@ export default function PowersMap({
                   avoid. */}
               <p className="mt-0.5 text-sm text-muted-foreground">
                 {rung.description}
-                {rung.allowance ? ` ${rung.allowance}.` : ""}
               </p>
 
               {rung.powers.length > 0 ? (
@@ -412,7 +410,6 @@ export default function PowersMap({
           <div className="mt-8 flex items-center gap-2">
             <UserCheck className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
             <h3 className="font-semibold text-card-foreground">Entrusted by the village</h3>
-            <span className="text-sm text-muted-foreground">{appointed.length}</span>
           </div>
           <p className="mt-0.5 text-sm text-muted-foreground">
             A role or a badge opens these. No amount of climbing reaches them.

@@ -1,6 +1,5 @@
 import { authToken, gameFetch, GameMe } from "@/lib/gameApi";
 import { useTokenName } from "@/hooks/useTokenNames";
-import { useLadderTitle } from "@/hooks/useVillagePaths";
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { ArrowRight, Compass, Heart, Sparkles } from "lucide-react";
@@ -57,7 +56,6 @@ export default function GameDashboard({
 } = {}) {
   const [me, setMe] = useState<GameMe | null>(null);
   const currency = useTokenName("Recognition");
-  const ladderTitle = useLadderTitle();
   /**
    * The advance to celebrate, or null.
    *
@@ -198,7 +196,7 @@ export default function GameDashboard({
   return (
     <div className="space-y-6">
       {advance && (
-        <StageAdvanced advance={advance} stages={me.stages} ladderTitle={ladderTitle} onClose={() => setAdvance(null)} />
+        <StageAdvanced advance={advance} onClose={() => setAdvance(null)} />
       )}
 
       {/*

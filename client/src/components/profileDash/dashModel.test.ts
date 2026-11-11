@@ -1,62 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
-  abilitiesAtStage,
   cashSummary,
   daysUntil,
   earnedIn,
   moonRows,
-  nextRungProgress,
   pickTokens,
-  rungStates,
-  stagePill,
   whole,
   wholeMoney,
 } from "./dashModel";
 import { todayCards } from "./TodayStrip";
-
-const rung = (id: string, rule: any) => ({ id, name: id[0].toUpperCase() + id.slice(1), rule });
-
-describe("nextRungProgress", () => {
-  it("counts consented quests against the quests rung, capped at the rung", () => {
-    expect(nextRungProgress(rung("contributor", { type: "quests", min: 3 }), { consentedQuests: 2 })).toEqual({ done: 2, total: 3 });
-    expect(nextRungProgress(rung("contributor", { type: "quests", min: 3 }), { consentedQuests: 9 })).toEqual({ done: 3, total: 3 });
-  });
-  it("counts mandatory lessons against the training rung", () => {
-    expect(nextRungProgress(rung("immersant", { type: "training-complete" }), { consentedQuests: 0, training: { done: 2, required: 3 } })).toEqual({ done: 2, total: 3 });
-  });
-  it("draws no steps for a rung that is one act", () => {
-    expect(nextRungProgress(rung("member", { type: "membership" }), { consentedQuests: 4 })).toBeNull();
-    expect(nextRungProgress(rung("guide", { type: "granted" }), { consentedQuests: 4 })).toBeNull();
-    expect(nextRungProgress(null, { consentedQuests: 4 })).toBeNull();
-  });
-  it("says nothing while the count is unknown", () => {
-    expect(nextRungProgress(rung("contributor", { type: "quests", min: 3 }), { consentedQuests: null })).toBeNull();
-  });
-});
-
-describe("the ladder and the pill", () => {
-  const stages = ["visitor", "guest", "member", "contributor", "sage"].map((id) => ({ id, name: id }));
-  it("marks reached, current, next and ahead", () => {
-    expect(rungStates(stages, 2).map((r) => r.state)).toEqual(["reached", "reached", "current", "next", "ahead"]);
-  });
-  it("names the stage once both halves are known", () => {
-    expect(stagePill(stages, 2)).toBe("Stage 3 · member");
-    expect(stagePill(null, 2)).toBeNull();
-    expect(stagePill(stages, null)).toBeNull();
-  });
-});
-
-describe("abilitiesAtStage", () => {
-  it("lists the held powers this rung opened, never an appointed one", () => {
-    const cat = [
-      { label: "Vote on a ballot", held: true, opens: { via: "stage" as const, stage: "member" } },
-      { label: "Post", held: true, opens: { via: "stage" as const, stage: "guest" } },
-      { label: "Seat roles", held: true, opens: { via: "appointment" as const } },
-      { label: "Veto", held: false, opens: { via: "stage" as const, stage: "member" } },
-    ];
-    expect(abilitiesAtStage(cat, "member")).toEqual(["Vote on a ballot"]);
-  });
-});
 
 describe("treasury arithmetic", () => {
   const ledger = [

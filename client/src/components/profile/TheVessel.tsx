@@ -47,13 +47,11 @@ const times = (n: number): string => `${n} time${n === 1 ? "" : "s"}`;
 export default function TheVessel({
   gratitude,
   here,
-  next,
   failed,
   onGiven,
 }: {
   gratitude: GameMe["gratitude"] | null;
   here: GameStagePublic | null;
-  next: GameStagePublic | null;
   /** True when the read FAILED, which is a different thing from having nothing. */
   failed?: boolean;
   /** Told after a successful give, so whatever else prints a balance re-reads. */
@@ -239,10 +237,11 @@ export default function TheVessel({
           <p className="mt-2 text-sm text-muted-foreground">
             The allowance resets with the new moon. Nothing you were given is ever taken back.
           </p>
-          {here && next && next.gratitudeMultiplier !== here.gratitudeMultiplier ? (
+          {/* The allowance as a fact, said once (the prune, C14). The next rung's multiplier is no longer put
+              as a reason to climb; the numbers themselves are the lead's to decide and stay exactly as served. */}
+          {here && here.gratitudeMultiplier > 0 ? (
             <p className="mt-2 text-sm text-muted-foreground">
-              Your sending allowance is {times(here.gratitudeMultiplier)} the base now, and{" "}
-              {times(next.gratitudeMultiplier)} at {next.name}.
+              Your sending allowance is {times(here.gratitudeMultiplier)} the base.
             </p>
           ) : null}
         </div>

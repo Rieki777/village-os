@@ -795,8 +795,8 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
   // ── The village ───────────────────────────────────────────────────────────
   stage_advanced: {
     group: "village",
-    blurb: "You crossed into a new stage, and what it opens is listed beside it.",
-    many: "{n} stages crossed.",
+    blurb: "A door opened for you, and the notice names what you can now do.",
+    many: "{n} doors opened.",
     celebrate: true,
   },
   badge: {
