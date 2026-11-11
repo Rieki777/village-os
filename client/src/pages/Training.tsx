@@ -23,7 +23,7 @@ import {
   TILE,
   WORLD,
 } from "@/components/journey/look";
-import { TRAINING_PAGES, TRAINING_TRACKS, isTrainingTrack, trainingPathFor, type TrainingTrack } from "@shared/pageContent/training";
+import { TRAINING_PAGES, TRAINING_TRACKS, isTrainingTrack, type TrainingTrack } from "@shared/pageContent/training";
 import type { ResolvedPage } from "@shared/pageContent/types";
 
 interface TrainingModule {
@@ -137,7 +137,8 @@ function TrainingChooser() {
               {TRAINING_TRACKS.map((t) => {
                 const door = pages[t]?.door.fields;
                 return (
-                  <Link key={t} href={trainingPathFor(t)} className={`${CARD} group flex min-h-11 flex-col gap-3 hover:border-notice`}>
+                  // Spelled out, so the reachability gate reads each door (trainingPathFor gives the same two).
+                  <Link key={t} href={t === "steward" ? "/training/steward" : "/training/resident"} className={`${CARD} group flex min-h-11 flex-col gap-3 hover:border-notice`}>
                     <span className={RING} aria-hidden="true">
                       <GraduationCap className="size-5" />
                     </span>
