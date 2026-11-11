@@ -86,6 +86,8 @@ export interface DashData {
     parties: Party[];
   } | null;
   session: { circle: string; title: string | null; words: string; href: string } | null;
+  /** The next meeting of every circle this member sits in, for the week strip (Profile Today). */
+  meetings: Array<{ circle: string; title: string | null; at: string; href: string }> | null;
   questPay: Record<string, WorkPay> | null;
   /** Open asks waiting on this member, and how many of them someone is stuck on. */
   asks: { waiting: number; blocking: number } | null;
@@ -106,6 +108,7 @@ const EMPTY: DashData = {
   tasks: null,
   messages: null,
   session: null,
+  meetings: null,
   questPay: null,
   asks: null,
 };
@@ -227,11 +230,15 @@ export function useDashData(userId: string | number | null | undefined): DashDat
         read<{ waiting: number; nextDue: string | null }>("/api/sessions/tasks/count").then((t) =>
           put({ tasks: t && typeof t.waiting === "number" ? { waiting: t.waiting, nextDue: t.nextDue ?? null } : null }),
         );
-        read<{ comingUp?: { rows: Array<{ circleName: string; nextTitle: string | null; words: string; mine: boolean; openRoom: { id: number } | null }> } }>(
+        read<{ comingUp?: { rows: Array<{ circleName: string; nextTitle: string | null; words: string; mine: boolean; openRoom: { id: number } | null; next?: { at?: string } }> } }>(
           "/api/sessions",
         ).then((s) => {
           const row = s?.comingUp?.rows?.find((r) => r.mine) ?? null;
+          const mine = s?.comingUp?.rows ? s.comingUp.rows.filter((r) => r.mine && typeof r.next?.at === "string") : null;
           put({
+            meetings: mine
+              ? mine.map((r) => ({ circle: r.circleName, title: r.nextTitle, at: String(r.next?.at), href: r.openRoom ? `/sessions/${r.openRoom.id}` : "/sessions" }))
+              : null,
             session: row
               ? {
                   circle: row.circleName,

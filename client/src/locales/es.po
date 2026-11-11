@@ -12155,3 +12155,123 @@ msgstr "Esta solicitud es para el ciclo del {termFrom} al {termTo}."
 msgctxt "founding application compensation"
 msgid "To be decided in the onboarding process."
 msgstr "Por decidir en el proceso de incorporación."
+
+#: client/src/components/today/FirstFourteenDays.tsx
+msgctxt "first fourteen days strip, eyebrow"
+msgid "Our first 14 days"
+msgstr "Nuestros primeros 14 días"
+
+#: client/src/components/today/FirstFourteenDays.tsx
+msgctxt "first fourteen days strip, which day it is"
+msgid "Day {0} of {total}"
+msgstr "Día {0} de {total}"
+
+#: client/src/components/today/FirstFourteenDays.tsx
+msgctxt "first fourteen days strip, the next step"
+msgid "Next: {0}"
+msgstr "Lo siguiente: {0}"
+
+#: client/src/components/today/FirstFourteenDays.tsx
+msgctxt "first fourteen days strip, who the next step is with and when"
+msgid "With {0}, by {nextDate}."
+msgstr "Con {0}, para el {nextDate}."
+
+#: client/src/components/today/FirstFourteenDays.tsx
+msgctxt "first fourteen days strip, when the next step is due"
+msgid "By {nextDate}."
+msgstr "Para el {nextDate}."
+
+#: client/src/components/today/FirstFourteenDays.tsx
+msgctxt "first fourteen days strip, all done"
+msgid "Every step of our first 14 days is walked. Welcome, truly."
+msgstr "Recorrimos cada paso de nuestros primeros 14 días. Te damos la bienvenida, de verdad."
+
+#: client/src/components/today/FirstFourteenDays.tsx
+msgctxt "first fourteen days strip, the days as a group"
+msgid "The fourteen days"
+msgstr "Los catorce días"
+
+#: client/src/components/today/FirstFourteenDays.tsx
+msgctxt "first fourteen days strip, a day's number in its name"
+msgid "day {0}"
+msgstr "día {0}"
+
+#: client/src/components/today/FirstFourteenDays.tsx
+msgctxt "first fourteen days strip, the day that is today"
+msgid "today"
+msgstr "hoy"
+
+#: client/src/components/today/FirstFourteenDays.tsx
+msgctxt "first fourteen days strip, the chosen day"
+msgid "Day {0}"
+msgstr "Día {0}"
+
+#: client/src/components/today/FirstFourteenDays.tsx
+msgctxt "first fourteen days strip, a day with no step"
+msgid "Nothing is due on this day. A day to settle in."
+msgstr "Nada vence este día. Un día para asentarte."
+
+#: client/src/components/today/FirstFourteenDays.tsx
+msgctxt "first fourteen days strip, who a step is with and when it is done"
+msgid "With {0}. Done when: {1}"
+msgstr "Con {0}. Hecho cuando: {1}"
+
+#: client/src/components/today/FirstFourteenDays.tsx
+msgctxt "first fourteen days strip, when a step is done"
+msgid "Done when: {0}"
+msgstr "Hecho cuando: {0}"
+
+#: client/src/components/today/FirstFourteenDays.tsx
+msgctxt "first fourteen days strip, tick a step"
+msgid "Mark done"
+msgstr "Marcar como hecho"
+
+#: client/src/components/today/WeekStrip.tsx
+msgctxt "week strip, a task due on a day"
+msgid "A task from your sessions is due"
+msgstr "Vence una tarea de tus sesiones"
+
+#: client/src/components/today/WeekStrip.tsx
+msgctxt "week strip, the new moon on a day"
+msgid "New moon"
+msgstr "Luna nueva"
+
+#: client/src/components/today/WeekStrip.tsx
+msgctxt "week strip, the full moon on a day"
+msgid "Full moon"
+msgstr "Luna llena"
+
+#: client/src/components/today/WeekStrip.tsx
+msgctxt "week strip, eyebrow"
+msgid "Your week"
+msgstr "Tu semana"
+
+#: client/src/components/today/WeekStrip.tsx
+msgctxt "week strip, heading"
+msgid "The next seven days"
+msgstr "Los próximos siete días"
+
+#: client/src/components/today/WeekStrip.tsx
+msgctxt "week strip, an empty week"
+msgid "Nothing is on the calendar for you this week."
+msgstr "No tienes nada en el calendario esta semana."
+
+#: client/src/components/today/WeekStrip.tsx
+msgctxt "week strip, the door when the week is empty"
+msgid "Open the calendar"
+msgstr "Abrir el calendario"
+
+#: client/src/components/today/WeekStrip.tsx
+msgctxt "week strip, the days as a group"
+msgid "The seven days"
+msgstr "Los siete días"
+
+#: client/src/components/today/WeekStrip.tsx
+msgctxt "week strip, the day that is today"
+msgid "today"
+msgstr "hoy"
+
+#: client/src/components/today/WeekStrip.tsx
+msgctxt "week strip, an empty day"
+msgid "Nothing on this day."
+msgstr "Nada este día."

@@ -16,7 +16,8 @@
  *                    application with the warm not-invited letter.
  *   5. holder        Persona 2 again, adopted: registers from the invitation,
  *                    aligns with confidentiality and the terms, and reads the
- *                    profile in their first hour.
+ *                    profile in their first hour, where our first 14 days
+ *                    show as a strip of days.
  *
  * Each walk is a list of acts. An act that fails stops that walk, and the
  * summary names it. The words typed are invented and plain.
@@ -487,6 +488,21 @@ export async function holder(w, ctx) {
     await settle(page, 1500);
   });
   await w.look("profile");
+  // Phase B: Profile Today shows someone newly seated our first 14 days as a strip
+  // of days (and no week strip beside it). The welcome, which waits on the
+  // Welcome Steward, is named next; a day opens its own steps.
+  await w.step("see our first 14 days on Profile Today", async () => {
+    const strip = page.locator("[data-first-fourteen]").first();
+    await strip.waitFor({ timeout: 15_000 });
+    await strip.scrollIntoViewIfNeeded();
+    const next = await strip.locator("[data-next-step]").getAttribute("data-next-step");
+    if (next !== "welcome") throw new Error(`the next step reads ${next}, not the welcome`);
+    if (await page.locator("[data-week-strip]").count()) throw new Error("the week strip shows beside the first 14 days");
+    await strip.locator('button[data-day="3"]').click();
+    if ((await strip.locator("[data-chosen-day]").getAttribute("data-chosen-day")) !== "3") throw new Error("day 3 did not open");
+    if (!(await strip.locator('[data-step="technical-operations-conversation"]').count())) throw new Error("day 3 does not hold the Technical Operations conversation");
+  });
+  await w.look("first-fourteen");
   // The five archetypes as roots (11 Nov 2026): a new holder picks the roots
   // they grow from, and the quests board shows what grows from them first,
   // with one switch to see everything.

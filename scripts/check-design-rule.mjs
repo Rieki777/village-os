@@ -127,6 +127,9 @@ const JOURNEY = [
   "client/src/components/modules/ModuleGate.tsx",
   "client/src/components/admin/OnboardingPathEditor.tsx",
   "client/src/pages/RequestMembership.tsx",
+  // Profile Today (Phase B): our first 14 days and the week.
+  "client/src/components/today/FirstFourteenDays.tsx",
+  "client/src/components/today/WeekStrip.tsx",
 ];
 
 const listFlag = (name) => flag(name)?.split(",").filter(Boolean);
