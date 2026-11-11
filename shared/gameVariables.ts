@@ -2668,6 +2668,47 @@ export const VARIABLES: VariableDef[] = [
     default: "",
   },
 
+  // ── The founding team (Phase A, 11 Nov 2026) ─────────────────────────────
+  //
+  // The application for a listed role (/propose-a-role) reads its own village
+  // words from here (shared/foundingApplication.ts): the ways to get to know
+  // us and the first cycle. The pay shape it shows is the role cards' own
+  // setting (`org.pay_shape` and its two lines), so the two never disagree.
+  {
+    key: "org.founding_know_us",
+    category: "The founding team",
+    label: "Ways to get to know us before applying",
+    description:
+      "The first step of the application lists these, one per line, and the applicant ticks the ones they have done. The step never stops anyone applying. Up to eight lines.",
+    type: "longtext",
+    default: "Join a community call\nVisit the land\nShare a meal with us",
+  },
+  {
+    key: "org.founding_know_us_note",
+    category: "The founding team",
+    label: "The note while a way to get to know us is not ticked",
+    description: "Shown on the first step of the application whenever a way is not ticked yet. It encourages, and the applicant can always continue.",
+    type: "longtext",
+    default:
+      "We encourage you to do these, but if you haven't, you can still apply, especially if you've been invited to, or if you live far away and the next call is more than a week away, or if you feel you're an incredibly strong candidate.",
+  },
+  {
+    key: "org.founding_first_cycle",
+    category: "The founding team",
+    label: "What the first cycle looks like",
+    description: "Shown on the Your first day step of the application: how long the first cycle is, when it runs, and that either side may end it there.",
+    type: "longtext",
+    default: "Your first cycle is one month. At its end, either side may choose to stop there, with thanks.",
+  },
+  {
+    key: "org.founding_first_conversations",
+    category: "The founding team",
+    label: "The first conversations after joining",
+    description: "Shown on the Your first day step: the first conversations a new team member has once they are chosen, one per line. Leave it empty and none are listed.",
+    type: "longtext",
+    default: "",
+  },
+
   // ── Events (0059; visible in Admin only while the module is non-off) ─────
   //
   // Three knobs, and all three are READ. A registered variable nothing reads

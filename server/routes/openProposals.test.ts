@@ -258,11 +258,46 @@ describe.skipIf(!configured)("open role proposals, the intake, on a real schema"
     });
   });
 
+  describe("the founding-team application (Phase A, 11 Nov 2026)", () => {
+    it("the form carries the village's words from its settings, and no pay shape the village has not written (the page shows N%)", async () => {
+      const r = await call("GET", "/api/open-proposals/form");
+      expect(r.body.founding).toMatchObject({
+        knowUs: ["Join a community call", "Visit the land", "Share a meal with us"],
+        shares: [],
+        atRisk: "",
+        footer: "",
+        firstConversations: [],
+      });
+      expect(r.body.founding.firstCycle).toMatch(/either side may/);
+      // Shares only: never a range, a minimum or an amount.
+      expect(JSON.stringify(r.body.founding)).not.toMatch(/\$|USD|minimum|budget/i);
+    });
+
+    it("keeps the ticks for ways the village lists, drops any other, and keeps the ramp-up and Human Design or Gene Keys", async () => {
+      const { id } = await send({ knowUs: ["Visit the land", "A way nobody lists", "Visit the land"], rampUp: true, selfKnowledge: "Projector, 4/6" });
+      const row = await readOpenProposal(pool, id);
+      expect(row?.body).toMatchObject({ knowUs: ["Visit the land"], rampUp: true, selfKnowledge: "Projector, 4/6" });
+      // An application without them stores none of the three.
+      const plain = await send({ email: "plain@example.test" });
+      const body = (await readOpenProposal(pool, plain.id))?.body ?? {};
+      for (const key of ["knowUs", "rampUp", "selfKnowledge"]) expect(body).not.toHaveProperty(key);
+    });
+
+    it("refuses Human Design or Gene Keys longer than its limit, naming the field", async () => {
+      const r = await call("POST", "/api/open-proposals", proposal({ selfKnowledge: "x".repeat(301) }));
+      expect(r.status).toBe(400);
+      expect(r.body.field).toBe("selfKnowledge");
+      expect(state.sent).toHaveLength(0);
+    });
+  });
+
   describe("nothing unconfirmed reaches a person", () => {
     it("a proposal is kept unconfirmed and its address gets one essential email with a link, and nothing else", async () => {
       const { id, mail } = await send();
-      expect(mail).toMatchObject({ kind: "essential", origin: "open_proposal.confirm", to: { email: "rowan@example.test", name: "Rowan" }, subject: "Confirm your proposal to Test Village" });
-      expect(mail.text).toContain("You proposed to hold Gate Keeper in Test Village next season.");
+      expect(mail).toMatchObject({ kind: "essential", origin: "open_proposal.confirm", to: { email: "rowan@example.test", name: "Rowan" }, subject: "Confirm your application to Test Village" });
+      // A listed role is applied for (Phase A vocabulary): the email says application.
+      expect(mail.text).toContain("You applied for Gate Keeper in Test Village.");
+      expect(mail.text).toContain("Confirm it's you, and your application reaches us:");
       expect(mail.text).toContain(`${ORIGIN}/propose-a-role/confirm?token=`);
       expect(state.sent).toHaveLength(1);
       const row = await readOpenProposal(pool, id);

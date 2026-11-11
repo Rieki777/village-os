@@ -8,12 +8,12 @@
  * A visitor with no account sees no button at all.
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { OPEN_WORDS } from "@shared/openProposals";
 import { DRAFT_WORDS } from "@shared/seraDrafts";
 
-// fillGoals is audit B1's helper; the walk along the six stones is the test kit's.
-import { fillGoals, pressNext, sendNow, stoneNow } from "@/test/proposeStones";
+// fillGoals is audit B1's helper; the walk along the six steps is the test kit's.
+import { SETUP, fillGoals, pressNext, sendNow, stoneNow } from "@/test/proposeStones";
 
 vi.mock("@/components/Layout", () => ({ default: ({ children }: { children: React.ReactNode }) => <div>{children}</div> }));
 const auth = vi.hoisted(() => ({ user: null as null | { name: string; email: string } }));
@@ -26,6 +26,7 @@ const FORM = {
   village: "Test Village",
   season: { id: "s-next", name: "Season of Roots", startsOn: "2099-01-01" },
   roles: [{ id: "r-gate", name: "Gate Keeper", circle: "Land Circle", aim: "Open the gate at dawn.", accountabilities: ["Open at dawn"] }],
+  founding: SETUP,
 };
 const LETTER = { version: "lv-0123456789abcdef", title: "Membership agreement", body: "Dear friend.", intent: "I align with the Membership agreement.", parts: {} };
 const GUIDE = { choice: null, options: [{ id: "saberra", name: "Sera", named: true, available: true }], answering: "saberra", note: null, canChoose: false };
@@ -64,28 +65,31 @@ afterEach(() => {
   vi.unstubAllGlobals();
   auth.user = null;
   seraDown = false;
+  window.localStorage.clear();
+  window.history.pushState({}, "", "/");
 });
 
 const open = async () => {
+  window.history.pushState({}, "", "/propose-a-role?role=r-gate");
   serve();
   render(<ProposeARole />);
-  await screen.findByText("Gate Keeper");
-  fireEvent.click(within(document.querySelector('[data-role="r-gate"]') as HTMLElement).getByRole("checkbox"));
+  await screen.findByRole("heading", { name: OPEN_WORDS.heading("Gate Keeper") });
   fireEvent.change(screen.getByLabelText(OPEN_WORDS.whyLabel), { target: { value: "The gate is always shut." } });
-  // The aim and its Sera button are on the second stone, "Your moon".
+  fireEvent.change(screen.getByLabelText(OPEN_WORDS.nameLabel), { target: { value: "Rowan Field" } });
+  fireEvent.change(screen.getByLabelText(OPEN_WORDS.emailLabel), { target: { value: "rowan@example.test" } });
+  fireEvent.click(screen.getByLabelText(/agree to the background check/i));
+  // The aim and its drafting help are on step 3, "Your value".
   pressNext();
-  expect(stoneNow()).toBe("moon");
+  pressNext();
+  expect(stoneNow()).toBe("value");
 };
 const fillRest = async () => {
   fireEvent.change(screen.getByLabelText("Your commitment"), { target: { value: "50" } });
-  fireEvent.change(screen.getByLabelText(OPEN_WORDS.nameLabel), { target: { value: "Rowan Field" } });
-  fireEvent.change(screen.getByLabelText(OPEN_WORDS.emailLabel), { target: { value: "rowan@example.test" } });
   fireEvent.click(await screen.findByLabelText(LETTER.intent));
   fireEvent.click(screen.getByLabelText(/confidentiality agreement before I see/));
-  fireEvent.click(screen.getByLabelText(/agree to the background check/i));
 };
 
-describe("the open form with Ask Sera", () => {
+describe("the application with Sera's drafting help", () => {
   it("draws no button for a visitor with no account", async () => {
     await open();
     expect(document.querySelector("[data-ask-sera]")).toBeNull();
@@ -103,8 +107,8 @@ describe("the open form with Ask Sera", () => {
     await fillRest();
     fillGoals();
     sendNow();
-    // Held on "Your moon", where the draft sits: Next names it before the path goes on.
-    expect(stoneNow()).toBe("moon");
+    // Held on "Your value", where the draft sits: Continue names it before the application goes on.
+    expect(stoneNow()).toBe("value");
     expect((await screen.findByRole("alert")).textContent).toContain(DRAFT_WORDS.blocked(["aim"]));
     expect(posted).toHaveLength(0);
 

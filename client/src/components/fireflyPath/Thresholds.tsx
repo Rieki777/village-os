@@ -1,5 +1,6 @@
 /**
- * THE THRESHOLDS of the open proposal (game feel wave 2, lane 1 option B):
+ * THE THRESHOLDS of the application (game feel wave 2, lane 1 option B; the
+ * founding register since Phase A, 11 Nov 2026):
  * "Check your email" after sending, and "Confirmed" from the email's link.
  * You and the village are two circles (the nature kit's Vesica): they touch
  * when you send, and meet when you confirm.
@@ -26,7 +27,7 @@ import { i18n } from "@/i18n/i18n";
 import { LOCALE_STORAGE_KEY, useLocale } from "@/i18n/LocaleProvider";
 import { storedText } from "@/lib/safeStorage";
 import { isApplicantLanguage } from "@shared/applicantWords";
-import { OPEN_CONFIRM_HOURS } from "@shared/openProposals";
+import { OPEN_CONFIRM_HOURS, type StepAfterSubmit } from "@shared/openProposals";
 import { confirmBy, inboxFor, replyBy } from "./stones";
 
 const BUTTON = `${BTN_PRIMARY} py-3`;
@@ -77,21 +78,47 @@ function whenWords(d: Date, withTime: boolean): string {
 }
 
 /**
+ * WHAT HAPPENS NEXT, after an application is sent and after it is confirmed:
+ * the one place these words live on this side (Phase A coordination note).
+ * Lane A2 owns the applicant's list of steps after submit (received, our
+ * review, invitation, conversations, decision, first cycle). The confirmed
+ * page draws that list whenever the confirm route carries it (`steps`, from
+ * the INTEGRATOR SLOT `stepsAfterSubmit` in shared/openProposals.ts); these
+ * two short lines are the fallback, and the sent page's own two.
+ */
+export function useWhatComesNext(): (at: { confirmBy?: string; replyBy?: string }) => string[] {
+  const { t } = useLingui();
+  return (at) => {
+    const steps: string[] = [];
+    if (at.confirmBy !== undefined) {
+      const until = at.confirmBy;
+      steps.push(t({ message: `Open the link in that email by ${until}. Until you do, nothing reaches us, and after that we delete what you sent.`, context: "founding application next" }));
+    }
+    const by = at.replyBy;
+    steps.push(
+      by
+        ? t({ message: `Our review: we read every application, and write to you by ${by}, with an invitation to the conversations or with our thanks.`, context: "founding application next" })
+        : t({ message: "Our review: we read every application, and write to you with an invitation to the conversations or with our thanks.", context: "founding application next" }),
+    );
+    return steps;
+  };
+}
+
+/**
  * THE DOORS TO WALK WHILE YOU WAIT: pages every village has, open to a
- * visitor. Drawn as lit side paths beside the threshold on a desk, and under
- * it on a phone.
+ * visitor. Beside the threshold on a desk, and under it on a phone. The
+ * founding register: no game words here (Phase A brief).
  */
 function WhileYouWait() {
   const { t } = useLingui();
   const doors: Array<[string, string, string]> = [
-    ["/quests", t({ message: "Take a quest", context: "while you wait" }), t({ message: "Alone or with others, no role needed", context: "while you wait" })],
     ["/roles", t({ message: "Meet the other roles", context: "while you wait" }), t({ message: "Who you would work beside", context: "while you wait" })],
     ["/love-letter", t({ message: "Read the Love Letter slowly", context: "while you wait" }), t({ message: "How we live together", context: "while you wait" })],
   ];
   return (
     <nav aria-labelledby="wait-doors-h" className={`${CARD} grid gap-3`} data-wait-doors="">
       <h2 id="wait-doors-h" className={EYEBROW}>
-        {t({ message: "Paths lit while you wait", context: "while you wait" })}
+        {t({ message: "While you wait", context: "founding application wait" })}
       </h2>
       <ul className="grid gap-2">
         {doors.map(([href, title, line]) => (
@@ -113,9 +140,10 @@ function WhileYouWait() {
 /** The link in the confirmation email: a threshold, where you and the village meet. */
 export function ConfirmProposal() {
   const { t } = useLingui();
+  const whatComesNext = useWhatComesNext();
   const locale = useLocale();
-  const gone = t`That link has run out or was already used. Send your proposal again, and open the new link within ${OPEN_CONFIRM_HOURS} hours.`;
-  const [said, setSaid] = useState<{ ok: boolean; message: string; statusPath?: string | null; replyDays?: number | null } | null>(null);
+  const gone = t({ message: `That link has run out or was already used. Send your application again, and open the new link within ${OPEN_CONFIRM_HOURS} hours.`, context: "founding application confirm" });
+  const [said, setSaid] = useState<{ ok: boolean; message: string; statusPath?: string | null; replyDays?: number | null; steps?: StepAfterSubmit[] } | null>(null);
   const [met, setMet] = useState(false);
   useEffect(() => {
     const token = new URLSearchParams(window.location.search).get("token") ?? "";
@@ -127,7 +155,9 @@ export function ConfirmProposal() {
         // The page speaks the language they proposed in, unless this browser has already chosen one.
         if (r.ok && isApplicantLanguage(data?.locale) && data.locale !== i18n.locale && !storedText("local", LOCALE_STORAGE_KEY) && locale.supported.includes(data.locale)) locale.setLocale(data.locale);
         const replyDays = typeof data?.replyDays === "number" ? data.replyDays : null;
-        setSaid({ ok: r.ok, message: typeof data?.message === "string" ? data.message : typeof data?.error === "string" ? data.error : gone, statusPath, replyDays });
+        // The steps after submit, in their language, when the server carries them (the slot in shared/openProposals.ts).
+        const steps: StepAfterSubmit[] = Array.isArray(data?.steps) ? data.steps.filter((x: any) => x && typeof x.name === "string" && typeof x.when === "string").slice(0, 8) : [];
+        setSaid({ ok: r.ok, message: typeof data?.message === "string" ? data.message : typeof data?.error === "string" ? data.error : gone, statusPath, replyDays, steps });
       })
       .catch(() => setSaid({ ok: false, message: gone }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -142,7 +172,7 @@ export function ConfirmProposal() {
   if (!said) {
     return (
       <Shell>
-        <BreathingLoader label={t({ message: "Confirming your proposal", context: "open proposal" })} showLabel />
+        <BreathingLoader label={t({ message: "Confirming your application", context: "founding application confirm" })} showLabel />
       </Shell>
     );
   }
@@ -152,7 +182,7 @@ export function ConfirmProposal() {
         <Notice title={t`That link didn't work`}>
           <p>{said.message}</p>
           <a href="/propose-a-role" className={`${BUTTON} mt-6`}>
-            {t({ message: "Propose again", context: "open proposal confirm" })}
+            {t({ message: "Apply again", context: "founding application confirm" })}
           </a>
         </Notice>
       </Shell>
@@ -168,19 +198,25 @@ export function ConfirmProposal() {
             <Vesica met={met} size="lg" label={t({ message: "You and the village, met", context: "open proposal confirmed drawing" })} names={[t({ message: "You", context: "open proposal confirmed drawing" }), t({ message: "The village", context: "open proposal confirmed drawing" })]} />
           </div>
           <ConfirmedHeading title={t({ message: "Confirmed", context: "open proposal confirm" })} />
-          <p className={`${LEDE} mx-auto lg:mx-0`}>{t`Your proposal is with the village now. We read every word, and we write to you by email.`}</p>
+          <p className={`${LEDE} mx-auto lg:mx-0`}>{t({ message: "Your application is with us now. We read every word, and we write to you by email.", context: "founding application confirm" })}</p>
           <ol className="grid gap-2 text-left text-sm text-foreground" data-dated-steps="">
-            <li className={TILE}>
-              {by
-                ? t({ message: `We write to you by ${byWords} with what comes next.`, context: "open proposal confirmed step" })
-                : t({ message: "We write to you with what comes next.", context: "open proposal confirmed step" })}
-            </li>
+            {said.steps?.length
+              ? said.steps.map((step) => (
+                  <li key={step.key || step.name} className={TILE} data-step-after={step.key}>
+                    <span className="font-semibold">{step.name}</span> <span className="text-muted-foreground">{step.when}</span>
+                  </li>
+                ))
+              : whatComesNext(by ? { replyBy: byWords } : {}).map((line) => (
+                  <li key={line} className={TILE}>
+                    {line}
+                  </li>
+                ))}
           </ol>
           {said.statusPath && (
             <div className="sticky bottom-[calc(var(--tabbar-h)+0.75rem)] z-10 grid justify-items-center gap-2 lg:static lg:justify-items-start">
               <Fireflies block>
                 <a href={said.statusPath} className={`${BUTTON} w-full sm:w-auto`} data-status-link="">
-                  {t`Follow where your proposal is`}
+                  {t({ message: "Follow your application", context: "founding application confirm" })}
                   <ArrowRight className="size-5" aria-hidden="true" />
                 </a>
               </Fireflies>
@@ -216,6 +252,7 @@ export function ConfirmedHeading({ title }: { title: string }) {
  */
 export function SentThreshold({ sent, roles, onFixAddress }: { sent: SentNote; roles: ComponentProps<typeof NextForRoles>["roles"]; onFixAddress: () => void }) {
   const { t } = useLingui();
+  const whatComesNext = useWhatComesNext();
   const inbox = inboxFor(sent.to);
   const until = confirmBy(sent.at, OPEN_CONFIRM_HOURS);
   const reply = sent.replyDays ? replyBy(until, sent.replyDays) : null;
@@ -254,17 +291,16 @@ export function SentThreshold({ sent, roles, onFixAddress }: { sent: SentNote; r
           <div className="grid gap-2">
             <h2 className={EYEBROW}>{t({ message: "What comes next", context: "open proposal sent" })}</h2>
             <ol className="grid gap-2 text-sm text-foreground" data-dated-steps="">
-              <li className={TILE}>{t({ message: `Open the link in that email by ${untilWords}. Until you do, nothing reaches the village, and after that we delete what you sent.`, context: "open proposal sent step" })}</li>
-              <li className={TILE}>
-                {reply
-                  ? t({ message: `Then the circle reads it, and we write to you by ${replyWords}.`, context: "open proposal sent step" })
-                  : t({ message: "Then the circle reads it, and we write to you by email.", context: "open proposal sent step" })}
-              </li>
+              {whatComesNext(reply ? { confirmBy: untilWords, replyBy: replyWords } : { confirmBy: untilWords }).map((line) => (
+                <li key={line} className={TILE}>
+                  {line}
+                </li>
+              ))}
             </ol>
             {/* The steps after confirming, for the roles picked (Rye's answer 7): conversations in order, the booking link. */}
             <NextForRoles roles={roles} />
           </div>
-          <p className={HINT}>{t`No email after a few minutes? Look in spam or promotions, or fix the address and send again. A proposal nobody confirms is deleted on its own.`}</p>
+          <p className={HINT}>{t({ message: "No email after a few minutes? Look in spam or promotions, or fix the address and send again. An application nobody confirms is deleted on its own.", context: "founding application sent" })}</p>
         </section>
         <aside className="grid gap-4">
           <WhileYouWait />

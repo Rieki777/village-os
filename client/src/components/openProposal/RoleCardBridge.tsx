@@ -560,7 +560,7 @@ export function NextForRoles({
         const conversations = r.conversations ?? [];
         return (
           <div key={r.id} className="rounded-xl border border-border p-3">
-            <p className="text-sm font-semibold text-card-foreground">{t`For ${roleName}, if the village takes your proposal forward:`}</p>
+            <p className="text-sm font-semibold text-card-foreground">{t({ message: `For ${roleName}, if we invite you to the conversations:`, context: "founding application next" })}</p>
             {conversations.length > 0 && (
               <ol className="mt-2 grid list-decimal gap-1 pl-5 text-sm text-foreground">
                 {conversations.map((i, n) => {
