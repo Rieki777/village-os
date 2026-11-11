@@ -195,7 +195,7 @@ export default function NotificationBell({ memberId = null }: NotificationBellPr
         aria-label={label}
         aria-expanded={open}
         aria-controls={`${uid}-panel`}
-        className="relative p-2 rounded-lg hover:bg-white/10 transition-colors inline-flex items-center justify-center pointer-coarse:min-h-11 pointer-coarse:min-w-11 pointer-coarse:-m-1"
+        className="relative p-2 rounded-lg hover:bg-white/10 transition-colors inline-flex items-center justify-center pointer-coarse:min-h-11 pointer-coarse:min-w-11 pointer-coarse:-m-1 max-md:min-h-11 max-md:min-w-11 max-md:-m-1"
       >
         <Bell className="w-5 h-5" />
         {unseen > 0 && (

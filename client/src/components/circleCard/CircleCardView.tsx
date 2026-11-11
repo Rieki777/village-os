@@ -20,7 +20,7 @@ import CircleName from "@/components/circles/CircleName";
 import { useState, type ReactNode } from "react";
 import { Link } from "wouter";
 import { Pencil } from "lucide-react";
-import InfoTip from "@/components/InfoTip";
+import InfoTip, { WORDED_TAP } from "@/components/InfoTip";
 import { BOX, EYEBROW, LINK, QUIET_BUTTON, SECTION, SlotView } from "@/components/playerCard/cardParts";
 import type { CircleCard, CircleSection, RoleRowOut, SignOut, Slot } from "@shared/circleCard";
 import { CIRCLE_CARD_WORDS as W } from "@shared/circleCardWords";
@@ -34,10 +34,10 @@ const H2 = "font-display text-xl font-bold text-card-foreground sm:text-2xl";
 const H3 = "text-sm font-semibold text-card-foreground";
 const HEADING_TAP = "inline-flex min-h-11 items-center text-left";
 /**
- * An inline trigger inside a sentence keeps the sentence's line height, and an
- * invisible inset grows its touch target to 44px, the bare InfoTip's own trick.
+ * An inline trigger inside a sentence keeps the sentence's line height, and its
+ * own box grows to a 44px touch target (WORDED_TAP, the InfoTip default).
  */
-const INLINE_TAP = "relative before:absolute before:-inset-x-1 before:-inset-y-3 before:content-['']";
+const INLINE_TAP = WORDED_TAP;
 
 /** A heading, with its CCOS term on hover or tap when the village shows the terms. */
 function Heading({ text, term, level }: { text: string; term: string | null; level: 2 | 3 }) {

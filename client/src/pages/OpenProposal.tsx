@@ -29,6 +29,7 @@ import { AttachedView, type ServedAttachments } from "@/components/openProposal/
 import { useLingui } from "@lingui/react/macro";
 import { APPLICANT_NOTE_MAX } from "@shared/applicantWords";
 import { CardSideBySide } from "@/components/openProposal/RoleCardBridge";
+import DecideDock from "@/components/openProposal/DecideDock";
 import TermsWeOffer, { OpenTalksWarning, type ServedDeciderOffer } from "@/components/openProposal/TermsWeOffer";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "wouter";
@@ -272,6 +273,8 @@ export default function OpenProposal() {
   }
 
   const record = p?.consent.record ?? null;
+  // Adopt waits on open talks not yet acknowledged, conversations still open, or a full role not chosen on purpose.
+  const adoptWaits = !!p && ((!!p.offer?.openTalks.length && !knowsOpenTalks) || !!p.beforeAdopt?.conversations.length || (!!p.beforeAdopt?.seatsFull.length && !forASeat));
 
   return (
     <Layout><div className={WORLD}>
@@ -410,11 +413,16 @@ export default function OpenProposal() {
                     {p.you.mayAdopt && p.offer && <div className="mt-3"><OpenTalksWarning settings={p.offer.openTalks} confirmed={knowsOpenTalks} onConfirm={setKnowsOpenTalks} /></div>}
                     {p.you.mayAdopt && <BeforeAdopt left={p.beforeAdopt ?? null} forASeat={forASeat} onForASeat={setForASeat} />}
                     {!declining ? (
-                      <div className="mt-4 flex flex-wrap gap-2">
+                      <div className="mt-4">
+                      <DecideDock
+                        label={DECIDE_WORDS.deciderHeading}
+                        note={adoptWaits ? t({ message: "Something waits before you can adopt. It is in the card further down.", context: "open proposal: the floating decision row on a phone" }) : undefined}
+                      >
+                      <div className="flex flex-wrap gap-2">
                         {p.you.mayAdopt && (
                           <button
                             type="button"
-                            disabled={busy || (!!p.offer?.openTalks.length && !knowsOpenTalks) || !!p.beforeAdopt?.conversations.length || (!!p.beforeAdopt?.seatsFull.length && !forASeat)}
+                            disabled={busy || adoptWaits}
                             aria-describedby={p.beforeAdopt && (p.beforeAdopt.conversations.length || p.beforeAdopt.seatsFull.length) ? "op-before-adopt" : undefined}
                             onClick={() => void act(`${base(p.id)}/adopt`, { ...(knowsOpenTalks ? { confirmOpenTalks: true } : {}), ...(forASeat ? { whenASeatOpens: true } : {}) }, true)}
                             className={PRIMARY}
@@ -424,11 +432,22 @@ export default function OpenProposal() {
                           </button>
                         )}
                         {p.you.mayDecline && (
-                          <button type="button" disabled={busy} onClick={() => setDeclining(true)} className={SECONDARY}>
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => {
+                              setDeclining(true);
+                              // From the floating row on a phone, the question opens in the card.
+                              document.getElementById("op-decide")?.scrollIntoView?.({ block: "start", behavior: window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+                            }}
+                            className={SECONDARY}
+                          >
                             <X className="h-4 w-4" aria-hidden="true" />
                             {DECIDE_WORDS.decline}
                           </button>
                         )}
+                      </div>
+                      </DecideDock>
                       </div>
                     ) : (
                       <div role="group" aria-label={DECIDE_WORDS.decline} className="mt-4 rounded-xl border border-border bg-card p-4">
