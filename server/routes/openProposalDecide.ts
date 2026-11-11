@@ -9,6 +9,8 @@
  *   POST /api/governance/open-proposals/:id/adopt        a live holder of org.seat adopts it for the village
  *   POST /api/governance/open-proposals/:id/decline      the same holder declines it, kindly
  *   POST /api/governance/open-proposals/:id/invitation   a new invitation for an adopted one nobody used
+ *   POST /api/governance/open-proposals/:id/invite       our review: invite to the conversations (Phase A)
+ *   POST /api/governance/open-proposals/:id/not-invited  our review: the warm not-invited letter (Phase A)
  *
  * Mounted under /api/governance, so behind `requireModule("governance")`, and
  * every door asks the gate on `terms.read` first: the page is for members, as
@@ -65,6 +67,9 @@ import {
   adoptedInviteLetter,
   declinedLetter,
   declinedWords,
+  invitedLetter,
+  notInvitedLetter,
+  notInvitedWords,
   DECIDE_WORDS,
   greetingName,
   openInviteId,
@@ -87,8 +92,10 @@ import type { LapseContext } from "../lib/orgChart";
 import { answerAsk, askRolesFor, consentView, decisionFor, type AskStanding } from "../lib/roleProposals";
 import { whileSessionHolds } from "../lib/sessionHold";
 import { effectiveLifecycle } from "../lib/modules";
-import { hasRecused, interviewsAreIn, stampDecided } from "../lib/applicationReview";
-import { currentMoonTerm, moonEnded, REVIEW_WORDS } from "../../shared/applicationReview";
+import { answerNotInvited, conversationsOf, hasRecused, interviewsAreIn, inviteToConversations, reviewWaits, stampDecided, stayCloseProgram } from "../lib/applicationReview";
+import { currentMoonTerm, moonEnded, REVIEW_WORDS, reviewStageOf } from "../../shared/applicationReview";
+import { statusLinkFor } from "../lib/applicantUpdates";
+import { stepsOf } from "../repos/applicationReview";
 import { activeClock } from "../lib/gratitude-cycles";
 import { createInviteOn, inviteById, reissueInviteOn, revokeInvite } from "../repos/memberInvites";
 import * as store from "../repos/openProposals";
@@ -151,6 +158,9 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
     lapse: deps.lapse,
     now,
   };
+
+  /** Whether our review came first on this application: its yes is then said as the circle's welcome. */
+  const reviewedOf = async (id: string): Promise<boolean> => reviewStageOf(await stepsOf(getPool(), id)) !== null;
 
   /** Updates to the person who proposed: their bell, once they have an account (the email already has its own letter). */
   const tell = makeApplicantTeller({ getPool, members, notify: deps.notify, postEmail, projectName, siteUrl: site });
@@ -339,6 +349,12 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
           seatsWords: full.length ? DECIDE_WORDS.seatsFull(full) : null,
         }
       : null;
+    // Our review (Phase A): where it stands, and the conversations an invitation opens, in order. Deciders read the conversations.
+    const stage = reviewStageOf(await stepsOf(pool, p.id));
+    const review = stage
+      ? { stage, conversations: decidesIt(may, asks, viewerId) ? (await conversationsOf(pool, p.id)).map((c) => ({ role: c.role, minutes: c.minutes })) : [] }
+      : null;
+    const reviewing = open && stage === "review";
     // An agent's proposal (0374): what it is, who keeps it, what it can reach (read live from its tokens) and how to switch it off.
     let agent: Record<string, unknown> | null = null;
     if (p.body.agent) {
@@ -360,7 +376,7 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
         id: p.id,
         href: openProposalHref(p.id),
         status: p.status,
-        statusWords: p.decision.words ?? STATUS_WORDS[p.status as keyof typeof STATUS_WORDS] ?? "",
+        statusWords: p.decision.words ?? (stage === "review" && open ? DECIDE_WORDS.review.inReview : stage === "invited" && open ? DECIDE_WORDS.review.invited : STATUS_WORDS[p.status as keyof typeof STATUS_WORDS] ?? ""),
         proposer: greetingName(p.name),
         season: season ? { id: String(season.id), name: String(season.name ?? "") || null, startsOn: String(season.startsOn) } : null,
         term: p.body.term ?? null,
@@ -382,12 +398,15 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
         aboutYou: agent ? null : aboutYou,
         offer,
         beforeAdopt,
+        review,
         you: {
           mayEditTerms: open && may.ok && !p.body.agent,
           holdsThePower,
           own: !!may.own && may.own === viewerId,
-          mayAdopt: open && may.ok && !former,
-          mayDecline: open && may.ok,
+          // While our review waits, its two answers stand in place of adopt and decline.
+          mayAdopt: open && may.ok && !former && !reviewing,
+          mayDecline: open && may.ok && !reviewing,
+          mayReview: reviewing && may.ok,
           formerMember: former,
           mayReissue: !!invitation && invitation.state !== "used",
         },
@@ -500,6 +519,8 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
     }
     // Role journey L5: nobody who stepped out adopts, and nothing is adopted while a conversation is still to be written up.
     if (await hasRecused({ getPool }, p.id, actorId)) return res.status(403).json({ error: "recused", message: REVIEW_WORDS.recused });
+    // Phase A: our review answers first, so nobody is adopted who was never invited.
+    if (await reviewWaits({ getPool }, p.id)) return res.status(409).json({ error: "review_first", message: DECIDE_WORDS.review.first });
     if (!(await interviewsAreIn({ getPool }, p.id))) {
       // Name whose conversation is missing, and say when nobody can hold it (audit M10).
       const left = await conversationsLeft(getPool(), p.id);
@@ -604,7 +625,7 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
       }
       const why = await sent(
         p.email
-          ? letter(`open-proposal:${p.id}:adopted`, "open_proposal.adopted", { email: p.email, name: firstName }, adoptedAccountLetter({ firstName, village, roleNames: namesOf(roles), ...seasonWords(p, at), signIn: `${site()}/profile`, loveLetter: letterLine, note, waitsForSeat }))
+          ? letter(`open-proposal:${p.id}:adopted`, "open_proposal.adopted", { email: p.email, name: firstName }, adoptedAccountLetter({ firstName, village, roleNames: namesOf(roles), reviewed: await reviewedOf(p.id), ...seasonWords(p, at), signIn: `${site()}/profile`, loveLetter: letterLine, note, waitsForSeat }))
           : null,
       );
       await tell(p.id, "adopted");
@@ -646,7 +667,7 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
     // Keyed by the link, so a new invitation goes out again, and one link never goes twice.
     const why = await sent(
       p.email
-        ? letter(`open-proposal:${p.id}:adopted:${input.tokenHash.slice(0, 16)}`, "open_proposal.adopted", { email: p.email, name: firstName }, adoptedInviteLetter({ firstName, village, roleNames: namesOf(roles), ...seasonWords(p, at), link, days: INVITE_DAYS, loveLetter: letterLine, note, waitsForSeat }))
+        ? letter(`open-proposal:${p.id}:adopted:${input.tokenHash.slice(0, 16)}`, "open_proposal.adopted", { email: p.email, name: firstName }, adoptedInviteLetter({ firstName, village, roleNames: namesOf(roles), reviewed: await reviewedOf(p.id), ...seasonWords(p, at), link, days: INVITE_DAYS, loveLetter: letterLine, note, waitsForSeat }))
         : null,
     );
     await store.noteInvitationSent(pool, p.id, at, why === null);
@@ -673,6 +694,8 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
     if (p.status !== "confirmed") return res.status(409).json({ error: DECIDE_WORDS.decided, status: p.status });
     const may = await deciding(p, actorId);
     if (!may.ok) return res.status(may.status).json(may.body);
+    // While our review waits, its answer is the not-invited letter, never the older no.
+    if (await reviewWaits({ getPool }, p.id)) return res.status(409).json({ error: "review_first", message: DECIDE_WORDS.review.first });
     const pool = getPool();
     const at = now();
     const decided = declinedWords(shortDay(at, tz()));
@@ -720,6 +743,104 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
    * be the only one). The old link is withdrawn and the same invitation is
    * given a new token, by a holder of the power, who becomes its maker.
    */
+  // ── Our review (Phase A) ──────────────────────────────────────────────────
+  /*
+   * The same people who adopt and decline answer our review, by the same rule
+   * (`deciding`), and nobody who stepped out. ONE answer per application: the
+   * review step's unique key decides a race. Each answer sends its own letter,
+   * keyed by the proposal, so a retry never sends it twice.
+   */
+  const reviewWork = {
+    getPool,
+    notify: deps.notify,
+    notifyAdmins: deps.notifyAdmins,
+    liveHoldersOf: deps.liveHoldersOf,
+    calendar: deps.seatCalendar,
+    now,
+    members,
+    tellApplicant: tell,
+  };
+
+  async function reviewer(req: any, res: any): Promise<{ p: store.StoredOpenProposal; actorId: string } | null> {
+    const viewer = await reader(req, res);
+    if (!viewer) return null;
+    const actorId = String(viewer.id);
+    if (await limited(res, `open-proposal-decide:${actorId}`)) return null;
+    const p = await found(req, res);
+    if (!p) return null;
+    if (p.status !== "confirmed") {
+      res.status(409).json({ error: DECIDE_WORDS.decided, status: p.status });
+      return null;
+    }
+    const may = await deciding(p, actorId);
+    if (!may.ok) {
+      res.status(may.status).json(may.body);
+      return null;
+    }
+    if (await hasRecused({ getPool }, p.id, actorId)) {
+      res.status(403).json({ error: "recused", message: REVIEW_WORDS.recused });
+      return null;
+    }
+    return { p, actorId };
+  }
+
+  app.post(`${BASE}/:id/invite`, async (req, res) => {
+    const who = await reviewer(req, res);
+    if (!who) return;
+    const { p, actorId } = who;
+    const pool = getPool();
+    const out = await inviteToConversations(reviewWork, p.id, actorId);
+    if (!out.ok) return res.status(out.status).json({ error: out.code === "done" ? "already_answered" : out.code === "gone" ? "decided" : "no_review", message: out.error });
+    const note = cleanNote(req.body?.note);
+    const firstName = greetingName(p.name);
+    const why = await sent(
+      p.email
+        ? letter(`open-proposal:${p.id}:invited`, "open_proposal.invited", { email: p.email, name: firstName }, invitedLetter({
+            firstName,
+            village: projectName(),
+            roleNames: namesOf(await rolesOf(pool, p)),
+            conversations: out.conversations.map((c) => ({ role: c.role, minutes: c.minutes })),
+            statusLink: statusLinkFor({ siteUrl: site }, p.id),
+            lang: languageOf(p),
+            note,
+          }))
+        : null,
+    );
+    await tell(p.id, "invited");
+    res.json({ success: true, stage: "invited", emailed: why === null, message: why === null ? DECIDE_WORDS.review.invitedEmailed : DECIDE_WORDS.review.invitedNotEmailed(why) });
+  });
+
+  app.post(`${BASE}/:id/not-invited`, async (req, res) => {
+    const who = await reviewer(req, res);
+    if (!who) return;
+    const { p, actorId } = who;
+    const pool = getPool();
+    const at = now();
+    const out = await answerNotInvited(reviewWork, p.id, actorId);
+    if (!out.ok) return res.status(out.status).json({ error: out.code === "done" ? "already_answered" : out.code === "gone" ? "decided" : "no_review", message: out.error });
+    const note = cleanNote(req.body?.note);
+    const decided = notInvitedWords(shortDay(at, tz()));
+    // decided_at is set here, so the tidy job takes the name and address off after 90 days, as for any no.
+    if (!(await store.decideOpenProposal(pool, p.id, "declined", { words: decided, authority: null }, at, note))) return res.status(409).json({ error: DECIDE_WORDS.raced });
+    await stampDecided(work, p.id, "declined");
+    const firstName = greetingName(p.name);
+    const why = await sent(
+      p.email
+        ? letter(`open-proposal:${p.id}:not-invited`, "open_proposal.not_invited", { email: p.email, name: firstName }, notInvitedLetter({
+            firstName,
+            village: projectName(),
+            roleNames: namesOf(await rolesOf(pool, p)),
+            site: site(),
+            stayClose: { program: stayCloseProgram(), quests: true, events: effectiveLifecycle("events") === "public" },
+            lang: languageOf(p),
+            note,
+          }))
+        : null,
+    );
+    await tell(p.id, "not_invited");
+    res.json({ success: true, status: "declined", stage: "not_invited", decided, emailed: why === null, message: why === null ? DECIDE_WORDS.review.notInvitedEmailed : DECIDE_WORDS.review.notInvitedNotEmailed(why) });
+  });
+
   app.post(`${BASE}/:id/invitation`, async (req, res) => {
     const viewer = await reader(req, res);
     if (!viewer) return;
@@ -746,7 +867,7 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
     const firstName = greetingName(p.name);
     const why = await sent(
       p.email
-        ? letter(`open-proposal:${p.id}:adopted:${input.tokenHash.slice(0, 16)}`, "open_proposal.adopted", { email: p.email, name: firstName }, adoptedInviteLetter({ firstName, village: projectName(), roleNames: namesOf(await rolesOf(pool, p)), ...seasonWords(p, p.decidedAt ?? now()), link, days: INVITE_DAYS, loveLetter: letterLine, note: p.body.note ?? null, waitsForSeat: (await roomFor(work, p, null)).length > 0 }))
+        ? letter(`open-proposal:${p.id}:adopted:${input.tokenHash.slice(0, 16)}`, "open_proposal.adopted", { email: p.email, name: firstName }, adoptedInviteLetter({ firstName, village: projectName(), roleNames: namesOf(await rolesOf(pool, p)), reviewed: await reviewedOf(p.id), ...seasonWords(p, p.decidedAt ?? now()), link, days: INVITE_DAYS, loveLetter: letterLine, note: p.body.note ?? null, waitsForSeat: (await roomFor(work, p, null)).length > 0 }))
         : null,
     );
     await store.noteInvitationSent(pool, p.id, now(), why === null);

@@ -138,6 +138,10 @@ export async function seedVillage({ base, dbUrl, adminPassword, log = () => {} }
   // The new holder's first steps.
   await call("PUT", "/api/admin/content/confidentiality", { title: "Confidentiality agreement", body: "What you read in our private records stays with you.\n\nYou keep it after you leave." }, F);
   for (const k of ["org.start_after_confidentiality", "org.start_after_membership"]) await call("PUT", `/api/admin/variables/${k}`, { value: true }, F);
+  // Our review comes before the conversations (Phase A), with a way to stay close the not-invited letter names.
+  await call("PUT", "/api/admin/variables/org.review_before_conversations", { value: true }, F);
+  await call("PUT", "/api/admin/variables/org.stay_close_name", { value: "Friends of the Village" }, F);
+  await call("PUT", "/api/admin/variables/org.stay_close_link", { value: "/resident" }, F);
 
   // Two existing members, one per viewport.
   for (const key of ["memberPhone", "memberDesktop"]) {

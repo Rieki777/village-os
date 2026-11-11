@@ -10,8 +10,10 @@
  *                    status page.
  *   3. member        An existing member proposing a role for next season through
  *                    the member's door, step by step, and submitting.
- *   4. steward       The steward who decides: reads persona 2's proposal, offers
- *                    different terms, then adopts.
+ *   4. steward       The steward who decides: reads persona 2's proposal,
+ *                    invites them to the conversations (our review), offers
+ *                    different terms, then adopts; then answers persona 1's
+ *                    application with the warm not-invited letter.
  *   5. holder        Persona 2 again, adopted: registers from the invitation,
  *                    aligns with confidentiality and the terms, and reads the
  *                    profile in their first hour.
@@ -332,6 +334,19 @@ export async function steward(w, ctx) {
     await page.locator("[data-terms-we-offer]").waitFor();
   });
   await w.look("reads");
+  // Our review comes first (Phase A): the steward invites the professional to the conversations before anything else.
+  await w.step("invite to the conversations", async () => {
+    const invite = page.getByRole("button", { name: /Invite to the conversations/i }).first();
+    await invite.scrollIntoViewIfNeeded();
+    await invite.click();
+    await settle(page, 1500);
+    // The page's answer to the click, and nothing else on it (the open-talks warning is an alert of its own).
+    const said = (await page.locator("[data-decision-said]").innerText().catch(() => "")).trim();
+    if (!/^Invited/.test(said)) throw new Error(`invite not answered as invited: ${said.slice(0, 200)}`);
+    await page.locator("[data-terms-we-offer]").waitFor();
+  });
+  await w.look("invited");
+  await w.step("the applicant is invited to the conversations", () => waitForMail(ctx.mail, applicant, /invitation to talk/i));
   await w.step("offer different terms", async () => {
     await page.locator("[data-term-row=allowance] textarea").fill("A tools allowance each moon that covers accounting software, agreed ahead of time.");
     await page.locator("[data-term-row=bonus] textarea").fill("A share of the moon's value when its goals are met; we walk you through it in our first conversation.");
@@ -353,6 +368,24 @@ export async function steward(w, ctx) {
   });
   await w.look("adopted");
   await w.step("the applicant is invited", () => waitForMail(ctx.mail, applicant, /adopt/i));
+  // The neighbour's application, answered with the not-invited letter: warm, never personal.
+  const neighbour = emailFor("neighbour", w.vp);
+  let nid;
+  await w.step("find the neighbour's application", async () => {
+    const res = await fetch(`${ctx.base}/api/admin/open-proposals`, { headers: { authorization: `Bearer ${ctx.seed.founder}` } });
+    nid = ((await res.json()).proposals ?? []).find((p) => p.email === neighbour)?.id;
+    if (!nid) throw new Error("the neighbour's application is not waiting");
+    await w.goto(`/open-proposals/${nid}`);
+    await page.locator("[data-our-review]").waitFor();
+  });
+  await w.look("our-review");
+  await w.step("send the not-invited letter", async () => {
+    await page.getByRole("button", { name: /Send the not-invited letter/i }).first().click();
+    await page.getByRole("button", { name: /Yes, send the letter/i }).click();
+    await settle(page, 1500);
+  });
+  await w.look("not-invited");
+  await w.step("the neighbour receives the not-invited letter", () => waitForMail(ctx.mail, neighbour, /Gracias por postularte|Thank you for applying/i));
 }
 
 // ── 5. The holder's first hour ────────────────────────────────────────────

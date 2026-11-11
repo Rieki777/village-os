@@ -2193,3 +2193,7 @@ Admin, Integrations has two new cards, `railway_project_token` (one Railway proj
 ## The nightly rehearsal (`.github/workflows/rehearsal.yml`, 2026-11-11, no migration)
 
 - Nothing for a village to set: it runs in CI only, against its own scratch database, and the server it boots reads no new variable. Its `REHEARSAL_*` variables (base URL, port, database server, scratch schema, the folder holding Playwright and axe-core) belong to the runner and are listed in `docs/REHEARSAL.md`; its seed (`scripts/rehearsal/seed.mjs`) builds a made-up example village through the founder's own routes and never touches a real one. A fork that keeps the workflow gets it nightly with no setup.
+
+## Our review before the conversations (Phase A, 2026-11-11, no migration)
+
+- No env var and nothing at boot. Off by default: a village turns on `org.review_before_conversations` (Admin, Game Mechanics, The village's people), and from then each newly confirmed application waits for a decider to invite it to the conversations or send the not-invited letter; one already in flight keeps the path it confirmed under. The not-invited letter and status page point first to the village's own way to stay close when it sets `org.stay_close_name` and `org.stay_close_link` (Amora: its Founding Seeders name and page). The conversations come from each role's own list (Admin, Roles, conversations). Amora's Technical Operations conversation moved to onboarding as data: `server/seeds/amora/onboarding-technical-operations-seed.json`, applied by hand in Admin, Onboarding path.
