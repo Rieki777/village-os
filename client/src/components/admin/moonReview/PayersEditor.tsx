@@ -110,7 +110,7 @@ export default function PayersEditor({ password }: { password: string }) {
       ))}
       <div className="flex flex-wrap items-center gap-2">
         <button type="button" className={buttonClass} onClick={() => setDrafts((all) => [...all, toDraft(blank())])}>{W.add}</button>
-        {message && <p role={message.ok ? "status" : "alert"} className="text-sm text-foreground">{message.text}</p>}
+        {message?.ok && <p role="status" className="text-sm text-foreground">{message.text}</p>}
       </div>
       <SaveBar count={docChangeCount(state.kind === "ready" ? JSON.stringify(state.doc.payers.map(toDraft)) : null, JSON.stringify(drafts))} onSave={() => save({ payers: drafts.map(fromDraft) })} onDiscard={() => setDrafts((state as { doc: PayersDoc }).doc.payers.map(toDraft))} what="the payers" />
     </div>

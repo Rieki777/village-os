@@ -77,7 +77,7 @@ export default function RhythmEditor({ password }: { password: string }) {
       </section>
 
       <div className="flex flex-wrap items-center gap-2">
-        {message && <p role={message.ok ? "status" : "alert"} className="text-sm text-foreground">{message.text}</p>}
+        {message?.ok && <p role="status" className="text-sm text-foreground">{message.text}</p>}
       </div>
       <SaveBar count={docChangeCount(state.kind === "ready" ? JSON.stringify(toDraft(state.doc)) : null, JSON.stringify(d))} onSave={() => save(fromDraft(d))} onDiscard={() => setD(toDraft((state as { doc: RhythmDoc }).doc))} what="the moon rhythm" />
     </div>
