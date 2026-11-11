@@ -14,7 +14,7 @@
  * founder opens, and most will never press this.
  *
  * `onIdentity` fills the wizard's own Identity boxes, unsaved, so the founder
- * presses "Save identity" there. It comes from the wizard, which holds those
+ * presses Save on the floating bar. It comes from the wizard, which holds those
  * boxes' state; this card never saves the brand record itself, because the
  * wizard would then save its older copy straight over it.
  */
