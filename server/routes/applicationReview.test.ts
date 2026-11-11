@@ -404,7 +404,7 @@ describe.skipIf(!configured)("application review, on a real schema", () => {
       const token = new URL(`${ORIGIN}${confirm.statusPath}`).searchParams.get("token");
       const before = await call("GET", `/api/application-status/${id}?token=${token}`, undefined, null);
       expect(before.body.status.mode).toBe("block");
-      expect(before.body.status.booking).toContain("one block of 2 hours");
+      expect(before.body.status.booking).toContain("one block of 120 minutes");
       expect(before.body.status.booking).toContain("Channel Role");
       const split = await call("POST", `/api/application-status/${id}/split?token=${token}`, {}, null);
       expect(split.status).toBe(200);

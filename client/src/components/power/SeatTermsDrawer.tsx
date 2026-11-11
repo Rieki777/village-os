@@ -38,7 +38,8 @@ import {
   Wallet,
   type LucideIcon,
 } from "lucide-react";
-import { settingsWords, type SeatSettings, type SettingsGroup, type SettingsRow } from "@shared/seatSettings";
+import { NOT_SET, settingsWords, type SeatSettings, type SettingsGroup, type SettingsRow } from "@shared/seatSettings";
+import { withAgreedWords } from "@shared/termsWords";
 import { isCustomised, presetFor, type SeatPreset } from "@shared/seatPresets";
 import { OFFER_WORDS } from "@shared/seatTermsOffer";
 import type { AlignmentState } from "@shared/alignments";
@@ -193,6 +194,7 @@ export default function SeatTermsDrawer({
   empty = null,
   changedGroups = [],
   alignment = null,
+  namePartner = true,
 }: {
   /** Parsed settings (`parseSeatSettings`). Absent: nothing renders. */
   settings?: SeatSettings | null;
@@ -217,6 +219,11 @@ export default function SeatTermsDrawer({
    * terms to a member; a seat's offer has no parties and passes nothing.
    */
   alignment?: { state: AlignmentState; sealed: boolean; parties: readonly ChipParty[]; endingLine?: string | null } | null;
+  /**
+   * Name the role that fills the open rows. False under a card that has
+   * already named it, so the page names it once (verify report B4).
+   */
+  namePartner?: boolean;
 }) {
   const who = useOpsPartner();
   const [open, setOpen] = useState(defaultOpen);
@@ -224,7 +231,9 @@ export default function SeatTermsDrawer({
   const bodyId = `${uid}-terms`;
   if (!settings && !unreadable && !empty) return null;
 
-  const rows = settings ? settingsWords(settings) : [];
+  // The words agreed for each setting count as set (verify report B4): a row the parties wrote
+  // in their own words is agreed, so it never reads "We'll fill this together" beside them.
+  const rows = settings ? withAgreedWords(settingsWords(settings), settings.words, settings.clocks?.commitmentPct, NOT_SET) : [];
   const set = rows.filter((r) => r.set);
   const unset = rows.filter((r) => !r.set);
 
@@ -281,7 +290,9 @@ export default function SeatTermsDrawer({
             )}
             {unset.length > 0 && (
               <p className="py-2 text-xs text-muted-foreground">
-                {`We'll fill this together with ${who}: ${unset.map((r) => r.label).join(", ")}.`}
+                {namePartner
+                  ? `We'll fill this together with ${who}: ${unset.map((r) => r.label).join(", ")}.`
+                  : `We'll fill these together: ${unset.map((r) => r.label).join(", ")}.`}
               </p>
             )}
           </>

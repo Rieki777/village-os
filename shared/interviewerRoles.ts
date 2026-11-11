@@ -144,26 +144,22 @@ export function conversationMinutes(steps: readonly InterviewStep[]): number {
   return steps.reduce((n, s) => n + s.minutes, 0);
 }
 
+/**
+ * A conversation's length is always said in minutes ("60 minutes", "100 minutes"), on every page
+ * and in every email, so the same length never reads two ways (verify report, 11 Nov).
+ */
 function minutesWords(m: number): string {
-  if (m % 60 === 0) {
-    const h = m / 60;
-    return `${h} ${h === 1 ? "hour" : "hours"}`;
-  }
-  return `${m} minutes`;
+  return `${m} ${m === 1 ? "minute" : "minutes"}`;
 }
 
-/** The total in words: "2 hours", "1 hour 40 minutes". */
+/** The total in words, in minutes: "120 minutes", "100 minutes". */
 export function interviewTotalWords(steps: readonly InterviewStep[]): string {
   const total = conversationMinutes(steps);
   if (total <= 0) return "";
-  const h = Math.floor(total / 60);
-  const m = total % 60;
-  if (h === 0) return `${m} minutes`;
-  const hours = `${h} ${h === 1 ? "hour" : "hours"}`;
-  return m === 0 ? hours : `${hours} ${m} minutes`;
+  return minutesWords(total);
 }
 
-/** One line per conversation, in order: "1. Some Role, 1 hour". The final approval says so. */
+/** One line per conversation, in order: "1. Some Role, 60 minutes". The final approval says so. */
 export function interviewLines(steps: ReadonlyArray<InterviewStep & { roleName?: string | null }>): string[] {
   return steps.map((s, i) => `${i + 1}. ${s.roleName ?? "An interviewer"}, ${minutesWords(s.minutes)}${s.final ? ", final approval" : ""}`);
 }

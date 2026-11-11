@@ -94,7 +94,7 @@ import {
 import { roleWordsIn, type RoleEditKey } from "../../shared/playerCardEdit";
 import { cycleWindows, readSign, SIGNS, isSignKey, type SignKey, type SignReading, type SignRows } from "../../shared/roleSigns";
 import { signSheetRows, type SignSheetRow } from "../../shared/roleSignRows";
-import { operationsRoleName } from "../../shared/roleProposalHonesty";
+import { onboardingRoleName } from "../../shared/roleProposalHonesty";
 import { parseSeatSettings, type SeatSettings } from "../../shared/seatSettings";
 import { readTermsOffer } from "../../shared/seatTermsOffer";
 import { civilDateInstant } from "../../shared/seatTerms";
@@ -135,6 +135,11 @@ export interface CardSeason {
 
 export interface CardContext {
   now: Date;
+  /**
+   * The role that welcomes people (`org.onboarding_role`), by id: the partner
+   * an open row on a proposal card names. Absent or empty names nobody.
+   */
+  onboardingRoleId?: string;
   timeZone: string;
   viewerUserId: string | null;
   season: CardSeason | null;
@@ -425,8 +430,11 @@ export async function buildPlayerCards(
   const roles = new Map<string, OrgRole & { archetypesSuggested: boolean }>(
     [...rows.roles, ...prop.roles].map((r) => [String(r.id), { ...rowToRole(r), archetypesSuggested: !!r.archetypes_suggested }]),
   );
-  // The card's own roles rarely include the Ops role, so the whole chart's names are the fallback.
-  const fillWith = operationsRoleName(Array.from(roles.values())) ?? operationsRoleName(rows.roleNames.map((r) => ({ name: String(r.name) })));
+  // The role that welcomes people, by the village's own setting and read by id (verify report B4).
+  // The card's own roles rarely include it, so the whole chart's names are read too.
+  const fillWith =
+    onboardingRoleName(Array.from(roles.values()), ctx.onboardingRoleId) ??
+    onboardingRoleName(rows.roleNames.map((r) => ({ id: String(r.id), name: String(r.name) })), ctx.onboardingRoleId);
   const roleName = new Map(rows.roleNames.map((r) => [String(r.id), String(r.name)]));
   const circleName = new Map([...rows.circles, ...prop.circles].map((c) => [String(c.id), String(c.name)]));
   const lapseCtx = { ...ctx.lapse, now: ctx.now };

@@ -8,7 +8,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { buildPlayerCard, type ApplicationIn, type PlayerCardInput, type PlayerRoleIn } from "./playerCard";
-import { countWord, moonNameOf, personTime, spanWords } from "./playerCardHero";
+import { countWord, moonNameOf, personTime, roleCommitmentPct, spanWords } from "./playerCardHero";
 
 const TZ = "America/Costa_Rica";
 
@@ -159,6 +159,32 @@ describe("the hero", () => {
     expect(personTime([r("Commitment: 60%"), r("Commitment: 40%")])).toBeNull();
     const stated = { ...r("Roughly 40 hours a week"), cardSeat: { commitmentPct: 60 } };
     expect(personTime([stated])).toBe("Commitment: 60%");
+  });
+
+  it("reads the agreed commitment first, and the card's own card.commitmentPct, before any legacy time line (verify B3)", () => {
+    // The new holder chose 100% on her application; the role still carries "Roughly 40 hours a week".
+    const legacy = role(1, { timeCommitment: "Roughly 40 hours a week" });
+    expect(personTime([{ ...legacy, settings: { clocks: { commitmentPct: 100 } } }])).toBe("Commitment: 100%");
+    // /api/org sends the card's commitment inside `card`, which is how the server hands it over.
+    expect(personTime([{ ...legacy, cardSeat: { timeCommitment: "Roughly 40 hours a week", card: { commitmentPct: 60 } } }])).toBe("Commitment: 60%");
+    // Agreed terms beat the card's offer.
+    expect(personTime([{ ...legacy, cardSeat: { card: { commitmentPct: 60 } }, settings: { clocks: { commitmentPct: 100 } } }])).toBe("Commitment: 100%");
+    expect(roleCommitmentPct({ settings: { clocks: {} }, cardSeat: null })).toBeNull();
+    expect(personTime([legacy])).toBe("Full-time");
+  });
+
+  it("draws the agreed commitment in the parameters block and on the tagline of a proposal card (verify B3)", () => {
+    const roles = [
+      role(1, {
+        timeCommitment: "Roughly 40 hours a week",
+        cardSeat: { timeCommitment: "Roughly 40 hours a week", card: {} },
+        settings: { v: 1, clocks: { commitmentPct: 100 } },
+      }),
+    ];
+    const card = buildPlayerCard(input({ roles, mode: "proposal" }));
+    expect(card.header.tagline).toContain("Commitment: 100%");
+    expect(card.header.tagline).not.toMatch(/Full-time|hours/);
+    expect((card.roles[0].cardSeat?.card as Record<string, unknown>).commitmentPct).toBe(100);
   });
 
   it("writes the span's year once when both ends share it", () => {
