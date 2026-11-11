@@ -192,9 +192,7 @@ export function ReferencesBlock({
             {t({ message: "A check happens for this role whatever the references say.", context: "about you" })}
           </p>
         )}
-        <p>{t({ message: "If you leave the three references blank, we'll run a background check instead. Its cost comes out of your first contractor pay.", context: "about you" })}</p>
-        <p>{t({ message: "If we don't seat you, we cover it.", context: "about you" })}</p>
-        <p>{t({ message: "The cost and the provider depend on your country, and we keep the cost as low as we can.", context: "about you" })}</p>
+        <p>{t({ message: "If you leave the three references blank, we'll run a background check instead. We cover its cost. The provider depends on your country.", context: "about you" })}</p>
         <p>{t({ message: "We contact your references only after our first conversation, and only with your OK.", context: "about you" })}</p>
         <p className="text-muted-foreground">{t({ message: "Only the people who decide your proposal see your references. No AI reads them. We delete them when we delete your proposal, or when we remove your name and email.", context: "about you" })}</p>
         {needed && (
