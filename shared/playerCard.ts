@@ -749,7 +749,7 @@ function roleOut(role: PlayerRoleIn, input: PlayerCardInput): RoleOut {
   const chips: string[] = [];
   if (role.criticality === "high") chips.push(W.keyRole);
   // The circle is drawn as a link to its card, beside these chips.
-  const circle = role.circle ? { name: role.circle.name, href: `/circles/${encodeURIComponent(role.circle.id)}`, anchor: role.circle.anchor === true } : null;
+  const circle = role.circle ? { name: role.circle.name, href: `/circles/${encodeURIComponent(role.circle.id)}`, ...(role.circle.anchor === true ? { anchor: true } : {}) } : null;
   const held = formatDay(role.termEndsAt ?? null, true, input.timeZone);
   if (held) chips.push(W.heldUntil(held));
   // 0274: the CCOS sections, and the review chip from the role's own terms.
