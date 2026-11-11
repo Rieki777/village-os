@@ -15,15 +15,8 @@ import { OPEN_AI_DRAFTS, OPEN_WORDS } from "@shared/openProposals";
 import { CARD_WORDS } from "@shared/openProposalCard";
 import { ATTACHMENT_WORDS } from "@shared/proposalAttachments";
 
-/** One goal on every picked role's card: the form asks for at least one before it sends (audit B1). */
-const fillGoals = () => {
-  for (const card of Array.from(document.querySelectorAll("[data-role-card]"))) {
-    const title = card.querySelector<HTMLInputElement>('input[id$="-title"]');
-    const done = card.querySelector<HTMLInputElement>('input[id$="-done"]');
-    if (title && !title.value) fireEvent.change(title, { target: { value: "Open the gate each dawn" } });
-    if (done && !done.value) fireEvent.change(done, { target: { value: "the gate is open by sunrise" } });
-  }
-};
+// fillGoals is audit B1's helper: one goal on every picked role's card. The path's walk is the test kit's.
+import { fillGoals, pressNext, sendNow, stoneNow, walk } from "@/test/proposeStones";
 
 vi.mock("@/components/Layout", () => ({ default: ({ children }: { children: React.ReactNode }) => <div>{children}</div> }));
 const auth = vi.hoisted(() => ({ user: null as null | { name: string; email: string } }));
@@ -120,7 +113,7 @@ describe("the form", () => {
     // About you: no references, so the background-check consent is ticked (joining lane PR 2).
     fireEvent.click(screen.getByLabelText(/agree to the background check/i));
     fillGoals();
-    fireEvent.click(screen.getByRole("button", { name: OPEN_WORDS.send }));
+    sendNow();
 
     expect(await screen.findByRole("heading", { name: "Check your email" })).toBeTruthy();
     expect(screen.getByText(OPEN_WORDS.sent("rowan@example.test"))).toBeTruthy();
@@ -159,7 +152,7 @@ describe("the form", () => {
     // Control: there is no Love Letter tick on the form at all; the alignment is the agreement.
     expect(screen.queryByLabelText(/Love Letter/)).toBeNull();
     // The one checkbox about the letter is the alignment itself, bound to the letter's own sentence.
-    const aboutLetter = screen.getAllByRole("checkbox").filter((c) => /Love Letter|membership/i.test(c.closest("label")?.textContent ?? ""));
+    const aboutLetter = screen.getAllByRole("checkbox", { hidden: true }).filter((c) => /Love Letter|membership/i.test(c.closest("label")?.textContent ?? ""));
     expect(aboutLetter.map((c) => c.closest("label")?.textContent)).toEqual([LETTER.intent]);
     cleanup();
 
@@ -187,16 +180,16 @@ describe("the form", () => {
     fireEvent.change(screen.getByLabelText("Link 1: what it is"), { target: { value: "Gates I built" } });
     fireEvent.change(screen.getByLabelText("Link 1: web address"), { target: { value: "http://gates.example.org" } });
     // Said at once: an address that is not https.
-    expect(screen.getByRole("alert").textContent).toBe(ATTACHMENT_WORDS.linkNotHttps);
+    expect(screen.getByRole("alert", { hidden: true }).textContent).toBe(ATTACHMENT_WORDS.linkNotHttps);
     fireEvent.change(screen.getByLabelText("Link 1: web address"), { target: { value: "https://gates.example.org/rowan" } });
-    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByRole("alert", { hidden: true })).toBeNull();
     const pdf = new File(["%PDF-1.7"], "portfolio.pdf", { type: "application/pdf" });
     fireEvent.change(document.querySelector('[data-attachments] input[type="file"]') as HTMLInputElement, { target: { files: [pdf] } });
     expect(document.querySelector('[data-file-row="0"]')?.textContent).toContain("portfolio.pdf");
     fireEvent.change(screen.getByLabelText("Your commitment"), { target: { value: "50" } });
     fireEvent.click(screen.getByLabelText(/agree to the background check/i));
     await completeTheRest();
-    fireEvent.submit(document.querySelector("[data-open-proposal]") as HTMLFormElement);
+    sendNow();
     await waitFor(() => expect(posted).toHaveLength(1));
     expect(posted[0].body.links).toEqual([{ label: "Gates I built", url: "https://gates.example.org/rowan" }]);
     expect(sentAs[0].files.map((f) => f.name)).toEqual(["portfolio.pdf"]);
@@ -211,7 +204,7 @@ describe("the form", () => {
     fireEvent.change(screen.getByLabelText("Your commitment"), { target: { value: "50" } });
     fireEvent.click(screen.getByLabelText(/agree to the background check/i));
     await completeTheRest();
-    fireEvent.submit(document.querySelector("[data-open-proposal]") as HTMLFormElement);
+    sendNow();
     await waitFor(() => expect(posted).toHaveLength(1));
     expect(sentAs[0]).toEqual({ files: [], headers: { "Content-Type": "application/json" } });
     expect(posted[0].body).not.toHaveProperty("links");
@@ -225,35 +218,66 @@ describe("the form", () => {
     fireEvent.change(screen.getByLabelText("Your commitment"), { target: { value: "50" } });
     fireEvent.click(screen.getByLabelText(/agree to the background check/i));
     await completeTheRest();
-    fireEvent.submit(document.querySelector("[data-open-proposal]") as HTMLFormElement);
+    sendNow();
     expect((await screen.findByRole("alert")).textContent).toContain(OPEN_WORDS.needWhy);
     expect(screen.getByLabelText(OPEN_WORDS.whyLabel).getAttribute("aria-invalid")).toBe("true");
     expect((screen.getByLabelText(OPEN_WORDS.nameLabel) as HTMLInputElement).value).toBe("Rowan");
   });
 
-  it("M1: sending with gaps posts nothing, lists every gap at once, shows each beside its field, and moves focus to the first", async () => {
+  it("M1, per stone: Next with gaps posts nothing, lists every gap on that stone at once, shows each beside its field, and moves focus to the first", async () => {
+    serve(FORM);
+    render(<ProposeARole />);
+    fireEvent.click(within((await screen.findByText("Gate Keeper")).closest("[data-role]") as HTMLElement).getByRole("checkbox"));
+    pressNext();
+    expect(stoneNow()).toBe("moon");
+    pressNext();
+    // Held on "Your moon": its two gaps, and only its own.
+    expect(stoneNow()).toBe("moon");
+    const list = (await screen.findByText(/things to look at before the next stone/)).closest("[data-problems]") as HTMLElement;
+    for (const words of [OPEN_WORDS.needAim, "Add at least one goal for your first moon."]) expect(list.textContent).toContain(words);
+    for (const words of [OPEN_WORDS.needWhy, OPEN_WORDS.needName, OPEN_WORDS.needEmail, CARD_WORDS.agreed]) expect(list.textContent).not.toContain(words);
+    expect(posted).toHaveLength(0);
+    expect(document.querySelector("#propose-problem-aim")?.textContent).toBe(OPEN_WORDS.needAim);
+    await waitFor(() => expect(document.activeElement?.id).toBe("propose-aim"));
+    expect(screen.getByLabelText(OPEN_WORDS.aimLabel).getAttribute("aria-invalid")).toBe("true");
+  });
+
+  it("M1, the final review: Send lists every gap on the whole path at once, in walking order, and each takes you to its stone and field", async () => {
     serve(FORM);
     render(<ProposeARole />);
     fireEvent.click(within((await screen.findByText("Gate Keeper")).closest("[data-role]") as HTMLElement).getByRole("checkbox"));
     fireEvent.change(screen.getByLabelText("Your commitment"), { target: { value: "50" } });
     fireEvent.click(screen.getByLabelText(/agree to the background check/i));
-    fireEvent.submit(document.querySelector("[data-open-proposal]") as HTMLFormElement);
+    fireEvent.change(screen.getByLabelText(OPEN_WORDS.whyLabel), { target: { value: "The gate is always shut." } });
+    fireEvent.change(screen.getByLabelText(OPEN_WORDS.aimLabel), { target: { value: "The gate opens at dawn." } });
+    fillGoals();
+    walk();
+    expect(stoneNow()).toBe("send");
+    // Walked back to "Why you" and emptied it, then straight back to Send along the trail.
+    fireEvent.change(screen.getByLabelText(OPEN_WORDS.whyLabel), { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: OPEN_WORDS.send }));
     const list = (await screen.findByText(/things to fix before we can send this/)).closest("[data-problems]") as HTMLElement;
-    for (const words of [OPEN_WORDS.needWhy, OPEN_WORDS.needAim, OPEN_WORDS.needName, OPEN_WORDS.needEmail, "Add at least one goal for your first moon.", CARD_WORDS.agreed]) expect(list.textContent).toContain(words);
+    for (const words of [OPEN_WORDS.needWhy, OPEN_WORDS.needName, OPEN_WORDS.needEmail, CARD_WORDS.agreed]) expect(list.textContent).toContain(words);
     expect(posted).toHaveLength(0);
-    // Beside the field as well, and the cursor is on the first one.
-    expect(document.querySelector("#propose-problem-why")?.textContent).toBe(OPEN_WORDS.needWhy);
+    // In walking order: Why you (stone 3) comes before the name (stone 6), and names its stone.
+    const items = Array.from(list.querySelectorAll("li")).map((li) => li.textContent ?? "");
+    expect(items[0]).toBe(`Why you: ${OPEN_WORDS.needWhy}`);
     expect(document.querySelector("#propose-problem-email")?.textContent).toBe(OPEN_WORDS.needEmail);
+    // The gap is behind us, so the cursor goes to the list; its line takes you there.
+    await waitFor(() => expect(document.activeElement?.id).toBe("propose-problems"));
+    fireEvent.click(within(list).getByRole("button", { name: `Why you: ${OPEN_WORDS.needWhy}` }));
+    expect(stoneNow()).toBe("why");
     await waitFor(() => expect(document.activeElement?.id).toBe("propose-why"));
     expect(screen.getByLabelText(OPEN_WORDS.whyLabel).getAttribute("aria-invalid")).toBe("true");
   });
 
-  it("the form holds the floating compass back, and a trail names its four parts", async () => {
+  it("the form holds the floating compass back, and a trail names its six stones", async () => {
     serve(FORM);
     render(<ProposeARole />);
     await screen.findByText("Gate Keeper");
     expect(document.querySelector("form[data-hides-fab]")).toBeTruthy();
-    expect(within(document.querySelector("[data-form-trail]") as HTMLElement).getAllByRole("button")).toHaveLength(4);
+    const stones = within(document.querySelector("[data-form-trail]") as HTMLElement).getAllByRole("button");
+    expect(stones.map((b) => b.textContent)).toEqual(["1Your role", "2Your moon", "3Why you", "4Your energy", "5About you", "6Send"]);
   });
 
   it("the privacy note says an AI may draft replies, in the same words as the confirmation email", async () => {
@@ -276,7 +300,7 @@ describe("the form", () => {
     window.history.pushState({}, "", "/propose-a-role?role=r-host");
     serve(FORM);
     render(<ProposeARole />);
-    await screen.findByText("Welcome Host");
+    await waitFor(() => expect(document.querySelector('[data-role="r-host"]')).toBeTruthy());
     const ticked = (id: string) => (within(document.querySelector(`[data-role="${id}"]`) as HTMLElement).getByRole("checkbox") as HTMLInputElement).checked;
     expect(ticked("r-host")).toBe(true);
     expect(ticked("r-gate")).toBe(false);
@@ -284,7 +308,7 @@ describe("the form", () => {
     window.history.pushState({}, "", "/propose-a-role?role=r-gone");
     serve(FORM);
     render(<ProposeARole />);
-    await screen.findByText("Welcome Host");
+    await waitFor(() => expect(document.querySelector('[data-role="r-host"]')).toBeTruthy());
     expect(["r-gate", "r-well", "r-host", "r-cook"].some(ticked)).toBe(false);
   });
 
@@ -320,7 +344,12 @@ describe("the confirmation link", () => {
     window.history.pushState({}, "", "/propose-a-role/confirm?token=abc");
     serve({}, { status: 200, body: { confirmed: true, message: OPEN_WORDS.confirmed } });
     render(<ConfirmProposal />);
-    expect(await screen.findByText(OPEN_WORDS.confirmed)).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "Confirmed" })).toBeTruthy();
+    expect(screen.getByText(/Your proposal is with the village now/)).toBeTruthy();
+    // Said once: the server's own "Confirmed." does not repeat under the heading (lane 1's finding).
+    expect(document.body.textContent?.match(/Confirmed/g)).toHaveLength(1);
+    // You and the village meet.
+    await waitFor(() => expect(document.querySelector('[data-met="true"]')).toBeTruthy());
     await waitFor(() => expect(posted[0]).toEqual({ url: "/api/open-proposals/confirm", body: { token: "abc" } }));
   });
 
@@ -334,7 +363,7 @@ describe("the confirmation link", () => {
     // Anything else the server might hand back is not drawn as a link.
     serve({}, { status: 200, body: { confirmed: true, message: OPEN_WORDS.confirmed, statusPath: "https://elsewhere.example/x" } });
     render(<ConfirmProposal />);
-    await screen.findByText(OPEN_WORDS.confirmed);
+    await screen.findByRole("heading", { name: "Confirmed" });
     expect(screen.queryByRole("link", { name: "Follow where your proposal is" })).toBeNull();
   });
 
@@ -424,7 +453,7 @@ describe("the applicant's own card beside the open one (Rye, 9 Nov 2026)", () =>
     // About you: no references, so the background-check consent is ticked (joining lane PR 2).
     fireEvent.click(screen.getByLabelText(/agree to the background check/i));
     fillGoals();
-    fireEvent.click(screen.getByRole("button", { name: OPEN_WORDS.send }));
+    sendNow();
     await screen.findByRole("heading", { name: "Check your email" });
     expect(posted[0].body.card).toMatchObject({
       roles: [{ roleId: "r-lfs", moves: [{ text: "A cash view every Monday", target: "13 of 13 Mondays" }], firstMoon: [{ quest: "Publish the first cash view", doneWhen: "every circle lead has it" }] }],
@@ -473,7 +502,7 @@ describe("form v2 (role journey brief v2, 5.4)", () => {
     // About you: no references, so the background-check consent is ticked (joining lane PR 2).
     fireEvent.click(screen.getByLabelText(/agree to the background check/i));
     fillGoals();
-    fireEvent.click(screen.getByRole("button", { name: OPEN_WORDS.send }));
+    sendNow();
     await screen.findByRole("heading", { name: "Check your email" });
     expect(posted[0].body.card.terms).toEqual({ answers: { term: { choice: "talk", note: "A shorter trial" } } });
     expect(posted[0].body.card.commitmentPct).toBe(80);
@@ -481,5 +510,202 @@ describe("form v2 (role journey brief v2, 5.4)", () => {
     const items = Array.from(steps.querySelectorAll("li")).map((li) => li.textContent);
     expect(items).toEqual(["60 minutes with Visionary Channel", "20 minutes with Technical Operations Steward", "20 minutes with Anchor Circle Steward, the final approval"]);
     expect(steps.textContent).toContain("We'll write to you to find a time.");
+  });
+});
+
+/*
+ * THE FIREFLY PATH (game feel wave 2, lane 1 option B): six stones, one
+ * question each. Next judges its own stone; the trail opens a stone once
+ * walked to; a desk walks with Enter and the arrows, a phone with a swipe.
+ */
+describe("the six stones", () => {
+  const pick = async (id = "r-gate") => {
+    await waitFor(() => expect(document.querySelector(`[data-role="${id}"]`)).toBeTruthy());
+    fireEvent.click(within(document.querySelector(`[data-role="${id}"]`) as HTMLElement).getByRole("checkbox"));
+  };
+  const shown = () => Array.from(document.querySelectorAll<HTMLElement>("[data-stone]")).filter((s) => !s.hidden).map((s) => s.getAttribute("data-stone"));
+
+  it("shows one stone at a time, and Next on the first stone with no role holds you there and says so", async () => {
+    serve(FORM);
+    render(<ProposeARole />);
+    await screen.findByText("Gate Keeper");
+    expect(shown()).toEqual(["role"]);
+    // A stone ahead is not open yet.
+    const trail = within(document.querySelector("[data-form-trail]") as HTMLElement).getAllByRole("button") as HTMLButtonElement[];
+    expect(trail.map((b) => b.disabled)).toEqual([false, true, true, true, true, true]);
+    pressNext();
+    expect(stoneNow()).toBe("role");
+    expect((await screen.findByRole("alert")).textContent).toContain(OPEN_WORDS.needRole);
+    await pick();
+    pressNext();
+    expect(stoneNow()).toBe("moon");
+    expect(shown()).toEqual(["moon"]);
+    // The problem list belonged to the stone left behind.
+    expect(screen.queryByRole("alert")).toBeNull();
+    // The heading of the new stone has the cursor.
+    await waitFor(() => expect(document.activeElement?.id).toBe("stone-1-h"));
+  });
+
+  it("walks back without losing a word, and the trail returns to any stone already reached", async () => {
+    serve(FORM);
+    render(<ProposeARole />);
+    await pick();
+    pressNext();
+    fireEvent.change(screen.getByLabelText(OPEN_WORDS.aimLabel), { target: { value: "The gate opens at dawn." } });
+    fillGoals();
+    pressNext();
+    expect(stoneNow()).toBe("why");
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    expect(stoneNow()).toBe("moon");
+    expect((screen.getByLabelText(OPEN_WORDS.aimLabel) as HTMLInputElement).value).toBe("The gate opens at dawn.");
+    const trail = within(document.querySelector("[data-form-trail]") as HTMLElement).getAllByRole("button") as HTMLButtonElement[];
+    expect(trail[2].disabled).toBe(false);
+    fireEvent.click(trail[2]);
+    expect(stoneNow()).toBe("why");
+    // Only stones stood on are ticked done.
+    expect(trail[0].getAttribute("data-state")).toBe("done");
+  });
+
+  it("a desk: Enter in a field moves on, the arrows walk when the caret is not in a field, and leave a field's own keys alone", async () => {
+    serve(FORM);
+    render(<ProposeARole />);
+    await pick();
+    const form = document.querySelector("[data-open-proposal]") as HTMLFormElement;
+    // ArrowRight on the form itself walks on, as Next does (with its check).
+    fireEvent.keyDown(form, { key: "ArrowRight" });
+    expect(stoneNow()).toBe("moon");
+    // In the aim field, the arrows move the caret and nothing else.
+    const aimBox = screen.getByLabelText(OPEN_WORDS.aimLabel);
+    fireEvent.keyDown(aimBox, { key: "ArrowLeft" });
+    expect(stoneNow()).toBe("moon");
+    fireEvent.change(aimBox, { target: { value: "The gate opens at dawn." } });
+    fillGoals();
+    // Enter in a field submits the form, and on a stone before Send that is Next.
+    fireEvent.submit(form);
+    expect(stoneNow()).toBe("why");
+    expect(posted).toHaveLength(0);
+    fireEvent.keyDown(form, { key: "ArrowLeft" });
+    expect(stoneNow()).toBe("moon");
+    // Ctrl+Enter moves on even from a long answer.
+    fireEvent.keyDown(aimBox, { key: "Enter", ctrlKey: true });
+    expect(stoneNow()).toBe("why");
+  });
+
+  it("a phone: a swipe left walks on, right walks back, and a swipe that starts in a field is the field's", async () => {
+    serve(FORM);
+    render(<ProposeARole />);
+    await pick();
+    const form = document.querySelector("[data-open-proposal]") as HTMLFormElement;
+    const swipe = (on: Element, dx: number, dy = 0) => {
+      fireEvent.touchStart(on, { touches: [{ clientX: 200, clientY: 300 }] });
+      fireEvent.touchEnd(on, { changedTouches: [{ clientX: 200 + dx, clientY: 300 + dy }] });
+    };
+    swipe(form, -120);
+    expect(stoneNow()).toBe("moon");
+    swipe(screen.getByLabelText(OPEN_WORDS.aimLabel), 120);
+    expect(stoneNow()).toBe("moon");
+    // Mostly up and down is a scroll.
+    swipe(form, 80, 200);
+    expect(stoneNow()).toBe("moon");
+    swipe(form, 120);
+    expect(stoneNow()).toBe("role");
+  });
+
+  it("each stone has its companion line, and Why you offers starter phrases that begin the answer", async () => {
+    serve(FORM);
+    render(<ProposeARole />);
+    await pick();
+    expect(document.querySelector("[data-companion]")?.textContent).toMatch(/Start with the role that calls you/);
+    pressNext();
+    expect(document.querySelector("[data-companion]")?.textContent).toMatch(/your first moon/);
+    fireEvent.change(screen.getByLabelText(OPEN_WORDS.aimLabel), { target: { value: "The gate opens at dawn." } });
+    fillGoals();
+    pressNext();
+    expect(document.querySelector("[data-companion]")?.textContent).toMatch(/why you, and why now/);
+    fireEvent.click(screen.getByRole("button", { name: "What I have tended before:" }));
+    fireEvent.click(screen.getByRole("button", { name: "What I want to learn:" }));
+    expect((screen.getByLabelText(OPEN_WORDS.whyLabel) as HTMLTextAreaElement).value).toBe("What I have tended before:\n\nWhat I want to learn: ");
+  });
+
+  it("the role card sits beside the stone, and on Send a review names each stone with a way back", async () => {
+    serve(FORM);
+    render(<ProposeARole />);
+    await pick();
+    expect(document.querySelector("[data-role-beside]")?.textContent).toContain("Gate Keeper");
+    fireEvent.change(screen.getByLabelText("Your commitment"), { target: { value: "50" } });
+    fireEvent.click(screen.getByLabelText(/agree to the background check/i));
+    fireEvent.change(screen.getByLabelText(OPEN_WORDS.whyLabel), { target: { value: "The gate is always shut." } });
+    fireEvent.change(screen.getByLabelText(OPEN_WORDS.aimLabel), { target: { value: "The gate opens at dawn." } });
+    fillGoals();
+    walk();
+    expect(stoneNow()).toBe("send");
+    const review = document.querySelector("[data-review]") as HTMLElement;
+    expect(review.textContent).toContain("Gate Keeper");
+    expect(review.textContent).toContain("Commitment: 50%");
+    expect(review.textContent).toContain("1 goal for your first moon");
+    fireEvent.click(within(review).getAllByRole("button", { name: "Change" })[2]);
+    expect(stoneNow()).toBe("why");
+  });
+
+  it("a refusal for too many tries stays on Send in the server's own words, and nothing is lost", async () => {
+    serve(FORM, { status: 429, body: { error: OPEN_WORDS.tooMany } });
+    render(<ProposeARole />);
+    await pick();
+    fireEvent.change(screen.getByLabelText("Your commitment"), { target: { value: "50" } });
+    fireEvent.click(screen.getByLabelText(/agree to the background check/i));
+    await completeTheRest();
+    sendNow();
+    expect((await screen.findByRole("alert")).textContent).toContain(OPEN_WORDS.tooMany);
+    expect(stoneNow()).toBe("send");
+    expect((screen.getByLabelText(OPEN_WORDS.nameLabel) as HTMLInputElement).value).toBe("Rowan");
+  });
+});
+
+describe("the sent threshold", () => {
+  const sendAs = async (address: string, replyDays?: number) => {
+    serve(FORM, { status: 200, body: { sent: true, message: OPEN_WORDS.sent(address), ...(replyDays ? { replyDays } : {}) } });
+    render(<ProposeARole />);
+    await waitFor(() => expect(document.querySelector('[data-role="r-gate"]')).toBeTruthy());
+    fireEvent.click(within(document.querySelector('[data-role="r-gate"]') as HTMLElement).getByRole("checkbox"));
+    fireEvent.change(screen.getByLabelText("Your commitment"), { target: { value: "50" } });
+    fireEvent.click(screen.getByLabelText(/agree to the background check/i));
+    await completeTheRest();
+    fireEvent.change(screen.getByLabelText(OPEN_WORDS.emailLabel), { target: { value: address } });
+    sendNow();
+    await screen.findByRole("heading", { name: "Check your email" });
+  };
+
+  it("offers the inbox for a provider we know, dated next steps, and the doors to walk while you wait", async () => {
+    await sendAs("rowan@gmail.com", 7);
+    const inbox = screen.getByRole("link", { name: "Open Gmail" });
+    expect(inbox.getAttribute("href")).toBe("https://mail.google.com/");
+    const steps = document.querySelector("[data-dated-steps]") as HTMLElement;
+    expect(steps.querySelectorAll("li")).toHaveLength(2);
+    expect(steps.textContent).toMatch(/Open the link in that email by /);
+    expect(steps.textContent).toMatch(/we write to you by /);
+    const doors = within(document.querySelector("[data-wait-doors]") as HTMLElement).getAllByRole("link").map((a) => a.getAttribute("href"));
+    expect(doors).toEqual(["/quests", "/roles", "/love-letter"]);
+    // The drawing: two circles that touch, not met yet.
+    expect(document.querySelector('[data-threshold="sent"] [data-met="false"]')).toBeTruthy();
+  });
+
+  it("no inbox button for a domain we do not know, and Fix the address goes back to the address with every answer kept", async () => {
+    await sendAs("rowan@example.test");
+    expect(document.querySelector("[data-inbox-link]")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Not rowan@example.test? Fix the address" }));
+    expect(stoneNow()).toBe("send");
+    await waitFor(() => expect(document.activeElement?.id).toBe("propose-email"));
+    expect((screen.getByLabelText(OPEN_WORDS.whyLabel) as HTMLTextAreaElement).value).toBe("The gate is always shut.");
+  });
+});
+
+describe("a member who is signed in (B7)", () => {
+  it("is not told they need no account", async () => {
+    auth.user = { name: "Gil Moss", email: "gil@example.test" };
+    serve(FORM);
+    render(<ProposeARole />);
+    await screen.findByText("Gate Keeper");
+    expect(document.body.textContent).not.toContain("You don't need an account");
+    expect(document.body.textContent).toContain("Your name and email come from your account.");
   });
 });

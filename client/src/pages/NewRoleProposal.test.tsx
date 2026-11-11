@@ -6,7 +6,7 @@
  * asked.
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { Router } from "wouter";
 import { memoryLocation } from "wouter/memory-location";
 
@@ -27,7 +27,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-function visit(mine: unknown) {
+function visit(mine: unknown, openForm?: unknown) {
   const posts: string[] = [];
   vi.stubGlobal(
     "fetch",
@@ -36,6 +36,7 @@ function visit(mine: unknown) {
         posts.push(url);
         return json({ proposal: { href: "/role-proposals/new-1" } });
       }
+      if (openForm !== undefined && String(url).startsWith("/api/open-proposals/form")) return json(openForm);
       return json(mine);
     }),
   );
@@ -60,5 +61,33 @@ describe("/role-proposals/new", () => {
     await waitFor(() => expect(posts.length).toBe(1));
     expect(posts[0]).toMatch(/prefill$/);
     await waitFor(() => expect(history.at(-1)).toBe("/role-proposals/new-1"));
+  });
+
+  /*
+   * B7 (verify, 11 Nov 2026): a village taking proposals for this moon offers
+   * its open roles at the member door too, beside next season. CONTROL: with
+   * the open form taking next season only, nothing is asked and the draft starts.
+   */
+  const MOON = { open: true, term: { kind: "moon", startsOn: "2026-11-09", endsOn: "2026-12-08" }, roles: [{ id: "r-cook", name: "Cook" }] };
+
+  it("B7: with this moon's roles open, asks which first, and starts no draft until next season is chosen", async () => {
+    const { posts, history } = visit({ draftId: null, proposals: [], nextSeason: null, nextSeasonWords: null }, MOON);
+    const moon = await waitFor(() => {
+      const el = document.querySelector('[data-door="moon"]');
+      if (!el) throw new Error("no choice yet");
+      return el as HTMLElement;
+    });
+    expect(moon.textContent).toContain("1 role is open now, from 9 November 2026 to the next new moon on 8 December 2026.");
+    expect(moon.querySelector("a")?.getAttribute("href")).toBe("/propose-a-role");
+    expect(posts).toEqual([]);
+    fireEvent.click(document.querySelector('[data-door="season"]') as HTMLElement);
+    await waitFor(() => expect(posts.length).toBe(1));
+    await waitFor(() => expect(history.at(-1)).toBe("/role-proposals/new-1"));
+  });
+
+  it("B7 CONTROL: with the open form for next season, nothing is asked and the draft starts", async () => {
+    const { posts } = visit({ draftId: null, proposals: [], nextSeason: null, nextSeasonWords: null }, { ...MOON, term: null });
+    await waitFor(() => expect(posts.length).toBe(1));
+    expect(document.querySelector("[data-moon-or-season]")).toBeNull();
   });
 });
