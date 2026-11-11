@@ -81,6 +81,93 @@ something is chosen), `.jw-unfurl` / `.jw-seal` (growth), and the trail of stepp
 Applicants are never shown points, ranks or scores; a count shown on a journey page is the
 village's (goals reached this season), never a person's.
 
+## The organic art direction (11 Nov 2026)
+
+The lead's direction for anything that moves or celebrates: organic, growing, mycelial, lit like
+fireflies, with sacred geometry and fractals as the structure underneath. It binds every page,
+inside the journey list or not.
+
+- **Banned:** confetti, streamers, fireworks, sparks and sparkle bursts, trophies, badges popping,
+  coins raining, level-up flashes, neon, scan lines, HUD chrome, holograms, "XP" progress fills,
+  and anything that reads as technical or arcade.
+- **Glow is firefly light:** a few soft, warm points that drift and pulse slowly and lead the way.
+  Fireflies appear only around the one next act on a screen and inside illustrations, never as a
+  field of lights behind text.
+- **Ceremony is a bloom, never a burst:** a flower opening, a fern unfurling, a root joining the
+  network, a circle of light gathering.
+- **Sacred geometry is structure, not ornament:** the Seed of Life grows one circle per step walked
+  and continues into the Flower of Life; fireflies sit on Vogel's golden-angle spiral (the
+  sunflower's packing); a fern is an L-system, the same rule at every scale; a threshold is a
+  vesica, two circles meeting; the moon is the real moon for the date. Night palette only: no
+  rainbow gradients, no new-age kitsch.
+
+The motion rule that goes with it:
+
+1. Ambient fireflies only around the one next act and in illustrations, and they rest after about
+   20 seconds without input (`useRest`, `REST_AFTER_MS`).
+2. A one-time bloom or unfurl may take up to 1.6s. It plays once per moment, claimed the way
+   `LevelUpMoment` claims its crossing.
+3. Everything else follows rule 10 above: transform and opacity, settled inside 600ms.
+4. `prefers-reduced-motion` shows a still drawing of the same thing, complete: the seed with its
+   petals open, the fern unfurled, the lights in their places. Never an empty box.
+
+**The firefly exception to rule 10.** Fireflies are the one thing allowed to loop, because they
+rest after 20 seconds and never sit on words. Their glow lives in the kit's stylesheet
+(`client/src/components/journey/nature/nature.css`, from the sheet's `--sheet-*` knobs), so a page's classes
+never carry a literal glow. `scripts/check-design-rule.mjs` holds the kit's files (`NATURE_KIT`) to
+the same class rules as the journey.
+
+**The nature kit** (`client/src/components/journey/nature`) is where these shapes live, each
+tested as maths and as a still drawing: `Fireflies`, `SeedOfLife`, `FernUnfurl`, `Vesica`,
+`MoonPhase` and the `RootStrip` shell. Import a piece where it is used, inside a lazy route or
+through `React.lazy`, and never from the app shell, so none of it reaches the first page.
+
+| Use | Not | Why |
+|---|---|---|
+| `<SeedOfLife bloom>` opening once when a path is whole | 46 sparks and a "Stage reached" flash | a bloom, never a burst |
+| `<Fireflies>` around the one next act | a glowing ring or pulse on every button | one light leads the way; it rests after 20s |
+| firefly glow from `nature.css` | `shadow-[0_0_40px_...]` on a page's classes | the glow re-tints with the sheet and stays out of class strings |
+| `<SeedOfLife total walked>` | a filling bar, a percentage ring, an "XP" fill | progress grows; it is never a meter |
+| `<FernUnfurl>` at adoption | a trophy, a badge popping in | something living, once |
+| `<Vesica met>` for a threshold crossed | a lock icon flipping open | two circles meeting, each still whole |
+| `<MoonPhase date>` | a decorative moon in a fixed phase | the real sky, computed, no network |
+| `useReducedMotion` rendering the still drawing | `animation-duration: 1ms` on a bloom | the member still sees what was celebrated |
+
+## Phone and desktop, each at its best (11 Nov 2026)
+
+The lead: every surface is great on a phone AND on a desktop, and each leans on what its device
+does best. Design each surface twice, on purpose. A desktop layout is never a stretched phone, and
+a phone layout is never a squeezed desktop. Shoot both, at 390px and 1280px at least, and say what
+is unique to each.
+
+- **A phone leans on:** one thumb, the bottom of the screen, one thing at a time, full-bleed
+  illustration, swiping between steps, a sticky next act within thumb reach, calm motion with no
+  haptic fuss, short copy, and the native share sheet and camera where the platform has them.
+- **A desktop leans on:** width for side by side (the path beside the step, the role card beside
+  the form, the whole moon beside today), hover to reveal, the keyboard (Enter for next, arrows
+  between stones, visible focus), larger fields for the geometry, and context panels that stay.
+
+How the nature kit does it:
+
+- `Fireflies`: with a fine pointer, hovering or focusing the act draws the lights in toward it; on
+  a touch screen at most five stay, and a press gathers them.
+- `SeedOfLife`, `FernUnfurl`, `Vesica`, `MoonPhase`: the drawing grows with the field (`size="lg"`
+  widens at `sm` and `lg`). `FernUnfurl detail="auto"` grows one more generation of leaflets at
+  1024px and up. Hovering a seed circle names its step; hovering the moon names its phase, and
+  `showName` prints it for a phone, which has no hover.
+- `RootStrip`: one slim line on a phone, with the whole strip as the target; on a desktop the root
+  reaches further with more hyphae and the `detail` line shows beside the sentence.
+
+| Use | Not | Why |
+|---|---|---|
+| a sticky next act at the bottom on a phone | the same button at the top of a long form | the thumb lives at the bottom |
+| the path beside the step from `lg` up (`lg:grid-cols-[...]`) | one centred column stretched to 1280px | a desktop has the width for both at once |
+| hover to reveal a name or draw fireflies in (`@media (hover: hover)`) | hover as the only way to reach something | a phone has no hover; reveal, never hide |
+| Enter for next and arrows between stones | mouse only | a desktop has a keyboard |
+| `navigator.share` on a phone, copy to clipboard on a desktop | one "copy link" for both | each device's own way to pass something on |
+| a full-bleed illustration on a phone, a larger geometry field on a desktop | one fixed-size picture for both | each screen at its best |
+| short copy on a phone, a `detail` line a desktop shows | the desktop's paragraph squeezed onto a phone | one thing at a time |
+
 ## What the gate does not check
 
 It reads class strings, so it cannot see a colour set in a `style` object through a variable, a

@@ -9,21 +9,32 @@
  * `recordStageEvent`'s own diff: the abilities named are the keys that rung
  * actually opened, never a list typed here.
  *
- * A dialog, so focus moves into it and Escape closes it. Reduced motion keeps
- * the words and drops the sparks' glow pulse.
+ * A dialog, so focus moves into it and Escape closes it.
+ *
+ * THE BLOOM (game feel wave 2, 11 Nov 2026). The sparks and the "Stage
+ * reached" flash are gone: the art direction bans bursts and level-up flashes.
+ * The portrait now sits at the heart of a Seed of Life with one circle per
+ * stage of the ladder. The circle of the stage just reached draws itself, and
+ * when the ladder is whole the seed opens its petals, once, inside 1.6s.
+ * Reduced motion shows the same seed, still and complete. The seed comes from
+ * the nature kit through React.lazy, so it costs the profile nothing until a
+ * stage is crossed.
  */
-import { useEffect, useRef, useState } from "react";
+import { Suspense, lazy, useEffect, useRef, useState } from "react";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { capabilityLabel } from "@shared/capabilities";
 import { playMoment } from "@/lib/sound";
 import type { StageAdvance } from "@/components/StageAdvanced";
 import { DEFAULT_LADDER_TITLE } from "@shared/villagePaths";
 
-const SPARKS = Array.from({ length: 46 }, (_, i) => ({
-  left: `${(i * 41) % 98}%`,
-  top: `${(i * 29) % 94}%`,
-  size: i % 5 === 0 ? 5 : 3,
-  opacity: 0.2 + (i % 5) * 0.14,
-}));
+const SeedOfLife = lazy(() => import("@/components/journey/nature/SeedOfLife"));
+
+/** Where the crossing sits on the ladder: one circle per stage, the reached one closed last. */
+export function seedOfStages(stages: ReadonlyArray<{ id: string }>, toStage: string): { total: number; walked: number } {
+  const total = Math.max(1, stages.length);
+  const at = stages.findIndex((s) => s.id === toStage);
+  return { total, walked: at >= 0 ? at + 1 : total };
+}
 
 const countWord = (n: number) =>
   (["No", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten"][n] ?? String(n));
@@ -48,6 +59,9 @@ export default function LevelUpMoment({
 }) {
   const reached = stages.find((s) => s.id === advance.toStage)?.name ?? advance.toStage;
   const gifts = advance.unlocked.map((key) => capabilityLabel(key));
+  const seed = seedOfStages(stages, advance.toStage);
+  const { t } = useLingui();
+  const { walked, total } = seed;
   const closeRef = useRef<HTMLButtonElement>(null);
   const [said, setSaid] = useState("");
   const [broken, setBroken] = useState(false);
@@ -90,24 +104,28 @@ export default function LevelUpMoment({
       aria-labelledby="levelup-h"
       className="sheet-night fixed inset-0 z-[70] flex flex-col items-center justify-center gap-5 overflow-y-auto bg-[radial-gradient(circle_at_50%_42%,var(--sheet-dash-glow,#2a3a22)_0%,var(--background)_45%,var(--sheet-dash-deep,#070d0a)_100%)] px-4 py-10 text-foreground"
     >
-      <div aria-hidden="true" className="pointer-events-none absolute inset-0">
-        {SPARKS.map((s, i) => (
-          <span
-            key={i}
-            className="absolute rounded-full bg-dash-gold-lit shadow-[0_0_8px_var(--color-dash-gold-lit)]"
-            style={{ left: s.left, top: s.top, width: s.size, height: s.size, opacity: s.opacity }}
-          />
-        ))}
-      </div>
+      <p className="relative m-0 text-xs font-semibold uppercase tracking-widest text-notice">
+        <Trans context="level-up moment eyebrow">A new stage</Trans>
+      </p>
 
-      <p className="relative m-0 text-sm uppercase tracking-[0.4em] text-dash-gold-lit">Stage reached</p>
-
-      <div className="relative h-56 w-56 rounded-full bg-dash-gold-lit p-2 shadow-[0_0_90px_color-mix(in_srgb,var(--color-dash-gold-lit)_55%,transparent)] sm:h-72 sm:w-72">
-        <div className="flex h-full w-full items-end justify-center overflow-hidden rounded-full border-[5px] border-background bg-muted">
+      <div className="relative grid size-64 place-items-center sm:size-80 lg:size-96">
+        <div className="absolute inset-0">
+          <Suspense fallback={null}>
+            <SeedOfLife
+              total={seed.total}
+              walked={seed.walked}
+              drawFrom={seed.walked - 1}
+              bloom
+              size="fill"
+              label={t({ message: `${walked} of ${total} stages walked`, context: "level-up seed of life" })}
+            />
+          </Suspense>
+        </div>
+        <div className="relative size-28 overflow-hidden rounded-full border-2 border-notice bg-muted sm:size-36 lg:size-44">
           {portrait?.src && !broken ? (
             <img src={portrait.src} alt={portrait.label} onError={() => setBroken(true)} className="h-full w-full object-cover object-top" />
           ) : (
-            <span className="flex h-full w-full items-center justify-center font-display text-6xl text-foreground">
+            <span className="flex h-full w-full items-center justify-center font-display text-5xl text-foreground">
               {(portrait?.label ?? name).replace(/^The\s+/i, "").slice(0, 1)}
             </span>
           )}
