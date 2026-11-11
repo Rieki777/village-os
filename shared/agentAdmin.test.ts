@@ -223,3 +223,83 @@ describe("reads of what a person alone changes (part B)", () => {
     expect(parseAgentAdminPaths({ paths: [{ method: "POST", path: "/api/admin/org/drafts", label: "x" }] }).ok).toBe(false);
   });
 });
+
+describe("page wording is not a power (content and FAQ section names)", () => {
+  const OPEN: AgentAdminPathsDoc = {
+    paths: [
+      { method: "PUT", path: "/api/admin/content/:section", confirm: "person", label: "Page wording" },
+      { method: "PUT", path: "/api/admin/faqs/:pathway", confirm: "person", label: "FAQs" },
+    ],
+  };
+  const WORDS = [
+    "/api/admin/content/page-journey-steward",
+    "/api/admin/content/page-governance",
+    "/api/admin/content/roles",
+    "/api/admin/content/page-rights-steward",
+  ];
+
+  it("allows the four content paths when they are listed", () => {
+    for (const p of WORDS) expect(adminRequestDecision("PUT", p, OPEN, "agent-1"), p).toMatchObject({ ok: true });
+    expect(adminRequestDecision("PUT", "/api/admin/faqs/steward", OPEN, "agent-1")).toMatchObject({ ok: true });
+  });
+
+  it("still closes them when they are not listed", () => {
+    for (const p of WORDS) expect(adminRequestDecision("PUT", p, SHIPPED, "agent-1"), p).toMatchObject({ ok: false, code: "not_allowed" });
+  });
+
+  it("every real power route is still refused as always a person", () => {
+    // From server/index.ts and server/routes: capabilities, badges, power groups, handover, seatings, org drafts, roles, stages, governance.
+    const REAL: Array<[string, string]> = [
+      ["PUT", "/api/admin/capabilities/moon.approve/holding"],
+      ["DELETE", "/api/admin/capabilities/cash.pay/holding"],
+      ["PUT", "/api/admin/members/u-1/capabilities"],
+      ["POST", "/api/admin/badges"],
+      ["PUT", "/api/admin/badges/b-1"],
+      ["POST", "/api/admin/badges/b-1/award"],
+      ["DELETE", "/api/admin/badges/b-1/award/u-1"],
+      ["PUT", "/api/admin/org-roles/r-1/power-groups"],
+      ["PUT", "/api/admin/power-affinity/governance"],
+      ["PUT", "/api/org/village/power"],
+      ["PUT", "/api/admin/roles/r-1"],
+      ["PUT", "/api/admin/roles/r-1/admin-access"],
+      ["PUT", "/api/admin/roles/r-1/capabilities"],
+      ["POST", "/api/admin/roles/r-1/holders"],
+      ["POST", "/api/admin/org/roles"],
+      ["PUT", "/api/admin/org/roles/r-1"],
+      ["POST", "/api/admin/org/roles/r-1/holders"],
+      ["DELETE", "/api/admin/org/seatings/s-1"],
+      ["POST", "/api/org/seatings/s-1/claim"],
+      ["POST", "/api/org/seatings/s-1/claim/confirm"],
+      ["POST", "/api/admin/org/drafts"],
+      ["PUT", "/api/admin/org/drafts/d-1/vision"],
+      ["POST", "/api/admin/org/drafts/d-1/publish"],
+      ["POST", "/api/org/drafts/d-1/publish-by-power"],
+      ["POST", "/api/org/drafts/d-1/put-to-village"],
+      ["PUT", "/api/admin/players/u-1/stage"],
+      ["PUT", "/api/admin/governance/weights/u-1"],
+      ["POST", "/api/admin/governance/weights/bulk"],
+      ["POST", "/api/admin/governance/land-due"],
+      ["PUT", "/api/admin/governance/rules"],
+    ];
+    for (const [m, p] of REAL) expect(adminRequestDecision(m, p, OPEN, "agent-1"), `${m} ${p}`).toMatchObject({ ok: false, code: "always_a_person" });
+  });
+
+  it("only the section segment is blanked: nothing else under content or faqs slips through", () => {
+    for (const p of [
+      "/api/admin/content/page-x/capabilities",
+      "/api/admin/content/page-x/steward/y",
+      "/api/admin/other/steward",
+      "/api/admin/content-steward/page",
+    ])
+      expect(adminRequestDecision("PUT", p, { paths: [{ method: "PUT", path: p, confirm: "person", label: "x" }] }, "agent-1"), p).toMatchObject({ ok: false, code: "always_a_person" });
+  });
+
+  it("leaves the other rules unchanged on those routes", () => {
+    const open = (p: string) => adminRequestDecision("PUT", p, { paths: [{ method: "PUT", path: p, confirm: "person", label: "x" }] }, "agent-1");
+    expect(open("/api/admin/content/page-payment")).toMatchObject({ ok: false, code: "always_a_person" });
+    expect(open("/api/admin/content/page-secret")).toMatchObject({ ok: false, code: "always_a_person" });
+    expect(open("/api/admin/content/agent")).toMatchObject({ ok: false, code: "always_a_person" });
+    expect(open("/api/admin/content/page-erase")).toMatchObject({ ok: false, code: "always_a_person" });
+    expect(open("/api/admin/content/agent-1")).toMatchObject({ ok: false, code: "always_a_person" });
+  });
+});
