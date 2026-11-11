@@ -18,11 +18,30 @@
  */
 import { useEffect, useState } from "react";
 import { Check, ShieldCheck } from "lucide-react";
-import { BTN_PRIMARY, BTN_SECONDARY, FIELD, TILE } from "@/components/journey/look";
 import { ALIGN_WORDS, alignedOnWords } from "@shared/alignments";
 import { useSeason } from "@/lib/gameApi";
 import { IdentityConfirmField, identityBody, identityReady, useIdentityConfirm } from "@/components/auth/ConfirmWithGoogle";
 import { asksReconfirm, confirmIdentity, type Answer } from "./alignmentsApi";
+
+/**
+ * The sheet's look (components/journey/look.ts), copied here rather than
+ * imported. This button is pulled in by the boot chunk's neighbours, and
+ * importing look.ts from it reshapes rollup's chunk graph: on main plus #1159
+ * it moved two shared modules out of a lazy chunk, the remainder fell under
+ * `experimentalMinChunkSize`, and first-page JS went from 695 KB to 1113 KB
+ * (budget 750). AlignButton.look.test.ts holds these four equal to look.ts,
+ * so the copy cannot drift.
+ */
+export const ALIGN_LOOK = {
+  BTN_PRIMARY:
+    "jw-btn inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-notice px-5 py-2 font-semibold text-background hover:bg-notice/90 disabled:opacity-50",
+  BTN_SECONDARY:
+    "jw-btn inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-muted disabled:opacity-50",
+  FIELD:
+    "w-full rounded-lg border border-border bg-background px-3 py-2 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring",
+  TILE: "rounded-xl border border-border bg-muted p-4",
+} as const;
+const { BTN_PRIMARY, BTN_SECONDARY, FIELD, TILE } = ALIGN_LOOK;
 
 /**
  * The confirmation, in place. Shown when the server asks for it, or ahead of
