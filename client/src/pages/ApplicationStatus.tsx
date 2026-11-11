@@ -317,7 +317,8 @@ export default function ApplicationStatus() {
             )}
             {/* The path as stepping stones: the line fills down to where you stand, one stone after another, and the
                 stone you are on answers with a ring on the water. Reduce motion: the filled path, at once. */}
-            <ol className="jw-trail-v" data-motion={still ? "still" : "live"}>
+            {/* Phone: the guide button rides the right edge, so the steps keep a gutter clear of it (verify item 7). */}
+            <ol className="jw-trail-v pr-16 md:pr-0" data-motion={still ? "still" : "live"}>
               {view.path.map((p, i) => (
                 <li
                   key={i}

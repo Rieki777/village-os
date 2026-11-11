@@ -330,6 +330,17 @@ function goalsOfCard(body: store.StoredOpenProposal["body"]): ProposalGoal[] {
   );
 }
 
+/** The village's season goals the card picked, in their words, with how the work serves each. A goal whose words were not kept is left out. */
+function servesOfCard(body: store.StoredOpenProposal["body"]): Array<{ goal: string; howItHelps: string | null }> {
+  const out: Array<{ goal: string; howItHelps: string | null }> = [];
+  for (const s of body.card?.serves ?? []) {
+    const goal = String(s.goal ?? "").trim();
+    if (!goal || out.some((g) => g.goal === goal)) continue;
+    out.push({ goal, howItHelps: String(s.how ?? "").trim() || null });
+  }
+  return out;
+}
+
 /**
  * THE CONVERSATIONS STILL TO BE WRITTEN UP, by role (audit M10), the same rule
  * `interviewsAreIn` holds Adopt to: a proposal with no review has none. Each
@@ -412,7 +423,12 @@ export async function placeOnRoles(
   const agreed = await agreedOf(pool, p.proposal);
   const goals = goalsOfCard(p.proposal.body);
   const cardTerms = p.proposal.body.card?.terms ?? null;
+  const aim = String(p.proposal.body.aim ?? "").trim();
+  const serves = servesOfCard(p.proposal.body);
   const answers = {
+    // The aim and the season goals she picked, so the adopted card reads them (verify item 7).
+    ...(aim ? { aim } : {}),
+    ...(serves.length ? { serves } : {}),
     ...(goals.length ? { goals } : {}),
     ...(cardTerms || agreed.commitmentPct != null
       ? {

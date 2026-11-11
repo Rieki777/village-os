@@ -828,8 +828,11 @@ describe.skipIf(!configured)("open role proposals, the decision, on a real schem
       expect(seen.body.proposal.card.roles[0].firstMoon[0]).toEqual({ quest: "Test the water", doneWhen: "the lab says it is clean" });
       expect(Array.isArray(seen.body.proposal.roles[0].accountabilities)).toBe(true);
       const adopted = await call("POST", `/api/governance/open-proposals/${id}/adopt`, { confirmOpenTalks: true }, FOUNDER.id); expect(adopted.status, JSON.stringify(adopted.body)).toBe(200);
-      const apps = await q("SELECT deliverables FROM seat_applications WHERE candidate_user_id = ?", [CARDED.id]);
+      const apps = await q("SELECT deliverables, answers FROM seat_applications WHERE candidate_user_id = ?", [CARDED.id]);
       expect(String(apps[0].deliverables)).toContain("Clean water all season.");
+      // Verify item 7: the aim rides on the application's answers too, so the adopted card reads it.
+      const stored = typeof apps[0].answers === "string" ? JSON.parse(apps[0].answers) : apps[0].answers;
+      expect(stored.aim).toBe("Clean water all season.");
       expect(String(apps[0].deliverables)).toContain("Goal: Test the water: done when the lab says it is clean");
       expect(String(apps[0].deliverables)).toContain("Commitment: 70%");
       expect(String(apps[0].deliverables)).toContain("Wants to talk about the terms: Term: Could the rate be per moon?");

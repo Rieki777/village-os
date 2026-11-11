@@ -236,7 +236,12 @@ export interface CardProposal {
    * the proposal serves, drawn in place of the filed plan, so the status card
    * shows what the member just wrote. A draft's own season words win.
    */
-  answers?: { aim: string | null; servesGoal: string | null } | null;
+  answers?: { aim: string | null; servesGoal: string | null; serves?: ServedGoal[] } | null;
+  /**
+   * The application is adopted (verify item 7): the card is drawn in "adopted"
+   * mode, its live sections reading the roles she now holds.
+   */
+  adopted?: boolean;
   draft?: {
     words: Record<string, Record<string, unknown>>;
     newRoles: Array<{ id: string; circleId: string | null; circleName: string | null; seats: number; words: Record<string, unknown> }>;
@@ -464,7 +469,7 @@ export async function buildPlayerCards(
     proposalsByRole.set(String(p.org_role_id), list);
   }
   // Every role a live card in the batch carries, the tensions read once for all of them.
-  const liveOwnerIds = new Set(owners.filter((o) => !o.proposal && o.tier.level !== "stranger").map((o) => o.userId));
+  const liveOwnerIds = new Set(owners.filter((o) => (!o.proposal || o.proposal.adopted) && o.tier.level !== "stranger").map((o) => o.userId));
   const tensionRoleIds = Array.from(
     new Set(seatings.filter((s) => s.userId && liveOwnerIds.has(String(s.userId)) && s.holderKind === "member" && !s.isExample).map((s) => s.orgRoleId)),
   );
@@ -573,7 +578,7 @@ export async function buildPlayerCards(
         // Unread wherever the structure is, or when the map could not be read.
         suited: seat.structure ? suitedFor((p.archetypes as string[]) ?? []) : undefined,
         // A role missing from the map (a reader who is not a member) is unread, never empty.
-        tensions: memberUp ? (proposal ? [] : tensionsByRole.get(id)?.tensions) : undefined,
+        tensions: memberUp ? (proposal && !proposal.adopted ? [] : tensionsByRole.get(id)?.tensions) : undefined,
         viewerHolds: viewerHolds(id),
         // A proposal is drawn on its own terms, never the offer on the role.
         settings: seat.terms ? (proposal ? proposalSettings : ownSettings ?? offer) : undefined,
@@ -587,7 +592,8 @@ export async function buildPlayerCards(
       };
     });
 
-    const tasks: TaskIn[] = proposal ? [] : heldIds.flatMap((id) =>
+    // An adopted application's roles are hers now, so its card reads their tasks as a live card does.
+    const tasks: TaskIn[] = proposal && !proposal.adopted ? [] : heldIds.flatMap((id) =>
       (tasksByRole.get(id) ?? [])
         // Open, or done this moon: by its own stamp, or by a "done" answer this moon.
         .filter((t) => t.status === "open" || (t.status === "done" && (t.done_at !== null || doneThisMoon.has(String(t.entry_id)))))
@@ -643,8 +649,8 @@ export async function buildPlayerCards(
       plan: memberUp
         ? draftSeason
           ? { aim: draftSeason.aim, goals: draftSeason.servesGoals }
-          : proposal?.answers && (proposal.answers.aim || proposal.answers.servesGoal)
-            ? { aim: proposal.answers.aim, goals: proposal.answers.servesGoal ? [{ goal: proposal.answers.servesGoal, howItHelps: null }] : [] }
+          : proposal?.answers && (proposal.answers.aim || proposal.answers.servesGoal || proposal.answers.serves?.length)
+            ? { aim: proposal.answers.aim, goals: servedOfAnswers(proposal.answers) }
           : plan
             ? {
                 aim: plan.aim ?? null,
@@ -660,7 +666,7 @@ export async function buildPlayerCards(
       applications: memberUp ? applications : undefined,
       pastSeatings: isSelf ? pastSeatings : undefined,
       endedSeasonIds: ctx.endedSeasonIds ?? [],
-      mode: proposal ? "proposal" : "live",
+      mode: proposal ? (proposal.adopted ? "adopted" : "proposal") : "live",
       fillWith: proposal ? fillWith : undefined,
       roleNames: Object.fromEntries(roleName),
       bonusTokenName: null,
@@ -711,6 +717,12 @@ export async function buildPlayerCards(
     });
   }
   return out;
+}
+
+/** The season goals an application's answers name: the picked list when written, else the one goal the member door sent. */
+function servedOfAnswers(a: NonNullable<CardProposal["answers"]>): ServedGoal[] {
+  if (a.serves?.length) return a.serves.map((g) => ({ goal: g.goal, howItHelps: g.howItHelps }));
+  return a.servesGoal ? [{ goal: a.servesGoal, howItHelps: null }] : [];
 }
 
 /** A plan's stored seasonal goals, as the model reads them. Null when none are written. */

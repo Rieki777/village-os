@@ -19,6 +19,9 @@
  * - once the card has been scrolled past;
  * - where IntersectionObserver is missing (tests, old browsers): the row
  *   simply stays in the card.
+ *
+ * While it floats it carries `data-hides-fab`: the guide button sat over the
+ * dock's corner, so it steps out until the row is back in its card.
  */
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { bottomBarHeight } from "@/components/SaveBar";
@@ -82,6 +85,9 @@ export default function DecideDock({ label, note, children }: {
     <div ref={slot} data-decide-dock={docked ? "floating" : "resting"} style={docked ? { minHeight: height } : undefined}>
       <div
         ref={row}
+        // While it floats the dock owns the bottom of the screen, corner included, so the
+        // guide button steps out until the row rests in its card again (index.css, verify item 7).
+        data-hides-fab={docked ? "" : undefined}
         role={docked ? "region" : undefined}
         aria-label={docked ? label : undefined}
         style={docked ? { bottom: lift } : undefined}

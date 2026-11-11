@@ -234,3 +234,16 @@ describe("whose move it is (guide v2, Rye 10 Nov 2026)", () => {
     expect(whoseMove("held-full", null)).toMatch(/waits for a place/);
   });
 });
+
+describe("the season goals an adopted open proposal picked (verify item 7)", () => {
+  it("keeps each goal's words and how it serves, drops a blank or repeated one, and alone makes the answers non-empty", () => {
+    const a = parseApplicationAnswers({
+      serves: [{ goal: " Money we can read ", howItHelps: "a monthly cash view" }, { goal: "" }, { goal: "Money we can read" }, { goal: "Homes for families", howItHelps: " " }],
+    });
+    expect(a?.serves).toEqual([
+      { goal: "Money we can read", howItHelps: "a monthly cash view" },
+      { goal: "Homes for families", howItHelps: null },
+    ]);
+    expect(parseApplicationAnswers({ serves: "not a list" })).toBeNull();
+  });
+});

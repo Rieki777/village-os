@@ -700,3 +700,40 @@ describe("a role's powers", () => {
     expect(value(card.roles[0].powers.items)).toEqual(["Places people in roles", "Moderates the intake"]);
   });
 });
+
+describe("adopted mode (verify item 7): the application once the village adopted it", () => {
+  const AFTER = "Open for now. You'll add these once the role is adopted.";
+  const adopted = (over: Partial<PlayerCardInput> = {}) =>
+    buildPlayerCard(
+      input({
+        mode: "adopted",
+        fillWith: "Operations Steward",
+        viewerUserId: OWNER.userId,
+        plan: { aim: "A clean close every moon.", goals: [{ goal: "Money we can read", howItHelps: "a monthly cash view" }] },
+        roles: [role(1, { settings: { v: 1, term: { endsOn: "2026-12-31" } } })],
+        ...over,
+      }),
+    );
+
+  it("reads her aim and the village goals she picked, never the not-yet-adopted lines", () => {
+    const card = adopted();
+    expect(card.across.aim).toEqual({ kind: "shown", value: "A clean close every moon." });
+    expect(value(card.across.goals)).toEqual([{ goal: "Money we can read", howItHelps: "a monthly cash view" }]);
+    expect(JSON.stringify(card)).not.toContain(AFTER);
+    expect(JSON.stringify(card)).not.toContain(CARD_WORDS.noPlan);
+  });
+
+  it("this moon's tasks read as a holder's, and the heading is her roles", () => {
+    const card = adopted();
+    expect(value(card.across.tasks).map((t) => t.title)).toEqual(["Onboarding pipeline", "Circle rhythm"]);
+    expect(adopted({ tasks: [] }).across.tasks).toEqual({ kind: "empty", words: CARD_WORDS.noTasks });
+    expect(card.tiles.heading).toBe(CARD_WORDS.myRoles);
+    expect(card.header.rolesLine.startsWith("Proposes to hold ")).toBe(false);
+  });
+
+  it("is still drawn from the application: its open rows name who fills them, and no tile reads a health dot", () => {
+    const card = adopted({ plan: { aim: "A clean close every moon.", goals: [] } });
+    expect(card.across.goals).toEqual({ kind: "empty", words: "We'll fill this together with Operations Steward." });
+    for (const t of value(card.tiles.items)) expect(t.health).toBeNull();
+  });
+});

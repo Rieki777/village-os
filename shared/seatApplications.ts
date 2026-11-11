@@ -137,6 +137,13 @@ export interface ApplicationAnswers {
    */
   goals: ProposalGoal[];
   /**
+   * The village's season goals an open proposal picked, in their words, with how
+   * the work serves each (shared/openProposalCard.ts `serves`). Written when the
+   * proposal is adopted (server/lib/openProposalDecide.ts), so the adopted card
+   * reads the goals she picked. Absent elsewhere.
+   */
+  serves?: Array<{ goal: string; howItHelps: string | null }>;
+  /**
    * About you (joining lane PR 2): third-party data, for the deciders only, never read by an AI,
    * and cleared with the rest of `answers` when the member is erased (shared/proposalAbout.ts).
    */
@@ -157,6 +164,22 @@ function termsExtras(t: Record<string, unknown> | null | undefined): { answers?:
   // Commitment missing or odd: keep what reads (an older application).
   const only = judgeTermsStep({ answers: t.answers, commitmentPct: 0 }, []);
   return only.ok && Object.keys(only.value.answers).length ? { answers: only.value.answers } : {};
+}
+
+/** Picked season goals as stored: words required, at most nine (three roles of three), each trimmed to the answer limits. */
+function servesOf(v: unknown): Array<{ goal: string; howItHelps: string | null }> {
+  if (!Array.isArray(v)) return [];
+  const out: Array<{ goal: string; howItHelps: string | null }> = [];
+  for (const x of v) {
+    if (!x || typeof x !== "object") continue;
+    const o = x as Record<string, unknown>;
+    const goal = typeof o.goal === "string" ? o.goal.trim().slice(0, ANSWER_LIMITS.goal) : "";
+    if (!goal || out.some((g) => g.goal === goal)) continue;
+    const how = typeof o.howItHelps === "string" && o.howItHelps.trim() ? o.howItHelps.trim().slice(0, ANSWER_LIMITS.goal) : null;
+    out.push({ goal, howItHelps: how });
+    if (out.length >= 9) break;
+  }
+  return out;
 }
 
 /** The answers as stored, from anything. Null when there are none; never throws. */
@@ -182,12 +205,13 @@ export function parseApplicationAnswers(raw: unknown): ApplicationAnswers | null
     earliestStart: typeof r.earliestStart === "string" && /^\d{4}-\d{2}-\d{2}$/.test(r.earliestStart) ? r.earliestStart : null,
     terms: choice ? { choice, note: text(t?.note, ANSWER_LIMITS.termsNote) ?? "", ...termsExtras(t) } : null,
     goals: goalsOf(r.goals),
+    ...(servesOf(r.serves).length ? { serves: servesOf(r.serves) } : {}),
     ...(referencesOf(r.references).length ? { references: referencesOf(r.references) } : {}),
     ...(Object.keys(aboutOf(r.about)).length ? { about: aboutOf(r.about) } : {}),
     ...(backgroundCheckOf(r.backgroundCheck) ? { backgroundCheck: backgroundCheckOf(r.backgroundCheck) as BackgroundCheck } : {}),
     ...(counterOfferOf(r.counterOffer) ? { counterOffer: counterOfferOf(r.counterOffer) as CounterOffer } : {}),
   };
-  const empty = !answers.references && !answers.about && !answers.backgroundCheck && !answers.goals.length && !answers.aim && !answers.servesGoal && !answers.timeZone && !answers.windows.length && !answers.earliestStart && !answers.terms;
+  const empty = !answers.references && !answers.about && !answers.backgroundCheck && !answers.goals.length && !answers.serves && !answers.aim && !answers.servesGoal && !answers.timeZone && !answers.windows.length && !answers.earliestStart && !answers.terms;
   return empty ? null : answers;
 }
 

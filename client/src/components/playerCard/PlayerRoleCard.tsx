@@ -63,9 +63,11 @@ export const CARD_LOAD_WORDS = {
 /**
  * "live" is a person's card as it stands. "proposal" is the card a role
  * application asks for (PR 3): drawn the same way, never edited, and its live
- * sections already read "Starts once adopted" in the model.
+ * sections already read "Starts once adopted" in the model. "adopted" is
+ * that application once the village adopted it: still never edited here, its
+ * live sections reading the roles she now holds.
  */
-export type CardViewMode = "live" | "proposal";
+export type CardViewMode = "live" | "proposal" | "adopted";
 
 /** The card itself, from a payload already read. Exported so tests draw it without a fetch. */
 export function PlayerRoleCardView({
