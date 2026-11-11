@@ -547,7 +547,7 @@ export async function holder(w, ctx) {
   });
   await w.look("quests-by-roots");
   // Two training pages (the lead, 11 Nov 2026): /training chooses, and each
-  // track has its own page with its own words. A holder takes the steward one
+  // path has its own page with its own words. A holder takes the steward one
   // and marks a lesson done; the record is the server's, so it is read back.
   const doors = page.getByRole("navigation", { name: "Training pages" });
   await w.step("open the training chooser", async () => {

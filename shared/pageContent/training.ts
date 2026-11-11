@@ -3,12 +3,12 @@
  *
  * WHY TWO (the lead, 11 Nov 2026): "Community training is both steward and
  * resident routes (and will have different trainings, but for now is holding
- * the same, but should have 2 different routes in admin)." So each track has
- * its own page with its own words in Admin, Pages, and each track's
+ * the same, but should have 2 different routes in admin)." So each path has
+ * its own page with its own words in Admin, Pages, and each path's
  * "Community training" step points at its own page. The lessons themselves
  * are still one list (Admin, Training modules), shown on both, because the
  * rung that counts them (`training-complete`) is one rule for everybody.
- * Splitting the lessons by track is a change to that rule, and it waits for
+ * Splitting the lessons by path is a change to that rule, and it waits for
  * the lead.
  *
  * ONE BUILDER, TWO SPECS, the way the rights pages do it. `/training` itself
@@ -27,7 +27,7 @@ export function isTrainingTrack(v: unknown): v is TrainingTrack {
   return typeof v === "string" && (TRAINING_TRACKS as readonly string[]).includes(v);
 }
 
-/** The address of a track's training page, and of the chooser between them. */
+/** The address of a path's training page, and of the chooser between them. */
 export const TRAINING_PATH = "/training";
 export const trainingPathFor = (track: TrainingTrack): string => `${TRAINING_PATH}/${track}`;
 

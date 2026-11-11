@@ -48,7 +48,7 @@ interface TrainingModule {
  *
  *   /training/steward and /training/resident each read their own words from
  *   Admin, Pages (shared/pageContent/training.ts), so a village can tell each
- *   path its own story, and each track's "Community training" step links to
+ *   path its own story, and each path's "Community training" step links to
  *   its own page.
  *   /training is the chooser: the two doors, each named in its page's words.
  *   Older links, the path card and the menu still land somewhere true.
@@ -94,7 +94,7 @@ const TYPE_ICON: Record<string, React.ComponentType<{ className?: string }>> = {
  * mirror would only reintroduce the question of which copy is true.
  */
 
-/** wouter hands a routed component its params; a track page is mounted with `track`. */
+/** wouter hands a routed component its params; a path's page is mounted with `track`. */
 export default function Training({ track }: { track?: unknown }) {
   return isTrainingTrack(track) ? <TrackTraining track={track} /> : <TrainingChooser />;
 }
@@ -116,7 +116,7 @@ function Hero({ eyebrow, headline, intro, waiting }: { eyebrow: string; headline
   );
 }
 
-/** /training: one door per track, each in its own page's words. */
+/** /training: one door per path, each in its own page's words. */
 function TrainingChooser() {
   const steward = usePageContent(TRAINING_PAGES.steward);
   const resident = usePageContent(TRAINING_PAGES.resident);

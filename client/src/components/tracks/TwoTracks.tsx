@@ -1,6 +1,6 @@
 /**
  * THE FORK: where the path divides after the first steps (build list 8.6).
- * Two tracks off the same entry steps, drawn as a vesica, two circles that
+ * Two paths off the same entry steps, drawn as a vesica, two circles that
  * meet and each stay whole: holding a role, and living here. Both pages show
  * it from the steward page's `tracks` section; each marks the one a visitor
  * is on and links to the other.
@@ -19,10 +19,10 @@ import type { ResolvedSection } from "@shared/pageContent/types";
 
 export type Track = "steward" | "resident";
 
-/** Each track's own page, fixed in the app. */
+/** Each path's own page, fixed in the app. */
 const TRACK_HREF: Readonly<Record<Track, string>> = { steward: "/steward", resident: "/resident" };
 
-/** Where the track a visitor is on continues on this page. */
+/** Where the path a visitor is on continues on this page. */
 const TRACK_ANCHOR: Readonly<Record<Track, string>> = { steward: "#role-path", resident: "#home-path" };
 
 export default function TwoTracks({ section, here }: { section: ResolvedSection; here: Track }) {

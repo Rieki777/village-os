@@ -1,5 +1,5 @@
 {
-  "_about": "Draft (lane A5, 11 Nov 2026): Amora's words for the one-flow steward page and the resident track. Not applied by anything. The content lane may refine them; apply each through Admin, Pages or PUT /api/admin/content/<key>.",
+  "_about": "Draft (lane A5, 11 Nov 2026): Amora's words for the one-flow steward page and the resident path. Not applied by anything. The content lane may refine them; apply each through Admin, Pages or PUT /api/admin/content/<key>.",
   "page-journey-steward": {
     "hero": {
       "eyebrow": "Steward the Village",
@@ -55,16 +55,16 @@
       ]
     },
     "tracks": {
-      "heading": "Two tracks from here",
+      "heading": "Two paths from here",
       "body": "After the first steps the path divides. Walk one, or both.",
-      "stewardTitle": "Steward track",
+      "stewardTitle": "Steward path",
       "stewardLine": "Hold a role on the founding team that takes {village} from idea to flourishing village.",
-      "residentTitle": "Resident track",
+      "residentTitle": "Resident path",
       "residentLine": "Make {village} your home, from Guest and Founding Seeder to Steward of {village}.",
       "hereLabel": "You are here"
     },
     "steps": {
-      "heading": "The steward track",
+      "heading": "The steward path",
       "intro": "From your application to your seat on the team, in {count} steps. Each says whose move it is.",
       "items": [
         {
@@ -148,9 +148,9 @@
     },
     "crossover": {
       "mark": "Optional",
-      "title": "Join the resident track too",
+      "title": "Join the resident path too",
       "body": "We prefer to work with people who also want to live here at least part time.",
-      "ctaLabel": "See the resident track",
+      "ctaLabel": "See the resident path",
       "ctaTarget": "/resident"
     },
     "foundingTeam": {
@@ -218,7 +218,7 @@
       "secondaryTarget": "/housing"
     },
     "steps": {
-      "heading": "The resident track",
+      "heading": "The resident path",
       "intro": "From Guest to Steward of {village}, and the invitation to make your home here. Each stage helps both sides decide.",
       "items": [
         {
@@ -385,7 +385,7 @@
     },
     "entry": {
       "heading": "Start with the first steps",
-      "body": "Everyone begins here, whichever track you walk. Tick each one off as you go."
+      "body": "Everyone begins here, whichever path you walk. Tick each one off as you go."
     }
   }
 }

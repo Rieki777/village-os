@@ -5,9 +5,9 @@
  * for now, "but should have 2 different routes in admin").
  *
  * What is held here:
- *   - each track page reads ITS OWN saved words (page-training-steward or
+ *   - each path's page reads ITS OWN saved words (page-training-steward or
  *     page-training-resident), never the other's;
- *   - /training draws one door per track, each named in that page's words and
+ *   - /training draws one door per path, each named in that page's words and
  *     linking to that page;
  *   - the member's progress is words and a Seed of Life, never a percentage
  *     or a filling bar (docs/DESIGN_RULE.md);
@@ -67,8 +67,8 @@ afterEach(() => {
 
 const inRouter = (node: ReactNode) => render(<Router>{node}</Router>);
 
-describe("a track's training page", () => {
-  it("reads its own saved words, never the other track's", async () => {
+describe("a path's training page", () => {
+  it("reads its own saved words, never the other path's", async () => {
     stored.current = {
       "page-training-steward": { hero: { headline: "Stewards learn here" } },
       "page-training-resident": { hero: { headline: "Residents learn here" } },
@@ -119,7 +119,7 @@ describe("a track's training page", () => {
 });
 
 describe("/training, the chooser", () => {
-  it("draws one door per track, named in that page's words and linking to it", async () => {
+  it("draws one door per path, named in that page's words and linking to it", async () => {
     stored.current = {
       "page-training-steward": { door: { title: "For our stewards" } },
       "page-training-resident": { door: { title: "For our residents" } },

@@ -3008,7 +3008,7 @@ msgid "The harm you see"
 msgstr ""
 
 #: client/src/pages/ResidentJourney.tsx
-msgctxt "resident track ticked off"
+msgctxt "resident path ticked off"
 msgid "{walkedCount} of {stepCount} steps completed"
 msgstr ""
 

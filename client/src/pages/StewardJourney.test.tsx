@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 /**
  * /steward is ONE flow (build list section 8, 11 Nov 2026): the first steps
- * everyone takes, the fork into two tracks, the role path ending in the
- * optional step onto the resident track (the lead's final ruling), and the
+ * everyone takes, the fork into two paths, the role path ending in the
+ * optional step onto the resident path (the lead's final ruling), and the
  * founding team's invitation as the page's one gold act. It carries no doors,
  * no second journey, no ladder of levels and no intake form.
  */
@@ -88,7 +88,7 @@ describe("/steward", () => {
     expect(link).toHaveAttribute("rel", expect.stringContaining("noopener"));
   });
 
-  it("forks into two tracks, marks the role path as here and links across to /resident", async () => {
+  it("forks into two paths, marks the role path as here and links across to /resident", async () => {
     show();
     await screen.findByText("Two paths from here");
     const steward = document.querySelector('[data-track="steward"]') as HTMLElement;
@@ -221,9 +221,9 @@ describe("the village's draft for the one flow (server/seeds/amora/journey-track
     expect(pageContentProblem("page-journey-resident", draft["page-journey-resident"])).toBeNull();
   });
 
-  it("carries the lead's words for the optional step, and no early supporters step on the steward track", () => {
+  it("carries the lead's words for the optional step, and no early supporters step on the steward path", () => {
     const s = draft["page-journey-steward"];
-    expect(`${s.crossover.title}: ${s.crossover.body}`).toBe("Join the resident track too: We prefer to work with people who also want to live here at least part time.");
+    expect(`${s.crossover.title}: ${s.crossover.body}`).toBe("Join the resident path too: We prefer to work with people who also want to live here at least part time.");
     expect(s.crossover.mark).toBe("Optional");
     expect(s.crossover.ctaTarget).toBe("/resident");
     expect(JSON.stringify(s.steps)).not.toMatch(/Founding Seeder/);
@@ -235,7 +235,7 @@ describe("the village's draft for the one flow (server/seeds/amora/journey-track
     expect(s.getToKnow.exceptions).toMatch(/more than a week away/);
   });
 
-  it("names the resident track's stages from the journey doc, with Founding Seeders inside it", () => {
+  it("names the resident path's stages from the journey doc, with Founding Seeders inside it", () => {
     const stages = draft["page-journey-resident"].steps.items.map((r: Record<string, string>) => r.stage);
     expect(stages.slice(0, 8)).toEqual(["Guest", "Founding Seeder", "Potential Steward", "Connection Ceremony", "Steward of {village}", "Wisdom Council", "Connection Ceremony", "Invitation"]);
   });
