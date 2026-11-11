@@ -410,6 +410,9 @@ function Router() {
       <Route path="/good-neighbor" component={GoodNeighbor} />
       <Route path="/steward-rights" component={StewardRights} />
       <Route path="/resident-rights" component={ResidentRights} />
+      {/* One training page per track, each with its own words in Admin, Pages; /training chooses between them. */}
+      <Route path="/training/steward">{() => <Training track="steward" />}</Route>
+      <Route path="/training/resident">{() => <Training track="resident" />}</Route>
       <Route path="/training" component={Training} />
       <Route path="/governance" component={Governance} />
       {/* The live surfaces sit BESIDE the explainer, never inside it: /governance

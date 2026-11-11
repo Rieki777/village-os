@@ -18,7 +18,8 @@
  *                    application with the warm not-invited letter.
  *   5. holder        Persona 2 again, adopted: registers from the invitation,
  *                    aligns with confidentiality and the terms, and reads the
- *                    profile in their first hour.
+ *                    profile in their first hour, then opens the steward
+ *                    training from /training and marks a lesson done.
  *
  * Each walk is a list of acts. An act that fails stops that walk, and the
  * summary names it. The words typed are invented and plain.
@@ -523,6 +524,34 @@ export async function holder(w, ctx) {
     await sw.click();
   });
   await w.look("quests-by-roots");
+  // Two training pages (the lead, 11 Nov 2026): /training chooses, and each
+  // track has its own page with its own words. A holder takes the steward one
+  // and marks a lesson done; the record is the server's, so it is read back.
+  const doors = page.getByRole("navigation", { name: "Training pages" });
+  await w.step("open the training chooser", async () => {
+    await w.goto("/training");
+    await doors.waitFor();
+  });
+  await w.look("training-chooser", { next: doors.locator('a[href="/training/steward"]') });
+  await w.step("choose the steward training", async () => {
+    await doors.locator('a[href="/training/steward"]').click();
+    await page.waitForURL((u) => u.pathname === "/training/steward", { timeout: 15_000 });
+    await settle(page, 1500);
+  });
+  await w.step("mark the first lesson done", async () => {
+    await page.getByRole("button", { name: /Mark as done/ }).first().click();
+    await page.getByText("Marked done.").waitFor({ timeout: 10_000 });
+    const token = await page.evaluate(() => localStorage.getItem("village-auth-token"));
+    const res = await fetch(`${ctx.base}/api/game/training/completed`, { headers: { authorization: `Bearer ${token}` } });
+    const body = await res.json();
+    if (!Array.isArray(body.completed) || body.completed.length !== 1) throw new Error(`the server holds ${JSON.stringify(body.completed)} after one lesson`);
+  });
+  await w.look("training-steward");
+  await w.step("the resident training reads the same record", async () => {
+    await w.goto("/training/resident");
+    await page.getByText(/^1 of \d+ lessons done$/).waitFor({ timeout: 10_000 });
+  });
+  await w.look("training-resident");
 }
 
 export const PERSONAS = [
