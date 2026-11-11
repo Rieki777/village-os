@@ -21,7 +21,7 @@ describe("RoleCardParams", () => {
     render(<RoleCardParams seat={{ id: "r", timeCommitment: "40 hours a week", card: { ...card, commitmentPct: 40 } }} />);
     expect(screen.getByText("40%")).toBeTruthy();
     expect(screen.queryByText(/Roughly|hours a week/)).toBeNull();
-    expect(screen.getByText("1. Human Operations Lead, 1 hour")).toBeTruthy();
+    expect(screen.getByText("1. Human Operations Lead, 60 minutes")).toBeTruthy();
     expect(screen.getByText("2. Visionary Channel, 20 minutes, final approval")).toBeTruthy();
     expect(screen.getByTestId("public-pay").textContent).toContain("Depends on funding");
   });

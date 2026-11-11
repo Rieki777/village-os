@@ -72,6 +72,7 @@ describe("the card", () => {
     vi.stubGlobal("fetch", fetchMock);
     const onChanged = vi.fn();
     render(<AlignmentCard alignment={served() as any} onChanged={onChanged} />);
+    fireEvent.click(screen.getByRole("button", { name: "More" }));
     fireEvent.click(screen.getByRole("button", { name: "Give notice" }));
     const ask = screen.getByRole("group", { name: "Give notice" });
     expect(ask.textContent).toContain("Giving notice ends these terms in 10 days.");
@@ -86,6 +87,17 @@ describe("the card", () => {
     expect(url).toBe("/api/profile/alignments/at-0000000000000001/notice");
     expect(init.method).toBe("POST");
     expect(JSON.parse(String(init.body))).toEqual({});
+  });
+
+  it("keeps the ending acts behind a quiet More right after aligning (verify report)", () => {
+    render(<AlignmentCard alignment={served() as any} />);
+    expect(screen.queryByRole("button", { name: "Give notice" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "End by agreement" })).toBeNull();
+    const more = screen.getByRole("button", { name: "More" });
+    expect(more.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(more);
+    expect(screen.getByRole("button", { name: "Give notice" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "End by agreement" })).toBeTruthy();
   });
 
   it("prints a running notice, offers to take it back, and draws no second notice", () => {
@@ -104,6 +116,7 @@ describe("the card", () => {
     const fetchMock = vi.fn(async () => json({ endingId: "ae-0000000000000003", effectiveAt: "2026-10-13T00:00:00.000Z", alignment: null }, 201));
     vi.stubGlobal("fetch", fetchMock);
     render(<AlignmentCard alignment={served({ you: null, village: OPEN }) as any} />);
+    fireEvent.click(screen.getByRole("button", { name: "More" }));
     expect(screen.getByText("For the village")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "End by agreement for the village" }));
     fireEvent.click(screen.getByRole("button", { name: "End by agreement" }));

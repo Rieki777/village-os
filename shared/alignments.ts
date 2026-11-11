@@ -133,7 +133,8 @@ export interface RenderedText {
  */
 export function renderSeatTermsText(seatNames: readonly string[], settings: SeatSettings, partner?: string | null): RenderedText {
   const title = `Terms for ${seatList(seatNames)}`.slice(0, 200);
-  const who = opsPartner(partner);
+  // The partner is named once, on the card and its drawer; the signed text names nobody unless a host passes one (verify B4).
+  const named = String(partner ?? "").trim() ? opsPartner(partner) : null;
   // The words agreed for each setting and the commitment are part of what is signed (audit B2).
   const rows = withAgreedWords(settingsWords(settings), settings.words, settings.clocks?.commitmentPct, NOT_SET);
   const set = rows.filter((r) => r.set);
@@ -151,7 +152,9 @@ export function renderSeatTermsText(seatNames: readonly string[], settings: Seat
       ...(r.moneyLine ? [`    ${r.moneyLine}`] : []),
     ]),
     ...(set.length === 0 ? ["  None set."] : []),
-    ...(unset.length > 0 ? ["", `We'll fill this together with ${who}: ${unset.map((r) => r.label).join(", ")}.`] : []),
+    ...(unset.length > 0
+      ? ["", named ? `We'll fill this together with ${named}: ${unset.map((r) => r.label).join(", ")}.` : `We'll fill these together: ${unset.map((r) => r.label).join(", ")}.`]
+      : []),
     "",
   ];
   return { title, body: lines.join("\n") };
@@ -272,6 +275,8 @@ export const ENDING_WORDS: Record<DerivedEnding["kind"], (on: string, version: n
 };
 
 export const ENDINGS_WORDS = {
+  /** The quiet door the ending acts wait behind, so they never sit beside a fresh alignment (verify report). */
+  more: "More",
   noticeRunning: (on: string) => `Notice given, ends ${on}`,
   asked: (who: string) => `${who} asked to end by agreement`,
   giveNotice: "Give notice",

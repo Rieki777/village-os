@@ -7,11 +7,16 @@
  * seating power who is not the candidate); this draws only that, so a button
  * never appears for an act the server would refuse.
  *
+ * The acts wait behind a quiet "More": a holder who has just aligned reads
+ * their terms, and "Give notice" beside them reads as the next step (verify
+ * report, 11 Nov). A notice or an ask already running is shown as it is,
+ * with its take-back, and opens nothing.
+ *
  * Both acts ask once more before they land, with the sentence that says what
  * happens: notice ends the terms after their own notice days and unseats
  * nobody; agreement ends them once every party asks.
  */
-import { useState } from "react";
+import { useId, useState } from "react";
 import { ENDINGS_WORDS } from "@shared/alignments";
 import { endByAgreement, giveNotice, takeBackEnding, type PartyActs } from "./alignmentsApi";
 
@@ -131,12 +136,25 @@ export default function EndingActions({
   onDone?: () => void;
 }) {
   // Nothing either party may do (ended terms, or none to act on): no divider, no empty block.
+  const [more, setMore] = useState(false);
+  const bodyId = useId();
   const any = (a: PartyActs | null | undefined) => !!a && (!!a.notice || !!a.ask || a.mayGiveNotice || a.mayEndByAgreement);
   if (!any(you) && !any(village)) return null;
+  // Something already running is shown at once; only the acts that start an ending wait behind "More".
+  const running = (a: PartyActs | null | undefined) => !!a && (!!a.notice || !!a.ask);
+  const open = more || running(you) || running(village);
   return (
     <div className="mt-4 space-y-3 border-t border-border/50 pt-3">
-      {any(you) && you && <PartyEnding textId={textId} acts={you} noticeDays={noticeDays} asVillage={false} onDone={onDone} />}
-      {any(village) && village && <PartyEnding textId={textId} acts={village} noticeDays={noticeDays} asVillage onDone={onDone} />}
+      {!open ? (
+        <button type="button" aria-expanded={false} aria-controls={bodyId} className={quiet} onClick={() => setMore(true)} data-ending-more="">
+          {ENDINGS_WORDS.more}
+        </button>
+      ) : (
+        <div id={bodyId} className="space-y-3">
+          {any(you) && you && <PartyEnding textId={textId} acts={you} noticeDays={noticeDays} asVillage={false} onDone={onDone} />}
+          {any(village) && village && <PartyEnding textId={textId} acts={village} noticeDays={noticeDays} asVillage onDone={onDone} />}
+        </div>
+      )}
     </div>
   );
 }

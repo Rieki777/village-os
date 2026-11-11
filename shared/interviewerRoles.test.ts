@@ -19,13 +19,13 @@ const ORDER = [
 const NAMES = ["Human Operations & Onboarding Lead Steward", "Technical Operations Steward", "A Role To Confirm", "Visionary Channel"];
 
 describe("the ordered conversations", () => {
-  it("keeps the order, each length and the final approval, and totals two hours", () => {
+  it("keeps the order, each length and the final approval, and totals 120 minutes", () => {
     const r = parseInterviewSteps(ORDER);
     expect(r).toEqual({ ok: true, value: ORDER });
-    expect(interviewTotalWords(ORDER)).toBe("2 hours");
+    expect(interviewTotalWords(ORDER)).toBe("120 minutes");
     expect(conversationMinutes(ORDER)).toBe(120);
     const lines = interviewLines(ORDER.map((s, i) => ({ ...s, roleName: NAMES[i] })));
-    expect(lines[0]).toBe("1. Human Operations & Onboarding Lead Steward, 1 hour");
+    expect(lines[0]).toBe("1. Human Operations & Onboarding Lead Steward, 60 minutes");
     expect(lines[3]).toBe("4. Visionary Channel, 20 minutes, final approval");
   });
   it("reads a bare list of role ids as twenty minutes each, and a stored string", () => {

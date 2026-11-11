@@ -444,7 +444,7 @@ describe.skipIf(!configured)("open role proposals, the decision, on a real schem
       expect(body).toContain("Allowance: Your accounting software is paid for.");
       expect(body).toContain("Term: We renew together each moon.");
       expect(body).toContain("Clocks: Commitment: 80%");
-      const together = body.split("\n").find((l) => l.startsWith("We'll fill this together")) ?? "";
+      const together = body.split("\n").find((l) => l.startsWith("We'll fill")) ?? "";
       for (const label of ["Term", "Clocks", "Allowance", "Ending"]) expect(together).not.toContain(label);
     });
 

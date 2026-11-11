@@ -100,6 +100,13 @@ describe("a role that states a commitment (audit M2)", () => {
     expect(article().querySelector('[data-role-chip="time"]')).toBeNull();
     expect(article().textContent).not.toContain("Roughly 40 hours a week");
   });
+
+  it("hides it too when the commitment is the card's own card.commitmentPct, as the server sends it (verify B3)", () => {
+    render(<PlayerRoleCardView data={payload({ ...WORDS, timeCommitment: "Roughly 40 hours a week", settings: { clocks: { commitmentPct: 100 } }, cardSeat: { timeCommitment: "Roughly 40 hours a week", card: {} } })} />);
+    expect(article().querySelector('[data-role-chip="time"]')).toBeNull();
+    expect(article().textContent).not.toContain("Roughly 40 hours a week");
+    expect(article().textContent).toContain("100%");
+  });
 });
 
 describe("a role with none of the CCOS words written", () => {

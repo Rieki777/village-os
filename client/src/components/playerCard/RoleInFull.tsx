@@ -34,6 +34,7 @@ import { Link } from "wouter";
 import { CARD_WORDS as W, type RoleOut, type Slot } from "@shared/playerCard";
 import type { RoleEditKey } from "@shared/playerCardEdit";
 import type { HealthOut } from "@shared/playerCardHealth";
+import { roleCommitmentPct } from "@shared/playerCardHero";
 import { ROLE_HANDOVER_WORDS, runbookIsLink } from "@shared/roleHandover";
 import { ROLE_CCOS_WORDS } from "@shared/roleCcos";
 import type { HoldingKey } from "@shared/playerCardCcos";
@@ -146,7 +147,8 @@ export function RoleInFull({ role, health = null }: { role: RoleOut; health?: He
   const headingId = `${role.anchor}-h`;
   const time = role.time.text;
   // A role whose card states a commitment shows that (in the parameters block below), and its legacy time chip stays quiet (audit M2).
-  const statesCommitment = Number.isInteger(role.cardSeat?.commitmentPct);
+  // The card's own `card.commitmentPct` counts, and so do agreed terms the model laid over it (verify report B3).
+  const statesCommitment = roleCommitmentPct({ cardSeat: role.cardSeat }) !== null;
   const chipTime = time.kind === "shown" && !statesCommitment;
   const exists = role.existsWhile.text;
   const holding = role.holdingWell.parts.filter((p) => draws(p.text));

@@ -27,12 +27,13 @@ describe("the interviewers a role names", () => {
     { roleId: "b", minutes: 20, final: false },
     { roleId: "c", minutes: 20, final: true },
   ];
-  it("keeps the order, the minutes and the final flag, and totals two hours", () => {
+  it("keeps the order, the minutes and the final flag, and totals 120 minutes", () => {
     const got = parseInterviewerRoles(lead);
     expect(got.map((g) => g.roleId)).toEqual(["visionary-channel", "a", "b", "c"]);
     expect(got[3].final).toBe(true);
     expect(totalMinutes(got)).toBe(120);
-    expect(minutesWords(120)).toBe("2 hours");
+    expect(minutesWords(120)).toBe("120 minutes");
+    expect(minutesWords(100)).toBe("100 minutes");
   });
   it("reads stored JSON text, and never throws on junk", () => {
     expect(parseInterviewerRoles(JSON.stringify(lead))).toHaveLength(4);

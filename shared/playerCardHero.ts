@@ -96,6 +96,37 @@ export interface HeroRoleIn {
   timeCommitment?: Read<string | null>;
   /** The role card's terms on offer. Its `commitmentPct`, when set, is the role's commitment. */
   cardSeat?: Record<string, unknown> | null;
+  /** The terms this person and the village agreed, or the application asks for. Its `clocks.commitmentPct` comes first. */
+  settings?: unknown;
+}
+
+const commitmentOf = (v: unknown): number | null => (typeof v === "number" && Number.isInteger(v) && v >= 0 && v <= 100 ? v : null);
+const objOf = (v: unknown): Record<string, unknown> | null => (v && typeof v === "object" ? (v as Record<string, unknown>) : null);
+
+/**
+ * THE ROLE'S COMMITMENT, read in one place (verify report B3). The terms the
+ * person agreed (or the application asks for) come first: a holder who chose
+ * 100% reads 100% whatever the role card offered. Then the role card's own
+ * `card.commitmentPct`, the shape `/api/org` sends, then a flat
+ * `commitmentPct`. Null when none states one, and only then may the role's
+ * legacy time line speak.
+ */
+export function roleCommitmentPct(r: { settings?: unknown; cardSeat?: Record<string, unknown> | null }): number | null {
+  const agreed = commitmentOf(objOf(objOf(r.settings)?.clocks)?.commitmentPct);
+  if (agreed !== null) return agreed;
+  const seat = r.cardSeat ?? null;
+  return commitmentOf(objOf(seat?.card)?.commitmentPct) ?? commitmentOf(seat?.commitmentPct);
+}
+
+/**
+ * The seat object the parameters block draws, with the agreed commitment laid
+ * over the card's, so the block and the tagline say the same number.
+ */
+export function seatWithCommitment(r: { settings?: unknown; cardSeat?: Record<string, unknown> | null }): Record<string, unknown> | null {
+  const seat = r.cardSeat ?? null;
+  const pct = roleCommitmentPct(r);
+  if (!seat || pct === null) return seat;
+  return { ...seat, card: { ...(objOf(seat.card) ?? {}), commitmentPct: pct } };
 }
 
 export interface HeroApplicationIn {
@@ -155,8 +186,8 @@ export function personTime(roles: readonly HeroRoleIn[]): string | null {
   // A role that states a commitment speaks in it, and its legacy time chip stays quiet (audit M2).
   const words = roles
     .map((r) => {
-      const pct = r.cardSeat?.commitmentPct;
-      return typeof pct === "number" && Number.isInteger(pct) ? commitmentWords(pct) : clean(r.timeCommitment ?? null);
+      const pct = roleCommitmentPct(r);
+      return pct !== null ? commitmentWords(pct) : clean(r.timeCommitment ?? null);
     })
     .filter((w): w is string => w !== null);
   if (!words.length) return null;

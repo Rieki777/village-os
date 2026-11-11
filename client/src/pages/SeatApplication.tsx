@@ -112,7 +112,7 @@ export const APPLICATION_WORDS = {
  * The application's terms in the Settings drawer, open. The card prints pay in
  * words only, so the drawer is where a holder reads the figures they adopt.
  */
-function TermsDrawer({ app }: { app: ServedApplication }) {
+function TermsDrawer({ app, namePartner = true }: { app: ServedApplication; namePartner?: boolean }) {
   const villagePresets = useVillagePresets();
   const parsed = parseSeatSettings(app.settings);
   const marks = app.alignment ? { state: app.alignment.state, sealed: app.alignment.sealed, parties: app.alignment.parties } : null;
@@ -140,6 +140,7 @@ function TermsDrawer({ app }: { app: ServedApplication }) {
       adopted={adopted}
       alignment={marks}
       defaultOpen
+      namePartner={namePartner}
     />
   );
 }
@@ -156,7 +157,8 @@ function ApplicationCard({ app }: { app: ServedApplication }) {
       footer={
         <div data-package-terms="" className="sheet-night mt-6 rounded-xl bg-card p-4 text-foreground">
           {app.seats.length > 1 && <p className="mb-3 text-sm text-muted-foreground">{APPLICATION_WORDS.packageTerms}</p>}
-          <TermsDrawer app={app} />
+          {/* The card above names who fills an open row, so the drawer under it does not name them again (verify B4). */}
+          <TermsDrawer app={app} namePartner={false} />
         </div>
       }
     />

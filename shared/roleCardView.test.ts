@@ -29,10 +29,10 @@ describe("roleCardView", () => {
     const interviews = v.rows.find((r) => r.id === "interviews")!;
     expect(interviews.lines).toEqual([
       "First conversation: Human Operations & Onboarding Lead Steward",
-      "1. Human Operations & Onboarding Lead Steward, 1 hour",
+      "1. Human Operations & Onboarding Lead Steward, 60 minutes",
       "2. Technical Operations Steward, 20 minutes",
       "3. Visionary Channel, 20 minutes, final approval",
-      "1 hour 40 minutes of conversations in all",
+      "100 minutes of conversations in all",
       "Paid roles are consented by Anchor Circle",
     ]);
     expect(v.applyAllowed).toBe(true);

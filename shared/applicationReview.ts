@@ -130,13 +130,10 @@ export function totalMinutes(list: readonly { minutes: number }[]): number {
   return list.reduce((n, i) => n + i.minutes, 0);
 }
 
-/** "2 hours", "1 hour 30 minutes", "45 minutes". */
+/** "120 minutes", "90 minutes", "45 minutes": conversation lengths are said in minutes everywhere. */
 export function minutesWords(total: number): string {
-  const h = Math.floor(total / 60);
-  const m = total % 60;
-  const hours = h === 0 ? "" : `${h} hour${h === 1 ? "" : "s"}`;
-  const mins = m === 0 ? "" : `${m} minute${m === 1 ? "" : "s"}`;
-  return [hours, mins].filter(Boolean).join(" ") || "0 minutes";
+  const m = Number.isFinite(total) && total > 0 ? Math.round(total) : 0;
+  return `${m} ${m === 1 ? "minute" : "minutes"}`;
 }
 
 // ── Interviews in order ─────────────────────────────────────────────────────
