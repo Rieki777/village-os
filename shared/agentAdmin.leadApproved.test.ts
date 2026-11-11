@@ -17,12 +17,15 @@ import {
   AGENT_WORDING_VARIABLES,
   ALWAYS_A_PERSON,
   alwaysAPerson,
+  LEAD_APPROVAL_WORDS,
   LEAD_APPROVED_WRITES,
+  leadApprovalSubject,
   leadApprovedBodyProblem,
   LIFTABLE_RULES,
   mergePastedAgentPaths,
   parseAgentAdminPaths,
   type AgentAdminPathsDoc,
+  type LeadApprovedKind,
   type LeadSeatFacts,
 } from "./agentAdmin";
 import { VARIABLES_BY_KEY } from "./gameVariables";
@@ -142,24 +145,24 @@ describe("the body half", () => {
   const seatPath = "/api/admin/org/roles/r-gardener/holders";
 
   it("lets a role card's words through and refuses money and powers by name", () => {
-    expect(leadApprovedBodyProblem("role_text", "/api/admin/org/roles/r-1", { aim: "Tend the beds", accountabilities: ["a", "b", "c"], bookingUrl: "https://example.test/book", selectionCriteria: ["care"], accessBundle: ["drive"], conversations: [] })).toBeNull();
+    expect(leadApprovedBodyProblem("role_text", "/api/admin/org/roles/r-1", { ...approval, aim: "Tend the beds", accountabilities: ["a", "b", "c"], bookingUrl: "https://example.test/book", selectionCriteria: ["care"], accessBundle: ["drive"], conversations: [] })).toBeNull();
     for (const k of ["valueMinor", "valueTokens", "cashMinor", "budgetLine", "fundedFrom", "capabilities", "active", "expiresEachSeason"]) {
-      expect(leadApprovedBodyProblem("role_text", "/api/admin/org/roles/r-1", { aim: "x", [k]: 1 }), k).toContain(k);
+      expect(leadApprovedBodyProblem("role_text", "/api/admin/org/roles/r-1", { ...approval, aim: "x", [k]: 1 }), k).toContain(k);
     }
-    expect(leadApprovedBodyProblem("role_edit", "/api/org/role-edit/r-1", { words: { aim: "x" }, parameters: { bookingUrl: "https://example.test" } })).toBeNull();
-    expect(leadApprovedBodyProblem("role_edit", "/api/org/role-edit/r-1", { pay: { kind: "cash" } })).toContain("pay");
-    expect(leadApprovedBodyProblem("role_edit", "/api/org/role-edit/r-1", { parameters: { budgetLine: "ops" } })).toContain("parameters.budgetLine");
+    expect(leadApprovedBodyProblem("role_edit", "/api/org/role-edit/r-1", { ...approval, words: { aim: "x" }, parameters: { bookingUrl: "https://example.test" } })).toBeNull();
+    expect(leadApprovedBodyProblem("role_edit", "/api/org/role-edit/r-1", { ...approval, pay: { kind: "cash" } })).toContain("pay");
+    expect(leadApprovedBodyProblem("role_edit", "/api/org/role-edit/r-1", { ...approval, parameters: { budgetLine: "ops" } })).toContain("parameters.budgetLine");
   });
 
   it("lets a draft carry the terms' wording and refuses their money groups and other ops", () => {
     const p = "/api/admin/org/drafts/d-1/changes";
-    expect(leadApprovedBodyProblem("role_draft", p, { op: "update_seat", orgRoleId: "r-1", payload: { aim: "x", termsOffer: { v: 1, term: { words: "We renew together each moon." } } } })).toBeNull();
+    expect(leadApprovedBodyProblem("role_draft", p, { ...approval, op: "update_seat", orgRoleId: "r-1", payload: { aim: "x", termsOffer: { v: 1, term: { words: "We renew together each moon." } } } })).toBeNull();
     for (const g of ["pay", "allowance", "bonus"]) {
-      expect(leadApprovedBodyProblem("role_draft", p, { op: "update_seat", orgRoleId: "r-1", payload: { termsOffer: { v: 1, [g]: {} } } }), g).toContain(`termsOffer.${g}`);
+      expect(leadApprovedBodyProblem("role_draft", p, { ...approval, op: "update_seat", orgRoleId: "r-1", payload: { termsOffer: { v: 1, [g]: {} } } }), g).toContain(`termsOffer.${g}`);
     }
-    expect(leadApprovedBodyProblem("role_draft", p, { op: "update_seat", orgRoleId: "r-1", payload: { valueMinor: 5 } })).toContain("valueMinor");
-    expect(leadApprovedBodyProblem("role_draft", p, { op: "seat_holder", orgRoleId: "r-1", payload: {} })).toBeTruthy();
-    expect(leadApprovedBodyProblem("role_draft", "/api/admin/org/drafts", { title: "Roles for the new season" })).toBeNull();
+    expect(leadApprovedBodyProblem("role_draft", p, { ...approval, op: "update_seat", orgRoleId: "r-1", payload: { valueMinor: 5 } })).toContain("valueMinor");
+    expect(leadApprovedBodyProblem("role_draft", p, { ...approval, op: "seat_holder", orgRoleId: "r-1", payload: {} })).toBeTruthy();
+    expect(leadApprovedBodyProblem("role_draft", "/api/admin/org/drafts", { ...approval, title: "Roles for the new season" })).toBeNull();
   });
 
   it("seats a person into a plain seat with the approval, and refuses without it", () => {
@@ -187,6 +190,44 @@ describe("the body half", () => {
     expect(leadApprovedBodyProblem("unseat", "/api/admin/org/seatings/s-1", approval, { holderId: "agent-1", seat: { ...plainSeat, seatingIsAgent: true } })).toContain("agent");
     expect(leadApprovedBodyProblem("seat", seatPath, { userId: "u-ana", ...approval }, { holderId: "agent-1", seat: { ...plainSeat, isExample: true } })).toContain("example");
     expect(leadApprovedBodyProblem("seat", seatPath, { userId: "u-ana", ...approval }, { holderId: "agent-1", seat: null })).toContain("no such");
+  });
+});
+
+describe("every lead-approved write carries the approval (the lead, 11 Nov 2026)", () => {
+  const approval = { approvedBy: "The lead", approvalNote: "Yes, change the aim to that wording." };
+  // One call per kind the switch makes possible, each one that passes WITH the approval.
+  const writes: Array<[LeadApprovedKind, string, Record<string, unknown>]> = [
+    ["role_text", "/api/admin/org/roles", { name: "Gardener", aim: "Tend the beds" }],
+    ["role_text", "/api/admin/org/roles/r-1", { aim: "Tend the beds" }],
+    ["role_edit", "/api/org/role-edit/r-1", { words: { aim: "Tend the beds" } }],
+    ["role_draft", "/api/admin/org/drafts", { title: "Roles for the new season" }],
+    ["role_draft", "/api/admin/org/drafts/d-1/changes", { op: "update_seat", orgRoleId: "r-1", payload: { aim: "x" } }],
+    ["role_draft", "/api/admin/org/drafts/d-1/vision", { vision: "A village that tends itself" }],
+    ["wording_variable", "/api/admin/variables/org.ccos_terms", { value: "Our terms" }],
+  ];
+
+  it("passes each with approvedBy and approvalNote, and refuses each without them", () => {
+    for (const [kind, path, body] of writes) {
+      expect(leadApprovedBodyProblem(kind, path, { ...body, ...approval }), `${kind} ${path}`).toBeNull();
+      expect(leadApprovedBodyProblem(kind, path, body), `${kind} ${path} bare`).toBe(LEAD_APPROVAL_WORDS.approval);
+      expect(leadApprovedBodyProblem(kind, path, { ...body, approvedBy: "The lead" }), `${kind} ${path} no note`).toBe(LEAD_APPROVAL_WORDS.approval);
+      expect(leadApprovedBodyProblem(kind, path, { ...body, approvalNote: "yes please" }), `${kind} ${path} nobody`).toBe(LEAD_APPROVAL_WORDS.approval);
+    }
+  });
+
+  it("leaves the role editor as it was only when the caller says the switch is off", () => {
+    expect(leadApprovedBodyProblem("role_edit", "/api/org/role-edit/r-1", { words: { aim: "x" } }, { approvalRequired: false })).toBeNull();
+    // Seating carries the approval whatever the caller says.
+    expect(leadApprovedBodyProblem("seat", "/api/admin/org/roles/r-1/holders", { userId: "u-ana" }, { approvalRequired: false })).toBe(LEAD_APPROVAL_WORDS.approval);
+  });
+
+  it("names what changed by field, never a value or the member a seating names", () => {
+    expect(leadApprovalSubject("role_text", "/api/admin/org/roles/r-1", { aim: "Secret words", ...approval })).toEqual({ what: "Changed a role card's words", target: "r-1", changed: ["aim"] });
+    expect(leadApprovalSubject("role_edit", "/api/org/role-edit/r-1", { words: { aim: "x" }, parameters: { bookingUrl: "y" } })).toMatchObject({ target: "r-1", changed: ["words.aim", "parameters.bookingUrl"] });
+    const seat = leadApprovalSubject("seat", "/api/admin/org/roles/r-1/holders", { userId: "u-ana", ...approval }, "r-1");
+    expect(seat).toEqual({ what: "Seated a member in a role", target: "r-1", changed: [] });
+    expect(JSON.stringify(seat)).not.toContain("u-ana");
+    expect(leadApprovalSubject("wording_variable", "/api/admin/variables/org.ccos_terms", { value: "x" }).target).toBe("org.ccos_terms");
   });
 });
 

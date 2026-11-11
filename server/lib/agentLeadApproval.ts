@@ -11,12 +11,17 @@
  *
  *   `readLeadSeatFacts`  what a seat carries: every capability on its linked power groups, and whether one of
  *                        them opens the admin panel. Read fresh at both calls of the two-call write.
- *   `recordLeadApproval` one admin-audience event naming who approved the seating and quoting the approval, and
- *                        one notice to every admin and founder, keyed on the spent confirm token so a retry is a
- *                        no-op.
+ *   `recordLeadApproval` for EVERY lead-approved write: one admin-audience event naming who approved it and
+ *                        quoting the approval, one record queued for the organisational memory, and for a seating
+ *                        one notice to every admin and founder, all keyed on the spent confirm token so a retry is
+ *                        a no-op.
+ *   `recentApprovedWrites` the events read back with the memory outbox's status, for Admin, Players, Agents.
  */
 import type { Pool } from "mysql2/promise";
-import type { LeadSeatFacts } from "../../shared/agentAdmin";
+import { leadApprovalSubject, type LeadApprovalSubject, type LeadApprovedKind, type LeadSeatFacts } from "../../shared/agentAdmin";
+import { APPROVAL_RECORD_KIND, approvalRecordKey, approvalRecordPayload, readApprovalRecordPayload, type ApprovalRecordPayload } from "../../shared/agentApprovalRecord";
+import { enqueue, type OutboxKind } from "../repos/memberTaskFeedback";
+import { APPROVAL_EVENT_ENTITY, approvalEventExists, approvalOutboxRows, recentApprovalEvents } from "../repos/agentApprovals";
 import { listSeatGroupLinks, liveSeatingHeader, seatHeader } from "../repos/seatPowerGroups";
 import { recordEvent } from "./events";
 
@@ -70,40 +75,127 @@ export async function readLeadSeatFacts(
 }
 
 export interface LeadApprovalRecord {
-  kind: "seat" | "unseat";
+  kind: LeadApprovedKind;
   roleId: string | null;
   path: string;
+  method?: string;
+  /** What changed, said without member data (shared/agentAdmin.ts, `leadApprovalSubject`). */
+  subject?: LeadApprovalSubject;
   approvedBy: string;
   approvalNote: string;
   /** One key per write: derived from the spent confirm token. */
   writeKey: string;
 }
 
-/** The event and the notices a seating or unseating through the connector leaves. */
+/** The outbox writer, a seam so a test can make the memory side fail. */
+export type QueueRecord = (key: string, payload: ApprovalRecordPayload) => Promise<void>;
+
+/** The default: the outbox the member-task bridge drains to the memory service, every 15 minutes, with back-off. */
+export const queueToMemory = (pool: Pool): QueueRecord => (key, payload) =>
+  enqueue(pool, null, key, APPROVAL_RECORD_KIND as OutboxKind, payload as unknown as Record<string, unknown>);
+
+/**
+ * The record one approved write leaves, once per write however often it is called:
+ *
+ *   1. one admin-audience audit event (entity `agent_approval`, ref = the write's key), naming the agent as the
+ *      actor, who approved it and their approval quoted. Skipped when that key's event is already stored.
+ *   2. for a seating or unseating, one notice to every admin and founder, on a stable key.
+ *   3. one record queued for the village's organisational memory (shared/agentApprovalRecord.ts), INSERT IGNORE on
+ *      the same key. Queue-and-forget: a failure is logged and never undoes or refuses the write, and the outbox's
+ *      own job retries a queued record until the memory confirms it holds it.
+ */
 export async function recordLeadApproval(
   deps: {
     pool: Pool;
     agentUserId: string;
     tokenPrefix: string;
     notifyAdmins: (type: string, title: string, dedupeKey: string, link?: string) => Promise<void>;
+    queue?: QueueRecord;
+    now?: () => Date;
   },
   a: LeadApprovalRecord,
 ): Promise<void> {
-  const act = a.kind === "seat" ? "seated a person" : "ended a seating";
-  // The approval can name people, so the line is admin-audience, and it names the agent as the actor.
-  await recordEvent(deps.pool, {
-    kind: "audit",
-    text: `connector (${deps.tokenPrefix}...) ${act} in ${a.roleId ?? "a role"} with approval from ${a.approvedBy}: "${a.approvalNote.slice(0, 1000)}"`,
-    actorUserId: deps.agentUserId,
-    actorKind: "agent",
-    entityType: "org_role",
-    entityRef: a.roleId ?? a.path.slice(0, 64),
-    audience: "admin",
+  const subject = a.subject ?? leadApprovalSubject(a.kind, a.path, {}, a.roleId);
+  const where = subject.target ? ` (${subject.target})` : "";
+  if (!(await approvalEventExists(deps.pool, a.writeKey))) {
+    // The approval can name people, so the line is admin-audience, and it names the agent as the actor.
+    await recordEvent(deps.pool, {
+      kind: "audit",
+      text: `connector (${deps.tokenPrefix}...): ${subject.what}${where}, with approval from ${a.approvedBy}: "${a.approvalNote.slice(0, 1000)}"`,
+      actorUserId: deps.agentUserId,
+      actorKind: "agent",
+      entityType: APPROVAL_EVENT_ENTITY,
+      entityRef: a.writeKey,
+      audience: "admin",
+    });
+  }
+  if (a.kind === "seat" || a.kind === "unseat") {
+    const act = a.kind === "seat" ? "seated a person" : "ended a seating";
+    await deps.notifyAdmins(
+      "governance",
+      `Our agent ${act} in ${a.roleId ?? "a role"}, approved by ${a.approvedBy.slice(0, 80)}`,
+      `agent-lead-${a.kind}:${a.writeKey}`,
+      "/admin",
+    );
+  }
+  const payload = approvalRecordPayload({
+    writeKey: a.writeKey,
+    what: subject.what,
+    target: subject.target,
+    method: a.method ?? "",
+    changed: subject.changed,
+    approvedBy: a.approvedBy,
+    approvalNote: a.approvalNote,
+    at: (deps.now ?? (() => new Date()))(),
   });
-  await deps.notifyAdmins(
-    "governance",
-    `Our agent ${act} in ${a.roleId ?? "a role"}, approved by ${a.approvedBy.slice(0, 80)}`,
-    `agent-lead-${a.kind}:${a.writeKey}`,
-    "/admin",
-  );
+  try {
+    await (deps.queue ?? queueToMemory(deps.pool))(approvalRecordKey(a.writeKey), payload);
+  } catch (err) {
+    console.error("[agent-approval] could not queue the memory record (the write and its audit event stand)", err);
+  }
+}
+
+/** One approved write as Admin, Players, Agents lists it. */
+export interface ApprovedWriteItem {
+  writeKey: string;
+  at: string;
+  what: string;
+  target: string | null;
+  approvedBy: string | null;
+  approvalNote: string | null;
+  /** The event's own line, for a write whose memory record is gone or was never queued. */
+  text: string;
+  /** Where the memory record is: sent (the memory confirmed it), waiting, failed (retrying), held, dropped, or none queued. */
+  memory: "sent" | "waiting" | "failed" | "held" | "dropped" | "none";
+  memoryError: string | null;
+}
+
+/** The recent approved writes, read from the audit events, with what the memory outbox says about each. */
+export async function recentApprovedWrites(pool: Pool, limit = 50): Promise<ApprovedWriteItem[]> {
+  const events = await recentApprovalEvents(pool, limit);
+  const rows = await approvalOutboxRows(pool, APPROVAL_RECORD_KIND, events.map((e) => approvalRecordKey(e.writeKey)));
+  return events.map((e) => {
+    const row = rows.get(approvalRecordKey(e.writeKey)) ?? null;
+    const p = row ? readApprovalRecordPayload(row.payload) : null;
+    const memory: ApprovedWriteItem["memory"] = !row
+      ? "none"
+      : row.status === "sent"
+        ? "sent"
+        : row.status === "queued"
+          ? "waiting"
+          : row.status === "failed" || row.status === "held" || row.status === "dropped"
+            ? row.status
+            : "waiting";
+    return {
+      writeKey: e.writeKey,
+      at: e.at,
+      what: p?.what ?? "",
+      target: p?.target ?? null,
+      approvedBy: p?.approvedBy ?? null,
+      approvalNote: p?.approvalNote ?? null,
+      text: e.text,
+      memory,
+      memoryError: row?.lastError ?? null,
+    };
+  });
 }

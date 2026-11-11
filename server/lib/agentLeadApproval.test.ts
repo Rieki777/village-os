@@ -11,7 +11,9 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { Pool } from "mysql2/promise";
 import { handleMcpMessage, type RouteAnswer, type ToolContext } from "./agentMcp";
 import { CONFIRM_REASON_SENTENCE, mintConfirmToken, verifyConfirmToken } from "./agentTokens";
-import { readLeadSeatFacts, recordLeadApproval } from "./agentLeadApproval";
+import { readLeadSeatFacts, recentApprovedWrites, recordLeadApproval } from "./agentLeadApproval";
+import { planSend } from "./memberTaskBridge";
+import { approvalRecordKey } from "../../shared/agentApprovalRecord";
 import { leadApprovedBodyProblem, type AgentAdminPathsDoc, type LeadSeatFacts } from "../../shared/agentAdmin";
 import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "../db/testDb";
 
@@ -65,10 +67,13 @@ describe("the role editor refuses pay from an agent, with the switch off or on",
         expect(r.result.structuredContent.detail.code).toBe("lead_approved_refused");
       }
       expect(a.routes).toEqual([]);
-      const args = { method: "POST", path: "/api/org/role-edit/r-gardener", body: { words: { aim: "Tend the beds" } } };
+      // With the switch on, the words carry the approval too, and the route sees them without it.
+      const words = { words: { aim: "Tend the beds" } };
+      const args = { method: "POST", path: "/api/org/role-edit/r-gardener", body: on ? { ...words, approvedBy: "The lead", approvalNote: "Yes, that aim." } : words };
       const first = await ask(call(args), a.ctx);
       await ask(call({ ...args, confirmToken: first.result.structuredContent.confirmToken }), a.ctx);
-      expect(a.routes).toEqual([{ method: "POST", path: args.path, body: args.body }]);
+      expect(a.routes).toEqual([{ method: "POST", path: args.path, body: words }]);
+      expect(a.recorded).toHaveLength(on ? 1 : 0);
     });
   }
 });
@@ -127,6 +132,54 @@ describe("admin_request under the lead-approved writes", () => {
   });
 });
 
+describe("every lead-approved write through the tool carries the approval (the lead, 11 Nov 2026)", () => {
+  const approval = { approvedBy: "The lead", approvalNote: "Yes, go ahead with that wording." };
+  const writes: Array<{ method: string; path: string; pattern: string; body: Record<string, unknown>; what: string }> = [
+    { method: "PUT", path: "/api/admin/org/roles/r-gardener", pattern: "/api/admin/org/roles/:id", body: { aim: "Tend the beds" }, what: "Changed a role card's words" },
+    { method: "POST", path: "/api/admin/org/roles", pattern: "/api/admin/org/roles", body: { name: "Gardener" }, what: "Created a role card" },
+    { method: "POST", path: "/api/admin/org/drafts/d-1/changes", pattern: "/api/admin/org/drafts/:id/changes", body: { op: "update_seat", orgRoleId: "r-gardener", payload: { aim: "x" } }, what: "Drafted a role change (update_seat)" },
+    { method: "PUT", path: "/api/admin/variables/org.ccos_terms", pattern: "/api/admin/variables/:key", body: { value: "Our terms" }, what: "Set a wording variable" },
+    { method: "POST", path: "/api/admin/org/roles/r-gardener/holders", pattern: "/api/admin/org/roles/:id/holders", body: { userId: "u-ana" }, what: "Seated a member in a role" },
+  ];
+
+  for (const w of writes) {
+    it(`${w.method} ${w.pattern}: refused without the approval, written once with it and recorded once`, async () => {
+      const a = agent({ on: true });
+      a.ctx.adminPaths = async () => ({ paths: [{ method: w.method as any, path: w.pattern, confirm: "agent", label: "x" }] });
+      const bare = await ask(call({ method: w.method, path: w.path, body: w.body }), a.ctx);
+      expect(bare.result.isError).toBe(true);
+      expect(bare.result.structuredContent.detail.code).toBe("lead_approved_refused");
+      expect(bare.result.structuredContent.error).toContain("approvedBy");
+      expect(a.routes).toEqual([]);
+      const args = { method: w.method, path: w.path, body: { ...w.body, ...approval } };
+      const first = await ask(call(args), a.ctx);
+      const token = first.result.structuredContent.confirmToken;
+      const second = await ask(call({ ...args, confirmToken: token }), a.ctx);
+      expect(second.result.structuredContent.written).toBe(true);
+      expect(a.routes).toEqual([{ method: w.method, path: w.path, body: w.body }]);
+      expect(a.recorded).toHaveLength(1);
+      expect(a.recorded[0]).toMatchObject({ approvedBy: "The lead", approvalNote: approval.approvalNote, subject: { what: w.what } });
+      // The same confirm token again is spent or refused; it never writes or records a second time.
+      await ask(call({ ...args, confirmToken: token }), a.ctx).catch(() => null);
+      expect(a.recorded.length).toBeLessThanOrEqual(2);
+      if (a.recorded.length === 2) expect(a.recorded[1].writeKey).toBe(a.recorded[0].writeKey);
+    });
+  }
+
+  it("a record that fails never turns the write into a refusal", async () => {
+    const a = agent({ on: true });
+    a.ctx.adminPaths = async () => ({ paths: [{ method: "PUT", path: "/api/admin/org/roles/:id", confirm: "agent", label: "x" }] });
+    a.ctx.leadApproved!.recorded = async () => {
+      throw new Error("memory down");
+    };
+    const args = { method: "PUT", path: "/api/admin/org/roles/r-gardener", body: { aim: "x", ...approval } };
+    const first = await ask(call(args), a.ctx);
+    const second = await ask(call({ ...args, confirmToken: first.result.structuredContent.confirmToken }), a.ctx);
+    expect(second.result.structuredContent.written).toBe(true);
+    expect(a.routes).toHaveLength(1);
+  });
+});
+
 const configured = testDbConfigured();
 
 describe.skipIf(!configured)("the seat's facts and the record, on the real tables", () => {
@@ -174,16 +227,66 @@ describe.skipIf(!configured)("the seat's facts and the record, on the real table
     expect((await readLeadSeatFacts(pool, () => [], { roleId: "r-tend" })).grantsAdmin).toBe(true);
   });
 
-  it("stores the audit event and rings every admin once, on one stable key", async () => {
+  it("stores the audit event, queues the memory record and rings every admin, once per write however often it runs", async () => {
     const rung: Array<{ type: string; key: string }> = [];
     const deps = { pool, agentUserId: "agent-1", tokenPrefix: "vat_ab12", notifyAdmins: async (type: string, _t: string, key: string) => void rung.push({ type, key }) };
-    const rec = { kind: "seat" as const, roleId: "r-tend", path: "/api/admin/org/roles/r-tend/holders", approvedBy: "The lead", approvalNote: "Yes, seat Bo as tender.", writeKey: "0123456789abcdef01234567" };
+    const rec = { kind: "seat" as const, roleId: "r-tend", path: "/api/admin/org/roles/r-tend/holders", method: "POST", approvedBy: "The lead", approvalNote: "Yes, seat Bo as tender. Mail bo@example.test", writeKey: "0123456789abcdef01234567" };
     await recordLeadApproval(deps, rec);
-    const [rows] = await pool.query<any[]>("SELECT kind, text, actor_user_id, actor_kind, entity_ref, audience FROM health_events WHERE entity_ref = 'r-tend'"); // module-review-ok: reading the scratch schema this suite provisioned
+    await recordLeadApproval(deps, rec);
+    const [rows] = await pool.query<any[]>("SELECT kind, text, actor_user_id, actor_kind, entity_type, entity_ref, audience FROM health_events WHERE entity_ref = ?", [rec.writeKey]); // module-review-ok: reading the scratch schema this suite provisioned
     expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({ kind: "audit", actor_user_id: "agent-1", actor_kind: "agent", audience: "admin" });
+    expect(rows[0]).toMatchObject({ kind: "audit", actor_user_id: "agent-1", actor_kind: "agent", audience: "admin", entity_type: "agent_approval" });
     expect(rows[0].text).toContain("approval from The lead");
     expect(rows[0].text).toContain("Yes, seat Bo as tender.");
-    expect(rung).toEqual([{ type: "governance", key: "agent-lead-seat:0123456789abcdef01234567" }]);
+    // The notice dedupes on its key in notify; here it is asked with the same key each time.
+    expect(new Set(rung.map((r) => r.key))).toEqual(new Set(["agent-lead-seat:0123456789abcdef01234567"]));
+    const [out] = await pool.query<any[]>("SELECT kind, status, payload, user_id FROM member_task_outbox WHERE feedback_id = ?", [approvalRecordKey(rec.writeKey)]); // module-review-ok: reading the scratch schema this suite provisioned
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({ kind: "decision_record", status: "queued", user_id: null });
+    const payload = JSON.parse(out[0].payload);
+    expect(payload).toMatchObject({ record: "agent_approval", what: "Seated a member in a role", target: "r-tend", approvedBy: "The lead" });
+    expect(payload.approvalNote).not.toContain("bo@example.test");
+  });
+
+  it("keeps the write's record when the memory side fails, and the recent list says so", async () => {
+    const deps = {
+      pool,
+      agentUserId: "agent-1",
+      tokenPrefix: "vat_ab12",
+      notifyAdmins: async () => {},
+      queue: async () => {
+        throw new Error("memory down");
+      },
+    };
+    const rec = { kind: "role_text" as const, roleId: null, path: "/api/admin/org/roles/r-tend", method: "PUT", approvedBy: "The lead", approvalNote: "Yes, that aim.", writeKey: "fedcba9876543210fedcba98" };
+    await expect(recordLeadApproval(deps, rec)).resolves.toBeUndefined();
+    const list = await recentApprovedWrites(pool);
+    const failed = list.find((w) => w.writeKey === rec.writeKey);
+    expect(failed).toMatchObject({ memory: "none", approvedBy: null });
+    expect(failed?.text).toContain("Changed a role card's words (r-tend)");
+    const seated = list.find((w) => w.writeKey === "0123456789abcdef01234567");
+    expect(seated).toMatchObject({ memory: "waiting", what: "Seated a member in a role", target: "r-tend", approvedBy: "The lead" });
+    // Newest first.
+    expect(list[0].writeKey).toBe(rec.writeKey);
+  });
+});
+
+describe("the memory outbox sends an approval record as one Governance document", () => {
+  const tools = new Map([["save_document", { name: "save_document", inputSchema: { properties: { title: {}, summary: {}, key_points: {}, category: {}, asserted_by: {}, source_date: {} } } }]]);
+  const payload = { record: "agent_approval", writeKey: "k1", what: "Changed a role card's words", target: "r-1", method: "PUT", changed: ["aim"], approvedBy: "The lead", approvalNote: "Yes.", at: "2026-11-11T10:00:00.000Z" };
+
+  it("plans save_document with who approved it, the note and the date", () => {
+    const plan = planSend(tools as any, { kind: "decision_record", payload });
+    expect(plan.tool).toBe("save_document");
+    if (plan.tool === null) return;
+    expect(plan.args).toMatchObject({ category: "Governance", asserted_by: "The lead", source_date: "2026-11-11" });
+    expect(String(plan.args.key_points)).toContain("Approval: Yes.");
+    expect(String(plan.args.title)).toContain("(r-1)");
+  });
+
+  it("waits, and is retried, while the memory offers no save_document", () => {
+    const plan = planSend(new Map(), { kind: "decision_record", payload });
+    expect(plan).toMatchObject({ tool: null });
+    expect((plan as { drop?: boolean }).drop).toBeFalsy();
   });
 });

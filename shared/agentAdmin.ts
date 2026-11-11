@@ -410,12 +410,20 @@ export interface LeadSeatFacts {
   seatingUserId?: string | null;
 }
 
-/** The fields an approval carries in the body of a seating or unseating. Stripped before the route sees the body. */
+/**
+ * The fields an approval carries in the body of EVERY lead-approved write (role card words, org drafts, the wording
+ * variables, seating and unseating). Stripped before the route sees the body, and kept as the record: one admin-only
+ * audit event and one record sent to the village's organisational memory (server/lib/agentLeadApproval.ts).
+ *
+ * The lead, 11 Nov 2026: "ensure that agents are acting as people with their permission and agreement in Claude so
+ * it's all recorded here in Claude and in Sera." The connector acts as the person who connected it; the approval says
+ * which person agreed to this one change, in their own words.
+ */
 export const APPROVAL_FIELDS = ["approvedBy", "approvalNote"] as const;
 
 export const LEAD_APPROVAL_WORDS = {
   approval:
-    "Seating or unseating through the connector carries the approval: approvedBy (who approved it) and approvalNote (their approval in the chat, quoted or summed up).",
+    "Every lead-approved write through the connector carries the approval: approvedBy (who approved it) and approvalNote (their approval in the chat, quoted or summed up). Ask them, then send it again with both.",
   agentSeat: "Seating or unseating an agent is a person's act in the app.",
   self: "An agent never seats or unseats itself.",
   missingSeat: "There is no such role or live seating to change.",
@@ -458,9 +466,22 @@ export function leadApprovedBodyProblem(
   kind: LeadApprovedKind,
   path: string,
   body: Record<string, unknown> | undefined,
-  ctx: { holderId?: string | null; seat?: LeadSeatFacts | null } = {},
+  ctx: {
+    holderId?: string | null;
+    seat?: LeadSeatFacts | null;
+    /**
+     * Whether this write must carry the approval. True unless the caller says otherwise: the one exception is the
+     * role editor with the village's switch off, which agents could already reach before the switch existed.
+     */
+    approvalRequired?: boolean;
+  } = {},
 ): string | null {
-  const b = body ?? {};
+  // The approval first, for every kind: a write the switch made possible never goes ahead unattributed.
+  if (ctx.approvalRequired !== false) {
+    const approval = readLeadApproval(body);
+    if (!approval.ok) return approval.words;
+  }
+  const b = withoutApproval(body);
   const keys = Object.keys(b);
   switch (kind) {
     case "role_text": {
@@ -488,7 +509,8 @@ export function leadApprovedBodyProblem(
     }
     case "seat":
     case "unseat": {
-      const approval = readLeadApproval(b);
+      // Seating always carries the approval, whatever the caller asked.
+      const approval = readLeadApproval(body);
       if (!approval.ok) return approval.words;
       if (b.isAgent || b.agentSlug) return LEAD_APPROVAL_WORDS.agentSeat;
       const seat = ctx.seat;
@@ -504,6 +526,48 @@ export function leadApprovedBodyProblem(
       const segs = segmentsOf(path) ?? [];
       return AGENT_WORDING_VARIABLES.includes(segs[segs.length - 1] ?? "") ? null : LEAD_APPROVAL_WORDS.variable;
     }
+  }
+}
+
+/** What one lead-approved write changed, said without any member's personal data: names of fields, never values. */
+export interface LeadApprovalSubject {
+  /** A short sentence: "Changed a role card's words". */
+  what: string;
+  /** The role, draft or variable it reached, by id or key; null when the call names none. */
+  target: string | null;
+  /** The field names the write carried (approval fields and member ids left out). */
+  changed: string[];
+}
+
+const keysOf = (v: unknown): string[] => (v && typeof v === "object" && !Array.isArray(v) ? Object.keys(v as object) : []);
+const idLike = (v: unknown): string | null => (typeof v === "string" && v.trim() ? v.trim().slice(0, 120) : null);
+
+/** The record's subject for one lead-approved write. Pure. */
+export function leadApprovalSubject(kind: LeadApprovedKind, path: string, body: Record<string, unknown> | undefined, seatRoleId?: string | null): LeadApprovalSubject {
+  const segs = segmentsOf(path) ?? [];
+  const b = withoutApproval(body);
+  const top = Object.keys(b).filter((k) => k !== "userId");
+  switch (kind) {
+    case "role_text":
+      return segs.length > 4
+        ? { what: "Changed a role card's words", target: segs[4] ?? null, changed: top }
+        : { what: "Created a role card", target: idLike(b.id) ?? idLike(b.name), changed: top };
+    case "role_edit": {
+      const nested = [...keysOf(b.words).map((k) => `words.${k}`), ...keysOf(b.parameters).map((k) => `parameters.${k}`)];
+      return { what: "Changed a role's words in the role editor", target: segs[3] ?? null, changed: [...top.filter((k) => k !== "words" && k !== "parameters"), ...nested] };
+    }
+    case "role_draft":
+      if (path.endsWith("/changes")) {
+        return { what: `Drafted a role change (${String(b.op ?? "change").slice(0, 24)})`, target: idLike(b.orgRoleId) ?? segs[4] ?? null, changed: keysOf(b.payload) };
+      }
+      if (path.endsWith("/vision")) return { what: "Wrote an org chart draft's vision", target: segs[4] ?? null, changed: top };
+      return { what: "Started an org chart draft", target: idLike(b.title), changed: top };
+    case "seat":
+      return { what: "Seated a member in a role", target: seatRoleId ?? segs[4] ?? null, changed: [] };
+    case "unseat":
+      return { what: "Ended a seating", target: seatRoleId ?? null, changed: [] };
+    case "wording_variable":
+      return { what: "Set a wording variable", target: segs[segs.length - 1] ?? null, changed: ["value"] };
   }
 }
 
