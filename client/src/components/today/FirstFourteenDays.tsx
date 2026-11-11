@@ -24,7 +24,7 @@ import { Link } from "wouter";
 import { Check } from "lucide-react";
 import { useLingui } from "@lingui/react/macro";
 import { FernUnfurl } from "@/components/journey/nature";
-import { BTN_SECONDARY, EYEBROW, H2, HINT, TILE } from "@/components/journey/look";
+import { BTN_SECONDARY, H2, HINT, TILE } from "@/components/journey/look";
 import { FIRST_DAYS, fourteenDays, moveDay, type StripPath, type StripStep } from "./fourteenDays";
 
 /** A step's link: a page of this site opens in place, an https address in a new tab that is never handed this page. */
@@ -79,10 +79,8 @@ export default function FirstFourteenDays({
   return (
     <div data-first-fourteen="" data-day={path.day} className="flex flex-col gap-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <p className={EYEBROW}>{t({ message: `Our first 14 days`, context: "first fourteen days strip, eyebrow" })}</p>
-          <p className={`${H2} mt-1`}>{t({ message: `Day ${path.day} of ${total}`, context: "first fourteen days strip, which day it is" })}</p>
-        </div>
+        {/* The card above carries the path's own title as its eyebrow; the strip says which day it is. */}
+        <p className={H2}>{t({ message: `Day ${path.day} of ${total}`, context: "first fourteen days strip, which day it is" })}</p>
         {strip.whole ? null : next ? (
           <p className="max-w-xl text-foreground" data-next-step={next.key}>
             <span className="font-semibold">{t({ message: `Next: ${next.title}`, context: "first fourteen days strip, the next step" })}</span>{" "}

@@ -12157,11 +12157,6 @@ msgid "To be decided in the onboarding process."
 msgstr "Por decidir en el proceso de incorporación."
 
 #: client/src/components/today/FirstFourteenDays.tsx
-msgctxt "first fourteen days strip, eyebrow"
-msgid "Our first 14 days"
-msgstr "Nuestros primeros 14 días"
-
-#: client/src/components/today/FirstFourteenDays.tsx
 msgctxt "first fourteen days strip, which day it is"
 msgid "Day {0} of {total}"
 msgstr "Día {0} de {total}"

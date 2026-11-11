@@ -226,9 +226,12 @@ function PathCard({
           ? ONBOARDING_WORDS.heading(p.roleName)
           : ONBOARDING_WORDS.holderOf(p.roleName)}
       </h2>
-      <p className="mt-2 text-foreground">
-        {ONBOARDING_WORDS.line(p.day, humanDate(p.dueOn))}
-      </p>
+      {/* The strip says the day and each step's date itself. */}
+      {!strip && (
+        <p className="mt-2 text-foreground">
+          {ONBOARDING_WORDS.line(p.day, humanDate(p.dueOn))}
+        </p>
+      )}
       <p className="mt-1 text-foreground">
         {p.buddyName
           ? ONBOARDING_WORDS.buddy(p.buddyName)

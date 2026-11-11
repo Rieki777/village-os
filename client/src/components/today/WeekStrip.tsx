@@ -103,14 +103,14 @@ export default function WeekStrip({ meetings, taskDue, eventsOn, now: nowProp }:
 
   return (
     <section aria-labelledby="week-h" data-week-strip="" className={CARD}>
-      <div className="flex flex-wrap items-center justify-between gap-4">
+      <div className="flex items-start justify-between gap-4">
         <div>
           <p className={EYEBROW}>{t({ message: `Your week`, context: "week strip, eyebrow" })}</p>
           <h2 id="week-h" className={`${H2} mt-1`}>
             {t({ message: `The next seven days`, context: "week strip, heading" })}
           </h2>
         </div>
-        <MoonPhase date={now} size="sm" showName />
+        <MoonPhase date={now} size="sm" showName className="shrink-0" />
       </div>
 
       {quietWeek(days) ? (
