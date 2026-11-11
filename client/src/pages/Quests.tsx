@@ -43,15 +43,15 @@ import { useRootsFilter } from "@/components/roots/useRootsFilter";
 import { useLingui } from "@lingui/react/macro";
 
 /*
- * The bare "?" is a 16px circle set inside a sentence, so its box cannot grow
- * without reflowing the line. Its hit area is the button's ::before instead:
- * inset -4 makes it 48px square, so the 44px floor still holds when a
- * neighbour's edge clips a pixel or two (measured: inset -3.5 hit 41px on a
- * desktop). `z-10` lifts the wrapper over the next paragraph, which on the
- * hero is pulled up under it by a negative margin and was eating the bottom
- * of the target.
+ * The bare "?" is a 16px circle set inside a sentence. Its button's own box is
+ * 44px (`tapBox`), with negative margins giving the space back so the line
+ * does not reflow; the rehearsal measured the old ::before hit area as a 16px
+ * box on /quests at 390 (12 Nov 2026), and a box is what a thumb is promised.
+ * `z-10` lifts the wrapper over the next paragraph, which on the hero is
+ * pulled up under it by a negative margin and was eating the bottom of the
+ * target.
  */
-const INFO_TIP_44 = "z-10 [&_button]:before:-inset-4";
+const INFO_TIP_44 = "z-10";
 
 type Difficulty = "Beginner" | "Intermediate" | "Advanced";
 
@@ -258,7 +258,7 @@ export default function Quests() {
             <ExamplesBanner moduleId="quests" noun="quest" />
             <p className="text-sm text-muted-foreground mb-8">
               {quests.length} active quests &nbsp;·&nbsp; {quests.filter((q) => q.pay?.value).length} with a value set
-              <InfoTip tip="A quest with a value set shows it on its card. One without says to inquire for payment details." label="What a value is" className={INFO_TIP_44} />
+              <InfoTip tip="A quest with a value set shows it on its card. One without says to inquire for payment details." label="What a value is" className={INFO_TIP_44} tapBox />
             </p>
             <p className="text-sm italic text-muted-foreground -mt-6 mb-8">
               Real work, on real land, beside people becoming your people.
@@ -364,7 +364,7 @@ export default function Quests() {
               <button
                 key={c}
                 onClick={() => setActiveCircle(c)}
-                className={`px-3 min-h-[44px] inline-flex items-center whitespace-nowrap flex-shrink-0 rounded-full text-xs font-medium transition-colors ${
+                className={`px-3 min-h-[44px] min-w-[44px] inline-flex items-center justify-center whitespace-nowrap flex-shrink-0 rounded-full text-xs font-medium transition-colors ${
                   activeCircle === c
                     ? "bg-notice text-background"
                     : "bg-muted text-muted-foreground hover:bg-muted/80"
@@ -381,7 +381,7 @@ export default function Quests() {
                 <button
                   key={d}
                   onClick={() => setActiveDifficulty(d)}
-                  className={`px-3 min-h-[44px] inline-flex items-center whitespace-nowrap flex-shrink-0 rounded-full text-xs font-medium transition-colors ${
+                  className={`px-3 min-h-[44px] min-w-[44px] inline-flex items-center justify-center whitespace-nowrap flex-shrink-0 rounded-full text-xs font-medium transition-colors ${
                     activeDifficulty === d
                       ? "bg-primary text-primary-foreground"
                       : "bg-muted text-muted-foreground hover:bg-muted/80"
@@ -479,7 +479,7 @@ export default function Quests() {
                     <p className="text-muted-foreground mt-1 max-w-2xl">
                       {meta.blurb.replace("{ladder}", ladder)}
                       {ring === "further" && (
-                        <InfoTip tip={`The ${ladder} is the membership ladder on your profile. Walking it, or holding a role, opens these quests.`} label="What opens these quests" className={INFO_TIP_44} />
+                        <InfoTip tip={`The ${ladder} is the membership ladder on your profile. Walking it, or holding a role, opens these quests.`} label="What opens these quests" className={INFO_TIP_44} tapBox />
                       )}
                     </p>
                   </div>
