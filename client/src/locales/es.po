@@ -194,10 +194,11 @@ msgstr ""
 msgid "That did not save."
 msgstr ""
 
+#. needs-native-review
 #: client/src/pages/ProposeARole.tsx
 msgctxt "open proposal review"
 msgid "Commitment not chosen yet"
-msgstr ""
+msgstr "Compromiso sin elegir todavía"
 
 #: client/src/components/canvas/ConflictAgreementEditor.tsx
 msgid "Add a safety contact"
@@ -262,10 +263,11 @@ msgctxt "canvas export button"
 msgid "Build it again"
 msgstr ""
 
+#. needs-native-review
 #: client/src/pages/ProposeARole.tsx
 msgctxt "open proposal beside"
 msgid "Your role card"
-msgstr ""
+msgstr "La tarjeta de tu rol"
 
 #: client/src/pages/RoleDraft.tsx
 msgctxt "role draft stat"
@@ -500,10 +502,11 @@ msgctxt "agent paths"
 msgid "Who confirms"
 msgstr ""
 
+#. needs-native-review
 #: client/src/components/fireflyPath/Thresholds.tsx
 msgctxt "open proposal confirmed drawing"
 msgid "You and the village, met"
-msgstr ""
+msgstr "Tú y la aldea, ya en contacto"
 
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "label of an answer box"
@@ -520,10 +523,11 @@ msgctxt "terms setting"
 msgid "Ending"
 msgstr "Cierre"
 
+#. needs-native-review
 #: client/src/components/openProposal/TermsWeOffer.tsx
 msgctxt "reviewer's terms panel for a proposal"
 msgid "Let's talk"
-msgstr ""
+msgstr "Hablemos"
 
 #: client/src/components/governance/GoalsList.tsx
 msgid "That is the most a proposal holds: {cap}."
@@ -707,10 +711,11 @@ msgstr "Estamos esperando tu respuesta."
 #~ msgid "Apply for these {pickCount} roles"
 #~ msgstr ""
 
+#. needs-native-review
 #: client/src/components/fireflyPath/Thresholds.tsx
 msgctxt "while you wait"
 msgid "Who you would work beside"
-msgstr ""
+msgstr "Con quién trabajarías"
 
 #: client/src/components/power/RoleCardParams.tsx
 msgctxt "full role card: the pay range heading"
@@ -878,10 +883,11 @@ msgstr ""
 msgid "Propose for these {pickCount} roles"
 msgstr "Proponerme para estos {pickCount} roles"
 
+#. needs-native-review
 #: client/src/pages/ProposeARole.tsx
 msgctxt "open proposal review"
 msgid "Change"
-msgstr ""
+msgstr "Cambiar"
 
 #: client/src/components/journal/GuideTasks.tsx
 msgctxt "journal guide tasks: added"
@@ -898,9 +904,10 @@ msgctxt "approval inbox"
 msgid "Now"
 msgstr ""
 
+#. needs-native-review
 #: client/src/pages/ProposeARole.tsx
 msgid "A few lines is enough. The people who decide read every word."
-msgstr ""
+msgstr "Bastan unas líneas. Quienes deciden leen cada palabra."
 
 #: client/src/components/admin/AdminHelperPanel.tsx
 msgctxt "admin helper panel"
@@ -921,9 +928,10 @@ msgctxt "the value of a setting once changed"
 msgid "After"
 msgstr ""
 
+#. needs-native-review
 #: client/src/pages/ProposeARole.tsx
 msgid "Pick a role on the first stone and its card shows here while you walk."
-msgstr ""
+msgstr "Elige un rol en la primera piedra y su tarjeta se mostrará aquí mientras avanzas."
 
 #: client/src/components/fundingRounds/RoundParts.tsx
 msgctxt "funding rounds"
@@ -1151,10 +1159,11 @@ msgctxt "sera answers"
 msgid "Keep {n}"
 msgstr ""
 
+#. needs-native-review
 #: client/src/pages/ProposeARole.tsx
 msgctxt "open proposal stone"
 msgid "Your energy"
-msgstr ""
+msgstr "Tu energía"
 
 #: client/src/components/admin/AdminHelperPanel.tsx
 msgctxt "admin helper, the Anthropic provider's name"
@@ -1415,10 +1424,11 @@ msgstr ""
 #~ msgstr ""
 
 #. placeholder {0}: choiceWords(r.theirs.choice)
+#. needs-native-review
 #: client/src/components/openProposal/TermsWeOffer.tsx
 msgctxt "reviewer's terms panel for a proposal"
 msgid "They said: {0}"
-msgstr ""
+msgstr "Dijeron: {0}"
 
 #: client/src/components/admin/AiSetupBanner.tsx
 msgctxt "admin, AI setup banner"
@@ -1530,10 +1540,11 @@ msgctxt "invoice desk"
 msgid "Chain: {there}."
 msgstr ""
 
+#. needs-native-review
 #: client/src/pages/ProposeARole.tsx
 msgctxt "open proposal stones"
 msgid "Stone {stoneNumber} of {stoneCount}"
-msgstr ""
+msgstr "Piedra {stoneNumber} de {stoneCount}"
 
 #: client/src/components/governance/GoalsList.tsx
 msgctxt "proposal goals list"
@@ -1687,19 +1698,22 @@ msgid "Full card"
 msgstr "Ficha completa"
 
 #. placeholder {0}: offer.roleCommitment
+#. needs-native-review
 #: client/src/components/openProposal/TermsWeOffer.tsx
 msgid "The role asks {0}%"
-msgstr ""
+msgstr "El rol pide {0}%"
 
 #. placeholder {0}: settings.join(", ")
+#. needs-native-review
 #: client/src/components/openProposal/TermsWeOffer.tsx
 msgid "We have not agreed these yet: {0}."
-msgstr ""
+msgstr "Todavía no hemos acordado estos: {0}."
 
+#. needs-native-review
 #: client/src/components/fireflyPath/Thresholds.tsx
 msgctxt "while you wait"
 msgid "Take a quest"
-msgstr ""
+msgstr "Toma una misión"
 
 #: client/src/pages/Roles.tsx
 msgctxt "roles page, role link"
@@ -1883,10 +1897,11 @@ msgctxt "pay door"
 msgid "You are setting pay as an admin because the village has no steward yet. Once someone holds the steward's role, only whoever holds the pay power sets pay, or the village by vote."
 msgstr ""
 
+#. needs-native-review
 #: client/src/pages/ProposeARole.tsx
 msgctxt "open proposal review"
 msgid "No role picked yet"
-msgstr ""
+msgstr "Todavía no has elegido un rol"
 
 #: client/src/components/fundingRounds/RoundParts.tsx
 msgid "Share it without my name. It shows as \"a member\" everywhere, and its forum thread is posted for you. In a small village people may still guess who wrote it."
@@ -2165,9 +2180,10 @@ msgstr ""
 #. placeholder {0}: h.n
 #. placeholder {1}: day(h.at)
 #. placeholder {2}: h.by
+#. needs-native-review
 #: client/src/components/openProposal/TermsWeOffer.tsx
 msgid "Revision {0}, {1}, by {2}"
-msgstr ""
+msgstr "Revisión {0}, {1}, por {2}"
 
 #: client/src/pages/OpenProposal.tsx
 msgctxt "open proposal: an agent's proposal"
@@ -2276,9 +2292,10 @@ msgctxt "an outside contact's organisation"
 msgid "Organisation"
 msgstr ""
 
+#. needs-native-review
 #: client/src/pages/ProposeARole.tsx
 msgid "Pick up to {maxRoles} roles for {seasonName}, say what you bring, and send it. Your name and email come from your account."
-msgstr ""
+msgstr "Elige hasta {maxRoles} roles para {seasonName}, cuenta lo que traes y envíalo. Tu nombre y tu correo vienen de tu cuenta."
 
 #: client/src/pages/RoleProposal.tsx
 msgctxt "member door choice"
@@ -2290,24 +2307,27 @@ msgctxt "admin quest safety"
 msgid "Badges a member needs"
 msgstr ""
 
+#. needs-native-review
 #: client/src/pages/ProposeARole.tsx
 msgctxt "open proposal companion"
 msgid "A little about you, so the people who decide can meet you. Links, files and references are all optional."
-msgstr ""
+msgstr "Un poco sobre ti, para que quienes deciden puedan conocerte. Los enlaces, archivos y referencias son opcionales."
 
+#. needs-native-review
 #: client/src/pages/ProposeARole.tsx
 msgctxt "open proposal review"
 msgid "{refsGiven} references"
-msgstr ""
+msgstr "{refsGiven} referencias"
 
 #: client/src/components/canvas/ConflictAgreementEditor.tsx
 msgctxt "button that adds a practice that keeps tensions small"
 msgid "Add a practice"
 msgstr ""
 
+#. needs-native-review
 #: client/src/pages/ProposeARole.tsx
 msgid "Pick a role on the first stone, and its goals are asked here."
-msgstr ""
+msgstr "Elige un rol en la primera piedra y aquí te preguntaremos por sus metas."
 
 #: client/src/pages/RoleDraft.tsx
 #~ msgctxt "role draft steps"
@@ -2490,10 +2510,11 @@ msgctxt "the circle that decides an involuntary exit"
 msgid "Decided by:"
 msgstr ""
 
+#. needs-native-review
 #: client/src/pages/ProposeARole.tsx
 msgctxt "open proposal review"
 msgid "Commitment: {commitment}%"
-msgstr ""
+msgstr "Compromiso: {commitment}%"
 
 #: client/src/pages/RoleDraft.tsx
 msgctxt "role draft next"
@@ -2571,10 +2592,11 @@ msgctxt "settlement table column"
 msgid "Received"
 msgstr ""
 
+#. needs-native-review
 #: client/src/pages/ProposeARole.tsx
 msgctxt "open proposal why starter"
 msgid "What I would bring in my first moon:"
-msgstr ""
+msgstr "Lo que traería en mi primera luna:"
 
 #: client/src/components/notebook/NotebookDocument.tsx
 msgid "How this serves the village's purpose, in one line"
@@ -2728,10 +2750,11 @@ msgctxt "document title field"
 msgid "Title"
 msgstr ""
 
+#. needs-native-review
 #: client/src/components/fireflyPath/Thresholds.tsx
 msgctxt "open proposal sent step"
 msgid "Then the circle reads it, and we write to you by email."
-msgstr ""
+msgstr "Después el círculo la lee y te escribimos por correo."
 
 #: client/src/components/myMoon/InvoicesDesk.tsx
 msgid "Sera records that name no invoice here"
@@ -3080,14 +3103,16 @@ msgid "Amount"
 msgstr ""
 
 #. placeholder {0}: r.current ?? ""
+#. needs-native-review
 #: client/src/components/openProposal/TermsWeOffer.tsx
 msgctxt "reviewer's terms panel for a proposal"
 msgid "Our wording: {0}"
-msgstr ""
+msgstr "Nuestra redacción: {0}"
 
+#. needs-native-review
 #: client/src/components/fireflyPath/Thresholds.tsx
 msgid "Your proposal is with the village now. We read every word, and we write to you by email."
-msgstr ""
+msgstr "Tu propuesta ya está con la aldea. Leemos cada palabra y te escribimos por correo."
 
 #. placeholder {0}: item.by
 #: client/src/components/review/SeraInDraft.tsx
@@ -3108,10 +3133,11 @@ msgctxt "screen reader name of the conflict agreement editor"
 msgid "The conflict agreement"
 msgstr ""
 
+#. needs-native-review
 #: client/src/pages/ProposeARole.tsx
 msgctxt "open proposal review"
 msgid "1 reference"
-msgstr ""
+msgstr "1 referencia"
 
 #: client/src/components/roleEdit/EditRoleButton.tsx
 msgctxt "role lists, opens the new role from a card dialog"
@@ -3337,10 +3363,11 @@ msgctxt "agent paths"
 msgid "The agent confirms"
 msgstr ""
 
+#. needs-native-review
 #: client/src/pages/ProposeARole.tsx
 msgctxt "open proposal stone"
 msgid "Send"
-msgstr ""
+msgstr "Enviar"
 
 #: client/src/components/canvas/CanvasBaseline.tsx
 msgctxt "heading of the canvas baseline view"
@@ -3420,10 +3447,11 @@ msgid "Close the agreement's frames"
 msgstr ""
 
 #. placeholder {0}: offer.ourCommitment
+#. needs-native-review
 #: client/src/components/openProposal/TermsWeOffer.tsx
 msgctxt "reviewer's terms panel for a proposal"
 msgid "We'd agree {0}%"
-msgstr ""
+msgstr "Acordaríamos {0}%"
 
 #: client/src/components/review/SeraBulk.tsx
 msgctxt "sera answers"
@@ -4123,10 +4151,11 @@ msgctxt "decline a suggested edit"
 msgid "Turn it down"
 msgstr ""
 
+#. needs-native-review
 #: client/src/pages/ProposeARole.tsx
 msgctxt "open proposal review"
 msgid "No references, so a background check instead"
-msgstr ""
+msgstr "Sin referencias, así que en su lugar una verificación de antecedentes"
 
 #: client/src/components/canvas/DecisionMatrixRows.tsx
 msgid "The village has not written any rows of its own yet."
@@ -4439,9 +4468,10 @@ msgstr ""
 msgid "Ask about any step…"
 msgstr ""
 
+#. needs-native-review
 #: client/src/components/openProposal/TermsWeOffer.tsx
 msgid "The terms as they stand for this proposal. Whoever holds the power to fill roles can change them."
-msgstr ""
+msgstr "Los términos tal como están para esta propuesta. Quien tiene el poder de asignar roles puede cambiarlos."
 
 #: client/src/components/canvas/CanvasSeason.tsx
 msgctxt "the canvas foundations a season week works on"
@@ -4705,10 +4735,11 @@ msgctxt "role draft step"
 msgid "Propose"
 msgstr "Proponer"
 
+#. needs-native-review
 #: client/src/components/fireflyPath/Thresholds.tsx
 msgctxt "open proposal confirmed step"
 msgid "We write to you with what comes next."
-msgstr ""
+msgstr "Te escribimos con lo que sigue."
 
 #: client/src/pages/RoleDraft.tsx
 #~ msgid "Apply with my pick"
@@ -4728,9 +4759,10 @@ msgstr ""
 msgid "That was not saved."
 msgstr ""
 
+#. needs-native-review
 #: client/src/components/openProposal/TermsWeOffer.tsx
 msgid "Adopting now records the terms as they stand."
-msgstr ""
+msgstr "Adoptarla ahora registra los términos tal como están."
 
 #: client/src/components/SaveBar.tsx
 msgctxt "save bar"
@@ -4808,9 +4840,10 @@ msgctxt "role draft discover"
 msgid "Use my profile"
 msgstr "Usar mi perfil"
 
+#. needs-native-review
 #: client/src/components/openProposal/TermsWeOffer.tsx
 msgid "Saved. We told the applicant."
-msgstr ""
+msgstr "Guardado. Se lo dijimos a la persona que propone."
 
 #: client/src/components/canvas/CanvasBlockFrames.tsx
 msgid "See: what the village shows about {name}"
@@ -4921,10 +4954,11 @@ msgstr ""
 msgid "Open this circle's card"
 msgstr "Abrir la ficha de este círculo"
 
+#. needs-native-review
 #: client/src/pages/ProposeARole.tsx
 msgctxt "open proposal stone"
 msgid "Your role"
-msgstr ""
+msgstr "Tu rol"
 
 #: client/src/components/seasonPlans/RoleCarryOn.tsx
 msgctxt "role access state"
@@ -4936,10 +4970,11 @@ msgctxt "signing key"
 msgid "Asked for a co-sign. Another admin replaces the key from this card."
 msgstr ""
 
+#. needs-native-review
 #: client/src/components/fireflyPath/Thresholds.tsx
 msgctxt "while you wait"
 msgid "How we live together"
-msgstr ""
+msgstr "Cómo vivimos juntos"
 
 #: client/src/components/admin/ConflictDoorFields.tsx
 msgid "Nobody holds the {chosenName} role today, so a request would reach nobody. <0>Give the role a holder under Power groups</0>, or name a contact outside the village."
@@ -4980,9 +5015,10 @@ msgctxt "who answered a note"
 msgid "{by} answered"
 msgstr ""
 
+#. needs-native-review
 #: client/src/components/openProposal/TermsWeOffer.tsx
 msgid "They have not chosen"
-msgstr ""
+msgstr "Todavía no ha elegido"
 
 #: client/src/components/admin/OrgChartTab.tsx
 msgctxt "org chart, a sample circle or role"
@@ -5347,9 +5383,10 @@ msgctxt "open proposal side by side"
 msgid "Commitment: {asked}%"
 msgstr "Compromiso: {asked} %"
 
+#. needs-native-review
 #: client/src/components/openProposal/TermsWeOffer.tsx
 msgid "Waiting for their answer"
-msgstr ""
+msgstr "Esperando su respuesta"
 
 #: client/src/components/canvas/CanvasSeason.tsx
 msgctxt "button that checks a pasted season file"
@@ -5751,10 +5788,11 @@ msgctxt "role editor history"
 msgid "put back"
 msgstr ""
 
+#. needs-native-review
 #: client/src/pages/ProposeARole.tsx
 msgctxt "open proposal why starter"
 msgid "What I have tended before:"
-msgstr ""
+msgstr "Lo que he cuidado antes:"
 
 #: client/src/components/governance/GoalsList.tsx
 msgid "Plant the first three beds"
@@ -5905,10 +5943,11 @@ msgctxt "settlement table column"
 msgid "Credited"
 msgstr ""
 
+#. needs-native-review
 #: client/src/components/openProposal/TermsWeOffer.tsx
 msgctxt "reviewer's terms panel for a proposal"
 msgid "Counter-offer"
-msgstr ""
+msgstr "Contraoferta"
 
 #: client/src/components/canvas/CanvasFrameAdopt.tsx
 msgid "Your note (needed to decline)"
@@ -5993,10 +6032,11 @@ msgctxt "when the purpose statement was written"
 msgid "Written on {0}"
 msgstr ""
 
+#. needs-native-review
 #: client/src/pages/ProposeARole.tsx
 msgctxt "open proposal why starter"
 msgid "What brought me here:"
-msgstr ""
+msgstr "Lo que me trajo aquí:"
 
 #: client/src/components/journey/EconomicsView.tsx
 msgctxt "economics view loading"
@@ -6007,10 +6047,11 @@ msgstr ""
 msgid "Nobody holds the care role today, so a private intake would reach nobody."
 msgstr ""
 
+#. needs-native-review
 #: client/src/pages/ProposeARole.tsx
 msgctxt "open proposal companion"
 msgid "None of this is final. Choose your commitment, and mark what you would like to talk through. We agree it together."
-msgstr ""
+msgstr "Nada de esto es definitivo. Elige tu compromiso y marca lo que te gustaría conversar. Lo acordamos juntos."
 
 #: client/src/i18n/LanguagePicker.tsx
 #, fuzzy
@@ -6171,9 +6212,10 @@ msgctxt "admin age band"
 msgid "Confirm {name}'s age band as {0}? The change is recorded with your name."
 msgstr ""
 
+#. needs-native-review
 #: client/src/components/openProposal/TermsWeOffer.tsx
 msgid "Our wording for this proposal"
-msgstr ""
+msgstr "Nuestra redacción para esta propuesta"
 
 #. placeholder {0}: reading.type
 #. placeholder {1}: reading.lines[0]
@@ -6264,10 +6306,11 @@ msgstr ""
 msgid "That was not recorded."
 msgstr ""
 
+#. needs-native-review
 #: client/src/components/fireflyPath/Thresholds.tsx
 msgctxt "open proposal confirmed drawing"
 msgid "The village"
-msgstr ""
+msgstr "La aldea"
 
 #: client/src/components/review/useSeraActs.ts
 msgctxt "sera answers"
@@ -6315,9 +6358,10 @@ msgctxt "agent proposal"
 msgid "Opening the form"
 msgstr ""
 
+#. needs-native-review
 #: client/src/components/fireflyPath/Thresholds.tsx
 msgid "No email after a few minutes? Look in spam or promotions, or fix the address and send again. A proposal nobody confirms is deleted on its own."
-msgstr ""
+msgstr "¿Ningún correo después de unos minutos? Mira en spam o en promociones, o corrige la dirección y envíala de nuevo. Una propuesta que nadie confirma se borra sola."
 
 #: client/src/pages/WorkWithUs.tsx
 msgctxt "voice field purpose: work with us reciprocity"
@@ -6372,10 +6416,11 @@ msgid "A village that designs its exits before it needs them can afford to welco
 msgstr ""
 
 #. placeholder {0}: offer.revision + 1
+#. needs-native-review
 #: client/src/components/openProposal/TermsWeOffer.tsx
 msgctxt "reviewer's terms panel for a proposal"
 msgid "Save revision {0}"
-msgstr ""
+msgstr "Guardar la revisión {0}"
 
 #: client/src/components/fundingRounds/RoundParts.tsx
 msgctxt "funding rounds"
@@ -6401,10 +6446,11 @@ msgstr "Elegir este rol"
 msgid "Set by the village"
 msgstr ""
 
+#. needs-native-review
 #: client/src/pages/ProposeARole.tsx
 msgctxt "open proposal stones"
 msgid "Back"
-msgstr ""
+msgstr "Atrás"
 
 #: client/src/components/roleDraft/DraftCarry.tsx
 #~ msgid "The roles you drafted: {roleList}."
@@ -6565,10 +6611,11 @@ msgctxt "applicant's application status, while you wait"
 msgid "None of this is required. These are open doors to meet us."
 msgstr ""
 
+#. needs-native-review
 #: client/src/pages/ProposeARole.tsx
 msgctxt "open proposal review"
 msgid "Not written yet"
-msgstr ""
+msgstr "Sin escribir todavía"
 
 #. placeholder {0}: read.model.currency
 #. placeholder {1}: read.model.version
@@ -6599,10 +6646,11 @@ msgstr "Todavía no se ha alineado con la carta de membresía."
 msgid "Not approved. Both tools are closed."
 msgstr ""
 
+#. needs-native-review
 #: client/src/components/openProposal/TermsWeOffer.tsx
 msgctxt "reviewer's terms panel for a proposal"
 msgid "I accept"
-msgstr ""
+msgstr "Acepto"
 
 #: client/src/pages/ApplicationStatus.tsx
 msgid "You did not answer this one."
@@ -6612,9 +6660,10 @@ msgstr "No respondiste a este punto."
 #~ msgid "Chosen by {names}."
 #~ msgstr ""
 
+#. needs-native-review
 #: client/src/components/openProposal/TermsWeOffer.tsx
 msgid "Nothing has been changed yet."
-msgstr ""
+msgstr "Todavía no se ha cambiado nada."
 
 #: client/src/pages/RoleMeasures.tsx
 msgid "How roles are going"
@@ -6735,15 +6784,17 @@ msgstr ""
 msgid "Update our role with this"
 msgstr ""
 
+#. needs-native-review
 #: client/src/components/fireflyPath/Thresholds.tsx
 msgctxt "open proposal sent"
 msgid "What comes next"
-msgstr ""
+msgstr "Lo que sigue"
 
+#. needs-native-review
 #: client/src/pages/ProposeARole.tsx
 msgctxt "open proposal companion"
 msgid "Now your first moon in it: a few goals you would like to reach, and your aim for the season."
-msgstr ""
+msgstr "Ahora tu primera luna en el rol: algunas metas que te gustaría alcanzar y tu propósito para la temporada."
 
 #: client/src/components/review/SeraRows.tsx
 msgid "Its {n} roles come with it, and leaving the circle out leaves them out too."
@@ -6891,10 +6942,11 @@ msgstr ""
 msgid "a draft of your story line"
 msgstr "un borrador de tu línea de historia"
 
+#. needs-native-review
 #: client/src/components/fireflyPath/Thresholds.tsx
 msgctxt "while you wait"
 msgid "Paths lit while you wait"
-msgstr ""
+msgstr "Caminos encendidos mientras esperas"
 
 #: client/src/components/admin/AgreementDocumentUpload.tsx
 msgid "The document was not attached ({status}). Nothing changed."
@@ -7110,10 +7162,11 @@ msgctxt "pick a change to edit"
 msgid "Choose a change"
 msgstr ""
 
+#. needs-native-review
 #: client/src/components/fireflyPath/Thresholds.tsx
 msgctxt "open proposal sent drawing"
 msgid "You"
-msgstr ""
+msgstr "Tú"
 
 #: client/src/components/roleDraft/DraftCarry.tsx
 #~ msgid "Apply with your draft"
@@ -7134,10 +7187,11 @@ msgctxt "treasury sync"
 msgid "Tokens, by source"
 msgstr ""
 
+#. needs-native-review
 #: client/src/components/fireflyPath/Thresholds.tsx
 msgctxt "open proposal confirmed step"
 msgid "We write to you by {byWords} with what comes next."
-msgstr ""
+msgstr "Te escribimos antes del {byWords} con lo que sigue."
 
 #: client/src/pages/RoleDraft.tsx
 msgctxt "role draft stat"
@@ -7302,10 +7356,11 @@ msgstr ""
 msgid "This role comes with its new circle. Add the circle, and it comes with it."
 msgstr ""
 
+#. needs-native-review
 #: client/src/components/openProposal/TermsWeOffer.tsx
 msgctxt "reviewer's terms panel for a proposal"
 msgid "Agreed"
-msgstr ""
+msgstr "Acordado"
 
 #: client/src/components/openProposal/AboutYou.tsx
 msgctxt "about you"
@@ -7429,10 +7484,11 @@ msgstr ""
 #~ msgid "This browser won't keep your draft (private mode or site data blocked). It stays until you leave the page."
 #~ msgstr ""
 
+#. needs-native-review
 #: client/src/pages/ProposeARole.tsx
 msgctxt "open proposal stones"
 msgid "Your path through the form, six stones"
-msgstr ""
+msgstr "Tu camino por el formulario, seis piedras"
 
 #: client/src/components/canvas/ConflictAgreementEditor.tsx
 msgctxt "button that adds a conflict step"
@@ -7708,10 +7764,11 @@ msgctxt "sera changes"
 msgid "Hide them"
 msgstr ""
 
+#. needs-native-review
 #: client/src/components/fireflyPath/Thresholds.tsx
 msgctxt "open proposal sent drawing"
 msgid "You and the village, about to meet"
-msgstr ""
+msgstr "Tú y la aldea, a punto de conocerse"
 
 #: client/src/components/modules/BuilderJourney.tsx
 msgctxt "module library, after copying the agent text"
@@ -7999,10 +8056,11 @@ msgctxt "agent paths"
 msgid "Remove"
 msgstr ""
 
+#. needs-native-review
 #: client/src/components/fireflyPath/Thresholds.tsx
 msgctxt "open proposal sent step"
 msgid "Open the link in that email by {untilWords}. Until you do, nothing reaches the village, and after that we delete what you sent."
-msgstr ""
+msgstr "Abre el enlace de ese correo antes del {untilWords}. Hasta entonces nada llega a la aldea, y pasada esa fecha borramos lo que enviaste."
 
 #: client/src/components/review/SeraDifferences.tsx
 msgid "Small changes apply by themselves: off"
@@ -8111,10 +8169,11 @@ msgctxt "quest editor"
 msgid "As little as"
 msgstr ""
 
+#. needs-native-review
 #: client/src/pages/ProposeARole.tsx
 msgctxt "open proposal beside"
 msgid "The role asks: {pct}% commitment"
-msgstr ""
+msgstr "El rol pide: {pct}% de compromiso"
 
 #. placeholder {0}: doc.title
 #: client/src/components/notebook/NotebookPanel.tsx
@@ -8203,10 +8262,11 @@ msgctxt "terms step"
 msgid "The terms"
 msgstr "Las condiciones"
 
+#. needs-native-review
 #: client/src/components/openProposal/TermsWeOffer.tsx
 msgctxt "reviewer's terms panel for a proposal"
 msgid "Commitment"
-msgstr ""
+msgstr "Compromiso"
 
 #: client/src/components/roleEdit/RoleEditor.tsx
 msgctxt "role editor"
@@ -8232,10 +8292,11 @@ msgstr ""
 msgid "Your claim now pays the quest's new price."
 msgstr ""
 
+#. needs-native-review
 #: client/src/components/fireflyPath/Thresholds.tsx
 msgctxt "open proposal sent"
 msgid "Open {inboxName}"
-msgstr ""
+msgstr "Abrir {inboxName}"
 
 #: client/src/components/roleEdit/SeraPanel.tsx
 msgctxt "role editor sera"
@@ -8560,9 +8621,10 @@ msgstr ""
 msgid "Not written yet. What you see is drawn from the exit policy's restorative path."
 msgstr ""
 
+#. needs-native-review
 #: client/src/components/openProposal/TermsWeOffer.tsx
 msgid "Not written. We'll set this together."
-msgstr ""
+msgstr "Sin escribir. Lo definiremos juntos."
 
 #: client/src/components/myMoon/InvoicesDesk.tsx
 msgctxt "invoice desk"
@@ -8621,10 +8683,11 @@ msgctxt "send one suggestion to a vote alone"
 msgid "Send it on its own"
 msgstr ""
 
+#. needs-native-review
 #: client/src/pages/ProposeARole.tsx
 msgctxt "open proposal why starter"
 msgid "What I want to learn:"
-msgstr ""
+msgstr "Lo que quiero aprender:"
 
 #: client/src/components/valuation/PricingDesk.tsx
 msgctxt "pricing desk"
@@ -8758,10 +8821,11 @@ msgstr "<0>Escríbelos en Administración, en Salidas</0>. Son los pasos restaur
 msgid "Contacts outside the village"
 msgstr ""
 
+#. needs-native-review
 #: client/src/pages/ProposeARole.tsx
 msgctxt "open proposal keys"
 msgid "Enter moves on. When the cursor is not in a field, the arrow keys walk between stones."
-msgstr ""
+msgstr "Intro avanza. Cuando el cursor no está en un campo, las flechas te mueven entre las piedras."
 
 #: client/src/components/review/SeraActs.tsx
 msgctxt "sera answers"
@@ -8807,10 +8871,11 @@ msgctxt "agent proposal"
 msgid "I keep this agent, {keeperName}: I am responsible for what it does in this role, and I can switch it off."
 msgstr ""
 
+#. needs-native-review
 #: client/src/pages/ProposeARole.tsx
 msgctxt "open proposal companion"
 msgid "Read it through once, then send. Nothing reaches the village until you confirm your email."
-msgstr ""
+msgstr "Léelo una vez y envíalo. Nada llega a la aldea hasta que confirmes tu correo."
 
 #: client/src/components/canvas/CanvasSuggestionForm.tsx
 #: client/src/components/canvas/DecisionMatrixRows.tsx
@@ -8836,10 +8901,11 @@ msgctxt "quest safety, age band"
 msgid "That did not save. Try again."
 msgstr ""
 
+#. needs-native-review
 #: client/src/components/openProposal/TermsWeOffer.tsx
 msgctxt "reviewer's terms panel for a proposal"
 msgid "Terms we offer"
-msgstr ""
+msgstr "Términos que ofrecemos"
 
 #: client/src/pages/ChangeRequests.tsx
 msgid "Move to its own change request"
@@ -8935,9 +9001,10 @@ msgstr ""
 msgid "What would you do?"
 msgstr ""
 
+#. needs-native-review
 #: client/src/components/openProposal/TermsWeOffer.tsx
 msgid "Energy and attention. We agree it together."
-msgstr ""
+msgstr "Energía y atención. Lo acordamos juntos."
 
 #: client/src/components/canvas/CanvasSuggestionForm.tsx
 #: client/src/components/canvas/DecisionMatrixRows.tsx
@@ -8997,10 +9064,11 @@ msgctxt "sera changes"
 msgid "Small changes {nSmall}"
 msgstr ""
 
+#. needs-native-review
 #: client/src/components/openProposal/TermsWeOffer.tsx
 msgctxt "reviewer's terms panel for a proposal"
 msgid "not set"
-msgstr ""
+msgstr "sin definir"
 
 #: client/src/components/openProposal/RoleCardBridge.tsx
 msgctxt "open proposal side by side"
@@ -9226,9 +9294,10 @@ msgstr "Una decisión avanza cuando nadie tiene una objeción razonada. El conse
 #~ msgid "Compare them"
 #~ msgstr ""
 
+#. needs-native-review
 #: client/src/components/openProposal/TermsWeOffer.tsx
 msgid "The commitment we'd agree on"
-msgstr ""
+msgstr "El compromiso que acordaríamos"
 
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgctxt "role pay"
@@ -9405,10 +9474,11 @@ msgctxt "agent paths"
 msgid "No words yet"
 msgstr ""
 
+#. needs-native-review
 #: client/src/pages/ProposeARole.tsx
 msgctxt "open proposal companion"
 msgid "Tell us in a few lines why you, and why now. You can start with one of these."
-msgstr ""
+msgstr "Cuéntanos en unas líneas por qué tú y por qué ahora. Puedes empezar con una de estas."
 
 #: client/src/components/fundingRounds/RoundParts.tsx
 msgid "Only Voice funds {title} ({cost})."
@@ -9600,9 +9670,10 @@ msgctxt "talk it out: input label"
 msgid "Your words to the guide"
 msgstr ""
 
+#. needs-native-review
 #: client/src/pages/ProposeARole.tsx
 msgid "One thing to look at before the next stone:"
-msgstr ""
+msgstr "Una cosa que revisar antes de la siguiente piedra:"
 
 #: client/src/components/review/SeraMember.tsx
 msgid "The chart and {agent} are in step"
@@ -9648,10 +9719,11 @@ msgstr ""
 msgid "Anyone here can suggest a change. The village decides."
 msgstr ""
 
+#. needs-native-review
 #: client/src/components/fireflyPath/Thresholds.tsx
 msgctxt "open proposal sent drawing"
 msgid "The village"
-msgstr ""
+msgstr "La aldea"
 
 #: client/src/components/canvas/CanvasFrameAdopt.tsx
 msgctxt "heading over the latest decisions on a canvas block"
@@ -9751,10 +9823,11 @@ msgctxt "save bar"
 msgid "Saving."
 msgstr ""
 
+#. needs-native-review
 #: client/src/components/fireflyPath/Thresholds.tsx
 msgctxt "open proposal sent"
 msgid "Not {sentTo}? Fix the address"
-msgstr ""
+msgstr "¿No es {sentTo}? Corrige la dirección"
 
 #: client/src/components/journey/EconomicsView.tsx
 msgctxt "consent queue empty"
@@ -9840,10 +9913,11 @@ msgctxt "agent paths, a group"
 msgid "Onboarding"
 msgstr ""
 
+#. needs-native-review
 #: client/src/components/fireflyPath/Thresholds.tsx
 msgctxt "while you wait"
 msgid "Read the Love Letter slowly"
-msgstr ""
+msgstr "Lee la Carta de Amor con calma"
 
 #: client/src/components/openProposal/RoleCardBridge.tsx
 msgctxt "open proposal card"
@@ -10013,10 +10087,11 @@ msgstr ""
 msgid "Anybody in the village can suggest a change to it under Say."
 msgstr ""
 
+#. needs-native-review
 #: client/src/pages/ProposeARole.tsx
 msgctxt "open proposal stones"
 msgid "Proposing for: {pickedNames}"
-msgstr ""
+msgstr "Propones para: {pickedNames}"
 
 #: client/src/components/seasonPlans/RoleCarryOn.tsx
 msgctxt "role access heading"
@@ -10062,10 +10137,11 @@ msgctxt "next frame"
 msgid "Next"
 msgstr ""
 
+#. needs-native-review
 #: client/src/components/fireflyPath/Thresholds.tsx
 msgctxt "open proposal sent step"
 msgid "Then the circle reads it, and we write to you by {replyWords}."
-msgstr ""
+msgstr "Después el círculo la lee y te escribimos antes del {replyWords}."
 
 #: client/src/components/roleEdit/RoleEditor.tsx
 msgctxt "role editor"
@@ -10203,10 +10279,11 @@ msgid "Open the agreement, where a member who can open votes proposes a change"
 msgstr ""
 
 #. placeholder {0}: offer.revision + 1
+#. needs-native-review
 #: client/src/components/openProposal/TermsWeOffer.tsx
 msgctxt "save bar, the counter-offer being saved"
 msgid "Revision {0} of the terms"
-msgstr ""
+msgstr "Revisión {0} de los términos"
 
 #: client/src/components/openProposal/RoleCardBridge.tsx
 msgctxt "open proposal side by side goals"
@@ -10291,10 +10368,11 @@ msgstr "Referencia {0}: de dónde la conoces"
 msgid "Record the Anchor's approval"
 msgstr ""
 
+#. needs-native-review
 #: client/src/pages/ProposeARole.tsx
 msgctxt "open proposal stones"
 msgid "Next: {nextName}"
-msgstr ""
+msgstr "Siguiente: {nextName}"
 
 #: client/src/pages/ProposeARole.tsx
 msgid "Pick up to {maxRoles} roles for {seasonName}, say what you bring, and send it. You don't need an account."
@@ -10468,10 +10546,11 @@ msgstr ""
 msgid "Bring it to the {intakeRoleLabel} and you hear back within {replyHours, plural, one {# hour} other {# hours}}."
 msgstr ""
 
+#. needs-native-review
 #: client/src/pages/ProposeARole.tsx
 msgctxt "open proposal stone"
 msgid "Why you"
-msgstr ""
+msgstr "Por qué tú"
 
 #: client/src/components/journey/TestRun.tsx
 msgid "One thing would not work as set"
@@ -10527,10 +10606,11 @@ msgctxt "sera answers"
 msgid "{name} purpose"
 msgstr ""
 
+#. needs-native-review
 #: client/src/pages/ProposeARole.tsx
 msgctxt "open proposal stone"
 msgid "Your moon"
-msgstr ""
+msgstr "Tu luna"
 
 #: client/src/pages/StewardJourney.tsx
 msgid "New here and ready for a role"
@@ -10606,10 +10686,11 @@ msgstr ""
 msgid "That could not be published"
 msgstr ""
 
+#. needs-native-review
 #: client/src/components/openProposal/TermsWeOffer.tsx
 msgctxt "reviewer's terms panel for a proposal"
 msgid "Choose"
-msgstr ""
+msgstr "Elegir"
 
 #: client/src/pages/StewardJourney.tsx
 msgid "Not ready for a role yet"
@@ -10733,9 +10814,10 @@ msgstr ""
 #~ msgid "The helper runs on Claude, using an Anthropic key that belongs to your village. Nobody can set it from this page, and the key never comes to your browser."
 #~ msgstr ""
 
+#. needs-native-review
 #: client/src/components/openProposal/TermsWeOffer.tsx
 msgid "Word any setting for this proposal. Each save is a new revision, the applicant sees what changed and answers it, and the history stays here."
-msgstr ""
+msgstr "Redacta cualquier ajuste para esta propuesta. Cada guardado es una nueva revisión, la persona que propone ve lo que cambió y responde, y el historial se queda aquí."
 
 #: client/src/components/admin/AgentPathTree.tsx
 msgctxt "agent paths"
@@ -10748,10 +10830,11 @@ msgid "Close"
 msgstr "Cerrar"
 
 #. placeholder {0}: r.theirs.note
+#. needs-native-review
 #: client/src/components/openProposal/TermsWeOffer.tsx
 msgctxt "reviewer's terms panel for a proposal"
 msgid "Their note: {0}"
-msgstr ""
+msgstr "Su nota: {0}"
 
 #: client/src/components/canvas/ConflictAgreementEditor.tsx
 msgctxt "a saved choice the picker no longer offers"
@@ -10842,10 +10925,11 @@ msgctxt "circle picker"
 msgid "No circle matches."
 msgstr ""
 
+#. needs-native-review
 #: client/src/components/fireflyPath/Thresholds.tsx
 msgctxt "while you wait"
 msgid "Alone or with others, no role needed"
-msgstr ""
+msgstr "A solas o con otras personas, sin necesidad de rol"
 
 #: client/src/components/admin/AgentPathTree.tsx
 msgctxt "agent paths"
@@ -11000,10 +11084,11 @@ msgctxt "sera changes"
 msgid "Showing all {nShown} waiting changes"
 msgstr ""
 
+#. needs-native-review
 #: client/src/pages/ProposeARole.tsx
 msgctxt "open proposal review"
 msgid "{goalCount} goals for your first moon"
-msgstr ""
+msgstr "{goalCount} metas para tu primera luna"
 
 #: client/src/components/admin/RestorativeInAgreement.tsx
 msgid "This comes from the village's conflict agreement now, with the care and cover roles, the reply time and the outside contact."
@@ -11038,10 +11123,11 @@ msgstr "Lo definiremos en conjunto."
 msgid "The approval of AI agents could not be read. Reload to try again."
 msgstr ""
 
+#. needs-native-review
 #: client/src/components/fireflyPath/Thresholds.tsx
 msgctxt "open proposal confirmed drawing"
 msgid "You"
-msgstr ""
+msgstr "Tú"
 
 #: client/src/components/canvas/ConflictAgreementPublic.tsx
 msgctxt "how someone appeals a consequence"
@@ -11177,18 +11263,20 @@ msgid "The membership letter didn't load. Reload the page to read it and align."
 msgstr "La carta de membresía no cargó. Recarga la página para leerla y alinearte."
 
 #. placeholder {0}: offer.history.length
+#. needs-native-review
 #: client/src/components/openProposal/TermsWeOffer.tsx
 msgctxt "reviewer's terms panel for a proposal"
 msgid "History ({0})"
-msgstr ""
+msgstr "Historial ({0})"
 
 #: client/src/components/canvas/ConflictAgreementEditor.tsx
 msgid "That did not reach the server, so nothing was saved."
 msgstr ""
 
+#. needs-native-review
 #: client/src/components/openProposal/TermsWeOffer.tsx
 msgid "I know, and I want to adopt anyway"
-msgstr ""
+msgstr "Lo sé, y quiero adoptarla de todos modos"
 
 #: client/src/components/journal/GuideTasks.tsx
 msgctxt "journal guide tasks"
@@ -11431,10 +11519,11 @@ msgctxt "quest editor"
 msgid "Kind of work"
 msgstr ""
 
+#. needs-native-review
 #: client/src/pages/ProposeARole.tsx
 msgctxt "open proposal companion"
 msgid "Start with the role that calls you. Pick up to three, and tell us what you bring to each if you like."
-msgstr ""
+msgstr "Empieza por el rol que te llama. Elige hasta tres y, si quieres, cuéntanos lo que traes a cada uno."
 
 #: client/src/components/canvas/ConflictAgreementEditor.tsx
 msgctxt "when a practice happens"
@@ -11552,10 +11641,11 @@ msgctxt "voice field label: profile bio"
 msgid "Your bio"
 msgstr ""
 
+#. needs-native-review
 #: client/src/components/openProposal/TermsWeOffer.tsx
 msgctxt "reviewer's terms panel for a proposal"
 msgid "The role suggests"
-msgstr ""
+msgstr "El rol sugiere"
 
 #: client/src/components/valuation/PricingDesk.tsx
 msgctxt "pricing desk"
@@ -11596,10 +11686,11 @@ msgid "Your own figure was {0}."
 msgstr ""
 
 #. placeholder {0}: offer.theirCommitment
+#. needs-native-review
 #: client/src/components/openProposal/TermsWeOffer.tsx
 msgctxt "reviewer's terms panel for a proposal"
 msgid "They chose {0}%"
-msgstr ""
+msgstr "Eligió {0}%"
 
 #: client/src/components/review/SeraDifferences.tsx
 msgctxt "sera changes"
@@ -11694,10 +11785,11 @@ msgstr ""
 msgid "If anyone is in danger now, the first call is to local emergency services. These contacts come after that, and nothing here contacts anyone on its own."
 msgstr ""
 
+#. needs-native-review
 #: client/src/components/fireflyPath/Thresholds.tsx
 msgctxt "while you wait"
 msgid "Meet the other roles"
-msgstr ""
+msgstr "Conoce los otros roles"
 
 #: client/src/components/agent/ConnectorSetupPanel.tsx
 msgctxt "connector setup panel, eyebrow after a download"
@@ -11710,13 +11802,15 @@ msgid "this moon (from its new moon to the next)"
 msgstr ""
 
 #. placeholder {0}: problems.length
+#. needs-native-review
 #: client/src/pages/ProposeARole.tsx
 msgid "{0} things to look at before the next stone:"
-msgstr ""
+msgstr "{0} cosas que revisar antes de la siguiente piedra:"
 
+#. needs-native-review
 #: client/src/pages/ProposeARole.tsx
 msgid "Pick up to {maxRoles} roles for this moon, from {moonFrom} to the next new moon on {moonTo}, say what you bring, and send it. Your name and email come from your account."
-msgstr ""
+msgstr "Elige hasta {maxRoles} roles para esta luna, del {moonFrom} a la próxima luna nueva, el {moonTo}, cuenta lo que traes y envíalo. Tu nombre y tu correo vienen de tu cuenta."
 
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "edit one change"
@@ -11743,10 +11837,11 @@ msgctxt "admin header"
 msgid "Sign out"
 msgstr ""
 
+#. needs-native-review
 #: client/src/pages/ProposeARole.tsx
 msgctxt "open proposal stone"
 msgid "About you"
-msgstr ""
+msgstr "Sobre ti"
 
 #: client/src/components/valuation/PricingDesk.tsx
 msgctxt "pricing desk"
@@ -11758,7 +11853,24 @@ msgctxt "sera answers"
 msgid "Take it again"
 msgstr ""
 
+#. needs-native-review
 #: client/src/pages/ProposeARole.tsx
 msgctxt "open proposal review"
 msgid "1 goal for your first moon"
-msgstr ""
+msgstr "1 meta para tu primera luna"
+
+#. needs-native-review
+#: client/src/pages/ProposeARole.tsx
+msgctxt "open proposal sent"
+msgid "Check {sentTo}. We sent a link to confirm it's you. Your proposal reaches the village once you open it."
+msgstr "Revisa {sentTo}. Te enviamos un enlace para confirmar que eres tú. Tu propuesta llega a la aldea cuando lo abres."
+
+#. needs-native-review
+#: client/src/pages/RoleProposal.tsx
+msgid "Members sign in here to propose the roles they will hold this moon."
+msgstr "Los miembros inician sesión aquí para proponer los roles que tendrán esta luna."
+
+#. needs-native-review
+#: client/src/pages/RoleProposal.tsx
+msgid "Propose a role for this moon without an account"
+msgstr "Propón un rol para esta luna sin una cuenta"

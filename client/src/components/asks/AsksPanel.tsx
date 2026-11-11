@@ -237,9 +237,9 @@ function AskSomeone({ onSent }: { onSent: () => void }) {
       }}
       aria-labelledby={`${ids}-h`}
     >
-      <h4 id={`${ids}-h`} className={LABEL_CAPS}>
+      <h3 id={`${ids}-h`} className={LABEL_CAPS}>
         Ask someone
-      </h4>
+      </h3>
       <div>
         <label htmlFor={`${ids}-who`} className={LABEL}>
           Who
@@ -351,9 +351,9 @@ export default function AsksPanel() {
 
   return (
     <section aria-labelledby="asks-h" className="space-y-5 rounded-3xl border border-border bg-card p-5 sm:p-6" data-asks>
-      <h3 id="asks-h" className="font-display text-xl font-bold text-card-foreground">
+      <h2 id="asks-h" className="font-display text-xl font-bold text-card-foreground">
         Asked of you
-      </h3>
+      </h2>
       {data.waitingOnYou.length === 0 ? (
         <p className={HINT}>Nobody is waiting on you for anything.</p>
       ) : (
@@ -362,7 +362,7 @@ export default function AsksPanel() {
           if (rows.length === 0) return null;
           return (
             <div key={tier} className="space-y-3" data-ask-tier={tier}>
-              <h4 className={LABEL_CAPS}>{TIER_WORDS[tier]}</h4>
+              <h3 className={LABEL_CAPS}>{TIER_WORDS[tier]}</h3>
               <ul className="space-y-3">
                 {rows.map((a) => (
                   <li key={a.id}>
@@ -375,7 +375,7 @@ export default function AsksPanel() {
         })
       )}
       <div id="your-asks" className="scroll-mt-28 space-y-3">
-        <h4 className={LABEL_CAPS}>Your asks</h4>
+        <h3 className={LABEL_CAPS}>Your asks</h3>
         {data.yourAsks.length === 0 ? (
           <p className={HINT}>You have not asked anyone for anything yet.</p>
         ) : (

@@ -50,12 +50,13 @@ function Page({ children }: { children: ReactNode }) {
   );
 }
 
-function Notice({ heading, line, next }: { heading: string; line?: string; next?: string }) {
+function Notice({ heading, line, next, children }: { heading: string; line?: string; next?: string; children?: ReactNode }) {
   return (
     <Page>
       <div className="mt-6 rounded-xl border border-border bg-card p-6 text-center sm:p-8">
         <h1 className="font-display text-2xl text-foreground">{heading}</h1>
         {line && <p className="mx-auto mt-2 max-w-md leading-relaxed text-muted-foreground">{line}</p>}
+        {children}
         {next && (
           <div className="mt-5">
             <SignInDoors next={next} />
@@ -177,6 +178,7 @@ function MoonOrSeason({ offer, onSeason }: { offer: MoonOffer; onSeason: () => v
 }
 
 function NewOwnRoleProposal() {
+  const { t } = useLingui();
   const gate = useGate(RP_WORDS.title);
   const { user, loading } = useAuth();
   const [, setLocation] = useLocation();
@@ -207,7 +209,18 @@ function NewOwnRoleProposal() {
     };
   }, [user, gate, setLocation, choosing]);
   if (gate) return <>{gate}</>;
-  if (!user && !loading) return <Notice heading={RP_WORDS.signIn} line={RP_WORDS.signInLine} next="/role-proposals/new" />;
+  // Signed out: this moon, and the open form beside the sign-in, so a visitor is never walled off (final verification).
+  if (!user && !loading)
+    return (
+      <Notice heading={RP_WORDS.signIn} line={t`Members sign in here to propose the roles they will hold this moon.`} next="/role-proposals/new">
+        <p className="mt-4">
+          <Link href={openProposalHref()} className="inline-flex min-h-11 items-center gap-2 font-semibold text-foreground underline underline-offset-4" data-open-form-door="">
+            {t`Propose a role for this moon without an account`}
+            <ArrowRight className="size-4" aria-hidden="true" />
+          </Link>
+        </p>
+      </Notice>
+    );
   if (error) return <Notice heading={error.status === 403 ? RP_WORDS.membersOnly : error.text} />;
   if (user && !season && moon && moon !== "asking") return <MoonOrSeason offer={moon} onSeason={() => setSeason(true)} />;
   return (

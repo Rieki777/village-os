@@ -26,7 +26,7 @@ import { describe, expect, it } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-import InfoTip from "./InfoTip";
+import InfoTip, { TAP_MIN, widenStyle } from "./InfoTip";
 
 // The real sentence from client/src/pages/Crowdpool.tsx, so this test names
 // the copy that produced the reported defect rather than a stand-in.
@@ -254,5 +254,26 @@ describe("InfoTip, keyboard", () => {
 
     await user.keyboard(" ");
     expect(within(host).queryByRole("tooltip")).toBeNull();
+  });
+});
+
+describe("a short worded trigger's own box reaches 44px wide (rehearsal, /roles at 390)", () => {
+  it("grows a 35px word to at least 44px and gives the space back, so the words do not move", () => {
+    const s = widenStyle(35)!;
+    const side = s.paddingLeft as number;
+    expect(35 + 2 * side).toBeGreaterThanOrEqual(TAP_MIN);
+    expect(s.paddingRight).toBe(side);
+    expect(s.marginLeft).toBe(-side);
+    expect(s.marginRight).toBe(-side);
+    // A word that short never wraps, so the padding cannot stack it one letter per line.
+    expect(s.whiteSpace).toBe("nowrap");
+    // The class max-w-full would clamp the grown box back to the words' width.
+    expect(s.maxWidth).toBe("none");
+  });
+
+  it("leaves a wide trigger, and one not laid out yet, exactly as it was", () => {
+    expect(widenStyle(TAP_MIN)).toBeUndefined();
+    expect(widenStyle(120)).toBeUndefined();
+    expect(widenStyle(0)).toBeUndefined();
   });
 });

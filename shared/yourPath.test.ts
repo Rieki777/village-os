@@ -281,10 +281,13 @@ describe("yourPath: words", () => {
 describe("yourPath: hrefs", () => {
   const app = readFileSync(resolve(__dirname, "../client/src/App.tsx"), "utf8");
   const routes = Array.from(app.matchAll(/<Route path="([^"]+)"/g)).map((m) => m[1]);
+  // Segment by segment, with no pattern built from the route text: a ":param"
+  // segment takes any one non-empty segment, every other segment must be equal.
   const matches = (path: string) =>
     routes.some((r) => {
-      const re = new RegExp(`^${r.replace(/:[^/]+\*?/g, "[^/]+").replace(/\//g, "\\/")}$`);
-      return re.test(path);
+      const want = r.split("/");
+      const got = path.split("/");
+      return want.length === got.length && want.every((seg, i) => (seg.startsWith(":") ? got[i] !== "" : seg === got[i]));
     });
 
   it("every href a rule can produce is a route of the app", () => {
@@ -295,6 +298,8 @@ describe("yourPath: hrefs", () => {
       expect(matches(href.split(/[?#]/)[0]), `${c.state} → ${href}`).toBe(true);
     }
     expect(matches("/path")).toBe(true);
+    // The matcher itself can say no, so the loop above is not vacuous.
+    expect(matches("/no-such-page/at-all/here")).toBe(false);
   });
 
   it("the strip stays quiet on the step's own page", () => {

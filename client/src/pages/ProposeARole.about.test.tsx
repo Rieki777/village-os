@@ -172,6 +172,8 @@ describe("About you, on the open form", () => {
     sendNow();
     expect((await screen.findByRole("alert")).textContent).toMatch(/Tick the box/);
     expect(stoneNow()).toBe("about");
+    // The cursor lands on the tick itself, never the first box at the top of the stone (final verification).
+    await waitFor(() => expect(document.activeElement?.id).toBe("propose-about-consent"));
     expect(posted).toHaveLength(0);
     fireEvent.click(screen.getByLabelText(/agree to the background check/i));
     fillGoals();

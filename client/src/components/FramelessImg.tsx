@@ -93,8 +93,27 @@ export function useFramelessSrc(src: string | null | undefined): string | undefi
   return shown && shown.from === src ? shown.to : src;
 }
 
+/**
+ * Only picture addresses reach the `<img>`: a page path, http(s), a blob copy,
+ * or an inline image. Anything else (a `javascript:` address in a stored
+ * picture field, say) draws nothing. Every address the app hands this today
+ * passes unchanged.
+ */
+export function safeImageSrc(src: string | null | undefined): string | undefined {
+  if (!src) return undefined;
+  const s = src.trim();
+  if (/^data:image\//i.test(s)) return src;
+  try {
+    const base = typeof window === "undefined" ? "http://localhost/" : window.location.href;
+    const { protocol } = new URL(s, base);
+    return protocol === "http:" || protocol === "https:" || protocol === "blob:" ? src : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /** A drop-in `<img>` for character art. `onError` still reports the picture's own address failing. */
 export default function FramelessImg({ src, alt = "", ...rest }: ImgHTMLAttributes<HTMLImageElement> & { src?: string | null }) {
-  const shown = useFramelessSrc(src ?? null);
+  const shown = useFramelessSrc(safeImageSrc(src));
   return <img src={shown} alt={alt} {...rest} />;
 }
