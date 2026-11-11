@@ -25,8 +25,17 @@
  * native Costa Rican speaker.
  */
 import type { StartStep } from "./roleStartWords";
-import { FIRST_DAYS } from "./roleStartWords";
 import type { CompanionStep } from "./companionLine";
+
+/**
+ * How many days the first stretch of a role is. The same number as
+ * `FIRST_DAYS` in shared/roleStartWords.ts, restated here so this file imports
+ * types only: it rides the lazy chunk of the strip on every page, and a value
+ * import would pull the seat-application words in behind it. The test holds
+ * the two numbers equal.
+ */
+export const PATH_FIRST_DAYS = 14;
+const FIRST_DAYS = PATH_FIRST_DAYS;
 
 // ── Facts ────────────────────────────────────────────────────────────────────
 

@@ -2,7 +2,9 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { companionLine, isCompanionStep } from "./companionLine";
+import { FIRST_DAYS } from "./roleStartWords";
 import {
+  PATH_FIRST_DAYS,
   PATH_KEYS,
   PATH_MILESTONES,
   PATH_RULES,
@@ -329,6 +331,7 @@ describe("yourPath: the walk and newness", () => {
   });
 
   it("first days are decided by the role's start day, with or without an onboarding path (verify B6)", () => {
+    expect(PATH_FIRST_DAYS).toBe(FIRST_DAYS);
     expect(inFirstDays("2026-11-11", "2026-11-11")).toBe(true);
     expect(inFirstDays("2026-11-11", "2026-11-24")).toBe(true);
     expect(inFirstDays("2026-11-11", "2026-11-25")).toBe(false);
