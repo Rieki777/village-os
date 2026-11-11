@@ -69,10 +69,8 @@ export default function RoleStartSteps({ className = "", onShown }: { className?
         {steps.map((s) => (
           <li key={s.step} data-step={s.step} className="text-sm text-foreground">
             {s.step === "confidentiality" ? (
-              <div>
-                <p className="mb-2 font-semibold">{START_WORDS.step.confidentiality}</p>
-                <ConfidentialityCard onAligned={load} />
-              </div>
+              // The card names the step in its own heading, so it reads once, and it sits inside this card without a second frame.
+              <ConfidentialityCard onAligned={load} embedded />
             ) : (
               <Link href={s.href} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border px-4 font-semibold text-foreground hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring">
                 {START_WORDS.step[s.step]}

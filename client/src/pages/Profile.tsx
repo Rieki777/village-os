@@ -29,6 +29,7 @@ import SeasonPlanSection from "@/components/profile/SeasonPlanSection";
 import AlignedSection from "@/components/profile/AlignedSection";
 import YourRolesSection from "@/components/profile/YourRolesSection";
 import PlayerRoleCard from "@/components/playerCard/PlayerRoleCard";
+import { FirstDaysContext } from "@/components/playerCard/CardLower";
 import MyMoonMount from "@/components/myMoon/MyMoonMount";
 import ProposeBanner from "@/components/roleProposal/ProposeBanner";
 import ProposeRolesEntry from "@/components/roleProposal/ProposeRolesEntry";
@@ -653,7 +654,9 @@ export default function Profile() {
                 The proposal door itself stays at the top. */}
             <div id="roles" className={`scroll-mt-28 flex flex-col gap-6 ${tabOf("roles")}`}>
               <YourRolesSection />
-              <PlayerRoleCard />
+              <FirstDaysContext.Provider value={firstDays}>
+                <PlayerRoleCard />
+              </FirstDaysContext.Provider>
               <MyMoonMount />
               {!firstDays && <SeasonPlanSection />}
             </div>

@@ -17,7 +17,7 @@ import { alignConfidentiality, fetchConfidentiality, openAgreementDocument } fro
 
 type Agreement = { title: string; body: string; intent: string; version: string; document: { title: string; size: number; href: string } | null };
 
-export default function ConfidentialityCard({ onAligned }: { onAligned?: () => void } = {}) {
+export default function ConfidentialityCard({ onAligned, embedded = false }: { onAligned?: () => void; embedded?: boolean } = {}) {
   const [agreement, setAgreement] = useState<Agreement | null>(null);
   const [holds, setHolds] = useState(false);
   const [alignedAt, setAlignedAt] = useState<string | null>(null);
@@ -38,7 +38,7 @@ export default function ConfidentialityCard({ onAligned }: { onAligned?: () => v
 
   if (!agreement) return null;
   return (
-    <section id="confidentiality" aria-labelledby="confidentiality-h" data-confidentiality="" className={`${CARD} mb-8`}>
+    <section id="confidentiality" aria-labelledby="confidentiality-h" data-confidentiality="" className={embedded ? "" : `${CARD} mb-8`}>
       <h2 id="confidentiality-h" className={`${H2} flex items-center gap-2`}>
         <ShieldCheck className="size-5 shrink-0 text-notice" aria-hidden="true" />
         {CONFIDENTIALITY_WORDS.heading(agreement.title)}
