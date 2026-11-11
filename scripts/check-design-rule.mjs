@@ -155,6 +155,31 @@ const RULES = [
   { id: "type", re: new RegExp(`${PRE}(?:text|tracking|leading)-\\[[^\\]]*\\]`, "g"), use: "text-xs, tracking-widest, leading-snug / leading-relaxed" },
 ];
 
+/**
+ * THE NATURE KIT (game feel wave 2, 11 Nov 2026): the shared drawings the
+ * chosen designs grow from, held to the same rule as the journey. Kept apart
+ * from JOURNEY so a lane adding pages there never meets this list.
+ *
+ * THE FIREFLY EXCEPTION. Firefly glow is the one light the art direction
+ * allows to loop, and only around the one next act or inside an
+ * illustration, resting after about 20 seconds without input. It is drawn in
+ * the kit's own stylesheet (components/journey/nature/nature.css), from the
+ * sheet's knobs, so no class string here carries a literal glow or an
+ * arbitrary shadow, and none needs a waiver. A `shadow-[...]` or a literal
+ * colour in these files is still a problem: the glow belongs to the kit's
+ * stylesheet, never to a page's classes.
+ */
+const NATURE_KIT = [
+  "client/src/components/journey/nature/Fireflies.tsx",
+  "client/src/components/journey/nature/SeedOfLife.tsx",
+  "client/src/components/journey/nature/FernUnfurl.tsx",
+  "client/src/components/journey/nature/Vesica.tsx",
+  "client/src/components/journey/nature/MoonPhase.tsx",
+  "client/src/components/journey/nature/RootStrip.tsx",
+];
+/** A self-test names its own files; the gate itself also holds the kit. */
+const held = listFlag("--files") ? files : [...files, ...NATURE_KIT];
+
 /** Comments out: block comments across lines first, then each line's `//` tail. */
 function linesOf(src, ext) {
   const blanked = src.replace(/\/\*[\s\S]*?\*\//g, (c) => c.replace(/[^\n]/g, " "));
@@ -189,7 +214,7 @@ function walk(dir, out = []) {
 }
 
 if (REPORT) {
-  const inList = new Set(files);
+  const inList = new Set(held);
   const rows = walk(path.join(ROOT, "client", "src"))
     .filter((f) => !inList.has(f))
     .map((f) => ({ f, n: scan(f).hits.length }))
@@ -203,7 +228,7 @@ if (REPORT) {
 
 const problems = [];
 let waivers = 0;
-for (const rel of files) {
+for (const rel of held) {
   if (!fs.existsSync(path.join(ROOT, rel))) {
     problems.push(`${rel}: listed in JOURNEY but missing. Remove it from the list or restore the file.`);
     continue;
@@ -223,4 +248,4 @@ if (problems.length) {
   for (const p of problems) console.error(`  ${p}`);
   process.exit(1);
 }
-console.log(`design rule: ${files.length} journey files, ${pages.length} pages in the sheet's world, 0 problems, ${waivers} waiver(s).`);
+console.log(`design rule: ${held.length} journey and nature kit files, ${pages.length} pages in the sheet's world, 0 problems, ${waivers} waiver(s).`);
