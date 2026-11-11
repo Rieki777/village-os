@@ -1,4 +1,5 @@
 import Layout from "@/components/Layout";
+import SaveBar, { type SaveResult } from "@/components/SaveBar";
 import GameDashboard from "@/components/GameDashboard";
 import ProfileJourney from "@/components/ProfileJourney";
 import NeedCard from "@/components/NeedCard";
@@ -266,14 +267,19 @@ export default function Profile() {
     }
   };
 
-  const saveBio = async () => {
+  // Saved from the floating save bar (components/SaveBar.tsx), which shows
+  // whatever the save answered.
+  const saveBio = async (): Promise<SaveResult> => {
     setSavingBio(true);
     setBioError("");
     try {
       await updateProfile({ bio: bioText });
       setEditingBio(false);
+      return { ok: true };
     } catch (e: any) {
-      setBioError(e?.message || "That didn't save. Try again.");
+      const why = e?.message || "That didn't save. Try again.";
+      setBioError(why);
+      return { ok: false, reason: why };
     } finally {
       setSavingBio(false);
     }
@@ -711,28 +717,6 @@ export default function Profile() {
                         {bioError}
                       </p>
                     )}
-                    <div className="mt-3 flex items-center gap-3">
-                      {/* `border border-border`: the fill is the village's own
-                          colour, dark by construction, so the button takes an
-                          edge to clear 3:1 on the night panel. */}
-                      <button
-                        onClick={saveBio}
-                        disabled={savingBio}
-                        className="min-h-11 rounded-lg border border-border bg-teal-deep px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-                      >
-                        {savingBio ? "Saving…" : "Save"}
-                      </button>
-                      <button
-                        onClick={() => {
-                          setBioText(user.bio || "");
-                          setEditingBio(false);
-                          setBioError("");
-                        }}
-                        className="min-h-11 px-2 text-sm text-muted-foreground hover:text-foreground"
-                      >
-                        Cancel
-                      </button>
-                    </div>
                     <p aria-live="polite" role="status" className="sr-only">
                       {savingBio ? "Saving your bio." : ""}
                     </p>
@@ -742,6 +726,12 @@ export default function Profile() {
                     {user.bio || "No bio yet. Add one to help other villagers know you."}
                   </p>
                 )}
+                {/* Outside the editor, so "Saved" can still show once it closes. */}
+                <SaveBar
+                  count={editingBio && bioText !== (user.bio || "") ? 1 : 0}
+                  onSave={saveBio}
+                  onDiscard={() => { setBioText(user.bio || ""); setEditingBio(false); setBioError(""); }}
+                />
               </m.section>
 
               {/* The anchor the surfaced banner and "Walk another path" point at. */}
