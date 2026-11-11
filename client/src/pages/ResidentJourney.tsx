@@ -324,7 +324,10 @@ export default function ResidentJourney() {
                             e.stopPropagation();
                             progress.toggle(step);
                           }}
-                          className="flex-shrink-0 mt-0.5 rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          // A 44px target around a 20px tick. The negative margins give
+                          // the 24px back to the row, so the layout is the one it had,
+                          // and the tick still sits 2px below the row's top as before.
+                          className="flex-shrink-0 -mx-3 -mt-2.5 -mb-3 inline-flex size-11 items-center justify-center rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                         >
                           <m.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}>
                             {isCompleted ? (

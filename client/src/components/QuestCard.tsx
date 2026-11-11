@@ -32,16 +32,24 @@ export const QUEST_ICONS: Record<string, React.ElementType> = {
 export const iconFor = (name: string | null | undefined): React.ElementType =>
   QUEST_ICONS[String(name ?? "")] ?? Star;
 
+/*
+ * SEMANTIC TOKENS ONLY (night-contrast lane, 2026-11-11). The board stands in
+ * the sheet's night world and the quest's own page does not, and these chips
+ * are drawn on both. The brand and palette inks they used (`text-sage`,
+ * `text-teal-700`, `text-teal-deep`) are dark by design: on the night card the
+ * sage chip measured 2.52:1 and "See the quest" 1.58:1. `open`, `notice` and
+ * `foreground` re-theme with the ground they land on and clear AA on both.
+ */
 export const difficultyColors: Record<string, string> = {
-  Beginner: "bg-sage/10 text-sage",
-  Intermediate: "bg-teal/10 text-teal-700",
-  Advanced: "bg-primary/10 text-primary",
+  Beginner: "bg-open/10 text-open",
+  Intermediate: "bg-notice/10 text-notice",
+  Advanced: "border border-border bg-muted text-foreground",
 };
 
 const CLAIM_CHIP: Record<string, { label: string; cls: string }> = {
-  claimed: { label: "In progress", cls: "bg-amber text-foreground" },
-  submitted: { label: "Turned in", cls: "bg-white/90 text-teal-deep" },
-  consented: { label: "Complete", cls: "bg-emerald-500 text-white" },
+  claimed: { label: "In progress", cls: "bg-notice text-background" },
+  submitted: { label: "Turned in", cls: "bg-card text-foreground" },
+  consented: { label: "Complete", cls: "bg-open text-background" },
 };
 
 export function QuestPoster({
@@ -181,7 +189,7 @@ export default function QuestCard({
           {(active > 0 || done > 0) && (
             <div className="flex flex-wrap items-center gap-3 text-xs">
               {active > 0 && (
-                <span className="inline-flex items-center gap-1 font-medium text-teal-deep">
+                <span className="inline-flex items-center gap-1 font-medium text-open">
                   <Users className="w-3.5 h-3.5" />
                   {active} in the field now
                 </span>
@@ -196,13 +204,13 @@ export default function QuestCard({
           )}
 
           {gate && (
-            <p className="inline-flex items-center gap-1.5 text-xs font-medium text-gold">
+            <p className="inline-flex items-center gap-1.5 text-xs font-medium text-notice">
               <Sprout className="w-3.5 h-3.5" />
               {gate}
             </p>
           )}
 
-          <div className="mt-auto pt-2 flex items-center justify-between text-sm font-semibold text-teal-deep">
+          <div className="mt-auto pt-2 flex items-center justify-between text-sm font-semibold text-notice">
             <span>See the quest</span>
             <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
           </div>
