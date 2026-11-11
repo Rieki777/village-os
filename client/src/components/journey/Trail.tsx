@@ -23,6 +23,8 @@ export interface TrailProps {
   reached: number;
   onGo: (i: number) => void;
   barLabel: string;
+  /** The steps the person has actually stood on. Given: only these are ticked done, so a step passed by jumping ahead is not. Absent: every step before the current one is done. */
+  visited?: ReadonlySet<number>;
   className?: string;
 }
 
@@ -31,7 +33,7 @@ export function trailFill(step: number, count: number): number {
   return Math.max(0, Math.min(1, step / (count - 1)));
 }
 
-export default function Trail({ labels, step, reached, onGo, barLabel, className = "" }: TrailProps) {
+export default function Trail({ labels, step, reached, onGo, barLabel, visited, className = "" }: TrailProps) {
   const still = useReducedMotion();
   const n = labels.length;
   const fill = trailFill(step, n);
@@ -42,7 +44,7 @@ export default function Trail({ labels, step, reached, onGo, barLabel, className
       </div>
       <ol className="relative grid" style={{ gridTemplateColumns: `repeat(${n}, minmax(0, 1fr))` }}>
         {labels.map((label, i) => {
-          const state = i < step ? "done" : i === step ? "here" : "ahead";
+          const state = i === step ? "here" : i < step && (!visited || visited.has(i)) ? "done" : "ahead";
           return (
             <li key={label} className="flex justify-center">
               <button

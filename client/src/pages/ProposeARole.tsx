@@ -124,7 +124,7 @@ function goToProblem(target: string | null) {
 function Beside({ id, message }: { id: string; message: string | null }) {
   if (!message) return null;
   return (
-    <p id={id} className="mt-2 rounded-lg border border-border bg-muted p-3 text-sm font-medium text-foreground" data-field-problem="">
+    <p id={id} className="mt-2 border-l-4 border-notice pl-3 text-sm font-medium text-foreground" data-field-problem="">
       {message}
     </p>
   );
@@ -471,7 +471,7 @@ export default function ProposeARole() {
       {form.season && (
         <form onSubmit={submit} noValidate className="space-y-6 rounded-2xl border border-border bg-card p-8 shadow-sm" data-open-proposal="" data-hides-fab="">
           {/* The trail through the form: four parts, each a jump. */}
-          <nav aria-label={t({ message: "Parts of this form", context: "open proposal" })} className="-mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm" data-form-trail="">
+          <nav aria-label={t({ message: "Parts of this form", context: "open proposal" })} className="-mt-2 flex flex-wrap gap-x-5 text-sm" data-form-trail="">
             {[
               [t({ message: "Your season", context: "open proposal section" }), "#propose-roles"],
               [t({ message: "About you", context: "open proposal section" }), "[data-about-you-section]"],

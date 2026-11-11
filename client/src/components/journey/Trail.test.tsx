@@ -36,6 +36,13 @@ describe("the trail", () => {
     expect(trailFill(0, 1)).toBe(1);
   });
 
+  it("P2: with visited given, a step jumped over is not ticked done", () => {
+    motion(true);
+    render(<Trail labels={LABELS} step={3} reached={4} onGo={() => {}} barLabel="Progress" visited={new Set([0, 3])} />);
+    const state = (i: number) => document.querySelectorAll("button[data-state]")[i].getAttribute("data-state");
+    expect([0, 1, 2, 3].map(state)).toEqual(["done", "ahead", "ahead", "here"]);
+  });
+
   it("renders the end state at once under reduced motion", () => {
     motion(true);
     const { container } = render(<Trail labels={LABELS} step={2} reached={4} onGo={() => {}} barLabel="Your progress" />);

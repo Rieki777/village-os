@@ -216,6 +216,9 @@ export default function RoleDraft() {
   const [full, setFull] = useState(false);
   const [saveBlocked, setSaveBlocked] = useState(stored.blocked);
   const [step, setStep] = useState(0);
+  /** The steps the person has stood on, so the trail ticks only those. */
+  const [visited, setVisited] = useState<ReadonlySet<number>>(() => new Set([0]));
+  useEffect(() => setVisited((v) => (v.has(step) ? v : new Set(Array.from(v).concat(step)))), [step]);
   const [burst, setBurst] = useState(0);
   const [applyBurst, setApplyBurst] = useState(0);
   const [, navigate] = useLocation();
@@ -353,6 +356,7 @@ export default function RoleDraft() {
               ]}
               step={step}
               reached={4}
+              visited={visited}
               onGo={go}
               barLabel={t({ message: "Your progress through the five steps", context: "role draft steps" })}
             />
