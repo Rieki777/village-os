@@ -622,7 +622,8 @@ const FIXED: Record<string, number> = {
   "client/src/pages/HowWeCreate.tsx": 1,
   // LoveLetter.tsx's two left this list on 2026-11-10: the Love Letter stands in the sheet's world
   // (docs/DESIGN_RULE.md) and its buttons are the sheet's gold, no longer white on the brand. 57.
-  "client/src/pages/NotFound.tsx": 1,
+  // NotFound.tsx's one left this list on 2026-11-11: the 404 stands in the sheet's world
+  // (docs/DESIGN_RULE.md) and its door is the sheet's gold, no longer white on the brand. 52.
   "client/src/pages/Opportunities.tsx": 1,
   "client/src/pages/ProjectHistory.tsx": 5,
   // The journey pages draw each step's button from ONE class list since their
@@ -649,11 +650,12 @@ describe("under the pointer, a brand button stays readable and visibly moves, li
     // other primitives nothing imported. Its one fixed hover left with the file.
     // 56 since 2026-11-11, when ContentEditorTab's section Save moved to the floating save bar.
     // 53 since batch 155, when the resident track's step button moved into the sheet's world.
-    expect(Object.values(FIXED).reduce((n, v) => n + v, 0)).toBe(53);
+    // 52 since the 404 moved to the night world with a gold door (Phase B, lane B3).
+    expect(Object.values(FIXED).reduce((n, v) => n + v, 0)).toBe(52);
     for (const [file, n] of Object.entries(FIXED)) {
       expect(POINTER_LISTS.filter((l) => l.file === file).length, `${file} hovers read`).toBeGreaterThanOrEqual(n);
     }
-    expect(POINTER_LISTS.length).toBeGreaterThanOrEqual(53 + 25);
+    expect(POINTER_LISTS.length).toBeGreaterThanOrEqual(52 + 25);
   });
 
   for (const list of POINTER_LISTS) {
