@@ -348,7 +348,7 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | Whether naming the village's needs target is asked before launch | `needs.launch_requirement` | Needs | choice | `recommended` | the whole village |
 | Members who must answer before a pulse average shows | `journal.pulse_floor` | Journal | integer | `1` | the whole village |
 | Every member has a task board unless a steward turns one off | `memberTasks.listDefault` | Journal | boolean | `true` | the whole village |
-| Our agent may make the changes we approve in the chat | `agents.lead_approved_writes` | Connector | boolean | `false` | the whole village |
+| Our agent may make the changes we approve in the chat | `agents.lead_approved_writes` | Connector | boolean | `true` | the whole village |
 | The place line read at drop in | `sessions.place_line` | Live Sessions | text | blank | the whole village |
 | How long a live session runs unless its opener says otherwise | `sessions.default_minutes` | Live Sessions | integer | `60` | the whole village |
 | Default language | `village.default_locale` | Language | choice | `en` | the whole village |
@@ -4689,13 +4689,13 @@ When on, every member has a task board on their profile unless a steward turns t
 
 ### Our agent may make the changes we approve in the chat
 
-When on, the village connector, acting for the person who connected it, may write a role's words, draft the wording of its terms, seat and unseat a person, and change the village's own wording, each time a person has approved it in the chat. Every seating names who approved it and quotes the approval, and every admin and founder is told. Pay, money, erasure, secrets, agent accounts and powers stay a person's act. Off, the connector does only what it did before.
+When on, the village connector, acting for the person who connected it, may write a role's words, draft the wording of its terms, seat and unseat a person, and change the village's own wording, each time a person has approved it in the chat. Every seating names who approved it and quotes the approval, and every admin and founder is told. Pay, money, erasure, secrets, agent accounts and powers stay a person's act. It is on by default because it opens nothing by itself: the list of paths the agent may use is still edited only by a person, and every write still needs the approval note from the person in the chat. Off, the connector does only what it did before.
 
 | Fact | Value |
 | --- | --- |
 | Key | `agents.lead_approved_writes` |
 | Type | boolean, on or off |
-| Default | `false` |
+| Default | `true` |
 | Range | on or off |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
