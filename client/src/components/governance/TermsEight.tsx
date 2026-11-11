@@ -113,11 +113,11 @@ export default function TermsEight({
             {written && (
               <div className="mt-3 grid gap-1" role="radiogroup" aria-label={labels[k]}>
                 <label className="flex min-h-11 items-center gap-2 text-sm text-foreground">
-                  <input type="radio" name={name} className="size-4 accent-notice" checked={answer?.choice === "accept"} onChange={() => setAnswer(k, { choice: "accept", note: answer?.note ?? "" })} />
+                  <input type="radio" name={name} className="size-5 shrink-0 accent-notice" checked={answer?.choice === "accept"} onChange={() => setAnswer(k, { choice: "accept", note: answer?.note ?? "" })} />
                   {t({ message: "I accept", context: "terms setting answer" })}
                 </label>
                 <label className="flex min-h-11 items-center gap-2 text-sm text-foreground">
-                  <input type="radio" name={name} className="size-4 accent-notice" checked={answer?.choice === "talk"} onChange={() => setAnswer(k, { choice: "talk", note: answer?.note ?? "" })} />
+                  <input type="radio" name={name} className="size-5 shrink-0 accent-notice" checked={answer?.choice === "talk"} onChange={() => setAnswer(k, { choice: "talk", note: answer?.note ?? "" })} />
                   {t({ message: "Let's talk", context: "terms setting answer" })}
                 </label>
                 {answer?.choice === "talk" && (

@@ -425,7 +425,8 @@ export function register(app: Express, deps: Deps): void {
       if (fileDir) await removeProposalFiles(fileDir, id);
       return res.status(503).json({ error: OPEN_WORDS.notSent });
     }
-    res.json({ sent: true, email, message: OPEN_WORDS.sent(email) });
+    // The days the village gives itself to first reply: the "sent" page dates its next steps with it (the firefly path).
+    res.json({ sent: true, email, message: OPEN_WORDS.sent(email), replyDays: numberVar("org.applicant_reply_days") });
   }
 
   /**
@@ -493,7 +494,8 @@ export function register(app: Express, deps: Deps): void {
     }
     // Somebody who already has an account reads it on their profile too; the email above is theirs either way.
     await tellApplicant(confirmed.proposal.id, "confirmed");
-    res.json({ confirmed: true, message: OPEN_WORDS.confirmed, statusPath });
+    // The language the applicant proposed in, so the confirmed page can speak it, and the first-reply window to date the next step.
+    res.json({ confirmed: true, message: OPEN_WORDS.confirmed, statusPath, locale: languageOf(confirmed.proposal), replyDays: numberVar("org.applicant_reply_days") });
   });
 
   // ── The desk ──────────────────────────────────────────────────────────────

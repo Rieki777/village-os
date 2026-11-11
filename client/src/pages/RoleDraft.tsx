@@ -46,6 +46,7 @@ import { BTN_PRIMARY, BTN_SECONDARY, CARD_FEATURED, CHIP_SOFT, DOOR, EYEBROW, H1
 import SelectStepper from "@/components/roleDraft/SelectStepper";
 import ArtImage from "@/components/roleDraft/ArtImage";
 import Burst, { reducedMotion } from "@/components/roleDraft/Burst";
+import { Fireflies } from "@/components/journey/nature";
 import { BreathingLoader } from "@/components/natural";
 import Leaf from "@/components/journey/Leaf";
 import { useVillageName } from "@/hooks/useVillageName";
@@ -386,10 +387,12 @@ export default function RoleDraft() {
               <p className="mt-3 text-sm text-muted-foreground">{t`No goals are set for this season yet.`}</p>
             )}
             <div className="mt-4 flex justify-end">
-              <button type="button" onClick={() => go(1)} className={BTN_PRIMARY}>
+              <NextAct here={step === 0} deskOnly>
+              <button type="button" onClick={() => go(1)} className={BTN_PRIMARY} data-select-next="">
                 {t({ message: "Next: your R-Ikigai and characters", context: "role draft next" })}
                 <ArrowRight className="size-4" aria-hidden="true" />
               </button>
+              </NextAct>
             </div>
           </section>
           <div id="sel-chars" className="scroll-mt-52"></div>
@@ -436,10 +439,12 @@ export default function RoleDraft() {
               })}
             </div>
             <div className="mt-4 flex justify-end">
-              <button type="button" onClick={() => go(2)} className={BTN_PRIMARY}>
+              <NextAct here={step === 1} deskOnly>
+              <button type="button" onClick={() => go(2)} className={BTN_PRIMARY} data-select-next="">
                 {t({ message: "Next: scout the open roles", context: "role draft next" })}
                 <ArrowRight className="size-4" aria-hidden="true" />
               </button>
+              </NextAct>
             </div>
           </section>
           </DiscoverStep>
@@ -512,7 +517,7 @@ export default function RoleDraft() {
                       <dl className="grid grid-cols-2 border-b border-border text-center text-sm">
                         <div className="border-r border-border px-2 py-2">
                           <dt className="text-xs uppercase tracking-widest text-muted-foreground">
-                            <InfoTip tip={t`We don't track time and we don't pay for it. We pay for contracted work and the contributions you lay out each moon and season. Commitment is how much energy and attention the role asks.`}>
+                            <InfoTip triggerClassName="inline-flex min-h-11 items-center px-1" tip={t`We don't track time and we don't pay for it. We pay for contracted work and the contributions you lay out each moon and season. Commitment is how much energy and attention the role asks.`}>
                               {t({ message: "Commitment", context: "role draft stat" })}
                             </InfoTip>
                           </dt>
@@ -583,10 +588,12 @@ export default function RoleDraft() {
                 })}
               </div>
               <div className="mt-6 flex justify-end">
-                <button type="button" onClick={() => go(3)} className={BTN_PRIMARY}>
+                <NextAct here={step === 2} deskOnly>
+              <button type="button" onClick={() => go(3)} className={BTN_PRIMARY} data-select-next="">
                   {t({ message: "Next: review my selection", context: "role draft next" })}
                   <ArrowRight className="size-4" aria-hidden="true" />
                 </button>
+                </NextAct>
               </div>
             </section>
 
@@ -638,7 +645,8 @@ export default function RoleDraft() {
                 </p>
               )}
               {applyHref && (
-                <Link href={applyHref} onClick={(e) => applyWithBurst(e, applyHref)} className={`relative mt-3 w-full ${BTN_PRIMARY}`}>
+                <NextAct here={step >= 3} block deskOnly className="mt-3">
+                <Link href={applyHref} onClick={(e) => applyWithBurst(e, applyHref)} className={`relative w-full ${BTN_PRIMARY}`} data-select-apply="">
                   {member
                     ? pickCount === 1
                       ? t`Propose for this role`
@@ -647,8 +655,9 @@ export default function RoleDraft() {
                       ? t`Propose with my pick`
                       : t`Propose with my ${pickCount} picks`}
                   <ArrowRight className="size-4" aria-hidden="true" />
-                  <Burst play={applyBurst} />
+                  <Burst play={applyBurst} size="sm" />
                 </Link>
+                </NextAct>
               )}
               <p className="mt-2 text-xs text-muted-foreground">
                 {saveBlocked
@@ -729,8 +738,54 @@ export default function RoleDraft() {
               </ul>
             </div>
           </section>
+
+          {/*
+            A PHONE'S THUMB: the one next act rides above the tab bar
+            (--tabbar-h, index.css), so nobody scrolls back up for Next. From
+            sm up the in-section buttons and the sticky trail carry it.
+          */}
+          <div className="sticky bottom-[calc(var(--tabbar-h)+0.5rem)] z-30 mt-8 sm:hidden" data-hides-fab-phone="" data-select-thumb="">
+            {step < 3 ? (
+              <NextAct here block>
+                <button type="button" onClick={() => go(step + 1)} className={`${BTN_PRIMARY} w-full shadow-sm`}>
+                  {step === 0
+                    ? t({ message: "Next: your R-Ikigai and characters", context: "role draft next" })
+                    : step === 1
+                      ? t({ message: "Next: scout the open roles", context: "role draft next" })
+                      : t({ message: "Next: review my selection", context: "role draft next" })}
+                  <ArrowRight className="size-4" aria-hidden="true" />
+                </button>
+              </NextAct>
+            ) : applyHref ? (
+              <NextAct here block>
+                <Link href={applyHref} onClick={(e) => applyWithBurst(e, applyHref)} className={`relative w-full shadow-sm ${BTN_PRIMARY}`}>
+                  {pickCount === 1 ? t`Propose with this role` : t`Propose with these ${pickCount} roles`}
+                  <ArrowRight className="size-4" aria-hidden="true" />
+                </Link>
+              </NextAct>
+            ) : (
+              <button type="button" onClick={() => go(2)} className={`${BTN_PRIMARY} w-full shadow-sm`}>
+                {t({ message: "Select a role to propose", context: "role draft next" })}
+                <ArrowRight className="size-4" aria-hidden="true" />
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </Layout>
+  );
+}
+
+/**
+ * THE ONE NEXT ACT gets the fireflies (wave 2 motion rule): only the act for
+ * the step you are on, so a long page never glows in several places at once.
+ */
+function NextAct({ here, block = false, deskOnly = false, className = "", children }: { here: boolean; block?: boolean; deskOnly?: boolean; className?: string; children: React.ReactNode }) {
+  if (!here) return <div className={className}>{children}</div>;
+  // On a phone the thumb bar holds the lit act, so an in-section copy stays unlit there.
+  return (
+    <Fireflies block={block} className={`${deskOnly ? "max-sm:[&>.nk-ff-layer]:hidden " : ""}${className}`}>
+      {children}
+    </Fireflies>
   );
 }

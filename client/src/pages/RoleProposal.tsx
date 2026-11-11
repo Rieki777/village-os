@@ -17,7 +17,7 @@
  * way, and reads "anyone with the link" to anybody.
  */
 import { useEffect, useState, type ReactNode } from "react";
-import { useLocation, useParams } from "wouter";
+import { Link, useLocation, useParams } from "wouter";
 import Layout from "@/components/Layout";
 import ModuleGate, { SignInDoors } from "@/components/modules/ModuleGate";
 import { useModule, useModules } from "@/modules/ModuleProvider";
@@ -31,6 +31,12 @@ import { keepRoleOn } from "@/components/roleProposal/QuickPath";
 import { RP_WORDS } from "@/components/roleProposal/proposalWords";
 import AgentProposalForm from "@/components/roleProposal/AgentProposalForm";
 import { AGENT_PROPOSAL_WORDS } from "@shared/agentHolders";
+import { useLingui } from "@lingui/react/macro";
+import { ArrowRight } from "lucide-react";
+import { termOf } from "@shared/openProposalTerm";
+import { civilDayWords } from "@shared/seasonPlans";
+import { openProposalHref } from "@shared/openProposals";
+import { BTN_PRIMARY, CARD, DOOR, EYEBROW, HINT } from "@/components/journey/look";
 
 const GATE_LINE = "Each member's proposal for the roles they will hold next season, shared for feedback before it goes to the circle.";
 
@@ -83,7 +89,10 @@ function NewAgentProposal({ roleId }: { roleId: string }) {
   if (!user) return <Page><div className="flex justify-center py-16"><BreathingLoader label={RP_WORDS.starting} /></div></Page>;
   return (
     <Page>
-      <AgentProposalForm roleId={roleId} />
+      {/* The compass steps out while the agent form is up: on a phone it sat over the fields (verify, 11 Nov). */}
+      <div data-hides-fab="">
+        <AgentProposalForm roleId={roleId} />
+      </div>
     </Page>
   );
 }
@@ -95,13 +104,88 @@ export function NewRoleProposal() {
   return <NewOwnRoleProposal />;
 }
 
+/**
+ * THIS MOON OR NEXT SEASON (B7, verify 11 Nov 2026). A village that takes
+ * proposals for this moon offers its open roles on the open form; the member
+ * door used to offer next season only. When the open form is taking this
+ * moon's roles, the door asks which first. `?season=1`, or a role the moon
+ * does not offer, goes straight to next season as before.
+ */
+type MoonOffer = { from: string; to: string; roles: Array<{ id: string; name: string }> };
+
+function useMoonOffer(): MoonOffer | null | "asking" {
+  const [offer, setOffer] = useState<MoonOffer | null | "asking">(() => {
+    if (typeof window === "undefined") return null;
+    return new URLSearchParams(window.location.search).get("season") === "1" ? null : "asking";
+  });
+  useEffect(() => {
+    if (offer !== "asking") return;
+    let live = true;
+    fetch("/api/open-proposals/form")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!live) return;
+        const term = termOf(d?.term);
+        const roles: Array<{ id: string; name: string }> = Array.isArray(d?.roles) ? d.roles.filter((r: any) => r && typeof r.id === "string").map((r: any) => ({ id: r.id, name: String(r.name ?? r.id) })) : [];
+        const asked = new URLSearchParams(window.location.search).get("role");
+        // A link for one role the moon does not offer is a next-season link: nothing to ask.
+        const roleElsewhere = !!asked && !roles.some((r) => r.id === asked);
+        setOffer(d?.open && term && roles.length > 0 && !roleElsewhere ? { from: term.startsOn, to: term.endsOn, roles } : null);
+      })
+      .catch(() => live && setOffer(null));
+    return () => {
+      live = false;
+    };
+  }, [offer]);
+  return offer;
+}
+
+function MoonOrSeason({ offer, onSeason }: { offer: MoonOffer; onSeason: () => void }) {
+  const { t } = useLingui();
+  const from = civilDayWords(offer.from);
+  const to = civilDayWords(offer.to);
+  const asked = typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("role");
+  const href = asked && offer.roles.some((r) => r.id === asked) ? openProposalHref(asked) : openProposalHref();
+  const count = offer.roles.length;
+  return (
+    <Page>
+      <div className="mt-6 grid gap-4" data-moon-or-season="">
+        <h1 className="font-display text-3xl text-foreground">{t({ message: "Which roles are you proposing for?", context: "member door choice" })}</h1>
+        <section className={`${CARD} grid gap-3`} data-door="moon">
+          <p className={EYEBROW}>{t({ message: "This moon", context: "member door choice" })}</p>
+          <p className="text-foreground">
+            {count === 1
+              ? t({ message: `1 role is open now, from ${from} to the next new moon on ${to}.`, context: "member door choice" })
+              : t({ message: `${count} roles are open now, from ${from} to the next new moon on ${to}.`, context: "member door choice" })}
+          </p>
+          <p className={HINT}>{t({ message: "Your name and email come from your account.", context: "member door choice" })}</p>
+          <Link href={href} className={`${BTN_PRIMARY} justify-self-start`}>
+            {t({ message: "Propose for this moon", context: "member door choice" })}
+            <ArrowRight className="size-4" aria-hidden="true" />
+          </Link>
+        </section>
+        <button type="button" onClick={onSeason} className={`jw-btn min-h-14 ${DOOR}`} data-door="season">
+          <span className="grid min-w-0 flex-1 text-left">
+            <span>{t({ message: "Your roles for next season", context: "member door choice" })}</span>
+            <span className="text-xs font-normal text-muted-foreground">{t({ message: "Change any words, share it for feedback, then send it to the circle.", context: "member door choice" })}</span>
+          </span>
+          <ArrowRight className="size-4 shrink-0" aria-hidden="true" />
+        </button>
+      </div>
+    </Page>
+  );
+}
+
 function NewOwnRoleProposal() {
   const gate = useGate(RP_WORDS.title);
   const { user, loading } = useAuth();
   const [, setLocation] = useLocation();
   const [error, setError] = useState<{ status: number; text: string } | null>(null);
+  const moon = useMoonOffer();
+  const [season, setSeason] = useState(false);
+  const choosing = !season && moon !== null;
   useEffect(() => {
-    if (!user || gate) return;
+    if (!user || gate || choosing) return;
     let alive = true;
     // Read first: a member with a draft goes to it without a refused POST, which a browser logs as an error on every visit (audit M14).
     void (async () => {
@@ -121,10 +205,11 @@ function NewOwnRoleProposal() {
     return () => {
       alive = false;
     };
-  }, [user, gate, setLocation]);
+  }, [user, gate, setLocation, choosing]);
   if (gate) return <>{gate}</>;
   if (!user && !loading) return <Notice heading={RP_WORDS.signIn} line={RP_WORDS.signInLine} next="/role-proposals/new" />;
   if (error) return <Notice heading={error.status === 403 ? RP_WORDS.membersOnly : error.text} />;
+  if (user && !season && moon && moon !== "asking") return <MoonOrSeason offer={moon} onSeason={() => setSeason(true)} />;
   return (
     <Page>
       <div className="flex justify-center py-16">
