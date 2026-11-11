@@ -52,7 +52,7 @@ describe.skipIf(!configured)("a draft that sets a circle's standing", () => {
     expect(pub.ok).toBe(true);
     expect(await row("two")).toMatchObject({ status: "forming", is_anchor: 1 });
     expect((await row("one")).is_anchor).toBe(0);
-    const back = await revertDraft(pool, id, "u-steward");
+    const back = await revertDraft(pool, id);
     expect(back.ok, !back.ok ? back.error : "").toBe(true);
     expect(await row("two")).toMatchObject({ status: "active", is_anchor: 0 });
     expect((await row("one")).is_anchor).toBe(1);
