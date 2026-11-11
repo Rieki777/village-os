@@ -66,6 +66,7 @@ import { requireModule } from "../lib/modules";
 import { boolVar, numberVar } from "../lib/variables";
 import { firstNameOf, peopleTier } from "../lib/peopleLock";
 import { userIdForHandle } from "../lib/profile";
+import { badgeNoticeTitle } from "../../shared/doorsOpened";
 
 type Deps = Pick<
   AppDeps,
@@ -665,7 +666,7 @@ export function register(app: Express, deps: Deps): void {
       await notify({
         userId: t.userId,
         type: "badge",
-        title: t.tier > 1 ? `Badge upgraded: ${badge?.name ?? t.badgeId} ×${t.tier}` : `Badge earned: ${badge?.name ?? t.badgeId}`,
+        title: badgeNoticeTitle(badge?.name ?? t.badgeId, t.tier),
         link: "/badges",
         dedupeKey: `rule:${t.badgeId}:${t.userId}:tier-${t.tier}`,
       });

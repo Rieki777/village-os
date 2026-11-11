@@ -66,7 +66,6 @@ import { onProfileRefresh } from "@/lib/profileRefresh";
 import { useStoryPageShown } from "@/lib/brochure";
 import { roleWithHolders } from "@shared/roleHolderLabel";
 import type { StageAdvance } from "@/components/StageAdvanced";
-import StatRow from "@/components/profileDash/StatRow";
 import StagePanel from "@/components/profileDash/StagePanel";
 import TodayStrip from "@/components/profileDash/TodayStrip";
 import AsksPanel from "@/components/asks/AsksPanel";
@@ -77,7 +76,6 @@ import LevelUpMoment from "@/components/profileDash/LevelUpMoment";
 import ProfileTabs, { phoneTab, type ProfileTab } from "@/components/profileDash/ProfileTabs";
 import { useDashData } from "@/components/profileDash/useDashData";
 import PartiesCard from "@/components/profileDash/PartiesCard";
-import { abilitiesAtStage, nextRungProgress, pickTokens, stagePill } from "@/components/profileDash/dashModel";
 import { BTN_GOLD, BTN_LINE, H2, KICKER, LINK } from "@/components/profileDash/dashUi";
 
 /**
@@ -98,7 +96,7 @@ import { BTN_GOLD, BTN_LINE, H2, KICKER, LINK } from "@/components/profileDash/d
  * ── THE GAME DASHBOARD (Rye approved the design on 2026-10-30) ──────────────
  *
  * The page now reads top to bottom as the approved character sheet: the hero,
- * the stat row, Stage reached, Today, the treasury, then two columns (the
+ * the doors open to you, Today, the treasury, then two columns (the
  * quest log on the left, roles and powers on the right) and the settings
  * band. The sections under components/profileDash/ are new; everything below
  * them is the section it always was, moved and not rewritten. On a phone the
@@ -402,11 +400,7 @@ export default function Profile() {
   ];
 
   const stages = config?.stages ?? null;
-  const stageIndex = prog?.stageIndex ?? null;
-  const nextRung = stages && stageIndex !== null ? (stages[stageIndex + 1] ?? null) : null;
-  const progress = nextRungProgress(nextRung, { consentedQuests: prog?.consentedQuests ?? null, training: prog?.training ?? null });
   const rolesLine = (prog?.roles ?? []).map((r) => roleWithHolders(r.name, [user.name])).join(", ");
-  const { village: villageToken } = pickTokens(dash.wallet ?? [], config?.currency?.value?.slug);
   const seasonWords = dash.season
     ? [dash.season.name, dash.season.day !== null && dash.season.of !== null ? `day ${Math.min(dash.season.day, dash.season.of)} of ${dash.season.of}` : ""].filter(Boolean).join(" · ")
     : null;
@@ -458,14 +452,12 @@ export default function Profile() {
               {!path && !firstDays && <ProposeBanner />}
               {!firstDays && <ProposeRolesEntry />}
             </div>
-            {/* WHO YOU ARE PLAYING, FIRST. The ladder position comes from the
-                page's own reads (`prog.stageIndex`, `config.stages`), never a
-                second fetch inside the hero. */}
+            {/* WHO YOU ARE PLAYING, FIRST. No rung on the face (the prune): the hero
+                carries the person, their badges and their moons on the land. */}
             <div className={tabOf("today")}>
               <ProfileHero
                 name={user.name}
                 handle={user.handle}
-                stageLabel={firstDays ? null : stagePill(stages, stageIndex)}
                 season={seasonWords}
                 rolesLine={rolesLine || null}
                 badges={dash.badgeList}
@@ -523,37 +515,11 @@ export default function Profile() {
               />
             </div>
 
-            <div className={tabOf("today")}>
-              <StatRow
-                stats={[
-                  { key: "paths", glyph: "◎", value: user.paths.length, label: "Paths walked", short: "Paths", phone: true },
-                  { key: "quests", glyph: "✦", value: prog?.consentedQuests ?? null, label: "Quests done", short: "Quests", phone: true },
-                  { key: "badges", glyph: "❖", value: dash.badges, label: "Badges", short: "Badges", phone: true },
-                  {
-                    key: "tokens",
-                    glyph: "◐",
-                    value: villageToken ? villageToken.heldUnits / Math.pow(10, Math.max(0, villageToken.decimals)) : null,
-                    label: "Tokens",
-                    short: "Tokens",
-                    phone: true,
-                  },
-                  { key: "powers", glyph: "☾", value: prog ? prog.capabilityCatalogue.filter((c) => c.held).length : null, label: "Powers open", short: "Powers", phone: false },
-                ]}
-              />
-            </div>
-
+            {/* The stat row (Paths walked, Quests done, Badges, Tokens, Powers open) is retired: the prune
+                keeps no totals beside a person's name. What they hold is drawn where it lives. */}
             {stages && prog && !firstDays ? (
               <div className={tabOf("today")}>
-                <StagePanel
-                  stages={stages}
-                  stageIndex={prog.stageIndex}
-                  abilities={abilitiesAtStage(prog.capabilityCatalogue ?? [], stages[prog.stageIndex]?.id ?? "")}
-                  nextAction={path ? null : (me?.nextAction ?? null)}
-                  progress={progress}
-                  progressUnit={nextRung?.rule.type === "training-complete" ? "lessons" : "quests consented"}
-                  nextRuleWords={nextRung?.description ?? null}
-                  ladderTitle={config?.ladder?.title}
-                />
+                <StagePanel catalogue={prog.capabilityCatalogue ?? []} stages={stages} nextAction={path ? null : (me?.nextAction ?? null)} />
               </div>
             ) : null}
 
@@ -769,7 +735,7 @@ export default function Profile() {
               </div>
 
               {config && prog ? (
-                <MaturityLadder showNext={false} title={config.ladder?.title} stages={config.stages} stageIndex={prog.stageIndex} consentedQuests={prog.consentedQuests} />
+                <MaturityLadder title={config.ladder?.title} stages={config.stages} stageIndex={prog.stageIndex} />
               ) : null}
 
               {/* BORROWED AND BOOKED: loans, stays and homes asked about, live only.
@@ -892,7 +858,6 @@ export default function Profile() {
               <TheVessel
                 gratitude={me?.gratitude ?? null}
                 here={me?.stage ?? null}
-                next={me && me.stages ? (me.stages[me.stageIndex + 1] ?? null) : null}
                 failed={meFailed}
                 onGiven={reloadMe}
               />
@@ -943,13 +908,11 @@ export default function Profile() {
         </div>
         <MoonDock />
       </div>
-      {advance && stages ? (
+      {advance ? (
         <LevelUpMoment
           advance={advance}
-          stages={stages}
           name={user.name}
           portrait={null}
-          ladderTitle={config?.ladder?.title}
           onClose={() => setAdvance(null)}
         />
       ) : null}

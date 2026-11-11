@@ -37,6 +37,7 @@ import {
   ALL_CAPABILITIES,
   BREAK_GLASS_WAY_THROUGH,
   capabilityDecision,
+  capabilityLabel,
   hasCapability,
   isDeniable,
   STAGE_UNLOCKS,
@@ -44,6 +45,7 @@ import {
   type Capability,
   type CapabilityCtx,
 } from "../shared/capabilities";
+import { doorNotice } from "../shared/doorsOpened";
 import {
   assertCapabilityHoldingInvariants,
   capabilityHoldings,
@@ -3019,12 +3021,14 @@ async function recordStageEvent(user: any, from: string, to: string, reason: str
     at: new Date().toISOString(),
   });
   commsSink.fire({ type: "stage_advanced", userId: user.id, stage: to });
-  await addActivity("stage", `${firstName(user.name)} advanced to ${stageName(to)}`, { actorUserId: user.id, entityType: "stage", entityRef: to, audience: "admin" });
+  // The prune (C7): no Pulse line for a crossing, so rank is never published, and
+  // the private notice names the door it opened, never the rung (shared/doorsOpened.ts).
+  const notice = doorNotice(unlocked.map((c) => capabilityLabel(c)));
   await notify({
     userId: user.id,
     type: "stage_advanced",
-    title: `You advanced to ${stageName(to)}`,
-    body: unlocked.length ? `Newly unlocked: ${unlocked.join(", ")}` : null,
+    title: notice.title,
+    body: notice.body,
     link: "/profile",
     // One per stage, ever: re-computation can never re-celebrate.
     dedupeKey: `stage:${user.id}:${to}`,

@@ -503,6 +503,12 @@ export async function holder(w, ctx) {
     await settle(page, 1500);
   });
   await w.look("profile");
+  // The prune (11 Nov 2026): a profile wears no rung and keeps no totals beside a name.
+  await w.step("the profile shows no rung, no ladder count and no stat row", async () => {
+    const text = (await page.locator("main").innerText()).replace(/\s+/g, " ");
+    const rank = text.match(/Stage \d+|Stage reached|Powers open|Quests done|Paths walked/);
+    if (rank) throw new Error(`the profile still ranks a person: "${rank[0]}"`);
+  });
   // The five archetypes as roots (11 Nov 2026): a new holder picks the roots
   // they grow from, and the quests board shows what grows from them first,
   // with one switch to see everything.
