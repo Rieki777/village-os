@@ -38,7 +38,7 @@ village or person, and every address is on `example.test`.
   The run drops and recreates it, so any other name is refused.
 - Mail goes to the repository's fake Resend (`server/testkit/fakeResend.ts`). The AI endpoint is
   a stub that answers every call with the same canned draft.
-- Every browser request that leaves loopback is aborted and listed in the run's `walks.json`.
+- Every browser request that leaves loopback is aborted and listed in the run's `<run>/walks.json`.
 
 `node --test scripts/rehearsal/rehearsal.test.mjs` holds the two refusals and the screenshot diff
 to their word.
@@ -84,12 +84,12 @@ Two lanes rehearsing on one machine each need their own `REHEARSAL_PORT` and `RE
 
 Each run is a folder under `.rehearsal/runs/<time>/` (in CI, the `rehearsal-<run id>` artifact):
 
-- `summary.md`: start here. In CI it is also the run's summary page.
+- `<run>/summary.md`: start here. In CI it is also the run's summary page.
 - `shots/`: one full-page screenshot per page reached, named `<person>-<phone|desktop>-<page>.png`.
   A failed act leaves a `FAILED-<act>` shot of where the person was stopped.
 - `diff/`: for each screenshot that changed, the new page faded with the changed pixels in red.
-- `emails.json`: every email sent, whole. `walks.json`: every act, page and check in detail.
-  `summary.json`: the summary as data. `ai-calls.json`, `server.log`.
+- `<run>/emails.json`: every email sent, whole. `<run>/walks.json`: every act, page and check in detail.
+  `<run>/summary.json`: the summary as data. `<run>/ai-calls.json`, `<run>/server.log`.
 
 **What fails a run** is an act that did not complete: someone could not get through. The summary
 names the person, the width and the act, and the exit code is 1 (2 when the rehearsal itself could
@@ -98,7 +98,7 @@ not start). A walk stops at its first failed act, because the rest depend on it.
 **Everything else is reported and fails nothing, at first:**
 
 - Console errors and failed requests, per person and width. Some are expected today (the password
-  re-check before aligning answers 403 first, by design); read `walks.json` for which.
+  re-check before aligning answers 403 first, by design); read `<run>/walks.json` for which.
 - Sideways scroll on any page.
 - Axe violations: contrast, names, labels, landmarks and heading order.
 - **Phone findings at 390:** sideways scroll, tap targets under 44px (each reported once per walk,

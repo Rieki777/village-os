@@ -52,7 +52,7 @@ const PORT = Number(process.env.REHEARSAL_PORT || 5871);
 const BASE = process.env.REHEARSAL_BASE_URL || `http://localhost:${PORT}`;
 const DB_SERVER = process.env.REHEARSAL_DB_SERVER || "mysql://root:ci-test@127.0.0.1:3306";
 const SCHEMA = process.env.REHEARSAL_SCHEMA || SCRATCH_PREFIX;
-const ADMIN_PASSWORD = "rehearsal-admin-not-real";
+const ADMIN_PASSWORD = "rehearsal-admin-not-real"; // module-review-ok: a throwaway password for the rehearsal's own scratch schema, never a real credential
 const WIDTHS = { 390: "phone", 1280: "desktop" };
 
 function log(...m) {
@@ -113,7 +113,7 @@ async function main() {
       DATA_DIR: dataDir,
       DATABASE_URL: `${DB_SERVER}/${SCHEMA}`,
       ADMIN_PASSWORD,
-      AUTH_TOKEN_SECRET: "rehearsal-token-secret-not-real",
+      AUTH_TOKEN_SECRET: "rehearsal-token-secret-not-real", // module-review-ok: signs tokens for the scratch server only, dropped with the run
       FRONTEND_URL: BASE,
       TRUSTED_PROXY_HOPS: "1",
       RESEND_API_BASE: mail.url,
