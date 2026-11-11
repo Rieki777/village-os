@@ -2586,6 +2586,60 @@ export const VARIABLES: VariableDef[] = [
     type: "boolean",
     default: "true",
   },
+  {
+    key: "org.founding_team",
+    category: "The village's people",
+    label: "Feature the founding team on the Roles page",
+    description:
+      "On, the top of the Roles and Circles page is a quiet \"Join the founding team\" section: the paid founding roles the village is hiring for, each with its full card and one Apply act. The roles are the ones written in \"The founding team's roles\". Off, the page opens on the roles and circles as before.",
+    type: "boolean",
+    default: "false",
+  },
+  {
+    key: "org.founding_team_roles",
+    category: "The village's people",
+    label: "The founding team's roles",
+    description:
+      "The roles the founding team section features, in the order they show: paste each role id from the org chart, separated by commas or new lines. A role that is unlisted, ended or held as an example is left out of the section. Empty, the section shows nothing.",
+    type: "text",
+    default: "",
+  },
+  {
+    key: "org.show_pay_ranges",
+    category: "The village's people",
+    label: "Show pay ranges on role cards",
+    description:
+      "Off, no role card shows a pay range or an amount to visitors or members, whatever a role's terms hold: a card shows how pay works (its shares) instead. On, an open listed role whose terms name a pay range shows that range on its card to everyone. People who hold the power to read terms still read the full terms either way.",
+    type: "boolean",
+    default: "false",
+  },
+  {
+    key: "org.pay_shape",
+    category: "The village's people",
+    label: "How pay works, on every role card",
+    description:
+      "The shape of the pay every role card shows under \"How pay works\", as shares of the whole, never an amount: write each share's name and percent, separated by commas, like Cash 40, Equity 55, Credits 5. The shares add up to 100 or less. A role whose card writes its own shares shows those instead. Empty, cards show no pay shape.",
+    type: "text",
+    default: "",
+  },
+  {
+    key: "org.pay_shape_at_risk",
+    category: "The village's people",
+    label: "The at-risk line under the pay shape",
+    description:
+      "One line under the shares on every role card, in the village's words, saying which part of the pay depends on what the village raises or earns. No amounts. Empty, no line.",
+    type: "text",
+    default: "",
+  },
+  {
+    key: "org.pay_shape_note",
+    category: "The village's people",
+    label: "The note under the pay shape",
+    description:
+      "The last line under the pay shape on every role card, like Indicative only. Terms are still being defined and are subject to legal review. No amounts. A role's card may write its own. Empty, no note.",
+    type: "text",
+    default: "",
+  },
 
   // ── Events (0059; visible in Admin only while the module is non-off) ─────
   //

@@ -62,6 +62,8 @@ import { listArchetypeRows } from "../repos/archetypes";
 import { characterTagsFrom } from "./orgChart";
 import { villageId } from "./economy";
 import { readHeldBy } from "../../shared/agentHolders";
+import { readSections, SECTION_WORDS, type RoleCardSections } from "../../shared/roleCardSections";
+import { saveSections, sectionsFor } from "./roleCardSections";
 
 export const EDIT_WORDS = {
   noRole: "There is no role by that id.",
@@ -89,6 +91,8 @@ export interface EditorState {
   parameterKeys: ParameterKey[];
   pay: PaySettings | null;
   archetypes: string[];
+  /** The founding sections (shared/roleCardSections.ts): who we hope for, AI support, the pay's shape. */
+  sections: RoleCardSections;
 }
 
 const asList = (v: unknown): unknown[] => {
@@ -146,6 +150,7 @@ export async function editorState(pool: Pool, role: OrgRole): Promise<EditorStat
     parameterKeys: ["recruiting", ...live],
     pay: payOf(role),
     archetypes: role.archetypes,
+    sections: (await sectionsFor(pool, role.id)).sections,
   };
 }
 
@@ -183,6 +188,8 @@ export interface EditRequest {
   /** The pay group on offer; `null` takes the pay off the terms; absent leaves the terms alone. */
   pay?: unknown;
   archetypes?: unknown;
+  /** The founding sections, whole; absent leaves them alone. Saved beside the draft, never into it. */
+  sections?: unknown;
 }
 
 export type EditOutcome =
@@ -279,7 +286,16 @@ export async function saveRoleEdit(deps: SaveDeps, roleId: string, userId: strin
     if (!sameJson([...t.tags].sort(), [...role.archetypes].sort())) tags = t.tags;
   }
 
-  if (!Object.keys(payload).length && tags === null) return bad(EDIT_WORDS.nothing);
+  // The founding sections are not a draft field either: they are the village's card data, saved beside the draft.
+  let sections: RoleCardSections | null = null;
+  if (body.sections !== undefined) {
+    const read = readSections(body.sections);
+    if (!read.ok) return bad(read.problem, 400, [read.field]);
+    const held = (await sectionsFor(pool, roleId)).sections;
+    if (JSON.stringify(held) !== JSON.stringify(read.value)) sections = read.value;
+  }
+
+  if (!Object.keys(payload).length && tags === null && sections === null) return bad(EDIT_WORDS.nothing);
 
   // A role is listed only once its card passes the gate.
   if (payload.listed === true) {
@@ -324,7 +340,8 @@ export async function saveRoleEdit(deps: SaveDeps, roleId: string, userId: strin
     }
   }
   if (tags !== null) await updateOrgRole(pool, roleId, { archetypes: tags });
-  const changed = [...Object.keys(payload).map(labelOf), ...(tags !== null ? ["Characters it suits"] : [])];
+  if (sections !== null) await saveSections(pool, roleId, sections, userId);
+  const changed = [...Object.keys(payload).map(labelOf), ...(tags !== null ? ["Characters it suits"] : []), ...(sections !== null ? [SECTION_WORDS.editorHeading] : [])];
   return { ok: true, draftId, changed: Array.from(new Set(changed)) };
 }
 

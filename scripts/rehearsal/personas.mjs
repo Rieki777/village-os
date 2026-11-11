@@ -112,9 +112,10 @@ export async function neighbour(w, ctx) {
     await pick.click();
     await page.waitForTimeout(400);
   });
-  await w.look("select-picked", { next: page.getByRole("link", { name: /propon|propose/i }).last() });
+  // Phase A: a listed role is applied for ("Apply", or the Spanish "Postular"/"Aplicar").
+  await w.look("select-picked", { next: page.getByRole("link", { name: /aplic|postul|apply|propon|propose/i }).last() });
   await w.step("open the proposal form", async () => {
-    const link = page.getByRole("link", { name: /propon|propose/i }).last();
+    const link = page.getByRole("link", { name: /aplic|postul|apply|propon|propose/i }).last();
     if (await link.count()) await link.click();
     else await w.goto(`/propose-a-role?role=${ctx.seed.roles.land}`);
     await page.locator("form[data-open-proposal]").waitFor();
@@ -176,6 +177,17 @@ export async function professional(w, ctx) {
     await settle(page);
   });
   await w.look("find-your-role");
+  // Phase A: the founding team leads /roles; the professional reads the Finance Steward's card there.
+  await w.step("read the founding team's Finance Steward card", async () => {
+    await w.goto("/roles");
+    const section = page.getByRole("region", { name: /Join the founding team|equipo fundador/i });
+    await section.waitFor();
+    const row = section.getByRole("button", { name: /Finance Steward/ }).first();
+    if ((await row.getAttribute("aria-expanded")) !== "true") await row.click();
+    await section.locator("[data-testid=pay-split]").first().waitFor();
+    await settle(page);
+  });
+  await w.look("founding-card", { next: page.getByRole("link", { name: /Apply for this role/ }).first() });
   await w.step("open the Finance Steward's full card", async () => {
     await w.goto("/roles/select");
     const card = page.getByRole("button", { name: /Full card for Finance Steward/i }).first();

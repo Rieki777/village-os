@@ -61,6 +61,14 @@ export function circleHasListedRole(
   return !any;
 }
 
+/** A circle with at least one live, listed role. */
+function circleListsARole(
+  circleId: string,
+  roles: ReadonlyArray<{ circleId?: string | null; listed?: boolean | null; active?: boolean }>,
+): boolean {
+  return roles.some((r) => r.circleId === circleId && r.active !== false && isListed(r));
+}
+
 /** A role "invites" applications: a free place not forming, a declared open state, or recruiting. */
 const OPEN_STATES = new Set(["open", "partial", "expired"]);
 export function invitesApplications(r: { seats: number; held: number; state: string; recruiting: boolean }): boolean {
@@ -136,8 +144,14 @@ export function circlesToShow<C extends { id: string; parentCircleId?: string | 
   viewer: ListingViewer,
 ): C[] {
   if (viewer.seesUnlisted) return [...circles];
+  // A CURATING VILLAGE shows only what it listed (phase A, verify 2.2). Once any live role is
+  // unlisted, the village has said what a visitor may find, and a circle holding no listed role
+  // goes too, an empty or projected one included. Before, "List only these" hid every role but
+  // left eleven projected circles on /api/org and the map, which read as the projected roles
+  // still being public. A village that has never unlisted a role keeps its empty circles.
+  const curating = roles.some((r) => r.active !== false && !isListed(r));
   const keep = new Set<string>();
-  for (const c of circles) if (circleHasListedRole(c.id, roles)) keep.add(c.id);
+  for (const c of circles) if (curating ? circleListsARole(c.id, roles) : circleHasListedRole(c.id, roles)) keep.add(c.id);
   const byId = new Map(circles.map((c) => [c.id, c]));
   for (const id of Array.from(keep)) {
     let up = byId.get(id)?.parentCircleId ?? null;

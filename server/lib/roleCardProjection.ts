@@ -22,6 +22,7 @@ import { payStatesRange, publicPayOf } from "../../shared/rolePublicPay";
 import { publicTermsOf, readTermsOffer } from "../../shared/seatTermsOffer";
 import type { OrgRole } from "./orgChart";
 import { mayHold, readHeldBy } from "../../shared/agentHolders";
+import { boolVar } from "./variables";
 
 export interface RoleCardTier {
   terms: boolean;
@@ -71,6 +72,12 @@ export interface CardVillageWords {
   paidConsentCircle?: string | null;
   /** The track a role without one reads as (`org.default_track`, guide v2), or null for none. */
   defaultTrack?: string | null;
+  /**
+   * Whether a card shows its pay range to everyone (`org.show_pay_ranges`, phase A). Absent reads
+   * the village's setting, so every host that builds a card (the org, the map, a circle's card)
+   * hides the range the moment the village turns it off.
+   */
+  showPayRanges?: boolean;
 }
 
 export function roleCard(
@@ -105,7 +112,7 @@ export function roleCard(
     agentMayHold: mayHold(role.heldBy, "agent"),
     firstConversation: opts.words?.firstConversationRole ?? null,
     ...(isPaid(role, pay?.kind, opts.words?.defaultTrack) && opts.words?.paidConsentCircle ? { consentCircle: opts.words.paidConsentCircle } : {}),
-    ...(pay && open && isListed(role) ? { publicPay: pay } : {}),
+    ...(pay && open && isListed(role) && (opts.words?.showPayRanges ?? boolVar("org.show_pay_ranges")) ? { publicPay: pay } : {}),
     ...(tier.terms ? { budgetLine: role.budgetLine ?? null, fundedFrom: role.fundedFrom ?? null } : {}),
     ...(tier.editing ? { accessBundle: role.accessBundle ?? null, bookingUrl: role.bookingUrl ?? null } : {}),
   };
