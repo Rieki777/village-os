@@ -139,7 +139,7 @@ export function gardenBed(score: Pick<MyMoonResponse["taskScore"], "done" | "par
 function PlantGlyph({ kind }: { kind: Plant | "tended" | "resting" }) {
   return (
     <svg viewBox="0 0 20 24" aria-hidden="true" data-plant={kind} className="h-6 w-5 shrink-0">
-      <path d="M2 22 H18" stroke="currentColor" strokeOpacity="0.3" strokeWidth="1.5" className="text-muted-foreground" />
+      <line x1="2" y1="22" x2="18" y2="22" stroke="currentColor" strokeOpacity="0.3" strokeWidth="1.5" className="text-muted-foreground" />
       {kind === "seed" || kind === "resting" ? (
         <ellipse cx="10" cy="19.5" rx="2.2" ry="1.6" className="fill-muted-foreground" />
       ) : (

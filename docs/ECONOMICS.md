@@ -564,6 +564,13 @@ consent queue, role cards at the `terms.read` tier, the circle card page and the
 "Earn your nights" list (`server/routes/stays.ts`, which now sends each quest's whole `pay`
 beside its stay credits) all carry it. None of this posts anything.
 
+**A badge that grows is told in words, never as a number (the prune, 2026-11-11).** When the
+post-close evaluation in `server/lib/cycleSettlement.ts` (and the admin evaluate button) finds a
+new tier, the notice reads "Your Seed keeper badge grew fuller" (`badgeNoticeTitle`,
+`shared/doorsOpened.ts`) where it read "Badge upgraded: Seed keeper ×3". Only the words changed:
+the tier, the award, its dedupe key and every multiplier above are exactly as they were, and
+nothing new is posted.
+
 ### The cash work pays, and the record of it (0285)
 
 Rye, 2026-10-23: "roles and quests and more can be paid in cash, tokens (equity, credits,
