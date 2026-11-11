@@ -153,28 +153,30 @@ export function PathTree({
                           <button type="button" className={button} onClick={() => onRemove(i)}><Trans context="agent paths">Remove</Trans></button>
                         </div>
                       ) : (
-                        <div className="flex flex-wrap items-start gap-x-3 gap-y-1">
-                          <span className={`mt-0.5 w-16 shrink-0 rounded-full border border-border px-2 text-center text-xs font-semibold ${e.method === "GET" ? "text-muted-foreground" : "text-foreground"}`}>{e.method}</span>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm text-foreground">{e.label || <span className="text-muted-foreground"><Trans context="agent paths">No words yet</Trans></span>}</p>
-                            <p className="break-all text-xs text-muted-foreground">{e.path}</p>
-                          </div>
-                          <span className="text-xs text-muted-foreground">
-                            {e.method === "GET" ? (
-                              <Trans context="agent paths, a read">Read</Trans>
-                            ) : e.confirm === "agent" ? (
-                              <Trans context="agent paths">The agent confirms</Trans>
-                            ) : (
-                              <Trans context="agent paths">A person confirms</Trans>
-                            )}
-                          </span>
-                          <div className="flex gap-2">
-                            <button type="button" className={button} aria-label={t({ message: `Change ${e.method} ${e.path}`, context: "agent paths" })} onClick={() => onEdit(i)}>
-                              <Trans context="agent paths, open a path's editor">Change</Trans>
-                            </button>
-                            <button type="button" className={button} aria-label={t({ message: `Remove ${e.method} ${e.path}`, context: "agent paths" })} onClick={() => onRemove(i)}>
-                              <Trans context="agent paths">Remove</Trans>
-                            </button>
+                        <div className="flex items-start gap-3">
+                          <span className={`mt-0.5 min-w-16 shrink-0 whitespace-nowrap rounded-full border border-border px-2 text-center text-xs font-semibold ${e.method === "GET" ? "text-muted-foreground" : "text-foreground"}`}>{e.method}</span>
+                          <div className="min-w-0 flex-1 sm:flex sm:items-start sm:gap-3">
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm text-foreground">{e.label || <span className="text-muted-foreground"><Trans context="agent paths">No words yet</Trans></span>}</p>
+                              <p className="break-all text-xs text-muted-foreground">{e.path}</p>
+                            </div>
+                            <div className="mt-2 flex flex-wrap items-center gap-2 sm:mt-0 sm:shrink-0">
+                              <span className="w-full text-xs text-muted-foreground sm:w-auto">
+                                {e.method === "GET" ? (
+                                  <Trans context="agent paths, a read">Read</Trans>
+                                ) : e.confirm === "agent" ? (
+                                  <Trans context="agent paths">The agent confirms</Trans>
+                                ) : (
+                                  <Trans context="agent paths">A person confirms</Trans>
+                                )}
+                              </span>
+                              <button type="button" className={button} aria-label={t({ message: `Change ${e.method} ${e.path}`, context: "agent paths" })} onClick={() => onEdit(i)}>
+                                <Trans context="agent paths, open a path's editor">Change</Trans>
+                              </button>
+                              <button type="button" className={button} aria-label={t({ message: `Remove ${e.method} ${e.path}`, context: "agent paths" })} onClick={() => onRemove(i)}>
+                                <Trans context="agent paths">Remove</Trans>
+                              </button>
+                            </div>
                           </div>
                         </div>
                       )}
