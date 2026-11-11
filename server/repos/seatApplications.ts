@@ -660,3 +660,18 @@ export async function setApplicationCounterOffer(db: Db, id: string, counterOffe
   );
   return Number(result.affectedRows ?? 0) === 1;
 }
+
+/**
+ * Take the references, the background-check consent and the "about you" section out of every application that was
+ * withdrawn or not adopted before `before`, as open proposals lose them at 90 days. The application itself, its
+ * words and its history stay. How many.
+ */
+export async function clearAboutYouDecidedBefore(db: Db, before: Date): Promise<number> {
+  const [result] = await db.query<ResultSetHeader>(
+    "UPDATE seat_applications SET answers = JSON_REMOVE(answers, '$.references', '$.backgroundCheck', '$.about') " +
+      "WHERE status IN ('withdrawn', 'not-adopted') AND decided_at < ? AND answers IS NOT NULL " +
+      "AND (JSON_CONTAINS_PATH(answers, 'one', '$.references', '$.backgroundCheck', '$.about'))",
+    [before],
+  );
+  return Number(result.affectedRows ?? 0);
+}

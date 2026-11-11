@@ -237,6 +237,31 @@ describe.skipIf(!configured)("a proposal's About-you section at the intake, on a
     expect(kept.body.backgroundCheck?.consent).toBeTruthy();
   });
 
+  it("REMOVAL: a withdrawn or not-adopted member-door application loses references, check and about after 90 days; a 10-day one and an open one keep them", async () => {
+    await q("INSERT IGNORE INTO users (id, name, email) VALUES ('u-sweep', 'Sweep', 'sweep@example.test')").catch(() => undefined);
+    const make = async (id: string, status: "withdrawn" | "not-adopted" | "awaiting-holder", daysAgo: number | null) => {
+      await insertApplication(pool, {
+        id, candidateUserId: "u-sweep", proposedBy: "u-sweep", seatIds: [gate], note: "why", deliverables: null, settings: {} as any, settingsHash: "h",
+        termEndsAt: new Date(Date.now() + 86_400_000), termSeasonId: null, termFollowsSeason: false, startsAt: null, status,
+        answers: { aim: "keep this", servesGoal: null, timeZone: null, windows: [], earliestStart: null, terms: null, goals: [], references: refs, about: { based: "Uvita" }, backgroundCheck: { needed: false, because: null } },
+      });
+      if (daysAgo !== null) await q("UPDATE seat_applications SET decided_at = ? WHERE id = ?", [new Date(Date.now() - daysAgo * 86_400_000), id]);
+    };
+    await make("sa-00000000000000f1", "withdrawn", 91);
+    await make("sa-00000000000000f2", "not-adopted", 91);
+    await make("sa-00000000000000f3", "withdrawn", 10);
+    await make("sa-00000000000000f4", "awaiting-holder", null);
+    await tidyOpenProposals(pool, new Date(), dir);
+    for (const id of ["sa-00000000000000f1", "sa-00000000000000f2"]) {
+      const a = (await readApplication(pool, id))!;
+      expect(a.answers?.references, id).toBeUndefined();
+      expect(a.answers?.about, id).toBeUndefined();
+      expect(a.answers?.backgroundCheck, id).toBeUndefined();
+      expect(a.answers?.aim, id).toBe("keep this");
+    }
+    for (const id of ["sa-00000000000000f3", "sa-00000000000000f4"]) expect((await readApplication(pool, id))!.answers?.references, id).toHaveLength(2);
+  });
+
   it("REMOVAL: a member's erasure clears the references, the check and the facts of their own application", async () => {
     await q("INSERT IGNORE INTO users (id, name, email) VALUES ('u-eraser', 'Eraser', 'eraser@example.test')").catch(() => undefined);
     await insertApplication(pool, {

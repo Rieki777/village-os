@@ -40,7 +40,7 @@
  */
 import { LUNAR_CLOCK } from "./cycleClock";
 import { walkthroughDay, type RhythmDoc } from "./moonRhythm";
-import { civilDaysBetween, fullMoonsBetween, zonedTimeToUtc } from "./lunar";
+import { civilDaysBetween, daysOfSpan, fullMoonsBetween, zonedTimeToUtc } from "./lunar";
 import { CARD_WORDS as W, ALLOWANCE_WORDS, APPLICATION_STATUS_WORDS, PAY_WORDS, PER_WORDS } from "./playerCardWords";
 import { formatDay, joinList, type Read } from "./roleSheet";
 import { cycleWindows, readSign, type SignReading, type SignRows } from "./roleSigns";
@@ -616,8 +616,7 @@ function header(input: PlayerCardInput, roles: PlayerRoleIn[] | undefined): Head
     const end = instantOf(input.season.endsOn, input.timeZone);
     if (!start || !end) day = empty(W.seasonNotRead);
     else {
-      const of = civilDaysBetween(start, end, input.timeZone) + 1;
-      const d = Math.min(of, Math.max(1, civilDaysBetween(start, input.now, input.timeZone) + 1));
+      const { day: d, of } = daysOfSpan(start, end, input.now, input.timeZone);
       day = shown({
         words: W.dayOfSeason(d, of),
         day: { n: d, source: "season.startsOn" },

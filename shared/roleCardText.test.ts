@@ -256,7 +256,7 @@ describe("limits and refusals: reported, never dropped", () => {
       ["signsStretched", "Signs I'm stretched"],
       ["flowsBack", "What flows back"],
       ["stepBack", "How I can step back"],
-      ["timeCommitment", "Time"],
+      ["timeCommitment", "Commitment"],
       ["measures", "How we'll know it's working"],
       ["seasonAim", "My aim this season"],
       ["seasonalGoals", "My seasonal goals"],
@@ -606,7 +606,7 @@ describe("what the member keeps", () => {
       "Signs I'm stretched",
       "What flows back",
       "How I can step back",
-      "Time",
+      "Commitment",
     ]);
   });
 

@@ -36,6 +36,13 @@ describe("counter-offer rules", () => {
     expect(offerForCandidate({ base, answers: {}, theirs: 60, co: two.co })?.rows.map((r) => r.key)).toEqual(["ending"]);
   });
 
+  it("lists an unchanged setting the applicant still wants to talk about", () => {
+    const one = editOffer({ base, theirs: 60, co: null, edit: { words: { ending: "Two moons." } }, by, now: at });
+    if (!one.ok) throw new Error();
+    expect(openTalks({ answers: { term: { choice: "talk", note: "" }, rhythm: { choice: "accept", note: "" } }, co: one.co })).toEqual(["term", "ending"]);
+    expect(openTalks({ answers: { term: { choice: "talk", note: "" } }, co: null })).toEqual(["term"]);
+  });
+
   it("takes the first role's wording for each setting", () => {
     expect(baseWordsOf([{ words: { term: "A" } }, { words: { term: "B", ending: "C" } }])).toEqual({ term: "A", ending: "C" });
   });

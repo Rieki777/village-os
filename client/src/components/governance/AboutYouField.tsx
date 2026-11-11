@@ -12,6 +12,8 @@
  * the wizard already holds (`alwaysChecked` on the role).
  */
 import { useEffect, useState } from "react";
+import { useLingui } from "@lingui/react/macro";
+import { useVillageLinks } from "@/lib/gameApi";
 import type { FieldSpec } from "./wizardConfig";
 import { StoryAssist } from "./SeraDraftFields";
 import { AboutYouFacts, ReferencesBlock, aboutYouOf, aboutYouProblem } from "@/components/openProposal/AboutYou";
@@ -63,9 +65,16 @@ export default function AboutYouField({
 }) {
   const v = aboutYouOf(value);
   const always = useAlwaysChecked(pickedSeats(answers.seatIds ?? answers.seatId));
+  const { t } = useLingui();
+  const { contactEmail } = useVillageLinks();
   return (
     <div className="grid gap-5" data-about-field="">
       {field.help && <p className="text-sm text-muted-foreground">{field.help}</p>}
+      {contactEmail && (
+        <p className="text-sm text-muted-foreground" data-door-files-line="">
+          {t`Send links, a CV or any other files to ${contactEmail} with your name in the subject line.`}
+        </p>
+      )}
       <AboutYouFacts
         value={v}
         onChange={onChange}

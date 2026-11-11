@@ -33,7 +33,7 @@ export const ONBOARDING_WORDS = {
   connection: "Who have you worked with? Who do you still want to meet?",
   culture: "What has surprised you about how we work together?",
   basics: "Do you have the access and tools you need? What is missing?",
-  load: "Hours given against hours expected. Any early signs of stretch?",
+  load: "Energy given against what you agreed. Any early signs of stretch?",
   oneThing: "One thing that would help most next moon",
   file: "File check-in",
   failed: "The onboarding path did not load.",

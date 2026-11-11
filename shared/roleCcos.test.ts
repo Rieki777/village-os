@@ -97,7 +97,7 @@ describe("the parser", () => {
 
   it("names the field in a draft's refusal, and leaves a key the payload does not carry alone", () => {
     expect(roleCcosProblem({ authorities: lines(9) })).toBe("What I can decide on my own: Up to 8 lines.");
-    expect(roleCcosProblem({ timeCommitment: "x".repeat(81) })).toBe("Time: Keep it to 80 characters.");
+    expect(roleCcosProblem({ timeCommitment: "x".repeat(81) })).toBe("Commitment: Keep it to 80 characters.");
     expect(roleCcosProblem({ name: "Water Steward", aim: "Keep the springs" })).toBeNull();
     expect(roleCcosProblem(null)).toBeNull();
   });

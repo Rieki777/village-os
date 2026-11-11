@@ -181,7 +181,7 @@ describe.skipIf(!configured)("the CCOS words change on the role, by draft", () =
       [{ authorities: Array.from({ length: 9 }, (_, i) => `Decision ${i + 1}`) }, /What I can decide on my own: Up to 8 lines/],
       [{ responsibilities: ["x".repeat(201)] }, /What I do regularly: Keep each line to 200 characters/],
       [{ existsWhile: "x".repeat(301) }, /This role exists while: Keep it to 300 characters/],
-      [{ timeCommitment: "x".repeat(81) }, /Time: Keep it to 80 characters/],
+      [{ timeCommitment: "x".repeat(81) }, /Commitment: Keep it to 80 characters/],
       [{ existsWhile: "one\ntwo" }, /Keep it to one line/],
       [{ flowsBack: "Pay into 12345678901" }, /bank or card number/],
     ];

@@ -389,6 +389,14 @@ describe.skipIf(!configured)("open role proposals, the decision, on a real schem
       expect(adopted.status, JSON.stringify(adopted.body)).toBe(200);
     });
 
+    it("also warns for an unchanged setting still marked let's talk", async () => {
+      await q("DELETE FROM seat_applications WHERE candidate_user_id = ?", [HAS.id]);
+      const { id } = await proposalWithCard({ term: { choice: "talk", note: "Let's talk." }, ending: A });
+      const warned = await call("POST", `/api/governance/open-proposals/${id}/adopt`, {}, FOUNDER.id);
+      expect(warned.status).toBe(409);
+      expect(warned.body.settings).toEqual(["Term"]);
+    });
+
     it("adopts at once when every changed setting is accepted", async () => {
       // The first test adopted for this account: its application is not the subject here.
       await q("DELETE FROM seat_applications WHERE candidate_user_id = ?", [HAS.id]);

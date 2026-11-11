@@ -75,7 +75,7 @@ function input(over: Partial<PlayerCardInput> = {}): PlayerCardInput {
 describe("the hero", () => {
   it("reads as the design: the moon pill, the eyebrow, the tagline and the span", () => {
     const h = buildPlayerCard(input()).header;
-    expect(h.moon.words).toBe("October Moon · Day 22 of 92");
+    expect(h.moon.words).toBe("October Moon · Day 22 of 93");
     expect(h.eyebrow).toBe("Riverbend · Season of Foundations");
     expect(h.tagline).toBe("Three roles in the Community Anchor · Full-time");
     expect(h.span).toBe("1 October to 31 December 2026");
@@ -89,7 +89,7 @@ describe("the hero", () => {
     expect(termed.span).toBe("15 October 2026 to 31 January 2027");
     // A term not yet adopted, or somebody else's, is not the owner's term.
     const voting = buildPlayerCard(input({ applications: [app({ status: "voting", starts_at: "2026-10-15" })] })).header;
-    expect(voting.moon).toMatchObject({ over: "season", words: "October Moon · Day 22 of 92" });
+    expect(voting.moon).toMatchObject({ over: "season", words: "October Moon · Day 22 of 93" });
     const theirs = buildPlayerCard(input({ applications: [app({ candidate_user_id: "u-else", starts_at: "2026-10-15" })] })).header;
     expect(theirs.moon.over).toBe("season");
   });
@@ -120,7 +120,7 @@ describe("the hero", () => {
     expect(none.span).toBeNull();
     // Control: the live card, and a proposal card with no season named, keep the running season.
     expect(buildPlayerCard(input({ proposalSeason: next })).header.eyebrow).toBe("Riverbend · Season of Foundations");
-    expect(buildPlayerCard(input({ mode: "proposal" })).header.moon.words).toBe("October Moon · Day 22 of 92");
+    expect(buildPlayerCard(input({ mode: "proposal" })).header.moon.words).toBe("October Moon · Day 22 of 93");
   });
 
   it("names the moon by the month its new moon falls in, in the village's zone", () => {
@@ -216,9 +216,9 @@ describe("the role tiles", () => {
 });
 
 describe("the season's end", () => {
-  it("is the day before `endsOn`, because a season runs while today is before it", () => {
+  it("counts its `endsOn` day too, as the role chart header does", () => {
     const h = buildPlayerCard(input({ season: { id: "s2", name: "Autumn", startsOn: "2026-09-22", endsOn: "2026-12-21" } })).header;
     expect(h.span).toBe("22 September to 20 December 2026");
-    expect(h.moon.words).toBe("October Moon · Day 31 of 90");
+    expect(h.moon.words).toBe("October Moon · Day 31 of 91");
   });
 });

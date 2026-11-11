@@ -101,7 +101,7 @@ describe("a role with every CCOS word written", () => {
       ["flowsBack", "What flows back", "CCOS: ARC Reciprocity", { kind: "shown", value: WORDS.flowsBack }],
       ["stepBack", "How I can step back", "CCOS: ARC Choice", { kind: "shown", value: WORDS.stepBack }],
     ]);
-    expect(r.time).toEqual({ heading: "Time", term: "CCOS: Time Commitment", text: { kind: "shown", value: WORDS.timeCommitment } });
+    expect(r.time).toEqual({ heading: "Commitment", term: "CCOS: Time Commitment", text: { kind: "shown", value: WORDS.timeCommitment } });
   });
 
   it("gives every plain heading its CCOS term", () => {
