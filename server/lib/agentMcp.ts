@@ -130,7 +130,7 @@ export interface ToolContext {
      * The record every approved write leaves: one admin-only audit event and one record queued for the village's
      * organisational memory, both keyed on `writeKey`. Called after the route answered; it never throws back here.
      */
-    recorded: (a: { kind: LeadApprovedKind; roleId: string | null; path: string; method: string; subject: LeadApprovalSubject; approvedBy: string; approvalNote: string; writeKey: string }) => Promise<void>;
+    recorded: (a: { kind: LeadApprovedKind; roleId: string | null; path: string; method: string; subject: LeadApprovalSubject; approvedBy: string; approvalNote: string; summary?: string; writeKey: string }) => Promise<void>;
   };
   /** Writes one `agent_actions` row. Only the admin and Sera tools record through it. */
   recordAction?: (a: { scope: string; tool: string; method: string | null; path: string | null; echoHash: string; state: "done" | "refused" | "asked" }) => Promise<void>;
@@ -517,10 +517,15 @@ export const MCP_TOOLS: readonly ToolDef[] = [
     kind: "write",
     title: "Call an admin path",
     description:
-      "Calls one admin path the village has opened to agents, as the holder, with the holder's own admin checks. GET answers at once. A write answers first with what it would do and a confirmToken; call again with the same arguments and the token to make it. Some writes a person makes in the app, and the answer says so. A role card, org draft, wording or seating write carries approvedBy and approvalNote in its body: who approved it and their approval in this chat, quoted; it is kept in the village's audit and its organisational memory. Erasure, powers, money, secrets and the agent accounts are never reachable here.",
+      "Calls one admin path the village has opened to agents, as the holder, with the holder's own admin checks. GET answers at once. A write answers first with what it would do and a confirmToken; call again with the same arguments and the token to make it. Some writes a person makes in the app, and the answer says so. Every write also carries summary, the first argument: one plain sentence a non-technical person can read in the permission box, naming the people and roles by name, with no ids and no jargon, such as: Remove the duplicate record of Ana on the Gardener role. She keeps the role. It is shown to the person with the platform's own line on what the call does, and kept in the audit. A role card, org draft, wording or seating write carries approvedBy and approvalNote in its body: who approved it and their approval in this chat, quoted; it is kept in the village's audit and its organisational memory. Erasure, powers, money, secrets and the agent accounts are never reachable here.",
     inputSchema: {
       type: "object",
       properties: {
+        summary: {
+          type: "string",
+          description:
+            "Required for any write, optional for a read. One plain sentence a non-technical person understands, naming people and roles by name, with no ids and no jargon. Example: Remove the duplicate record of Ana on the Gardener role. She keeps the role.",
+        },
         method: { type: "string", enum: ["GET", "POST", "PUT", "PATCH", "DELETE"] },
         path: { type: "string", description: "The admin path, such as /api/admin/member-tasks/access. No query string." },
         body: { type: "object", description: "The JSON body for a write." },
@@ -538,7 +543,10 @@ export const MCP_TOOLS: readonly ToolDef[] = [
       const method = String(args.method ?? "").toUpperCase();
       const path = typeof args.path === "string" ? args.path : "";
       const body = args.body && typeof args.body === "object" && !Array.isArray(args.body) ? (args.body as Record<string, unknown>) : undefined;
-      const echo = { method, path, body: body ?? null };
+      const summary = typeof args.summary === "string" ? args.summary.replace(/\s+/g, " ").trim().slice(0, 400) : "";
+      // The summary is the caller's words to the person, never the route's input. It rides in the echo so the
+      // sentence the person read at the preview is the one the confirmToken covers.
+      const echo = summary ? { summary, method, path, body: body ?? null } : { method, path, body: body ?? null };
       const hash = echoHash(echo);
       const record = (state: "done" | "refused" | "asked") =>
         ctx.recordAction!({ scope: "admin", tool: "admin_request", method: method.slice(0, 8) || null, path: path.slice(0, 500) || null, echoHash: hash, state });
@@ -580,6 +588,12 @@ export const MCP_TOOLS: readonly ToolDef[] = [
           detail: { code: "person_confirms", echo },
         };
       }
+      if (summary.length < 8) {
+        await record("refused");
+        return { ok: false, error: "Say what this does in one plain sentence, naming the people and roles: summary. The person sees it before they approve.", detail: { code: "summary_required" } };
+      }
+      // What the platform itself says the call does, where it has a line for it, so the person reads both.
+      const platformSays = lead ? leadApprovalSubject(lead, path, body, seatRoleId).what : null;
       if (args.confirmToken === undefined) {
         const { token, expiresAt } = ctx.mintConfirm("admin_request", echo);
         await record("asked");
@@ -587,10 +601,12 @@ export const MCP_TOOLS: readonly ToolDef[] = [
           ok: true,
           result: {
             confirmRequired: true,
+            summary,
+            ...(platformSays ? { platformSays } : {}),
             echo,
             confirmToken: token,
             expiresAt,
-            message: "Nothing was written. Call admin_request again with the same arguments and this confirmToken to make it.",
+            message: `${summary}${platformSays ? ` The platform describes it as: ${platformSays}.` : ""} Nothing was written. Call admin_request again with the same arguments and this confirmToken to make it.`,
           },
         };
       }
@@ -617,6 +633,7 @@ export const MCP_TOOLS: readonly ToolDef[] = [
               subject: leadApprovalSubject(lead, path, body, seatRoleId),
               approvedBy: approval.approvedBy,
               approvalNote: approval.approvalNote,
+              summary,
               writeKey: echoHash({ token: String(args.confirmToken) }).slice(0, 24),
             })
             .catch((err) => console.error("[agent-mcp] the approval record failed (the write stands)", err));

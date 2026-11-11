@@ -333,7 +333,7 @@ export const LEAD_APPROVED_WRITES_VARIABLE = "agents.lead_approved_writes";
 export const LIFTABLE_RULES = ["powers", "tier_c", "settings"] as const;
 export type LiftableRule = (typeof LIFTABLE_RULES)[number];
 
-export type LeadApprovedKind = "role_text" | "role_edit" | "role_draft" | "seat" | "unseat" | "wording_variable";
+export type LeadApprovedKind = "role_text" | "role_edit" | "role_draft" | "seat" | "unseat" | "seat_note" | "wording_variable";
 
 export interface AgentDecisionOpts {
   /** Whether the Anchor has recorded its approval of AI agents (personal data reads). */
@@ -377,6 +377,8 @@ export const LEAD_APPROVED_WRITES: readonly LeadApprovedEntry[] = [
   // b. Seating and unseating a person, with the lead's approval in the body.
   { kind: "seat", method: "POST", path: "/api/admin/org/roles/:id/holders", lifts: ["powers", "tier_c"] },
   { kind: "unseat", method: "DELETE", path: "/api/admin/org/seatings/:id", lifts: ["powers", "tier_c"] },
+  // The focus and note on a live seating, which leaves the holder and the term alone.
+  { kind: "seat_note", method: "PATCH", path: "/api/admin/org/seatings/:id", lifts: ["powers", "tier_c"] },
   // c. The wording and the non-money switches among the game variables, by name.
   { kind: "wording_variable", method: "PUT", path: "/api/admin/variables/:key", lifts: ["settings"], when: (s) => AGENT_WORDING_VARIABLES.includes(s[s.length - 1] ?? "") },
 ];
@@ -465,7 +467,7 @@ export function leadSeatTarget(kind: LeadApprovedKind, path: string): { roleId: 
   const segs = segmentsOf(path);
   if (!segs) return null;
   if (kind === "seat") return { roleId: segs[4] ?? "" };
-  if (kind === "unseat") return { seatingId: segs[4] ?? "" };
+  if (kind === "unseat" || kind === "seat_note") return { seatingId: segs[4] ?? "" };
   return null;
 }
 
@@ -519,15 +521,20 @@ export function leadApprovedBodyProblem(
       return bad.length ? `An agent drafts a role's words and the wording of its terms. Money and powers stay a person's: ${bad.slice(0, 8).join(", ")}.` : null;
     }
     case "seat":
-    case "unseat": {
+    case "unseat":
+    case "seat_note": {
       // Seating always carries the approval, whatever the caller asked.
       const approval = readLeadApproval(body);
       if (!approval.ok) return approval.words;
       if (b.isAgent || b.agentSlug) return LEAD_APPROVAL_WORDS.agentSeat;
+      if (kind === "seat_note") {
+        const bad = keys.filter((k) => k !== "focus" && k !== "note");
+        if (bad.length) return `An agent changes a seating's focus and note. Nothing else on it: ${bad.slice(0, 8).join(", ")}.`;
+      }
       const seat = ctx.seat;
       if (!seat || !seat.found) return LEAD_APPROVAL_WORDS.missingSeat;
       if (seat.isExample) return LEAD_APPROVAL_WORDS.example;
-      if (kind === "unseat" && seat.seatingIsAgent) return LEAD_APPROVAL_WORDS.agentSeat;
+      if ((kind === "unseat" || kind === "seat_note") && seat.seatingIsAgent) return LEAD_APPROVAL_WORDS.agentSeat;
       const who = kind === "seat" ? (typeof b.userId === "string" ? b.userId : null) : seat.seatingUserId ?? null;
       if (ctx.holderId && who === ctx.holderId) return LEAD_APPROVAL_WORDS.self;
       if (seat.grantsAdmin || seat.capabilities.some((c) => !isBadgeGrantable(c) || c === BREAK_GLASS_SEAT)) return LEAD_APPROVAL_WORDS.ungrantable;
@@ -577,6 +584,8 @@ export function leadApprovalSubject(kind: LeadApprovedKind, path: string, body: 
       return { what: "Seated a member in a role", target: seatRoleId ?? segs[4] ?? null, changed: [] };
     case "unseat":
       return { what: "Ended a seating", target: seatRoleId ?? null, changed: [] };
+    case "seat_note":
+      return { what: "Changed a seating's note", target: seatRoleId ?? null, changed: top.filter((k) => k === "focus" || k === "note") };
     case "wording_variable":
       return { what: "Set a wording variable", target: segs[segs.length - 1] ?? null, changed: ["value"] };
   }

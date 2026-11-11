@@ -493,6 +493,12 @@
       "label": "End a seating, with the lead's approval quoted"
     },
     {
+      "method": "PATCH",
+      "path": "/api/admin/org/seatings/:id",
+      "confirm": "agent",
+      "label": "Change a seating's focus and note, with the lead's approval quoted"
+    },
+    {
       "method": "PUT",
       "path": "/api/admin/variables/org.start_after_confidentiality",
       "confirm": "agent",

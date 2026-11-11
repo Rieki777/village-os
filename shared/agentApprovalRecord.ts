@@ -33,6 +33,8 @@ export interface ApprovalRecordPayload {
   changed: string[];
   approvedBy: string;
   approvalNote: string;
+  /** The plain sentence written for the person who approved it; empty on a record made before it existed. */
+  summary: string;
   /** ISO time the write was made. */
   at: string;
 }
@@ -45,6 +47,7 @@ export function approvalRecordPayload(a: {
   changed: readonly string[];
   approvedBy: string;
   approvalNote: string;
+  summary?: string;
   at: Date;
 }): ApprovalRecordPayload {
   return {
@@ -56,6 +59,7 @@ export function approvalRecordPayload(a: {
     changed: a.changed.slice(0, 40).map((k) => String(k).slice(0, 80)),
     approvedBy: stripContact(a.approvedBy).slice(0, 120),
     approvalNote: stripContact(a.approvalNote),
+    summary: stripContact(a.summary ?? "").slice(0, 400),
     at: a.at.toISOString(),
   };
 }
@@ -73,6 +77,7 @@ export function readApprovalRecordPayload(raw: unknown): ApprovalRecordPayload |
     changed: Array.isArray(p.changed) ? p.changed.map(String) : [],
     approvedBy: String(p.approvedBy ?? ""),
     approvalNote: String(p.approvalNote ?? ""),
+    summary: String(p.summary ?? ""),
     at: String(p.at ?? ""),
   };
 }
@@ -88,6 +93,7 @@ export function approvalRecordDocument(p: ApprovalRecordPayload): { args: Record
     `What: ${p.what}${where}`,
     p.changed.length ? `Fields: ${p.changed.join(", ")}` : null,
     `Approved by: ${p.approvedBy}`,
+    p.summary ? `Summary: ${p.summary}` : null,
     `Approval: ${p.approvalNote}`,
     `When: ${p.at}`,
     `Made by: the village connector, acting as the person who connected it`,

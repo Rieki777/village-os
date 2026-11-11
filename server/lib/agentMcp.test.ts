@@ -52,7 +52,9 @@ function holder(initial: { status?: string; version?: number } = {}) {
 
 const info = { name: "Example Village", version: "1.2.0" };
 const rpc = (method: string, params?: unknown, id: number | null = 1) => ({ jsonrpc: "2.0", ...(id === null ? {} : { id }), method, ...(params === undefined ? {} : { params }) });
-const callTool = (name: string, args: Record<string, unknown>) => rpc("tools/call", { name, arguments: args });
+// A write names what it does in plain words (admin_request's `summary`); a case that is not about it gets a default.
+const callTool = (name: string, args: Record<string, unknown>) =>
+  rpc("tools/call", { name, arguments: name === "admin_request" && args.method !== "GET" && !("summary" in args) ? { summary: "Switch on Ana's task board.", ...args } : args });
 
 async function ask(message: unknown, scopes: AgentScope[], ctx: ToolContext) {
   return handleMcpMessage(message, { scopes, info, ctx }) as Promise<any>;
@@ -240,6 +242,26 @@ describe("admin_request (check 52)", () => {
     expect(changed.result.isError).toBe(true);
     expect(a.routeCalls).toHaveLength(1);
     expect(a.actions.map((x) => x.state)).toEqual(["asked", "done", "refused"]);
+  });
+
+  it("takes a read without a summary", async () => {
+    const a = admin();
+    const r = await ask(callTool("admin_request", { method: "GET", path: "/api/admin/member-tasks/access" }), ["admin"], a.ctx);
+    expect(r.result.isError).toBe(false);
+  });
+
+  it("refuses a write with no summary, and puts the summary in the preview and never in the route's body", async () => {
+    const a = admin();
+    const args = { method: "PUT", path: "/api/admin/member-tasks/access/u-2", body: { on: true } };
+    const bare = await ask(callTool("admin_request", { ...args, summary: "" }), ["admin"], a.ctx);
+    expect(bare.result.isError).toBe(true);
+    expect(bare.result.structuredContent.detail.code).toBe("summary_required");
+    const full = { ...args, summary: "Give Ana a task board." };
+    const first = await ask(callTool("admin_request", full), ["admin"], a.ctx);
+    expect(first.result.structuredContent.summary).toBe("Give Ana a task board.");
+    expect(first.result.structuredContent.message.startsWith("Give Ana a task board.")).toBe(true);
+    await ask(callTool("admin_request", { ...full, confirmToken: first.result.structuredContent.confirmToken }), ["admin"], a.ctx);
+    expect(a.routeCalls).toEqual([{ method: "PUT", path: args.path, body: { on: true } }]);
   });
 
   it("refuses a path a person must take, and one not on the list, calling no route", async () => {

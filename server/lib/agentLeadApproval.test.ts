@@ -9,7 +9,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { Pool } from "mysql2/promise";
-import { handleMcpMessage, type RouteAnswer, type ToolContext } from "./agentMcp";
+import { handleMcpMessage, MCP_TOOLS, type RouteAnswer, type ToolContext } from "./agentMcp";
 import { CONFIRM_REASON_SENTENCE, mintConfirmToken, verifyConfirmToken } from "./agentTokens";
 import { readLeadSeatFacts, recentApprovedWrites, recordLeadApproval } from "./agentLeadApproval";
 import { planSend } from "./memberTaskBridge";
@@ -19,7 +19,12 @@ import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "../db/
 
 const SIGNER = "lead-approved-unit-test-signing-input";
 const info = { name: "Example Village", version: "1.2.0" };
-const call = (args: Record<string, unknown>) => ({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "admin_request", arguments: args } });
+// A write names what it does in plain words (admin_request's `summary`); a case that is not about it gets a default.
+const SUMMARY = "Seat Ana in the Gardener role for the new season.";
+const call = (args: Record<string, unknown>) => ({
+  jsonrpc: "2.0", id: 1, method: "tools/call",
+  params: { name: "admin_request", arguments: "summary" in args || args.method === "GET" ? args : { summary: SUMMARY, ...args } },
+});
 const ask = (message: unknown, ctx: ToolContext) => handleMcpMessage(message, { scopes: ["admin"], info, ctx }) as Promise<any>;
 
 const LIST: AgentAdminPathsDoc = {
@@ -132,6 +137,58 @@ describe("admin_request under the lead-approved writes", () => {
   });
 });
 
+describe("the plain summary on admin_request (the lead, 11 Nov 2026)", () => {
+  const args = { method: "DELETE", path: "/api/admin/org/seatings/s-1", body: { approvedBy: "The lead", approvalNote: "Yes, end that seating." } };
+
+  it("is the first argument in the tool's schema, and the description says to use plain words and names", () => {
+    const tool = MCP_TOOLS.find((t) => t.name === "admin_request")!;
+    expect(Object.keys((tool.inputSchema as any).properties)[0]).toBe("summary");
+    expect((tool.inputSchema as any).required).not.toContain("summary");
+    expect(tool.description).toMatch(/summary/);
+    expect(tool.description).toMatch(/no ids/);
+  });
+
+  it("is required for a write: refused with a clear message, no route called, nothing minted", async () => {
+    const a = agent({ on: true });
+    for (const summary of [undefined, "", "   ", "ok"]) {
+      const r = await ask(call({ ...args, summary }), a.ctx);
+      expect(r.result.isError).toBe(true);
+      expect(r.result.structuredContent.detail.code).toBe("summary_required");
+      expect(r.result.structuredContent.error).toContain("summary");
+    }
+    expect(a.routes).toEqual([]);
+  });
+
+  it("leads the preview with the summary and the platform's own line", async () => {
+    const a = agent({ on: true });
+    const first = await ask(call({ ...args, summary: "Remove Rick's duplicate record on the Living Memory role. He keeps the role." }), a.ctx);
+    const out = first.result.structuredContent;
+    expect(out.confirmRequired).toBe(true);
+    expect(out.summary).toBe("Remove Rick's duplicate record on the Living Memory role. He keeps the role.");
+    expect(out.platformSays).toBe("Ended a seating");
+    expect(out.message.startsWith("Remove Rick's duplicate record")).toBe(true);
+    expect(out.message).toContain("Ended a seating");
+  });
+
+  it("is never forwarded to the route, and is recorded beside the approval", async () => {
+    const a = agent({ on: true });
+    const full = { ...args, summary: "Remove Rick's duplicate record on the Living Memory role. He keeps the role." };
+    const first = await ask(call(full), a.ctx);
+    await ask(call({ ...full, confirmToken: first.result.structuredContent.confirmToken }), a.ctx);
+    expect(a.routes).toEqual([{ method: "DELETE", path: args.path, body: {} }]);
+    expect(JSON.stringify(a.routes)).not.toContain("Rick");
+    expect(a.recorded[0]).toMatchObject({ approvedBy: "The lead", approvalNote: "Yes, end that seating.", summary: full.summary });
+  });
+
+  it("is covered by the confirm token: a different summary at the confirm is refused", async () => {
+    const a = agent({ on: true });
+    const first = await ask(call({ ...args, summary: "End the seat of Ana on the Gardener role." }), a.ctx);
+    const second = await ask(call({ ...args, summary: "Something else entirely.", confirmToken: first.result.structuredContent.confirmToken }), a.ctx);
+    expect(second.result.isError).toBe(true);
+    expect(a.routes).toEqual([]);
+  });
+});
+
 describe("every lead-approved write through the tool carries the approval (the lead, 11 Nov 2026)", () => {
   const approval = { approvedBy: "The lead", approvalNote: "Yes, go ahead with that wording." };
   const writes: Array<{ method: string; path: string; pattern: string; body: Record<string, unknown>; what: string }> = [
@@ -230,7 +287,7 @@ describe.skipIf(!configured)("the seat's facts and the record, on the real table
   it("stores the audit event, queues the memory record and rings every admin, once per write however often it runs", async () => {
     const rung: Array<{ type: string; key: string }> = [];
     const deps = { pool, agentUserId: "agent-1", tokenPrefix: "vat_ab12", notifyAdmins: async (type: string, _t: string, key: string) => void rung.push({ type, key }) };
-    const rec = { kind: "seat" as const, roleId: "r-tend", path: "/api/admin/org/roles/r-tend/holders", method: "POST", approvedBy: "The lead", approvalNote: "Yes, seat Bo as tender. Mail bo@example.test", writeKey: "0123456789abcdef01234567" };
+    const rec = { kind: "seat" as const, roleId: "r-tend", path: "/api/admin/org/roles/r-tend/holders", method: "POST", approvedBy: "The lead", approvalNote: "Yes, seat Bo as tender. Mail bo@example.test", summary: "Seat Bo in the Tender role.", writeKey: "0123456789abcdef01234567" };
     await recordLeadApproval(deps, rec);
     await recordLeadApproval(deps, rec);
     const [rows] = await pool.query<any[]>("SELECT kind, text, actor_user_id, actor_kind, entity_type, entity_ref, audience FROM health_events WHERE entity_ref = ?", [rec.writeKey]); // module-review-ok: reading the scratch schema this suite provisioned
@@ -238,6 +295,7 @@ describe.skipIf(!configured)("the seat's facts and the record, on the real table
     expect(rows[0]).toMatchObject({ kind: "audit", actor_user_id: "agent-1", actor_kind: "agent", audience: "admin", entity_type: "agent_approval" });
     expect(rows[0].text).toContain("approval from The lead");
     expect(rows[0].text).toContain("Yes, seat Bo as tender.");
+    expect(rows[0].text).toContain("Seat Bo in the Tender role.");
     // The notice dedupes on its key in notify; here it is asked with the same key each time.
     expect(new Set(rung.map((r) => r.key))).toEqual(new Set(["agent-lead-seat:0123456789abcdef01234567"]));
     const [out] = await pool.query<any[]>("SELECT kind, status, payload, user_id FROM member_task_outbox WHERE feedback_id = ?", [approvalRecordKey(rec.writeKey)]); // module-review-ok: reading the scratch schema this suite provisioned
@@ -246,6 +304,7 @@ describe.skipIf(!configured)("the seat's facts and the record, on the real table
     const payload = JSON.parse(out[0].payload);
     expect(payload).toMatchObject({ record: "agent_approval", what: "Seated a member in a role", target: "r-tend", approvedBy: "The lead" });
     expect(payload.approvalNote).not.toContain("bo@example.test");
+    expect(payload.summary).toBe("Seat Bo in the Tender role.");
   });
 
   it("keeps the write's record when the memory side fails, and the recent list says so", async () => {
