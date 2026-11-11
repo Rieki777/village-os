@@ -71,6 +71,17 @@ export type PersonMode =
   /** Applicant and member personal data: a write is always refused, and a GET waits for the Anchor's approval of AI agents. */
   | "personal";
 
+/**
+ * The words-only routes name a SECTION or a PATHWAY in their last segment, and a page called "page-journey-steward" or
+ * "governance" is wording, not a power. `PUT /api/admin/content/:section` is guarded by its own shape validator and
+ * `/api/admin/faqs/:pathway` writes question and answer text, so the powers rule reads those paths with that one
+ * segment blanked. Only the powers rule does this: every other rule still reads the whole path.
+ */
+const WORDS_ONLY_ROUTE = /^(\/api\/admin\/(?:content|faqs)\/)[^/]+((?:\/[^/]+)?)$/i;
+function withoutWordsSegment(p: string): string {
+  return p.replace(WORDS_ONLY_ROUTE, "$1_$2");
+}
+
 export const ALWAYS_A_PERSON: ReadonlyArray<{ key: string; words: string; mode: PersonMode; test: (method: string, path: string) => boolean }> = [
   {
     key: "erasure",
@@ -82,7 +93,7 @@ export const ALWAYS_A_PERSON: ReadonlyArray<{ key: string; words: string; mode: 
     key: "powers",
     mode: "writes",
     words: "Power handover, the break-glass, power groups and capabilities are always a person's act.",
-    test: (_m, p) => /power|break-?glass|override|capabilit|badge|handover|veto|steward|admin-access|governance|\/org\/(drafts|seatings|roles)|\/roles(\/|$)|\/stages?(\/|$)/i.test(p),
+    test: (_m, p) => /power|break-?glass|override|capabilit|badge|handover|veto|steward|admin-access|governance|\/org\/(drafts|seatings|roles)|\/roles(\/|$)|\/stages?(\/|$)/i.test(withoutWordsSegment(p)),
   },
   {
     key: "money",
