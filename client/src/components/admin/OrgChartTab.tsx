@@ -341,25 +341,6 @@ export function OrgChartTab({ password }: { password: string }) {
         </div>
       )}
 
-      {/*
-        EVERY OPEN ASK, ONCE, ON THE FIRST LEVEL. The nested chart draws a
-        seat's own asks only when that role is open, so the circles level is
-        where all of them wait; a steward never has to open roles one by one
-        to find out somebody is asking.
-      */}
-      <UndrawnSeatAsks
-        asks={seatAsks}
-        drawnSeatIds={new Set<string>()}
-        roles={roles}
-        circles={circles}
-        call={call}
-        heading={t`Asks waiting for an answer`}
-        intro={t`Members asking to be confirmed in a role the village recorded under their name. Answer here, or open the role.`}
-        onDone={(said) => { toast.success(said); void load(); }}
-      />
-
-      <RoleListingPanel roles={roles} circles={circles} call={call} onDone={() => void load()} />
-
       <section aria-labelledby="org-circles-h" className="mb-8">
         <h3 id="org-circles-h" className="text-lg font-semibold text-foreground"><Trans context="org chart heading">Circles</Trans></h3>
         <p className="mt-1 text-sm text-muted-foreground">
@@ -411,6 +392,25 @@ export function OrgChartTab({ password }: { password: string }) {
           )}
         </ul>
       </section>
+
+      {/*
+        EVERY OPEN ASK, ONCE, ON THE FIRST LEVEL. The nested chart draws a
+        seat's own asks only when that role is open, so the circles level is
+        where all of them wait; a steward never has to open roles one by one
+        to find out somebody is asking.
+      */}
+      <UndrawnSeatAsks
+        asks={seatAsks}
+        drawnSeatIds={new Set<string>()}
+        roles={roles}
+        circles={circles}
+        call={call}
+        heading={t`Asks waiting for an answer`}
+        intro={t`Members asking to be confirmed in a role the village recorded under their name. Answer here, or open the role.`}
+        onDone={(said) => { toast.success(said); void load(); }}
+      />
+
+      <RoleListingPanel roles={roles} circles={circles} call={call} onDone={() => void load()} />
 
       <div className="space-y-6">
         {/*

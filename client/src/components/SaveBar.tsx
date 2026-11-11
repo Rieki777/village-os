@@ -188,7 +188,8 @@ export default function SaveBar({
             style={{ bottom: lift }}
             className={`fixed inset-x-0 z-[55] px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] motion-safe:transition-[transform,opacity] motion-safe:duration-300 motion-safe:ease-out ${shown ? "translate-y-0 opacity-100" : "translate-y-4 opacity-0 motion-reduce:translate-y-0 motion-reduce:opacity-100"}`}
           >
-            <div className="mx-auto max-w-3xl rounded-2xl border border-border bg-card px-4 py-3 text-card-foreground shadow-sm">
+            {/* The width is inline: Admin's `.admin-fit` sets max-width outside any layer, which beats a utility class. */}
+            <div style={{ maxWidth: "48rem" }} className="mx-auto rounded-2xl border border-border bg-card px-4 py-3 text-card-foreground shadow-sm">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <p className="text-sm font-medium" data-save-bar-status={status}>
                   {headline}
