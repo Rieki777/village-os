@@ -12,6 +12,7 @@ import {
   copyPartsIn,
 } from "./client/src/lib/routePreload";
 import { pointAtUnhintedFonts } from "./client/src/lib/unhintedFonts";
+import { allLazyInBoot, bootIntrudersMessage, lazyModulesInBoot, shortId, type BootChunkFacts } from "./client/src/lib/bootSet";
 import { CopyCollector, splitLongCopy } from "./client/src/i18n/copySplit";
 import { splitArtifact, type SplitResult } from "./server/lib/groundsSplit";
 
@@ -212,6 +213,52 @@ function routeChunkPreload(): Plugin {
 }
 
 /**
+ * FAIL THE BUILD, BY NAME, WHEN A LAZY-ONLY MODULE JOINS THE FIRST PAGE.
+ *
+ * The size budgets (scripts/check-dist-budget.mjs) say the first page got
+ * heavier and cannot say which module moved. This reads the module graph and
+ * the finished bundle and does: see client/src/lib/bootSet.ts for the rule.
+ */
+function guardBootSet(): Plugin {
+  return {
+    name: "guard-boot-set",
+    apply: "build",
+    generateBundle(_options, bundle) {
+      // Everything the entry reaches by static imports, in the module graph.
+      const eager = new Set<string>();
+      const stack: string[] = [];
+      const chunks: BootChunkFacts[] = [];
+      for (const out of Object.values(bundle)) {
+        if (out.type !== "chunk") continue;
+        chunks.push({ fileName: out.fileName, imports: out.imports, isEntry: out.isEntry, moduleIds: Object.keys(out.modules) });
+        if (out.isEntry && out.facadeModuleId) stack.push(out.facadeModuleId);
+      }
+      while (stack.length) {
+        const id = stack.pop() as string;
+        if (eager.has(id)) continue;
+        eager.add(id);
+        for (const dep of this.getModuleInfo(id)?.importedIds ?? []) stack.push(dep);
+      }
+      const root = import.meta.dirname;
+      const name = (id: string) => shortId(id, root);
+      const baselineFile = path.resolve(root, "scripts", "boot-set-baseline.json");
+      const known = new Set<string>(fs.existsSync(baselineFile) ? (JSON.parse(fs.readFileSync(baselineFile, "utf8")).modules as string[]) : []);
+      const found = lazyModulesInBoot(chunks, eager, known, name);
+      if (found.length && !process.env.BOOT_SET_WRITE) this.error(bootIntrudersMessage(found, root));
+      const now = allLazyInBoot(chunks, eager, name);
+      if (process.env.BOOT_SET_WRITE) {
+        // Writing only ever shrinks the list, once it exists: a new intruder is fixed, not recorded.
+        if (known.size > 0 && now.some((m) => !known.has(m))) this.error(`BOOT_SET_WRITE refuses to add to the baseline.\n${bootIntrudersMessage(found, root)}`);
+        fs.writeFileSync(baselineFile, JSON.stringify({ modules: now }, null, 2) + "\n");
+        return;
+      }
+      const gone = Array.from(known).filter((m) => !now.includes(m));
+      if (gone.length) this.warn(`scripts/boot-set-baseline.json lists ${gone.length} module(s) that no longer ride the first page. Shrink it with BOOT_SET_WRITE=1 pnpm build: ${gone.join(", ")}`);
+    },
+  };
+}
+
+/**
  * SMALL SHARED MODULES SHARE TWO LAZY CHUNKS.
  *
  * Rollup gives every shared module its own chunk, and CI charges every file a
@@ -308,7 +355,7 @@ const longCopy = new CopyCollector();
 const LONG_COPY_PARTS = path.resolve(import.meta.dirname, "dist", "i18n", "parts", "en");
 
 export default defineConfig({
-  plugins: [linguiMacros(longCopy), splitLongCopy(longCopy, LONG_COPY_PARTS), react(), tailwindcss(), serveGroundsInDev(), dropLegacyWoffFallback(), useUnhintedFonts(), routeChunkPreload()],
+  plugins: [linguiMacros(longCopy), splitLongCopy(longCopy, LONG_COPY_PARTS), react(), tailwindcss(), serveGroundsInDev(), dropLegacyWoffFallback(), useUnhintedFonts(), routeChunkPreload(), guardBootSet()],
   resolve: {
     alias: {
       "@": path.resolve(import.meta.dirname, "client", "src"),

@@ -30,7 +30,9 @@ import { asksReconfirm, confirmIdentity, type Answer } from "./alignmentsApi";
  * it moved two shared modules out of a lazy chunk, the remainder fell under
  * `experimentalMinChunkSize`, and first-page JS went from 695 KB to 1113 KB
  * (budget 750). AlignButton.look.test.ts holds these four equal to look.ts,
- * so the copy cannot drift.
+ * so the copy cannot drift. The build now fails by name when a lazy-only
+ * module joins the first page (client/src/lib/bootSet.ts, guardBootSet in
+ * vite.config.ts), which is the guard this copy was working around by hand.
  */
 export const ALIGN_LOOK = {
   BTN_PRIMARY:
