@@ -22,6 +22,7 @@ import { ALL_CAPABILITIES, isDeniable } from "@shared/capabilities";
 import BreathingLoader from "@/components/natural/BreathingLoader";
 import { SeatSomebody } from "@/components/power/SeatSomebody";
 import { OrgChartTab } from "@/components/admin/OrgChartTab";
+import { confirmLeave } from "@/lib/unsavedChanges";
 import SeasonPlanWindowFields, { type PlanWindowValue } from "@/components/admin/SeasonPlanWindowFields";
 import { AppointToRole } from "@/components/admin/AppointToRole";
 import PlayersTab from "@/components/admin/PlayersTab";
@@ -7825,9 +7826,15 @@ export default function Admin() {
   // `activeTab`/`setActiveTab` contract, so the ~35 call sites are untouched,
   // and back/forward now walk tab history the way a browser should.
   const [activeTab, setActiveTabState] = useState<string>(() => tabFromSearch(window.location.search));
+  const tabNow = useRef(activeTab);
+  const tabHref = useRef(window.location.href);
+  useEffect(() => { tabNow.current = activeTab; tabHref.current = window.location.href; }, [activeTab]);
   const setActiveTab = useCallback((tab: string) => {
+    // Unsaved edits on the open panel ask first (lib/unsavedChanges.ts).
+    if (tab !== tabFromSearch(window.location.search) && !confirmLeave()) return;
     setActiveTabState(tab);
     const p = new URLSearchParams(window.location.search);
+    if (p.get("tab") !== tab) { p.delete("circle"); p.delete("role"); }
     p.set("tab", tab);
     window.history.pushState({}, "", `${window.location.pathname}?${p.toString()}`);
     // Choosing from low in the rail leaves you scrolled past the top of the
@@ -7837,7 +7844,12 @@ export default function Admin() {
     window.scrollTo({ top: 0 });
   }, []);
   useEffect(() => {
-    const onPop = () => setActiveTabState(tabFromSearch(window.location.search));
+    const onPop = () => {
+      const next = tabFromSearch(window.location.search);
+      // Back to another tab with edits waiting: ask, and stay put on a no.
+      if (next !== tabNow.current && !confirmLeave()) { window.history.pushState({}, "", tabHref.current); return; }
+      setActiveTabState(next);
+    };
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
   }, []);
