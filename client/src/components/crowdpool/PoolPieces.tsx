@@ -498,11 +498,11 @@ export function SlotMeter({
   wanted, claimed, delivered, tint, unit = "count",
 }: {
   wanted: number; claimed: number; delivered: number; tint: string;
-  /** 'hours_per_week' only at hub contract 3 or later; anything else counts people. */
+  /** 'hours_per_week' only at hub contract 3 or later (the stored value stays; it is shown as commitment %); anything else counts people. */
   unit?: string;
 }) {
   const hours = unit === "hours_per_week";
-  const noun = (n: number) => (hours ? `${n} hours a week` : String(n));
+  const noun = (n: number) => (hours ? `${n}% of energy and attention` : String(n));
   const track = wanted > 0 ? wanted : Math.max(claimed, delivered, 1);
   const dPct = Math.min(100, Math.max(0, (delivered / track) * 100));
   const cPct = Math.min(100, Math.max(0, (Math.max(claimed, delivered) / track) * 100));
@@ -517,9 +517,9 @@ export function SlotMeter({
         <div className="cp-slots-delivered" style={{ width: `${dPct}%`, background: tint }} />
       </div>
       <div className="cp-slots-caption">
-        <span>{hours ? `${delivered} hours a week` : delivered} arrived</span>
-        <span>{hours ? `${Math.max(0, claimed - delivered)} hours a week` : Math.max(0, claimed - delivered)} spoken for</span>
-        <span>{hours ? `${wanted} hours a week` : wanted} wanted</span>
+        <span>{hours ? `${delivered}% of energy and attention` : delivered} arrived</span>
+        <span>{hours ? `${Math.max(0, claimed - delivered)}% of energy and attention` : Math.max(0, claimed - delivered)} spoken for</span>
+        <span>{hours ? `${wanted}% of energy and attention` : wanted} wanted</span>
       </div>
       {/*
         * NOT ON AN HOURS NEED, and for a sharper reason than "it cannot

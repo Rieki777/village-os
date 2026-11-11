@@ -107,7 +107,7 @@ describe("the completeness gate", () => {
   });
   it("says Being written and what is left", () => {
     expect(beingWrittenLine({ missing: ["aim", "hours", "track", "term", "goal"] })).toBe(
-      "Being written. Still to write: its aim, rough hours, its track and 2 more.",
+      "Being written. Still to write: its aim, its commitment, its track and 2 more.",
     );
   });
 });

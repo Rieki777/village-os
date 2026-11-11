@@ -35,7 +35,7 @@ const ORG = {
     { id: "land", name: "Land Circle" },
   ],
   roles: [
-    { id: "lfs", name: "Lead Financial Steward", circleId: "anchor", seats: 1, holderCount: 0, state: "open", archetypes: ["catalyzing"], timeCommitment: "25 to 30 hours a week", aim: "Money kept true." },
+    { id: "lfs", name: "Lead Financial Steward", circleId: "anchor", seats: 1, holderCount: 0, state: "open", archetypes: ["catalyzing"], timeCommitment: "Commitment: 60%", aim: "Money kept true." },
     { id: "garden", name: "Gardener", circleId: "land", seats: 1, holderCount: 0, state: "open", archetypes: ["building"] },
     { id: "host", name: "Welcome Host", circleId: "land", seats: 1, holderCount: 0, state: "open", archetypes: ["facilitating"] },
     { id: "cook", name: "Cook", circleId: "land", seats: 1, holderCount: 0, state: "open", archetypes: [] },
@@ -80,9 +80,9 @@ describe("the board, read live", () => {
     expect(screen.queryByRole("heading", { level: 3, name: "Water Keeper" })).toBeNull();
     const lfs = card("Lead Financial Steward");
     expect(within(lfs).getByText("Anchor Circle")).toBeTruthy();
-    expect(within(lfs).getByText("Roughly 25 to 30 hours a week")).toBeTruthy();
-    // A role that wrote no hours shows the village's estimate, never a blank (Rye, 9 Nov).
-    expect(within(card("Cook")).getByText("~20 h half time, ~30 to 40 h full time")).toBeTruthy();
+    expect(within(lfs).getByText("Commitment: 60%")).toBeTruthy();
+    // A role that wrote no commitment (or wrote hours before) shows a plain line, never a blank (Rye, 9 Nov).
+    expect(within(card("Cook")).getByText("Part or full commitment")).toBeTruthy();
   });
 
   it("offers the village's own cast, and more than one character can be picked", async () => {

@@ -27,6 +27,7 @@ import { TRACKS, TRACK_WORDS, readTrack, type Track } from "./roleTracks";
 export const PARAMETER_KEYS = [
   "listed",
   "recruiting",
+  "alwaysChecked",
   "track",
   "whereWorked",
   "languages",
@@ -46,6 +47,7 @@ export type ParameterKey = (typeof PARAMETER_KEYS)[number];
 export const PARAMETER_COLUMNS: Record<ParameterKey, string> = {
   listed: "listed",
   recruiting: "recruiting",
+  alwaysChecked: "always_checked",
   track: "track",
   whereWorked: "where_worked",
   languages: "languages",
@@ -101,6 +103,8 @@ export interface Interviewer {
 export type ParameterValues = {
   listed?: boolean;
   recruiting?: boolean;
+  /** A background check happens for this role whatever the references say (0370). */
+  alwaysChecked?: boolean;
   track?: Track | null;
   whereWorked?: WhereWorked | null;
   languages?: string[];
@@ -189,11 +193,12 @@ export const interviewMinutesTotal = (list: readonly Interviewer[]): number => l
 export function readParameter(key: ParameterKey, raw: unknown, isRole: (id: string) => boolean = () => true): Read<ParameterValues[ParameterKey]> {
   switch (key) {
     case "listed":
+    case "alwaysChecked":
     case "recruiting": {
       if (typeof raw === "boolean") return ok(raw);
       if (raw === 0 || raw === 1) return ok(raw === 1);
       if (typeof raw === "string" && /^(true|false|yes|no|open|closed|listed|unlisted)$/i.test(raw.trim())) return ok(/^(true|yes|open|listed)$/i.test(raw.trim()));
-      return no(key === "listed" ? "Listed is yes or no." : "The door is open or closed.");
+      return no(key === "listed" ? "Listed is yes or no." : key === "alwaysChecked" ? "Always background-checked is yes or no." : "The door is open or closed.");
     }
     case "track": {
       if (raw === null || raw === undefined || raw === "") return ok(null);
@@ -324,6 +329,7 @@ export interface ParameterCardSpec {
 /** Every parameter heading, in the order a card writes them. */
 export const PARAMETER_CARD_FIELDS: readonly ParameterCardSpec[] = [
   { key: "listed", heading: "Listed", list: false, oneLine: true, aliases: ["is it listed"], limit: "Yes or no: whether visitors and members find this role." },
+  { key: "alwaysChecked", heading: "Always background-checked", list: false, oneLine: true, aliases: ["background check"], limit: "Yes or no: whether a check happens for this role whatever the references say." },
   { key: "recruiting", heading: "Door", list: false, oneLine: true, aliases: ["door state"], limit: "Open or closed: whether the role is looking for someone." },
   { key: "track", heading: "Track", list: false, oneLine: true, aliases: [], limit: `One of: ${TRACKS.map((t) => TRACK_WORDS[t]).join(", ")}.` },
   { key: "whereWorked", heading: "Where it is worked", list: false, oneLine: true, aliases: ["where the work happens"], limit: "Land, remote or both." },

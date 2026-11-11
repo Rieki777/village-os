@@ -23,6 +23,7 @@ import { toast } from "sonner";
 import type { SeatSettings } from "@shared/seatSettings";
 import { parseSeatSettings } from "@shared/seatSettings";
 import { OFFER_WORDS } from "@shared/seatTermsOffer";
+import TermsWordsEditor from "./TermsWordsEditor";
 import SeatSettingsEditor from "@/components/governance/SeatSettingsEditor";
 import { useVillagePresets } from "@/lib/seatPresetsRead";
 
@@ -100,6 +101,7 @@ export default function SeatTermsOfferEditor({
       {open && (
         <div className="border-t border-gray-100 p-3">
           <p className="mb-3 text-xs text-gray-500">{OFFER_EDITOR_WORDS.sub}</p>
+          <TermsWordsEditor value={value} onChange={setValue} />
           <SeatSettingsEditor value={value} onChange={setValue} villagePresets={villagePresets} />
           <div className="mt-3 flex flex-wrap gap-2">
             <button

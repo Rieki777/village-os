@@ -1,15 +1,10 @@
 {
-  "note": "The steward questions as they should read after the joining flow landed (2026-11-10). stw-1 and stw-2 are unchanged and still need a person to confirm them. Apply by hand through Admin, FAQs. Not loaded by any boot step.",
+  "note": "The steward questions as they should read after the joining flow landed (2026-11-10). stw-1 is unchanged and still needs a person to confirm them. Apply by hand through Admin, FAQs. Not loaded by any boot step.",
   "faqs": [
     {
       "id": "stw-1",
       "question": "How are decisions made?",
       "answer": "Through sociocratic circles using consent-based decision making. No single person, including the founders, can override a community consent vote."
-    },
-    {
-      "id": "stw-2",
-      "question": "Do I get paid as a Village Steward?",
-      "answer": "Contributions are recognised in Gratitude, the village's signal of appreciation. Gratitude carries no financial value on its own. Each cycle the community shares a real pool of value tokens across everyone's Gratitude, and as Amora's shared businesses generate revenue those tokens can convert to cash, equity, or community currency."
     },
     {
       "id": "stw-3",

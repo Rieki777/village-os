@@ -11,7 +11,7 @@
  *     handover meter, and no AI button while the bridge is not configured;
  *   3 the village's goals for next season, ticked with how each helps, and the
  *     sentence when none are set, saving anyway;
- *   4 the load check, the review dates and the terms.
+ *   4 the commitment, the review dates and the terms.
  *
  * Every save is read back off the PUT the page sent. Every name is made up.
  */
@@ -20,7 +20,6 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { Router } from "wouter";
 import { ROLE_CCOS_WORDS } from "@shared/roleCcos";
 import { GROUP_PLAIN } from "@shared/roleProposalHonesty";
-import { LOAD_WORDS } from "@shared/roleProposalLoad";
 import { fakeServer, ORG, PROPOSAL_ID, proposalWith, type DraftBody } from "@/test/roleProposalFixture";
 
 vi.mock("@/lib/gameApi", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/gameApi")>()), authToken: () => "t" }));
@@ -211,24 +210,6 @@ describe("step 3, your season", () => {
 });
 
 describe("step 4, terms and review dates", () => {
-  it("adds up each role's time and says plainly when it goes past a full season", async () => {
-    draw({ roles: [{ roleId: "r1" }, { roleId: "r2" }] }, "terms");
-    const check = (await screen.findByText(LOAD_WORDS.heading)).closest("[data-load-check]") as HTMLElement;
-    expect(check.getAttribute("data-load-check")).toBe("over");
-    expect(within(check).getByText(LOAD_WORDS.over(54))).toBeTruthy();
-    expect(within(check).getByText("Kitchen keeper: about 30 hours a week")).toBeTruthy();
-  });
-
-  it("fits when the time fits, and names a role it could not count", async () => {
-    draw({ roles: [{ roleId: "r1" }, { roleId: "r3" }] }, "terms");
-    const check = (await screen.findByText(LOAD_WORDS.heading)).closest("[data-load-check]") as HTMLElement;
-    expect(check.getAttribute("data-load-check")).toBe("within");
-    expect(within(check).getByText(LOAD_WORDS.within(30))).toBeTruthy();
-    expect(within(check).getByText("Gate keeper: No time written yet")).toBeTruthy();
-    fireEvent.click(within(check).getByRole("button", { name: LOAD_WORDS.writeHours }));
-    expect(await screen.findByText(RP_WORDS.wordsLede)).toBeTruthy();
-  });
-
   it("an open row names who fills it, a preset names its source, and a blank season name leaves no hole", async () => {
     draw({ roles: [{ roleId: "r1" }] }, "terms", {
       target: { seasonId: "s3", name: "", startsOn: "2027-01-01", endsOn: "2027-03-31", ended: false },
@@ -244,11 +225,16 @@ describe("step 4, terms and review dates", () => {
     expect(pay.textContent).toContain("Suggested from Unpaid. A proposal, not a promise. Confirmed with the village's operations role.");
   });
 
-  it("an hours chip writes the role's time, which the load check can read", async () => {
+  it("asks a commitment with no default, no hours, and writes it as words", async () => {
     draw({ roles: [{ roleId: "r3" }] }, "terms");
-    fireEvent.click(await screen.findByRole("button", { name: RP_WORDS.hoursChoice(5) }));
-    await waitFor(() => expect(lastPut()?.roles?.[0]?.words.timeCommitment).toBe("5 hours a week"));
-    expect(screen.getByText(/Gate keeper: about 5 hours a week/)).toBeTruthy();
+    const section = (await screen.findByText(RP_WORDS.commitmentQuestion, { selector: "h3" })).closest("section") as HTMLElement;
+    const select = within(section).getByLabelText("Gate keeper") as HTMLSelectElement;
+    expect(select.value).toBe("");
+    expect(Array.from(select.options).map((o) => o.value)).toEqual(["", "0", "10", "20", "30", "40", "50", "60", "70", "80", "90", "100"]);
+    expect(section.textContent).toContain("never hours");
+    expect(screen.queryByText(/hours a week/i)).toBeNull();
+    fireEvent.change(select, { target: { value: "40" } });
+    await waitFor(() => expect(lastPut()?.roles?.[0]?.words.timeCommitment).toBe("Commitment: 40%"));
   });
 
   it("a review date autosaves with its role", async () => {
@@ -261,7 +247,7 @@ describe("step 4, terms and review dates", () => {
 
   it("the step indicator moves between steps, saving first", async () => {
     draw({ roles: [{ roleId: "r1" }] }, "terms");
-    await screen.findByText(LOAD_WORDS.heading);
+    await screen.findByText(RP_WORDS.commitmentQuestion);
     expect(screen.getByRole("button", { name: "Step 4: Terms and review dates" }).getAttribute("aria-current")).toBe("step");
     fireEvent.click(screen.getByRole("button", { name: RP_WORDS.back }));
     expect(await screen.findByText(RP_WORDS.seasonLede)).toBeTruthy();

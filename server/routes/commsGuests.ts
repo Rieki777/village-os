@@ -132,6 +132,7 @@ export function register(app: Express, deps: CommsGuestsDeps): void {
       name: req.body?.name,
       email,
       timezone: req.body?.timezone,
+      locale: req.body?.locale,
     });
     if (!outcome.ok) return res.status(outcome.status).json({ error: outcome.error, reason: outcome.reason ?? null });
     if (!outcome.sent) {

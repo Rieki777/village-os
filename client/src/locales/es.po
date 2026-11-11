@@ -9515,3 +9515,11 @@ msgstr ""
 msgctxt "sera answers"
 msgid "Take it again"
 msgstr ""
+
+#: client/src/pages/OpenProposal.tsx
+msgid "A note for the applicant (they will see this)"
+msgstr "Una nota para quien se propuso (la verá)"
+
+#: client/src/pages/OpenProposal.tsx
+msgid "Optional. Plain text. They read it on their status page and in our email. It is part of their own application, and nobody else sees it."
+msgstr "Opcional. Texto sencillo. La lee en la página del estado de su propuesta y en nuestro correo. Es parte de su propia solicitud, y nadie más la ve."

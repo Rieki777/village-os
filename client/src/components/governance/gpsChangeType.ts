@@ -52,6 +52,7 @@ export const GPS_CHANGE_TYPE: WizardTypeConfig = {
     }),
   },
   steps: {
+    about: { skip: true },
     subject: { skip: true },
     details: {
       label: "The statement",

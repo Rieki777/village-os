@@ -39,7 +39,7 @@ import { provisionTestDb, testDbConfigured, type TestDb, testPool } from "../db/
 import { ballotById, openBallotFor } from "../lib/ballots";
 import type { LandingDeps, SubjectCloser } from "../lib/applyDue";
 import { createOrgRole, seatHolder } from "../lib/orgChart";
-import { readApplication, seatingsHolding } from "../repos/seatApplications";
+import { readApplication, rewriteTermsOffer, seatingsHolding } from "../repos/seatApplications";
 import { register, seatFromApplication } from "./seatApplications";
 import { WAITING_COPY } from "../../shared/waitingOnYou";
 
@@ -47,7 +47,7 @@ const LADDER = ["visitor", "guest", "member"];
 const DAY = 24 * 60 * 60 * 1000;
 
 const PEOPLE: Record<string, { id: string; name: string }> = {
-  "u-ana": { id: "u-ana", name: "Ana Quillfeather" },
+  "u-ana": { id: "u-ana", name: "Ana Quillfeather", email: "ana@example.test" } as any,
   "u-hal": { id: "u-hal", name: "Hal Keeper" },
   "u-ivo": { id: "u-ivo", name: "Ivo Lantern" },
   "u-guest": { id: "u-guest", name: "Gale Visitor" },
@@ -91,6 +91,7 @@ function harness() {
       throw new Error("the database was read before the gate answered");
     },
   };
+  const mails: any[] = [];
   const notices: Array<{ userId: string; type: string; title: string; body?: string | null; link?: string | null; dedupeKey: string }> = [];
   const closers: Record<string, SubjectCloser> = {};
   let server: http.Server;
@@ -145,6 +146,11 @@ function harness() {
         return { inserted: true } as any;
       },
       notifyAdmins: async () => {},
+      postEmail: async (email: any) => {
+        mails.push(email);
+        return { status: "sent", messageId: "m-1" } as any;
+      },
+      projectName: () => "Test Village",
       overLimit: async () => false,
       members: { byId: async (id: string) => PEOPLE[id] ?? null } as any,
       firstName: (n: string) => String(n ?? "").split(" ")[0] ?? "",
@@ -179,7 +185,7 @@ function harness() {
     });
     return { status: res.status, body: (await res.json().catch(() => ({}))) as any };
   };
-  return { state, notices, closers, start, stop, call };
+  return { state, notices, mails, closers, start, stop, call };
 }
 
 describe("the reads refuse everyone below the member rung", () => {
@@ -308,6 +314,22 @@ describe.skipIf(!configured)("applying, adopting and seating, on a real schema",
       expect(read.body.application.goals).toHaveLength(2);
     });
 
+    it("the terms step: each written setting is answered and the commitment chosen, and both are kept", async () => {
+      const s = await goalSeat(["Food grows every season"]);
+      await rewriteTermsOffer(pool, s, { v: 1, words: { term: "We renew each moon.", bonus: "Earned Equity." } });
+      const terms = (answers: unknown, commitmentPct?: number) => ({ choice: "accept", note: "", answers, ...(commitmentPct === undefined ? {} : { commitmentPct }) });
+      const goals = [{ ...GOAL, moves: "Food grows every season" }];
+      // Bonus is written and not answered; no commitment; a commitment off the steps.
+      expect((await apply({ seatIds: [s], answers: { goals, terms: terms({ term: { choice: "accept" } }, 50) } })).body).toMatchObject({ field: "terms" });
+      expect((await apply({ seatIds: [s], answers: { goals, terms: terms({ term: { choice: "accept" }, bonus: { choice: "accept" } }) } })).body).toMatchObject({ field: "terms" });
+      expect((await apply({ seatIds: [s], answers: { goals, terms: terms({ term: { choice: "accept" }, bonus: { choice: "accept" } }, 45) } })).body).toMatchObject({ field: "terms" });
+      // CONTROL: all answered, commitment 0.
+      const ok = await apply({ seatIds: [s], answers: { goals, terms: terms({ term: { choice: "accept" }, bonus: { choice: "talk", note: "the mix" } }, 0) } });
+      expect(ok.status).toBe(201);
+      const kept = (await readApplication(pool, ok.body.id))!.answers!.terms;
+      expect(kept).toMatchObject({ commitmentPct: 0, answers: { bonus: { choice: "talk", note: "the mix" } } });
+    });
+
     it("refuses a goal that moves a goal the role does not have, with the field and the words", async () => {
       const s = await goalSeat(["Food grows every season"]);
       const bad = await apply({ seatIds: [s], answers: { goals: [{ ...GOAL, moves: "Something the role never listed" }] } });
@@ -398,6 +420,34 @@ describe.skipIf(!configured)("applying, adopting and seating, on a real schema",
     h.state.holders = ["u-ana", "u-hal"];
     const b = await apply({ seatIds: [await seat("Two holders")] });
     expect(b.body.status).toBe("awaiting-holder");
+  });
+
+  it("the counter-offer on the member door: the holder who may adopt edits, nobody else, one bell per revision, the history for deciders only (joining lane PR 4)", async () => {
+    h.state.holders = ["u-ana", "u-hal"];
+    const s = await seat("Terms keeper");
+    const a = await apply({ seatIds: [s], answers: { terms: { choice: "accept", note: "" } } });
+    const url = `/api/governance/role-applications/${a.body.id}/terms`;
+    const body = { words: { ending: "One moon's notice." }, expectedRevision: 0 };
+    // The candidate (who also holds the power) and a member who holds nothing are refused.
+    expect((await h.call("POST", url, body)).status).toBe(403);
+    h.state.viewer = { id: "u-ivo", stage: "member" };
+    expect((await h.call("POST", url, body)).status).toBe(403);
+    h.state.viewer = { id: "u-hal", stage: "member" };
+    h.notices.length = 0;
+    h.mails.length = 0;
+    const ok = await h.call("POST", url, body);
+    expect(ok.status, JSON.stringify(ok.body)).toBe(200);
+    expect(ok.body.offer.revision).toBe(1);
+    // A retried save is refused and rings nobody again.
+    expect((await h.call("POST", url, body)).status).toBe(409);
+    expect(h.notices.filter((n: any) => n.type === "applicant_update").map((n: any) => n.dedupeKey)).toEqual([`sa:${a.body.id}:update:terms:1:u-ana`]);
+    expect(h.mails.map((m: any) => [m.idempotencyKey, m.to.email, m.subject])).toEqual([[`role-application:${a.body.id}:update:terms:1`, "ana@example.test", "The terms for your proposal changed"]]);
+    expect((await readApplication(pool, a.body.id))!.answers!.counterOffer!.revisions).toHaveLength(1);
+    const page = await h.call("GET", `/api/governance/role-applications/${a.body.id}`);
+    expect(page.body.application.offer.history).toHaveLength(1);
+    expect(page.body.application.you.mayEditTerms).toBe(true);
+    h.state.viewer = { id: "u-ana", stage: "member" };
+    expect((await h.call("GET", `/api/governance/role-applications/${a.body.id}`)).body.application.offer).toBeNull();
   });
 
   it("a holder who is the candidate is refused at :id/adopt, and the other holder adopts", async () => {

@@ -5,16 +5,22 @@
  * holds them, written in the member door's own editor (SeatSettingsEditor),
  * judged by the parser the server runs. Each role keeps its own review date.
  *
- * The load check adds up each role's time and says plainly when it goes past
- * a full season (shared/roleProposalLoad.ts).
+ * Each role asks a commitment, 0 to 100 in tens with no default: energy and
+ * attention, never hours. Time is not tracked here.
  */
 import SeatSettingsEditor from "@/components/governance/SeatSettingsEditor";
 import { useVillagePresets } from "@/lib/seatPresetsRead";
-import { loadCheck, LOAD_WORDS } from "@shared/roleProposalLoad";
+import { COMMITMENT_CHOICES, COMMITMENT_HINT, commitmentWords } from "@shared/termsWords";
 import { parseSeatSettings, type SeatSettings } from "@shared/seatSettings";
 import { RP_WORDS } from "./proposalWords";
-import { INPUT, LEDE, PANEL, PRIMARY, QUIET, SECONDARY } from "./parts";
+import { INPUT, LEDE, PANEL } from "./parts";
 import WrittenDate from "./WrittenDate";
+
+/** The percent a role's time words carry ("Commitment: 40%"), or null for anything else, such as older words about hours. */
+export function commitmentOf(time: string | null | undefined): number | null {
+  const m = /^Commitment: (\d{1,3})%$/.exec((time ?? "").trim());
+  return m && (COMMITMENT_CHOICES as readonly number[]).includes(Number(m[1])) ? Number(m[1]) : null;
+}
 
 export interface TermsRole {
   id: string;
@@ -30,8 +36,7 @@ export default function StepTerms({
   onReview,
   onSettings,
   partner,
-  onOpenWords,
-  onHours,
+  onCommitment,
 }: {
   roles: readonly TermsRole[];
   settings: SeatSettings;
@@ -40,50 +45,14 @@ export default function StepTerms({
   /** Who fills a row left open. The chart's operations role, or the fallback. */
   /** Null while the chart loads, so no generic name flashes before the real one. */
   partner: string | null;
-  /** Opens the Words step, where each role's hours are written. */
-  onOpenWords: () => void;
-  /** Writes one role's time, which the load check adds up. */
-  onHours: (roleId: string, text: string) => void;
+  /** Writes one role's commitment, as the words "Commitment: 40%". Empty clears it. */
+  onCommitment: (roleId: string, text: string) => void;
 }) {
   const presets = useVillagePresets();
-  const load = loadCheck(roles.map((r) => ({ name: r.name, time: r.time })));
   const parsed = parseSeatSettings(settings);
   return (
     <div className="grid gap-4">
       <p className={LEDE}>{RP_WORDS.termsLede}</p>
-
-      <section aria-labelledby="rp-load" className={`${PANEL} grid gap-2 ${load.over ? "border-coral" : ""}`} data-load-check={load.over ? "over" : "within"}>
-        <h3 id="rp-load" className="font-semibold text-foreground">
-          {LOAD_WORDS.heading}
-        </h3>
-        <p className={LEDE}>{LOAD_WORDS.lede}</p>
-        {load.counted.length > 0 && (
-          <ul className="grid gap-0.5 text-sm text-foreground">
-            {load.counted.map((c, i) => (
-              <li key={i}>{LOAD_WORDS.oneRole(c.name, Math.round(c.hours))}</li>
-            ))}
-          </ul>
-        )}
-        {load.lines.map((l, i) => (
-          <p key={i} className={i === 0 ? `font-semibold ${load.over ? "text-coral" : "text-foreground"}` : "text-sm text-muted-foreground"} data-load-line={i}>
-            {l}
-          </p>
-        ))}
-        {load.notCounted.length > 0 && (
-          <ul className="grid gap-0.5 text-sm text-muted-foreground">
-            {load.notCounted.map((c, i) => (
-              <li key={i}>
-                {c.name}: {c.why}
-              </li>
-            ))}
-          </ul>
-        )}
-        {load.notCounted.length > 0 && (
-          <button type="button" className={QUIET} onClick={onOpenWords}>
-            {LOAD_WORDS.writeHours}
-          </button>
-        )}
-      </section>
 
       {roles.length > 0 && (
         <section aria-labelledby="rp-reviews" className={`${PANEL} grid gap-3 pt-4`}>
@@ -100,27 +69,29 @@ export default function StepTerms({
       )}
 
       {roles.length > 0 && (
-        <section className={`${PANEL} grid gap-3`} aria-label={RP_WORDS.hoursQuestion}>
-          <h3 className="font-semibold text-foreground">{RP_WORDS.hoursQuestion}</h3>
-          {roles.map((r) => (
-            <div key={r.id} role="group" aria-label={r.name} className="grid gap-2">
-              <p className="text-sm font-medium text-foreground">{r.name}</p>
-              <div className="flex flex-wrap gap-2">
-                {[2, 5, 10, 20, 40].map((n) => {
-                  const label = RP_WORDS.hoursChoice(n);
-                  const on = (r.time ?? "").trim().toLowerCase() === label;
-                  return (
-                    <button key={n} type="button" className={on ? PRIMARY : SECONDARY} aria-pressed={on} onClick={() => onHours(r.id, label)}>
-                      {label}
-                    </button>
-                  );
-                })}
-                <button type="button" className={!r.time ? PRIMARY : SECONDARY} aria-pressed={!r.time} onClick={() => onHours(r.id, "")}>
-                  {RP_WORDS.notSureHours}
-                </button>
-              </div>
-            </div>
-          ))}
+        <section className={`${PANEL} grid gap-3`} aria-label={RP_WORDS.commitmentQuestion} data-commitment-section="">
+          <h3 className="font-semibold text-foreground">{RP_WORDS.commitmentQuestion}</h3>
+          <p className="text-xs text-muted-foreground">{COMMITMENT_HINT}</p>
+          {roles.map((r) => {
+            const pct = commitmentOf(r.time);
+            return (
+              <label key={r.id} className="grid gap-1 text-sm font-medium text-foreground">
+                <span className="break-words">{r.name}</span>
+                <select
+                  value={pct === null ? "" : String(pct)}
+                  onChange={(e) => onCommitment(r.id, e.target.value === "" ? "" : commitmentWords(Number(e.target.value)))}
+                  className={`min-h-[44px] ${INPUT}`}
+                >
+                  <option value="">{RP_WORDS.commitmentChoose}</option>
+                  {COMMITMENT_CHOICES.map((n) => (
+                    <option key={n} value={n}>
+                      {n}%
+                    </option>
+                  ))}
+                </select>
+              </label>
+            );
+          })}
         </section>
       )}
 

@@ -52,7 +52,7 @@ describe("parseApplicationInput", () => {
   it("refuses terms the shared parser refuses, in its own words", () => {
     const r = parseApplicationInput(body({ seatSettings: { v: 1, commitmentPct: 40 } }));
     expect(r).toMatchObject({ ok: false, field: "seatSettings" });
-    if (!r.ok) expect(r.error).toMatch(/held whole/);
+    if (!r.ok) expect(r.error).toMatch(/set under Clocks/);
   });
 
   it("refuses payment details in the member's words, and lets a date through", () => {

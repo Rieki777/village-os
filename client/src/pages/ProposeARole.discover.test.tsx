@@ -40,14 +40,16 @@ async function fillAndSend() {
   fireEvent.click((await screen.findByText("Gate Keeper")).closest("[data-role]")!.querySelector("input[type=checkbox]")!);
   fireEvent.change(screen.getByLabelText(OPEN_WORDS.nameLabel), { target: { value: "Rowan" } });
   fireEvent.change(screen.getByLabelText(OPEN_WORDS.emailLabel), { target: { value: "a@b.test" } });
-  // Form v2 (#1071): the aim and the terms are required.
+  // Form v2 (#1071): the aim and the commitment are required (the terms step, joining lane PR 3).
   fireEvent.change(screen.getByLabelText(OPEN_WORDS.aimLabel), { target: { value: "Food grown here." } });
-  fireEvent.click(screen.getByLabelText("I accept the terms on offer."));
+  fireEvent.change(screen.getByLabelText("Your commitment"), { target: { value: "50" } });
   const why = screen.getByLabelText(OPEN_WORDS.whyLabel) as HTMLTextAreaElement;
   const before = why.value;
   // The agreements as PR-E draws them: the membership letter aligned with here, the NDA promised for once approved.
   fireEvent.click(await screen.findByLabelText(LETTER.intent));
   fireEvent.click(screen.getByLabelText(/confidentiality agreement before I see/));
+  // About you: no references, so the background-check consent is ticked (joining lane PR 2).
+  fireEvent.click(screen.getByLabelText(/agree to the background check/i));
   fireEvent.click(screen.getByRole("button", { name: OPEN_WORDS.send }));
   await screen.findByRole("heading", { name: "Check your email" });
   return before;
@@ -73,7 +75,7 @@ describe("the open form after the discover step", () => {
     expect(posted).toHaveLength(1);
     const keys = Object.keys(posted[0].body).sort();
     // `membership` is PR-E's letter version (Rye's answer 8): an `lv-` fingerprint, never a discover value.
-    expect(keys).toEqual(["aim", "card", "email", "hp", "link", "membership", "name", "roles", "why"].filter((k) => keys.includes(k)));
+    expect(keys).toEqual(["about", "aim", "card", "checkConsent", "email", "hp", "link", "locale", "membership", "name", "references", "roles", "why"].filter((k) => keys.includes(k)));
     expect(posted[0].body.membership).toEqual({ letterVersion: LETTER.version });
     expect(posted[0].body.why).toContain("growing food");
     expect(posted[0].raw).not.toMatch(/Projector|humanDesign|geneKeys|ikigai/i);
