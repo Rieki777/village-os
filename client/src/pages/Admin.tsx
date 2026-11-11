@@ -43,6 +43,7 @@ import { legacyModulesTabTarget } from "@shared/moduleSetupLink";
 import AdminHeader from "@/components/admin/AdminHeader";
 import AdminHelperHost from "@/components/admin/AdminHelperHost";
 import AiSetupBanner from "@/components/admin/AiSetupBanner";
+import ConnectorSetupPanel from "@/components/agent/ConnectorSetupPanel";
 import { adminRootClass, readAdminNight, writeAdminNight } from "@/components/admin/adminNight";
 import { AdminSeraChip, SeraAdminHome } from "@/components/admin/AdminSeraLink";
 import { tabFromSearch } from "@/components/admin/adminAreas";
@@ -866,6 +867,8 @@ export function IntegrationsTab({ password }: { password: string }) {
   const [loading, setLoading] = useState(true);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState("");
+  // The connector panel opens when the village's Anthropic key is saved (the lead, 2026-11-11).
+  const [keySaved, setKeySaved] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -890,6 +893,7 @@ export function IntegrationsTab({ password }: { password: string }) {
       if (!res.ok) throw new Error(refusal(d, "failed"));
       toast.success(d?.asked ? String(d.message) : value.trim() ? "Key saved" : "Key cleared");
       setDrafts((p) => ({ ...p, [key]: "" }));
+      if (key === "assistant_api_key" && value.trim() && !d?.asked) setKeySaved(true);
       load();
     } catch (e: any) { toast.error(e?.message ?? "Failed"); }
     setBusy("");
@@ -922,6 +926,7 @@ export function IntegrationsTab({ password }: { password: string }) {
         </p>
       </div>
       <SecretsKeyBanner status={data?.villageSecretsKey} />
+      {keySaved && <div className="mb-6"><ConnectorSetupPanel moment="key" isAdmin password={password} person="admin" /></div>}
       <SigningKeyCard password={password} />
       {loading && !data ? <div className="text-center py-12 text-gray-400">Loading…</div> : (
         <div className="w-full space-y-5">

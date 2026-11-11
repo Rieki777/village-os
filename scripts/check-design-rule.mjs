@@ -87,6 +87,7 @@ const JOURNEY = [
   "client/src/components/journey/look.ts",
   "client/src/components/journey/Trail.tsx",
   "client/src/components/journey/Leaf.tsx",
+  "client/src/components/agent/ConnectorSetupPanel.tsx",
   "client/src/components/roleDraft/SeasonGoals.tsx",
   "client/src/components/roleDraft/ArchetypeStep.tsx",
   "client/src/components/roleDraft/IkigaiDoor.tsx",

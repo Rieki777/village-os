@@ -848,7 +848,7 @@ export default function Profile() {
 
               {/* Round 4: your agent, the harness in every profile */}
               <div id="your-agent">
-                <YourAgentPanel />
+                <YourAgentPanel person={user?.id} />
               </div>
 
               <button type="button" onClick={() => logout()} className={`${BTN_LINE} self-start sm:hidden`}>
