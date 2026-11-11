@@ -56,7 +56,7 @@ function input(over: Partial<PlayerCardInput> = {}): PlayerCardInput {
     owner: { userId: "u-owner", displayName: "Lena Ortiz", avatar: "/api/uploads/portrait-1.webp" },
     viewerUserId: "u-owner",
     villageName: "Riverbend",
-    season: { id: "s2", name: "Season of Foundations", startsOn: "2026-10-01", endsOn: "2027-01-01" }, // endsOn is the next season's first day
+    season: { id: "s2", name: "Season of Foundations", startsOn: "2026-10-01", endsOn: "2026-12-31" }, // endsOn is a civil day, shown as written
     nextSeasonId: null,
     archetypeNames: {},
     roles: [1, 2, 3].map((n) => role(n, { timeCommitment: "Part of a full-time season" })),
@@ -75,7 +75,7 @@ function input(over: Partial<PlayerCardInput> = {}): PlayerCardInput {
 describe("the hero", () => {
   it("reads as the design: the moon pill, the eyebrow, the tagline and the span", () => {
     const h = buildPlayerCard(input()).header;
-    expect(h.moon.words).toBe("October Moon · Day 22 of 93");
+    expect(h.moon.words).toBe("October Moon · Day 22 of 92");
     expect(h.eyebrow).toBe("Riverbend · Season of Foundations");
     expect(h.tagline).toBe("Three roles in the Community Anchor · Full-time");
     expect(h.span).toBe("1 October to 31 December 2026");
@@ -89,7 +89,7 @@ describe("the hero", () => {
     expect(termed.span).toBe("15 October 2026 to 31 January 2027");
     // A term not yet adopted, or somebody else's, is not the owner's term.
     const voting = buildPlayerCard(input({ applications: [app({ status: "voting", starts_at: "2026-10-15" })] })).header;
-    expect(voting.moon).toMatchObject({ over: "season", words: "October Moon · Day 22 of 93" });
+    expect(voting.moon).toMatchObject({ over: "season", words: "October Moon · Day 22 of 92" });
     const theirs = buildPlayerCard(input({ applications: [app({ candidate_user_id: "u-else", starts_at: "2026-10-15" })] })).header;
     expect(theirs.moon.over).toBe("season");
   });
@@ -105,7 +105,7 @@ describe("the hero", () => {
     const next = { id: "s3", name: "Second Season", startsOn: "2027-01-01", endsOn: "2027-03-21" };
     const card = buildPlayerCard(input({ mode: "proposal", proposalSeason: next }));
     expect(card.header.eyebrow).toBe("Riverbend · Second Season");
-    expect(card.header.span).toBe("1 January to 20 March 2027");
+    expect(card.header.span).toBe("1 January to 21 March 2027");
     expect(card.header.moon).toMatchObject({ words: "Second Season", day: null, of: null, over: null });
     // My moon cycle runs over that season.
     expect(card.timeline.moons[0].startsAt.slice(0, 10)).toBe("2027-01-01");
@@ -120,7 +120,7 @@ describe("the hero", () => {
     expect(none.span).toBeNull();
     // Control: the live card, and a proposal card with no season named, keep the running season.
     expect(buildPlayerCard(input({ proposalSeason: next })).header.eyebrow).toBe("Riverbend · Season of Foundations");
-    expect(buildPlayerCard(input({ mode: "proposal" })).header.moon.words).toBe("October Moon · Day 22 of 93");
+    expect(buildPlayerCard(input({ mode: "proposal" })).header.moon.words).toBe("October Moon · Day 22 of 92");
   });
 
   it("names the moon by the month its new moon falls in, in the village's zone", () => {
@@ -153,6 +153,12 @@ describe("the hero", () => {
     expect(personTime([r("Mornings"), r("Mornings")])).toBe("Mornings");
     expect(personTime([r("Mornings"), r(null)])).toBeNull();
     expect(personTime([r(null)])).toBeNull();
+    // Audit M2: a commitment is shown as it was chosen and never turned into hours.
+    expect(personTime([r("Commitment: 60%")])).toBe("Commitment: 60%");
+    expect(personTime([r("Commitment: 100%")])).toBe("Commitment: 100%");
+    expect(personTime([r("Commitment: 60%"), r("Commitment: 40%")])).toBeNull();
+    const stated = { ...r("Roughly 40 hours a week"), cardSeat: { commitmentPct: 60 } };
+    expect(personTime([stated])).toBe("Commitment: 60%");
   });
 
   it("writes the span's year once when both ends share it", () => {
@@ -218,7 +224,19 @@ describe("the role tiles", () => {
 describe("the season's end", () => {
   it("counts its `endsOn` day too, as the role chart header does", () => {
     const h = buildPlayerCard(input({ season: { id: "s2", name: "Autumn", startsOn: "2026-09-22", endsOn: "2026-12-21" } })).header;
-    expect(h.span).toBe("22 September to 20 December 2026");
+    expect(h.span).toBe("22 September to 21 December 2026");
     expect(h.moon.words).toBe("October Moon · Day 31 of 91");
   });
+});
+
+describe("a civil end date has no zone shift (audit M12)", () => {
+  // Zones west of UTC are where a civil day slips: midnight there is the evening before in UTC.
+  for (const zone of ["America/Los_Angeles", "America/Costa_Rica", "Pacific/Honolulu", "Asia/Tokyo", "UTC"]) {
+    it(`shows the season's end as written in ${zone}`, () => {
+      const h = buildPlayerCard(input({ timeZone: zone, season: { id: "s2", name: "Foundations", startsOn: "2026-06-21", endsOn: "2026-12-31" } })).header;
+      expect(h.span).toBe("21 June to 31 December 2026");
+      const q1 = buildPlayerCard(input({ timeZone: zone, mode: "proposal", proposalSeason: { id: "s3", name: "Next", startsOn: "2027-01-01", endsOn: "2027-03-31" } })).header;
+      expect(q1.span).toBe("1 January to 31 March 2027");
+    });
+  }
 });

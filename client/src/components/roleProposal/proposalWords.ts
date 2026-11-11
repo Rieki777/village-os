@@ -159,7 +159,7 @@ export const RP_WORDS = {
   shareOff: "The link is off. Nobody else can read this draft.",
   makeLink: "Make a share link",
   sendToOps: (who: string) => `Send to ${who} to finish the terms together`,
-  sendOpsLine: (who: string) => `The terms are still open. ${who} can read this draft and fill them with you.`,
+  sendOpsLine: (who: string) => `The terms are still open. ${who.charAt(0).toUpperCase()}${who.slice(1)} can read this draft and fill them with you.`,
   sentToOps: (who: string) => `Sent. ${who} can open the link.`,
   whoReads: "Who can read it",
   membersOnlyTier: "Members of the village",

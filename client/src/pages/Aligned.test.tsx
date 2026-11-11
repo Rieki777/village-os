@@ -25,10 +25,6 @@ vi.mock("@/components/Layout", () => ({
 vi.mock("@/contexts/AuthContext", () => ({
   useAuth: () => ({ user: signedIn }),
 }));
-vi.mock("@/components/modules/ModuleGate", () => ({
-  default: () => <p>Module gate</p>,
-  SignInDoors: ({ next }: { next?: string }) => <a href={`/login?next=${next}`}>Sign in</a>,
-}));
 vi.mock("@/components/natural/useReducedMotion", () => ({
   useReducedMotion: () => true,
   prefersReducedMotion: () => true,
@@ -118,7 +114,12 @@ describe("who reads the register", () => {
     serve(() => page(ROWS));
     render(<Aligned />);
     expect(screen.getByRole("heading", { name: "Members read what the village has aligned with." })).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Sign in" }).getAttribute("href")).toBe("/login?next=/aligned");
+    expect(screen.getByRole("link", { name: "Sign in" }).getAttribute("href")).toBe("/login?next=%2Faligned");
+    // Audit M4: "Create an account" was brand ink on the night ground (contrast 1.21). It takes the sheet's edged button.
+    const create = screen.getByRole("link", { name: "Create an account" });
+    expect(create.getAttribute("href")).toBe("/register");
+    expect(create.className).toContain("text-foreground");
+    expect(create.className).not.toMatch(/teal-deep/);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 

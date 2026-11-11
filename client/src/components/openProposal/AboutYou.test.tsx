@@ -26,7 +26,7 @@ describe("the deciders' view", () => {
     expect(screen.getByText("Ines Vargas")).toBeTruthy();
     expect(screen.getByText("Uvita")).toBeTruthy();
     expect(screen.getByText(ABOUT_WORDS.checkNeededRole)).toBeTruthy();
-    expect(screen.getByText(ABOUT_WORDS.consentGiven("2026-11-10"))).toBeTruthy();
+    expect(screen.getByText(ABOUT_WORDS.consentGiven("10 Nov 2026"))).toBeTruthy();
     // No score, no summary: the page holds only what was given.
     expect(document.querySelector("[data-aboutyou]")?.textContent).not.toMatch(/score|rank|summary/i);
   });

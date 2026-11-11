@@ -145,6 +145,9 @@ export function RoleInFull({ role, health = null }: { role: RoleOut; health?: He
   const draws = (slot: Slot<unknown>): boolean => slot.kind === "shown" || (slot.kind === "empty" && editing);
   const headingId = `${role.anchor}-h`;
   const time = role.time.text;
+  // A role whose card states a commitment shows that (in the parameters block below), and its legacy time chip stays quiet (audit M2).
+  const statesCommitment = Number.isInteger(role.cardSeat?.commitmentPct);
+  const chipTime = time.kind === "shown" && !statesCommitment;
   const exists = role.existsWhile.text;
   const holding = role.holdingWell.parts.filter((p) => draws(p.text));
   // A decided proposal's confirmation, kept here: adopting the last one empties its panel.
@@ -167,7 +170,7 @@ export function RoleInFull({ role, health = null }: { role: RoleOut; health?: He
         {role.title}
       </h3>
 
-      {role.chips.length || role.circle || time.kind === "shown" || powers.length || role.plays ? (
+      {role.chips.length || role.circle || chipTime || powers.length || role.plays ? (
         <ul className="pc-chips" aria-label="About this role">
           {keyRole ? <li className="pc-chip pc-gold">{W.keyRole}</li> : null}
           {role.circle ? (
@@ -183,7 +186,7 @@ export function RoleInFull({ role, health = null }: { role: RoleOut; health?: He
               {c}
             </li>
           ))}
-          {time.kind === "shown" ? (
+          {chipTime && time.kind === "shown" ? (
             <li className={`pc-chip${timeChanged ? ` ${GOLD_FRAME}` : ""}`} data-role-chip="time">
               <CardTerm term={role.time.term}>{time.value}</CardTerm>
             </li>
