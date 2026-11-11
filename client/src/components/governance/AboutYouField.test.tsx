@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-/** The member door's About-you step says where links and files go: the village's own contact address, and nothing when it has none. */
+/** The member door's About you step says where links and files go: the village's own contact address, and nothing when it has none. */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 
@@ -14,7 +14,7 @@ const show = () => render(<AboutYouField field={{ id: "aboutYou" } as any} value
 
 afterEach(cleanup);
 
-describe("the member door's About-you step", () => {
+describe("the member door's About you step", () => {
   it("names the village's contact address for links and files", () => {
     links.contactEmail = "hello@example.org";
     show();
