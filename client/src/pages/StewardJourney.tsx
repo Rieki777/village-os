@@ -4,7 +4,7 @@ import { altOr, useBrandImages, useGameConfig } from "@/lib/gameApi";
 import FaqSection from "@/components/FaqSection";
 import { Emphasized, Highlighted } from "@/components/PageText";
 import { JourneyLink, leavesSite } from "@/components/journey/JourneyLink";
-import { useJourneyContent } from "@/hooks/useJourneyContent";
+import { useJourneyContent, useJourneyProgress } from "@/hooks/useJourneyContent";
 import { buttonAction, stepPoints, type TargetContext } from "@/lib/journeyPage";
 import { STEWARD_JOURNEY, STEWARD_STAGE_CIRCLE, STEWARD_STAGE_YOURS } from "@shared/pageContent/journeys";
 import { useIsAdmin } from "@/contexts/AuthContext";
@@ -12,13 +12,18 @@ import { Link } from "wouter";
 import { Trans } from "@lingui/react/macro";
 import type { ResolvedSection } from "@shared/pageContent/types";
 import { m } from "framer-motion";
-import { Users, ArrowRight, Compass, Heart, Moon, ExternalLink, ShieldCheck } from "lucide-react";
+import { Users, ArrowRight, Calendar, BookOpen, CheckCircle2, Circle, ChevronDown, Compass, Heart, Moon, ExternalLink, ShieldCheck } from "lucide-react";
+import { useState } from "react";
+import { AnimatePresence } from "framer-motion";
 
 /*
  * EVERY WORD ON THIS PAGE IS THE VILLAGE'S OWN, from Admin, Pages, Steward
  * journey (shared/pageContent/journeys.ts). What stays here is the look: the
  * layout and the doors, which go to fixed places in the app.
  */
+
+/** Icons for the "Getting to know us" cards, in order. */
+const KNOW_ICONS = [Calendar, Users, Users, BookOpen];
 
 export default function StewardJourney() {
   // This village's own destinations. Blank hides the control.
@@ -31,6 +36,9 @@ export default function StewardJourney() {
   const heroSecondary = buttonAction(hero?.secondaryLabel, hero?.secondaryTarget, targets);
   const brand = useBrandImages();
   const admin = useIsAdmin();
+  const knowCards = page?.getToKnow.lists.items ?? null;
+  const progress = useJourneyProgress("steward-getting-to-know", knowCards, []);
+  const [expandedStep, setExpandedStep] = useState<number | null>(0);
   const adminPath = useGameConfig()?.project?.adminPath || "/admin";
   // Until the saved words arrive the hero keeps its space and stays
   // invisible, so a visitor never reads the defaults and watches them change.
@@ -126,18 +134,97 @@ export default function StewardJourney() {
         </div>
       </section>
 
-      {/* Meet us first: an invitation, never a requirement. */}
-      {page && !page.meetFirst.hidden && (
-        <section className="py-12 bg-sage/10">
+      {/* Getting to know us: optional first steps, none required before a proposal. */}
+      {page && !page.getToKnow.hidden && (
+        <section className="py-16 bg-sage/10">
           <div className="container">
-            <div className="max-w-2xl mx-auto text-center">
-              <h2 className="font-display text-2xl md:text-3xl font-semibold text-foreground mb-3 break-words">
-                {page.meetFirst.fields.heading}
+            <div className="text-center mb-8">
+              <h2 className="font-display text-3xl md:text-4xl font-semibold text-foreground mb-4 break-words">
+                {page.getToKnow.fields.heading}
               </h2>
-              <p className="text-muted-foreground mb-6">
-                <Emphasized text={page.meetFirst.fields.body} />
+              <p className="text-muted-foreground max-w-2xl mx-auto">
+                <Emphasized text={page.getToKnow.fields.body} />
               </p>
-              <BandButton section={page.meetFirst} targets={targets} />
+            </div>
+            <div className="max-w-3xl mx-auto space-y-3">
+              {page.getToKnow.lists.items.map((step, index) => {
+                const isCompleted = progress.isDone(step);
+                const isExpanded = expandedStep === index;
+                const StepIcon = KNOW_ICONS[index % KNOW_ICONS.length];
+                const action = buttonAction(step.actionLabel, step.actionTarget, targets);
+                const points = stepPoints(step);
+                const hasMore = points.length > 0 || !!action;
+                return (
+                  <div
+                    key={`${index}-${step.title}`}
+                    className={`bg-card rounded-xl shadow-sm overflow-hidden transition-all ${
+                      isCompleted ? "border-l-4 border-sage" : "border-l-4 border-transparent hover:border-coral/50"
+                    }`}
+                  >
+                    <div className={`p-5 ${hasMore ? "cursor-pointer" : ""}`} onClick={() => hasMore && setExpandedStep(isExpanded ? null : index)}>
+                      <div className="flex items-start gap-4">
+                        <button
+                          type="button"
+                          role="checkbox"
+                          aria-checked={isCompleted}
+                          aria-label={`${step.title}: mark as ${isCompleted ? "not done" : "done"}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            progress.toggle(step);
+                          }}
+                          className="flex-shrink-0 mt-0.5 rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-sage"
+                        >
+                          {isCompleted ? <CheckCircle2 className="w-6 h-6 text-sage" /> : <Circle className="w-6 h-6 text-muted-foreground hover:text-teal-deep transition-colors" />}
+                        </button>
+                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${isCompleted ? "bg-sage/10" : "bg-teal-deep/10"}`}>
+                          <StepIcon className={`w-5 h-5 ${isCompleted ? "text-sage" : "text-teal-deep"}`} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-x-2 gap-y-1 flex-wrap min-w-0">
+                              <span className={`px-2 py-0.5 text-xs font-medium rounded ${isCompleted ? "bg-sage/10 text-sage" : "bg-muted text-muted-foreground"}`}>{step.stage}</span>
+                              <h3 className={`font-display text-lg font-semibold basis-24 grow max-w-full break-words ${isCompleted ? "text-muted-foreground" : "text-foreground"}`}>{step.title}</h3>
+                              {step.mark && <span className="px-2 py-0.5 text-xs font-medium rounded border border-sage text-foreground">{step.mark}</span>}
+                            </div>
+                            {hasMore && (
+                              <m.div className="shrink-0" animate={{ rotate: isExpanded ? 180 : 0 }} transition={{ duration: 0.2 }}>
+                                <ChevronDown className="w-5 h-5 text-muted-foreground" />
+                              </m.div>
+                            )}
+                          </div>
+                          <p className="text-sm text-muted-foreground mt-1 break-words">{step.description}</p>
+                        </div>
+                      </div>
+                    </div>
+                    <AnimatePresence>
+                      {isExpanded && hasMore && (
+                        <m.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.3 }} className="overflow-hidden">
+                          <div className="px-5 pb-5 pt-0 ml-14">
+                            {points.length > 0 && (
+                              <div className="bg-muted/50 rounded-lg p-4 mb-4">
+                                <ul className="grid sm:grid-cols-2 gap-2">
+                                  {points.map((detail, i) => (
+                                    <li key={i} className="flex items-center gap-2 text-sm text-muted-foreground min-w-0 break-words">
+                                      <div className="w-1.5 h-1.5 shrink-0 rounded-full bg-sage" />
+                                      <span className="min-w-0 break-words">{detail}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                            {action && (
+                              <JourneyLink action={action.action} className="inline-flex items-center gap-2 px-4 py-2 bg-sage text-white rounded-full text-sm font-medium hover:opacity-90 transition-opacity">
+                                {action.label}
+                                {leavesSite(action.action) ? <ExternalLink className="w-4 h-4" /> : <ArrowRight className="w-4 h-4" />}
+                              </JourneyLink>
+                            )}
+                          </div>
+                        </m.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </section>

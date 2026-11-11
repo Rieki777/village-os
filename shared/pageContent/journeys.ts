@@ -564,6 +564,92 @@ const STEWARD_STEPS: StepDefault[] = [
   },
 ];
 
+/** One of the cards in "Getting to know us": the old journey's look, a few optional first steps. */
+function knowRow(r: { stage: string; title: string; mark: string; description: string; bullets: readonly string[]; label: string; target: string }): Record<string, string> {
+  const row: Record<string, string> = { stage: r.stage, title: r.title, mark: r.mark, description: r.description };
+  for (let i = 0; i < BULLETS; i++) row[`bullet${i + 1}`] = r.bullets[i] ?? "";
+  row.actionLabel = r.label;
+  row.actionTarget = r.target;
+  return row;
+}
+
+/**
+ * The first steps before a proposal, none of them required to propose. Platform defaults name
+ * no village practice and carry no link to a village's own site; a village puts its own in
+ * Admin, Pages, Steward journey.
+ */
+function getToKnowSection(): SectionSpec {
+  return {
+    id: "getToKnow",
+    label: "Getting to know us",
+    shows: "The cards before the eleven steps: coming to an event, village life, an immersion, training. Each can carry an Optional mark.",
+    hideable: true,
+    fields: [
+      text("heading", "Heading", 40, "Getting to know us"),
+      long("body", "Paragraph", 240, "Nobody has to do the optional ones before proposing for a role."),
+    ],
+    lists: [
+      {
+        key: "items",
+        label: "Cards",
+        help: "Read top to bottom. Opening a card shows its points and its button. A card with words in Mark shows them as a small label, for example Optional.",
+        itemLabel: "Card",
+        titleKey: "title",
+        minItems: 0,
+        maxItems: 8,
+        fields: [
+          text("stage", "Stage (the small label)", 20, ""),
+          text("title", "Title", 48, ""),
+          text("mark", "Mark (for example Optional)", 16, "", { optional: true }),
+          long("description", "Description", 420, ""),
+          ...Array.from({ length: BULLETS }, (_, i) => text(`bullet${i + 1}`, `Point ${i + 1}`, 44, "", { optional: true })),
+          text("actionLabel", "Button words", 32, "", { optional: true }),
+          target("actionTarget", "Button goes to", "", TARGET_HELP),
+        ],
+        default: [
+          knowRow({
+            stage: "Visitor",
+            title: "Come to an Event",
+            mark: "",
+            description: "Learn the basics and ask any immediate questions about {village}.",
+            bullets: ["Meet the people", "Learn about our vision", "Ask questions live", "Connect with other visitors"],
+            label: "See Upcoming Events",
+            target: JOURNEY_TARGETS.events,
+          }),
+          knowRow({
+            stage: "Guest",
+            title: "Take Part in Events",
+            mark: "Optional",
+            description: "Join gatherings, workshops and celebrations on the land to experience the community.",
+            bullets: [],
+            label: "View Events",
+            target: JOURNEY_TARGETS.events,
+          }),
+          knowRow({
+            stage: "Immersant",
+            title: "Village Immersion",
+            mark: "Optional",
+            description:
+              "Spend immersive time in the village learning how it operates, observing circles in action and discovering where your gifts are most needed. A good step, and not required.",
+            bullets: [],
+            label: "",
+            target: "",
+          }),
+          knowRow({
+            stage: "Participant",
+            title: "Community Training",
+            mark: "",
+            description: "Complete the village's community training, or show that you already know and live its practices.",
+            bullets: [],
+            label: "Learn About Training",
+            target: "/training",
+          }),
+        ],
+      },
+    ],
+  };
+}
+
 export const STEWARD_JOURNEY: PageSpec = buildJourney({
   id: "steward",
   label: "Steward journey",
@@ -578,11 +664,7 @@ export const STEWARD_JOURNEY: PageSpec = buildJourney({
     secondary: ["Ask us a question", JOURNEY_TARGETS.contact],
   },
   beforeSteps: [
-    ctaBand("meetFirst", "Meet us first", "The optional invitation to a community call or a visit, before the doors.", {
-      heading: "Meet us first, if you like",
-      body: "Coming to an event or visiting the land is an invitation. Nobody has to come before proposing for a role.",
-      cta: ["Come to an event", JOURNEY_TARGETS.events],
-    }),
+    getToKnowSection(),
   ],
   steps: {
     heading: "How joining a role works",
