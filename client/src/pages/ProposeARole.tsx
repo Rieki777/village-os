@@ -26,7 +26,9 @@ import { AttachmentFields, linksToSend } from "@/components/openProposal/Proposa
 import type { ProposalLink } from "@shared/proposalAttachments";
 import { AskSera, DraftMark } from "@/components/proposalDrafts/AskSera";
 import { DRAFT_WORDS, goalsFromDraft, isTextDraft, placeDraftGoals, unconfirmedDrafts, type DraftMarks } from "@shared/seraDrafts";
-import { GOAL_LIMITS } from "@shared/proposalGoals";
+import { GOAL_LIMITS, parseGoals } from "@shared/proposalGoals";
+import { CARD_WORDS } from "@shared/openProposalCard";
+import { BreathingLoader } from "@/components/natural";
 import { AboutYouFacts, ReferencesBlock, EMPTY_ABOUT_YOU, aboutYouBody, aboutYouProblem, type AboutYouValue } from "@/components/openProposal/AboutYou";
 import { termOf, type OpenProposalTerm } from "@shared/openProposalTerm";
 import { civilDayWords } from "@shared/seasonPlans";
@@ -75,6 +77,58 @@ type FormState =
   | { kind: "closed"; message: string }
   | { kind: "open"; village: string; season: { id: string; name: string | null; startsOn: string } | null; term: OpenProposalTerm | null; goals: Array<{ id: string; text: string }>; roles: FormRole[] }
   | { kind: "failed" };
+
+/** One thing to fix before sending: the field's name, the words, and where to look for it on the page. */
+interface FormProblem {
+  field: string | null;
+  message: string;
+  target: string | null;
+}
+
+/** Where on the form each field name the server or the checks use can be found. */
+function targetFor(field: string | null): string | null {
+  switch (field) {
+    case "why": return "#propose-why";
+    case "aim": return "#propose-aim";
+    case "name": return "#propose-name";
+    case "email": return "#propose-email";
+    case "roles": return "#propose-roles";
+    case "serves": return "[data-card-serves]";
+    case "card": return "[data-role-card]";
+    case "terms": return "[data-terms-section]";
+    case "agreed": return "[data-agreements] input[type=checkbox][required]";
+    case "checkConsent":
+    case "references":
+    case "about":
+    case "links":
+    case "files": return "[data-about-you-section]";
+    case "membership": return "[data-agreements]";
+    default: return null;
+  }
+}
+
+/** Scroll to what needs fixing and put the cursor there, so a press on Send never looks like nothing happened. */
+function goToProblem(target: string | null) {
+  if (typeof document === "undefined") return;
+  const el = target ? document.querySelector<HTMLElement>(target) : null;
+  const form = document.querySelector<HTMLElement>("[data-open-proposal]");
+  const spot = el ?? form?.querySelector<HTMLElement>("#propose-problems") ?? null;
+  if (!spot) return;
+  const reduce = typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  spot.scrollIntoView?.({ block: "center", behavior: reduce ? "auto" : "smooth" });
+  const focusable = spot.matches("input,textarea,select,button,[tabindex]") ? spot : spot.querySelector<HTMLElement>("input,textarea,select,button");
+  (focusable ?? spot).focus({ preventScroll: true });
+}
+
+/** The words for a problem shown beside its field. */
+function Beside({ id, message }: { id: string; message: string | null }) {
+  if (!message) return null;
+  return (
+    <p id={id} className="mt-2 rounded-lg border border-border bg-muted p-3 text-sm font-medium text-foreground" data-field-problem="">
+      {message}
+    </p>
+  );
+}
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
@@ -135,9 +189,7 @@ export function ConfirmProposal() {
           )}
         </Notice>
       ) : (
-        <p role="status" className="text-muted-foreground">
-          Confirming...
-        </p>
+        <BreathingLoader label={t({ message: "Confirming your proposal", context: "open proposal" })} showLabel />
       )}
     </Shell>
   );
@@ -154,7 +206,11 @@ export default function ProposeARole() {
   const [email, setEmail] = useState("");
   const [hp, setHp] = useState("");
   const [sending, setSending] = useState(false);
-  const [error, setError] = useState<{ field: string | null; message: string } | null>(null);
+  /** Every problem found on the last press of Send, each with the field it is on (audit M1). */
+  const [problems, setProblems] = useState<FormProblem[]>([]);
+  const error = problems[0] ?? null;
+  const setError = (e: { field: string | null; message: string } | null) => setProblems(e ? [{ ...e, target: targetFor(e.field) }] : []);
+  const problemOn = (field: string) => problems.find((p) => p.field === field)?.message ?? null;
   const [sent, setSent] = useState<string | null>(null);
   /** The applicant's own card (components/openProposal/RoleCardBridge.tsx). */
   const [cards, setCards] = useState<Record<string, RoleCardState>>({});
@@ -229,28 +285,45 @@ export default function ProposeARole() {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (sending) return;
-    // A draft from Sera is the candidate's only once they edit or keep it. Nothing is stored about which parts were drafted.
+    // Every problem at once, so nobody meets them one press at a time. The server judges all of it again.
+    const found: FormProblem[] = [];
+    const add = (field: string, message: string, target = targetFor(field)) => found.push({ field, message, target });
     const pending = unconfirmedDrafts({ aim, story: about.story, marks, goals: Object.keys(picked).flatMap((id) => (cards[id] ?? EMPTY_ROLE_CARD).goals) });
-    if (pending.length > 0) {
-      setError({ field: null, message: DRAFT_WORDS.blocked(pending) });
-      return;
-    }
-    // The consent is asked before anything goes, in the words the shared rules use; the server judges it again.
-    const aboutProblem = form.kind === "open" ? aboutYouProblem(about, form.roles.some((r) => r.id in picked && r.alwaysChecked === true)) : null;
-    if (aboutProblem) {
-      setError({ field: "checkConsent", message: aboutProblem });
-      return;
-    }
-    // Every written setting answered and the commitment chosen, in the shared rules' words; the server judges it again.
+    if (pending.length > 0) found.push({ field: null, message: DRAFT_WORDS.blocked(pending), target: null });
+    if (!why.trim()) add("why", OPEN_WORDS.needWhy);
+    if (!aim.trim()) add("aim", OPEN_WORDS.needAim);
+    if (count === 0) add("roles", OPEN_WORDS.needRole);
     if (form.kind === "open") {
-      const judged = judgeTermsStep({ answers: termsStep.answers, commitmentPct: termsStep.commitmentPct }, writtenKeys(form.roles.filter((r) => r.id in picked).map((r) => ({ words: r.terms?.words, commitmentPct: r.terms?.commitmentPct ?? null }))));
-      if (!judged.ok) {
-        setError({ field: "terms", message: judged.error });
-        return;
+      const today = new Date().toISOString().slice(0, 10);
+      const seasonKeys = new Set(form.goals.map((g) => g.id));
+      const chosen = form.roles.filter((r) => r.id in picked);
+      for (const r of chosen) {
+        const own = (r.accountabilities ?? []).map((a) => a.trim());
+        const asked = (cards[r.id] ?? EMPTY_ROLE_CARD).goals.map((g) => ({ ...g, roleId: r.id }));
+        const judged = parseGoals(asked, { roleGoalsOf: () => own, seasonKeys, today });
+        if (!judged.ok) add("card", chosen.length > 1 ? `${r.name}: ${judged.error}` : judged.error, `[data-role-card="${r.id}"]`);
       }
+      if (chosen.length > 0 && form.goals.length > 0 && chosen.every((r) => Object.keys(cards[r.id]?.serves ?? {}).length === 0)) {
+        add("serves", CARD_WORDS.needGoal, `[data-card-serves="${chosen[0].id}"]`);
+      }
+      // The consent is asked before anything goes, in the words the shared rules use.
+      const aboutProblem = aboutYouProblem(about, chosen.some((r) => r.alwaysChecked === true));
+      if (aboutProblem) add("checkConsent", aboutProblem);
+      // Every written setting answered and the commitment chosen, in the shared rules' words.
+      const judgedTerms = judgeTermsStep({ answers: termsStep.answers, commitmentPct: termsStep.commitmentPct }, writtenKeys(chosen.map((r) => ({ words: r.terms?.words, commitmentPct: r.terms?.commitmentPct ?? null }))));
+      if (!judgedTerms.ok) add("terms", judgedTerms.error);
+    }
+    if (!agreed.nda) add("agreed", CARD_WORDS.agreed);
+    if (!name.trim()) add("name", OPEN_WORDS.needName);
+    if (!email.trim()) add("email", OPEN_WORDS.needEmail);
+    if (found.length > 0) {
+      setProblems(found);
+      // After the list has drawn, go to the first one.
+      window.setTimeout(() => goToProblem(found[0].target), 0);
+      return;
     }
     setSending(true);
-    setError(null);
+    setProblems([]);
     try {
       const proposal = {
         name,
@@ -304,7 +377,12 @@ export default function ProposeARole() {
       const data = await res.json().catch(() => ({}));
       // The letter changed while they read it: show it again, untick, and say so.
       if (!res.ok && data?.field === "membership") setLetterRead((n) => n + 1);
-      if (!res.ok) return setError({ field: typeof data?.field === "string" ? data.field : null, message: typeof data?.error === "string" ? data.error : OPEN_WORDS.notSent });
+      if (!res.ok) {
+        const field = typeof data?.field === "string" ? data.field : null;
+        setError({ field, message: typeof data?.error === "string" ? data.error : OPEN_WORDS.notSent });
+        window.setTimeout(() => goToProblem(targetFor(field)), 0);
+        return;
+      }
       setSent(typeof data?.message === "string" ? data.message : OPEN_WORDS.sent(email.trim()));
     } catch {
       setError({ field: null, message: OPEN_WORDS.notSent });
@@ -316,9 +394,7 @@ export default function ProposeARole() {
   if (form.kind === "loading") {
     return (
       <Shell>
-        <p role="status" className="text-muted-foreground">
-          Loading...
-        </p>
+        <BreathingLoader label={t({ message: "Opening the form", context: "open proposal" })} showLabel />
       </Shell>
     );
   }
@@ -358,7 +434,7 @@ export default function ProposeARole() {
   const seasonName = form.season?.name || "next season";
   // Only when a door sent the visitor here with `from`; a shared link stands on its own.
   const cameFrom = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("from") ? doorBackOf(window.location.search, "", window.location.origin) : null;
-  const invalid = (field: string) => (error?.field === field ? { "aria-invalid": true, "aria-describedby": "propose-error" } : {});
+  const invalid = (field: string) => (error?.field === field ? { "aria-invalid": true, "aria-describedby": `propose-problem-${field}` } : {});
 
   return (
     <Shell>
@@ -386,11 +462,37 @@ export default function ProposeARole() {
       </div>
 
       {form.season && (
-        <form onSubmit={submit} className="space-y-6 rounded-2xl border border-border bg-card p-8 shadow-sm" data-open-proposal="">
-          {error && (
-            <p id="propose-error" role="alert" className="rounded-lg border border-border bg-muted p-4 text-sm text-foreground">
-              {error.message}
-            </p>
+        <form onSubmit={submit} noValidate className="space-y-6 rounded-2xl border border-border bg-card p-8 shadow-sm" data-open-proposal="" data-hides-fab="">
+          {/* The trail through the form: four parts, each a jump. */}
+          <nav aria-label={t({ message: "Parts of this form", context: "open proposal" })} className="-mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm" data-form-trail="">
+            {[
+              [t({ message: "Your season", context: "open proposal section" }), "#propose-roles"],
+              [t({ message: "About you", context: "open proposal section" }), "[data-about-you-section]"],
+              [t({ message: "The terms", context: "open proposal section" }), "[data-terms-section]"],
+              [t({ message: "Send", context: "open proposal section" }), "#propose-name"],
+            ].map(([label, sel], i) => (
+              <button key={sel} type="button" onClick={() => goToProblem(sel)} className="min-h-11 text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-2 focus-visible:outline-ring">
+                {i + 1}. {label}
+              </button>
+            ))}
+          </nav>
+          {problems.length > 0 && (
+            <div id="propose-problems" tabIndex={-1} role="alert" className="rounded-lg border border-border bg-muted p-4 text-sm text-foreground outline-none" data-problems="">
+              <p className="font-semibold">{problems.length === 1 ? t`One thing to fix before we can send this:` : t`${problems.length} things to fix before we can send this:`}</p>
+              <ul className="mt-2 grid gap-1">
+                {problems.map((p, i) => (
+                  <li key={`${p.field}-${i}`}>
+                    {p.target ? (
+                      <button type="button" onClick={() => goToProblem(p.target)} className="min-h-11 text-left underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-ring">
+                        {p.message}
+                      </button>
+                    ) : (
+                      p.message
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
 
           {/* Guide v2: why you and your aim, then each role card (its goals, the first moon's goals, the season goal it serves), then the practicalities. */}
@@ -399,12 +501,14 @@ export default function ProposeARole() {
               {OPEN_WORDS.whyLabel}
             </label>
             <textarea id="propose-why" required rows={5} maxLength={OPEN_WHY_MAX} value={why} onChange={(e) => setWhy(e.target.value)} className={FIELD} {...invalid("why")} />
+            <Beside id="propose-problem-why" message={problemOn("why")} />
           </div>
           <div>
             <label htmlFor="propose-aim" className="mb-2 block text-sm font-semibold text-card-foreground">
               {OPEN_WORDS.aimLabel}
             </label>
             <input id="propose-aim" required maxLength={OPEN_AIM_MAX} value={aim} onChange={(e) => setAim(e.target.value)} className={FIELD} {...invalid("aim")} />
+            <Beside id="propose-problem-aim" message={problemOn("aim")} />
             {count > 0 && (
               <div className="mt-2 grid gap-2">
                 {(!aim.trim() || isTextDraft(aim, marks.aim)) && <AskSera kind="aim" roles={askRoles} why={why} aim={aim} onDraft={(r) => { if (r.aim) { setAim(r.aim.slice(0, OPEN_AIM_MAX)); setMarks((m) => ({ ...m, aim: r.aim!.slice(0, OPEN_AIM_MAX) })); } }} />}
@@ -412,7 +516,7 @@ export default function ProposeARole() {
               </div>
             )}
           </div>
-          <fieldset className="space-y-4" {...invalid("roles")}>
+          <fieldset id="propose-roles" tabIndex={-1} className="scroll-mt-24 space-y-4 outline-none" {...invalid("roles")}>
             <legend className="mb-2 text-sm font-semibold text-card-foreground">
               {OPEN_WORDS.pickRoles} <span className="font-normal text-muted-foreground">({count} of {OPEN_PROPOSAL_MAX_ROLES})</span>
             </legend>
@@ -491,11 +595,12 @@ export default function ProposeARole() {
                 })}
               </div>
             ))}
+            <Beside id="propose-problem-roles" message={problemOn("roles")} />
           </fieldset>
 
           {/* The practicalities, then the agreements, then who you are (guide v2; role audit, 10 Nov 2026). */}
           {/* About you: after the goals, before the terms. The links and files moved here from below. */}
-          <section aria-labelledby="propose-about-h" className="grid gap-5 border-t border-border pt-6" data-about-you-section="">
+          <section aria-labelledby="propose-about-h" className="grid scroll-mt-24 gap-5 border-t border-border pt-6" data-about-you-section="">
             <h2 id="propose-about-h" className="font-display text-2xl font-bold text-card-foreground">
               {t({ message: "About you", context: "open proposal section" })}
             </h2>
@@ -524,7 +629,7 @@ export default function ProposeARole() {
           </section>
           <Practicalities value={practical} onChange={setPractical} part="rest" />
           {/* The terms: all eight settings with each role's suggestion, then the commitment (joining lane PR 3). */}
-          <section aria-labelledby="propose-terms-h" className="grid gap-4 border-t border-border pt-6" data-terms-section="">
+          <section aria-labelledby="propose-terms-h" tabIndex={-1} className="grid scroll-mt-24 gap-4 border-t border-border pt-6 outline-none" data-terms-section="">
             <h2 id="propose-terms-h" className="font-display text-2xl font-bold text-card-foreground">
               {t({ message: "The terms", context: "open proposal section" })}
             </h2>
@@ -536,21 +641,26 @@ export default function ProposeARole() {
               idPrefix="propose-terms"
             />
           </section>
+          <div data-agreements="" className="scroll-mt-24">
           <SeasonServes goals={form.goals} serves={NO_GLOBAL_SERVES} onServes={() => {}} showGoals={false} agreed={agreed}
             onAgreed={setAgreed}
             membership={<MembershipAtApplication signedIn={!!me} choice={membership} onChoice={setMembership} refreshKey={letterRead} />}
           />
+            <Beside id="propose-problem-agreed" message={problemOn("agreed") ?? problemOn("membership")} />
+          </div>
           <div>
             <label htmlFor="propose-name" className="mb-2 block text-sm font-semibold text-card-foreground">
               {OPEN_WORDS.nameLabel}
             </label>
             <input id="propose-name" autoComplete="name" required value={name} onChange={(e) => setName(e.target.value)} className={FIELD} {...invalid("name")} />
+            <Beside id="propose-problem-name" message={problemOn("name")} />
           </div>
           <div>
             <label htmlFor="propose-email" className="mb-2 block text-sm font-semibold text-card-foreground">
               {OPEN_WORDS.emailLabel}
             </label>
             <input id="propose-email" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} className={FIELD} {...invalid("email")} />
+            <Beside id="propose-problem-email" message={problemOn("email")} />
             <p className="mt-2 text-sm text-muted-foreground">{OPEN_WORDS.emailNote}</p>
             <p className="mt-1 text-sm text-muted-foreground" data-after-approval="">
               {t`We will write to this address with every reply. If we approve your proposal, you will get an email with a button to create your profile, where your tasks and our replies live.`}
@@ -568,7 +678,7 @@ export default function ProposeARole() {
             <input type="text" name="hp" tabIndex={-1} autoComplete="off" value={hp} onChange={(e) => setHp(e.target.value)} />
           </div>
           <button type="submit" disabled={sending || count === 0} className={`${BUTTON} w-full`}>
-            {sending ? "Sending..." : OPEN_WORDS.send}
+            {sending ? t`Sending...` : OPEN_WORDS.send}
             {!sending && <ArrowRight className="h-5 w-5" aria-hidden="true" />}
           </button>
         </form>

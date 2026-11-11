@@ -85,6 +85,14 @@ describe("the board, read live", () => {
     expect(within(card("Cook")).getByText("Part or full commitment")).toBeTruthy();
   });
 
+  it("P1: the tile reads the commitment the role's terms ask, not a vague line", async () => {
+    serve({ form: { open: true, roles: ORG.roles.map((r) => ({ id: r.id, name: r.name, terms: { words: {}, commitmentPct: r.id === "cook" ? 100 : null } })) } });
+    render(<RoleDraft />);
+    await screen.findByRole("heading", { level: 3, name: "Cook" });
+    await waitFor(() => expect(within(card("Cook")).getByText("Commitment: 100%")).toBeTruthy());
+    expect(within(card("Cook")).queryByText("Part or full commitment")).toBeNull();
+  });
+
   it("offers the village's own cast, and more than one character can be picked", async () => {
     serve();
     render(<RoleDraft />);

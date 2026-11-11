@@ -319,7 +319,16 @@ export const OPEN_WORDS = {
   needAim: "Say your aim for this role.",
   tooLong: (what: string, max: number) => `${what} is too long. Keep it under ${max} characters.`,
   notSent: "We couldn't send the confirmation email just now. Try again later.",
-  tooMany: "Too many proposals from here. Wait a little and try again.",
+  /** The sending connection already had its five accepted proposals this hour. Refused tries never count toward it. */
+  tooMany: "We've already received five proposals from this connection in the last hour, so we can't take another one yet. Nothing you wrote is lost on this page. Please try again in about an hour, or send from a different connection.",
+  /** Many tries in a short while, valid or not: the generous outer bucket. */
+  tooManyTries: "That's a lot of tries from this connection in a short while. Please wait about an hour and try again.",
+  /** The same address already has three proposals in a day. */
+  tooManyForAddress: "This email address already has three proposals waiting today. Check your inbox for the confirmation links, or try again tomorrow.",
+  /** The village-wide hourly cap on confirmation email. */
+  tooBusy: "We're receiving a lot of proposals right now and can't send another confirmation email yet. Please try again in about an hour.",
+  /** The confirm link opened too many times from one connection. */
+  tooManyOpens: "That link has been opened many times from this connection. Please wait about an hour and try again.",
   // The desk.
   linkMade: "Link made. Copy it now: it won't be shown again.",
   linkOff: "That link is switched off. It no longer opens the form.",

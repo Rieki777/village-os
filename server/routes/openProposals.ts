@@ -145,6 +145,11 @@ const newToken = (): string => crypto.randomBytes(24).toString("base64url");
 /** The greeting's name: a stranger typed it, so only a plain name is repeated (shared/openProposals.ts, safeGreeting). */
 const firstNameOf = (name: string): string | null => safeGreeting(name);
 
+/** Every try from one connection, refused or accepted, per hour. A flood stopper, far above what an honest session needs. */
+const OPEN_TRIES_HOURLY = 60;
+/** Posts that carry files, per connection per hour, refused or accepted. */
+const OPEN_UPLOAD_TRIES_HOURLY = 30;
+
 export function register(app: Express, deps: Deps): void {
   const { getPool, overLimit, clientIp, guardCapability, authedUser, deploymentOrigin, projectName, escapeHtml } = deps;
   const postEmail = deps.postEmail ?? ((email: OutgoingEmail) => post(deps.commsPostOffice, email));
@@ -295,7 +300,8 @@ export function register(app: Express, deps: Deps): void {
   app.post("/api/open-proposals", async (req, res) => {
     if (!req.is("multipart/form-data")) return intake(req, res, req.body ?? {}, []);
     // Before any file is read: the per-connection cap on posts that carry files.
-    if (await overLimit(`open-proposal:upload:ip:${ipBucket(clientIp(req))}`, 5, 60 * 60_000)) return res.status(429).json({ error: OPEN_WORDS.tooMany });
+    // Generous on purpose: this counts every post that carries files, refused or not. The strict five an hour is counted in `intake`, on accepted proposals only.
+    if (await overLimit(`open-proposal:upload:ip:${ipBucket(clientIp(req))}`, OPEN_UPLOAD_TRIES_HOURLY, 60 * 60_000)) return res.status(429).json({ error: OPEN_WORDS.tooManyTries });
     upload(req, res, (err: any) => {
       if (err) {
         const code = String(err?.code ?? "");
@@ -319,7 +325,10 @@ export function register(app: Express, deps: Deps): void {
   async function intake(req: Request, res: Response, body: Record<string, any>, files: UploadedFile[]) {
     // Honeypot: a hidden field only a bot fills. Pretend it went, keep nothing.
     if (body.hp) return res.json({ sent: true });
-    if (await overLimit(`open-proposal:ip:${ipBucket(clientIp(req))}`, 5, 60 * 60_000)) return res.status(429).json({ error: OPEN_WORDS.tooMany });
+    // Two buckets per connection. This one counts every try, refused or not, and is generous: it only stops a flood.
+    // The strict five an hour is counted below, once the proposal has been judged and would be accepted, so a person
+    // who meets three honest mistakes is never locked out for them (audit B1).
+    if (await overLimit(`open-proposal:tries:ip:${ipBucket(clientIp(req))}`, OPEN_TRIES_HOURLY, 60 * 60_000)) return res.status(429).json({ error: OPEN_WORDS.tooManyTries });
     const d = await door(body.link);
     if (!d.open) return res.status(403).json({ error: OPEN_WORDS.closed });
     const mode = (await settings()).term;
@@ -369,9 +378,11 @@ export function register(app: Express, deps: Deps): void {
     const locale = await languageForNewProposal({ getPool, members: deps.members }, { clientLocale: body.locale, email, acceptLanguage: req.headers["accept-language"] });
     const proposal = { ...parsed.value.body, ...(card ? { card } : {}), ...(t.term ? { term: t.term } : {}), ...(membership ? { membership } : {}), locale };
     const emailKey = emailKeyOf(email);
-    if (await overLimit(`open-proposal:email:${limiterAddressKey(emailKey)}`, 3, 24 * 60 * 60_000)) return res.status(429).json({ error: OPEN_WORDS.tooMany });
+    // Every refusal above has been given. Only now, with the proposal acceptable, does this connection spend one of its five an hour.
+    if (await overLimit(`open-proposal:ip:${ipBucket(clientIp(req))}`, 5, 60 * 60_000)) return res.status(429).json({ error: OPEN_WORDS.tooMany });
+    if (await overLimit(`open-proposal:email:${limiterAddressKey(emailKey)}`, 3, 24 * 60 * 60_000)) return res.status(429).json({ error: OPEN_WORDS.tooManyForAddress });
     // The last gate before an email goes: the village's overall hourly cap on confirmations.
-    if (await overLimit("open-proposal:global", OPEN_GLOBAL_HOURLY, 60 * 60_000)) return res.status(429).json({ error: OPEN_WORDS.tooMany });
+    if (await overLimit("open-proposal:global", OPEN_GLOBAL_HOURLY, 60 * 60_000)) return res.status(429).json({ error: OPEN_WORDS.tooBusy });
 
     const pool = getPool();
     const id = `op-${crypto.randomBytes(10).toString("hex")}`;
@@ -441,7 +452,7 @@ export function register(app: Express, deps: Deps): void {
   }
 
   app.post("/api/open-proposals/confirm", async (req, res) => {
-    if (await overLimit(`open-proposal:confirm:${clientIp(req)}`, 30, 60 * 60_000)) return res.status(429).json({ error: OPEN_WORDS.tooMany });
+    if (await overLimit(`open-proposal:confirm:${clientIp(req)}`, 30, 60 * 60_000)) return res.status(429).json({ error: OPEN_WORDS.tooManyOpens });
     const token = typeof req.body?.token === "string" ? req.body.token.trim() : "";
     const at = now();
     // Confirmed, and the circle asked, in one transaction (part B). A used, old or unknown token asks nobody.
