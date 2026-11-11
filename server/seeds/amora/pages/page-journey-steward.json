@@ -2,6 +2,60 @@
   "faq": {
     "heading": "Common Questions"
   },
+  "getToKnow": {
+    "heading": "Getting to know us",
+    "body": "Nobody has to do the optional ones before proposing for a role.",
+    "items": [
+      {
+        "stage": "Visitor",
+        "title": "Attend Community Call",
+        "mark": "",
+        "description": "Learn about the basics and ask any immediate questions about {village}.",
+        "bullet1": "Meet the founding team",
+        "bullet2": "Learn about our vision",
+        "bullet3": "Ask questions live",
+        "bullet4": "Connect with other visitors",
+        "actionLabel": "Join Community Call",
+        "actionTarget": "#events"
+      },
+      {
+        "stage": "Guest",
+        "title": "Participate in Events",
+        "mark": "Optional",
+        "description": "Join potlucks, events, workshops, and parties on our land to experience the community.",
+        "bullet1": "",
+        "bullet2": "",
+        "bullet3": "",
+        "bullet4": "",
+        "actionLabel": "View Events",
+        "actionTarget": "#events"
+      },
+      {
+        "stage": "Immersant",
+        "title": "Village Weaving Immersion",
+        "mark": "Optional",
+        "description": "Spend immersive time in the village learning how it operates, observing circles in action, and discovering where your gifts are most needed. A beautiful step, but not required. It is also how you join the Founding Seeders.",
+        "bullet1": "",
+        "bullet2": "",
+        "bullet3": "",
+        "bullet4": "",
+        "actionLabel": "Meet the Founding Seeders",
+        "actionTarget": "https://amora.cr/founding-seeder/"
+      },
+      {
+        "stage": "Participant",
+        "title": "Community Training",
+        "mark": "",
+        "description": "Either complete our training in NVC (Nonviolent Communication), authentic relating, and other community practices, or demonstrate you already know and live these essential practices.",
+        "bullet1": "",
+        "bullet2": "",
+        "bullet3": "",
+        "bullet4": "",
+        "actionLabel": "Learn About Training",
+        "actionTarget": "/training"
+      }
+    ]
+  },
   "hero": {
     "eyebrow": "Joining a role",
     "headline": "Join the village",
@@ -11,12 +65,6 @@
     "primaryTarget": "/roles",
     "secondaryLabel": "Ask us a question",
     "secondaryTarget": "#contact"
-  },
-  "meetFirst": {
-    "heading": "Meet us first, if you like",
-    "body": "A community call or a visit to the land is an invitation. Nobody has to come before proposing for a role.",
-    "ctaLabel": "Come to a community call",
-    "ctaTarget": "#events"
   },
   "rights": {
     "heading": "Your rights and responsibilities",

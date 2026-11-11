@@ -228,7 +228,7 @@ function GroupRow({
       {problems.length > 0 && (
         <ul role="alert" className="mt-2 space-y-1">
           {problems.map((p, i) => (
-            <li key={i} className="text-sm font-medium text-coral">
+            <li key={i} className="text-sm font-medium text-destructive">
               {p}
             </li>
           ))}
@@ -304,7 +304,7 @@ export default function SeatSettingsEditor({
       {loose.length > 0 && (
         <ul role="alert" className="space-y-1">
           {loose.map((p, i) => (
-            <li key={i} className="text-sm font-medium text-coral">
+            <li key={i} className="text-sm font-medium text-destructive">
               {p.message}
             </li>
           ))}

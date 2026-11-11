@@ -117,7 +117,7 @@ export default function HumanDesignStep({
                 type="button"
                 aria-pressed={chars.includes(k)}
                 onClick={() => onToggle(k)}
-                className={`min-h-11 rounded-full border px-4 font-semibold focus-visible:outline-2 focus-visible:outline-ring ${chars.includes(k) ? "border-primary bg-primary text-primary-foreground" : "border-border"}`}
+                className={`min-h-11 rounded-full border px-4 font-semibold focus-visible:outline-2 focus-visible:outline-ring ${chars.includes(k) ? "border-notice bg-notice text-background" : "border-border text-foreground hover:bg-muted"}`}
               >
                 {nameOf(k)}
               </button>

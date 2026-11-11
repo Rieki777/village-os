@@ -67,7 +67,7 @@ export default function WizardRolePreview({
         <span aria-hidden="true" className="size-2 rounded-full bg-open" />
         {SHEET_WORDS.livePreview}
       </p>
-      <p className="mt-1.5 text-xs text-stone-600">{SHEET_WORDS.livePreviewSub}</p>
+      <p className="mt-1.5 text-xs text-muted-foreground">{SHEET_WORDS.livePreviewSub}</p>
       <div className="mt-3">
         <PermissionRoleCard
           input={fromPermissionRole(role, { signedIn: !!authToken() })}

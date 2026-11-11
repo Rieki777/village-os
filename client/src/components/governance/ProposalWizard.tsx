@@ -441,14 +441,14 @@ export default function ProposalWizard({ start = null, leaveTo = "/decisions" }:
 
   if (published) {
     return (
-      <div className="rounded-xl border-2 border-sage bg-sage-light p-6">
-        <h2 className="flex items-center gap-2 font-display text-2xl font-bold text-stone-900">
-          <Check className="w-6 h-6 text-sage" aria-hidden="true" />
+      <div className="rounded-xl border-2 border-open bg-open/10 p-6">
+        <h2 className="flex items-center gap-2 font-display text-2xl font-bold text-foreground">
+          <Check className="w-6 h-6 text-open" aria-hidden="true" />
           It is in front of the village
         </h2>
-        <p className="mt-2 text-stone-800 leading-relaxed">{cfg?.consequence}</p>
+        <p className="mt-2 text-foreground leading-relaxed">{cfg?.consequence}</p>
         {supportThreshold > 0 && !cfg?.opensVote && (
-          <p className="mt-2 text-sm text-stone-700 leading-relaxed">
+          <p className="mt-2 text-sm text-foreground leading-relaxed">
             It needs {supportThreshold} {supportThreshold === 1 ? "supporter" : "supporters"} before it can go to a
             vote. Sensing happens where the proposal lives, and anyone can add theirs.
           </p>
@@ -459,7 +459,7 @@ export default function ProposalWizard({ start = null, leaveTo = "/decisions" }:
           {type === "role_application" && published.id && (
             <Link
               href={`/role-applications/${encodeURIComponent(published.id)}`}
-              className="inline-flex min-h-[44px] items-center rounded-lg bg-teal-deep px-5 text-sm font-semibold text-white hover:bg-teal-deep-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep focus-visible:ring-offset-2"
+              className="inline-flex min-h-[44px] items-center rounded-lg bg-notice px-5 text-sm font-semibold text-background hover:bg-notice/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             >
               Open the application
             </Link>
@@ -467,7 +467,7 @@ export default function ProposalWizard({ start = null, leaveTo = "/decisions" }:
           <button
             type="button"
             onClick={() => navigate("/decisions")}
-            className="min-h-[44px] rounded-lg bg-teal-deep px-5 text-sm font-semibold text-white hover:bg-teal-deep-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep focus-visible:ring-offset-2"
+            className="min-h-[44px] rounded-lg bg-notice px-5 text-sm font-semibold text-background hover:bg-notice/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           >
             See what the village is deciding
           </button>
@@ -481,7 +481,7 @@ export default function ProposalWizard({ start = null, leaveTo = "/decisions" }:
               setDraftId(null);
               setStep("type");
             }}
-            className="min-h-[44px] rounded-lg border border-stone-400 px-5 text-sm font-medium text-stone-800 hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
+            className="min-h-[44px] rounded-lg border border-border px-5 text-sm font-medium text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             Write another
           </button>
@@ -499,13 +499,13 @@ export default function ProposalWizard({ start = null, leaveTo = "/decisions" }:
         </div>
 
         {stepMeta && step !== "type" && step !== "review" && (
-          <h2 ref={stepHeadingRef} tabIndex={-1} className="mb-2 font-display text-xl font-bold text-stone-900 focus:outline-none">
+          <h2 ref={stepHeadingRef} tabIndex={-1} className="mb-2 font-display text-xl font-bold text-foreground focus:outline-none">
             {stepMeta.label}
           </h2>
         )}
 
         {stepMeta?.intro && step !== "type" && (
-          <p className="mb-4 text-stone-700 leading-relaxed">{stepMeta.intro}</p>
+          <p className="mb-4 text-foreground leading-relaxed">{stepMeta.intro}</p>
         )}
 
         {step === "type" && (
@@ -525,10 +525,10 @@ export default function ProposalWizard({ start = null, leaveTo = "/decisions" }:
               <>
                 <DraftCards drafts={drafts} busyId={busyDraft} onContinue={continueDraft} onDiscard={discardDraft} />
                 <div>
-                  <h2 ref={stepHeadingRef} tabIndex={-1} className="text-base font-bold text-stone-900 focus:outline-none">
+                  <h2 ref={stepHeadingRef} tabIndex={-1} className="text-base font-bold text-foreground focus:outline-none">
                     What kind of decision is this?
                   </h2>
-                  <p className="mt-0.5 text-sm text-stone-600">
+                  <p className="mt-0.5 text-sm text-muted-foreground">
                     Each kind asks different questions and travels a different road. Pick the one that fits and the
                     rest follows.
                   </p>
@@ -574,17 +574,17 @@ export default function ProposalWizard({ start = null, leaveTo = "/decisions" }:
         {step === "review" && cfg && (
           <div className="space-y-6">
             <div>
-              <h2 ref={stepHeadingRef} tabIndex={-1} className="text-base font-bold text-stone-900 focus:outline-none">
+              <h2 ref={stepHeadingRef} tabIndex={-1} className="text-base font-bold text-foreground focus:outline-none">
                 Read it back
               </h2>
-              <p className="mt-0.5 text-sm text-stone-600">
+              <p className="mt-0.5 text-sm text-muted-foreground">
                 This is what the village will see. Everything here is still yours to change.
               </p>
             </div>
 
             {(seatPreview || rolePreview) && <div className="lg:hidden">{preview("inline")}</div>}
 
-            <dl className="divide-y divide-stone-200 rounded-xl border border-stone-200 bg-white">
+            <dl className="divide-y divide-border rounded-xl border border-border bg-card">
               {walk
                 .filter((s) => s.key !== "type" && s.key !== "review")
                 .flatMap((s) => fieldsFor(type, s.key, answers).map((f) => ({ step: s.key, field: f })))
@@ -616,14 +616,14 @@ export default function ProposalWizard({ start = null, leaveTo = "/decisions" }:
                             : String(v ?? "");
                   return (
                     <div key={field.key} className="flex flex-wrap gap-x-4 gap-y-1 p-3">
-                      <dt className="w-40 shrink-0 text-sm font-medium text-stone-600">{field.label}</dt>
-                      <dd className="min-w-0 flex-1 whitespace-pre-wrap text-sm text-stone-900">
-                        {shown || <span className="text-stone-400">Left blank</span>}
+                      <dt className="w-40 shrink-0 text-sm font-medium text-muted-foreground">{field.label}</dt>
+                      <dd className="min-w-0 flex-1 whitespace-pre-wrap text-sm text-foreground">
+                        {shown || <span className="text-muted-foreground">Left blank</span>}
                       </dd>
                       <button
                         type="button"
                         onClick={() => void goTo(from)}
-                        className="min-h-[44px] shrink-0 rounded-lg px-3 text-sm font-medium text-teal-deep hover:bg-stone-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
+                        className="min-h-[44px] shrink-0 rounded-lg px-3 text-sm font-medium text-notice hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       >
                         Change
                         <span className="sr-only"> {field.label}</span>
@@ -634,8 +634,8 @@ export default function ProposalWizard({ start = null, leaveTo = "/decisions" }:
             </dl>
 
             {problems.length > 0 && (
-              <div role="alert" className="rounded-xl border-2 border-coral bg-red-50 p-4">
-                <p className="text-sm font-bold text-coral">
+              <div role="alert" className="rounded-xl border-2 border-destructive bg-destructive/10 p-4">
+                <p className="text-sm font-bold text-destructive">
                   {problems.length === 1 ? "One thing is not ready" : `${problems.length} things are not ready`}
                 </p>
                 <ul className="mt-2 space-y-2">
@@ -644,7 +644,7 @@ export default function ProposalWizard({ start = null, leaveTo = "/decisions" }:
                       <button
                         type="button"
                         onClick={() => void goTo(p.step)}
-                        className="min-h-[44px] w-full rounded-lg px-2 text-left text-sm text-stone-800 hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
+                        className="min-h-[44px] w-full rounded-lg px-2 text-left text-sm text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       >
                         <strong>{p.label}:</strong> {p.message}
                         <span className="sr-only">. Go to this step</span>
@@ -657,13 +657,13 @@ export default function ProposalWizard({ start = null, leaveTo = "/decisions" }:
 
             {cfg.aligns && <AlignmentReview body={cfg.publish.body(answers)} onState={setReview} />}
 
-            <div className="rounded-xl border border-stone-200 bg-stone-50 p-4">
-              <p className="text-sm font-semibold text-stone-900">What publishing does</p>
-              <p className="mt-1 text-sm text-stone-700 leading-relaxed">{cfg.consequence}</p>
+            <div className="rounded-xl border border-border bg-muted p-4">
+              <p className="text-sm font-semibold text-foreground">What publishing does</p>
+              <p className="mt-1 text-sm text-foreground leading-relaxed">{cfg.consequence}</p>
               {/* A type whose route opens the ballot itself says so in its
                   consequence, and this sentence would contradict it. */}
               {!cfg.opensVote && (
-                <p className="mt-1.5 text-sm text-stone-600 leading-relaxed">
+                <p className="mt-1.5 text-sm text-muted-foreground leading-relaxed">
                   Publishing does not start a vote. The village senses it first, and someone has to take it to a ballot.
                 </p>
               )}
@@ -674,19 +674,19 @@ export default function ProposalWizard({ start = null, leaveTo = "/decisions" }:
         {feedback && (
           <p
             role={feedback.ok ? "status" : "alert"}
-            className={`mt-4 text-sm font-medium ${feedback.ok ? "text-sage" : "text-coral"}`}
+            className={`mt-4 text-sm font-medium ${feedback.ok ? "text-open" : "text-destructive"}`}
           >
             {feedback.text}
           </p>
         )}
 
         {/* The walk's controls. */}
-        <div className="mt-8 flex flex-wrap items-center gap-2 border-t border-stone-200 pt-4">
+        <div className="mt-8 flex flex-wrap items-center gap-2 border-t border-border pt-4">
           {prevStep(type, step, answers) ? (
             <button
               type="button"
               onClick={() => void goTo(prevStep(type, step, answers)!)}
-              className="inline-flex min-h-[44px] items-center gap-2 rounded-lg border border-stone-300 px-4 text-sm font-medium text-stone-700 hover:bg-stone-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
+              className="inline-flex min-h-[44px] items-center gap-2 rounded-lg border border-border px-4 text-sm font-medium text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <ArrowLeft className="w-4 h-4" aria-hidden="true" />
               Back
@@ -695,7 +695,7 @@ export default function ProposalWizard({ start = null, leaveTo = "/decisions" }:
             <button
               type="button"
               onClick={() => (dirty ? setLeaving(true) : navigate(leaveTo))}
-              className="inline-flex min-h-[44px] items-center gap-2 rounded-lg border border-stone-300 px-4 text-sm font-medium text-stone-700 hover:bg-stone-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
+              className="inline-flex min-h-[44px] items-center gap-2 rounded-lg border border-border px-4 text-sm font-medium text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <ArrowLeft className="w-4 h-4" aria-hidden="true" />
               Leave
@@ -707,7 +707,7 @@ export default function ProposalWizard({ start = null, leaveTo = "/decisions" }:
               type="button"
               disabled={busy || problems.length > 0 || (!!cfg?.aligns && !review.ready)}
               onClick={publish}
-              className="inline-flex min-h-[44px] items-center gap-2 rounded-lg bg-teal-deep px-5 text-sm font-semibold text-white hover:bg-teal-deep-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep focus-visible:ring-offset-2 disabled:opacity-50"
+              className="inline-flex min-h-[44px] items-center gap-2 rounded-lg bg-notice px-5 text-sm font-semibold text-background hover:bg-notice/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50"
             >
               {busy ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> : <Send className="w-4 h-4" aria-hidden="true" />}
               {cfg?.publishLabel ?? "Put it in front of the village"}
@@ -718,7 +718,7 @@ export default function ProposalWizard({ start = null, leaveTo = "/decisions" }:
                 type="button"
                 disabled={!type}
                 onClick={() => void goTo(nextStep(type, step, answers)!)}
-                className="inline-flex min-h-[44px] items-center gap-2 rounded-lg bg-teal-deep px-5 text-sm font-semibold text-white hover:bg-teal-deep-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep focus-visible:ring-offset-2 disabled:opacity-50"
+                className="inline-flex min-h-[44px] items-center gap-2 rounded-lg bg-notice px-5 text-sm font-semibold text-background hover:bg-notice/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50"
               >
                 Next
                 <ArrowRight className="w-4 h-4" aria-hidden="true" />
@@ -730,7 +730,7 @@ export default function ProposalWizard({ start = null, leaveTo = "/decisions" }:
             <button
               type="button"
               onClick={() => setLeaving(true)}
-              className="inline-flex min-h-[44px] items-center gap-2 rounded-lg px-4 text-sm font-medium text-stone-600 hover:bg-stone-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
+              className="inline-flex min-h-[44px] items-center gap-2 rounded-lg px-4 text-sm font-medium text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <Save className="w-4 h-4" aria-hidden="true" />
               Save and leave
@@ -750,9 +750,9 @@ export default function ProposalWizard({ start = null, leaveTo = "/decisions" }:
         <div className="sticky top-24 -mx-1 max-h-[calc(100dvh-7rem)] overflow-y-auto overscroll-contain p-1">
           <WizardStepper typeId={type} answers={answers} current={step} onGoBack={(s) => void goTo(s)} />
           {dirty && (
-            <p className="mt-4 px-2 text-xs text-stone-500">Unsaved changes. They save on their own in a moment.</p>
+            <p className="mt-4 px-2 text-xs text-muted-foreground">Unsaved changes. They save on their own in a moment.</p>
           )}
-          {!dirty && draftId && <p className="mt-4 px-2 text-xs text-stone-500">Saved. You can close this and come back.</p>}
+          {!dirty && draftId && <p className="mt-4 px-2 text-xs text-muted-foreground">Saved. You can close this and come back.</p>}
           {preview("rail")}
         </div>
       </aside>
@@ -762,34 +762,34 @@ export default function ProposalWizard({ start = null, leaveTo = "/decisions" }:
           role="dialog"
           aria-modal="true"
           aria-labelledby="leave-title"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/40 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4"
         >
-          <div className="w-full max-w-sm rounded-xl bg-white p-5 shadow-xl">
-            <h2 id="leave-title" className="text-lg font-bold text-stone-900">
+          <div className="w-full max-w-sm rounded-xl bg-card p-5 shadow-sm">
+            <h2 id="leave-title" className="text-lg font-bold text-foreground">
               Keep this for later?
             </h2>
-            <p className="mt-1 text-sm text-stone-600 leading-relaxed">
+            <p className="mt-1 text-sm text-muted-foreground leading-relaxed">
               A saved draft waits for you on any device you sign in from. Nobody else can see it.
             </p>
             <div className="mt-4 space-y-2">
               <button
                 type="button"
                 onClick={() => void leave(true)}
-                className="min-h-[44px] w-full rounded-lg bg-teal-deep px-4 text-sm font-semibold text-white hover:bg-teal-deep-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep focus-visible:ring-offset-2"
+                className="min-h-[44px] w-full rounded-lg bg-notice px-4 text-sm font-semibold text-background hover:bg-notice/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               >
                 Save draft and leave
               </button>
               <button
                 type="button"
                 onClick={() => void leave(false)}
-                className="min-h-[44px] w-full rounded-lg border border-stone-300 px-4 text-sm font-medium text-stone-700 hover:bg-stone-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
+                className="min-h-[44px] w-full rounded-lg border border-border px-4 text-sm font-medium text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 Leave without saving
               </button>
               <button
                 type="button"
                 onClick={() => setLeaving(false)}
-                className="min-h-[44px] w-full rounded-lg px-4 text-sm font-medium text-stone-600 hover:bg-stone-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
+                className="min-h-[44px] w-full rounded-lg px-4 text-sm font-medium text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 Stay here
               </button>

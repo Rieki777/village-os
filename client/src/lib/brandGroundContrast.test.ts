@@ -619,7 +619,8 @@ const FIXED: Record<string, number> = {
   "client/src/pages/Home.tsx": 1,
   "client/src/pages/Housing.tsx": 2,
   "client/src/pages/HowWeCreate.tsx": 1,
-  "client/src/pages/LoveLetter.tsx": 2,
+  // LoveLetter.tsx's two left this list on 2026-11-10: the Love Letter stands in the sheet's world
+  // (docs/DESIGN_RULE.md) and its buttons are the sheet's gold, no longer white on the brand. 57.
   "client/src/pages/NotFound.tsx": 1,
   "client/src/pages/Opportunities.tsx": 1,
   "client/src/pages/ProjectHistory.tsx": 5,
@@ -643,11 +644,11 @@ describe("under the pointer, a brand button stays readable and visibly moves, li
   it(`reads every white-on-brand hover in client/src (${POINTER_LISTS.length}), and every one this change fixed`, () => {
     // 60 until 2026-10-30, when the unused shadcn ui/badge.tsx was deleted with 38
     // other primitives nothing imported. Its one fixed hover left with the file.
-    expect(Object.values(FIXED).reduce((n, v) => n + v, 0)).toBe(59);
+    expect(Object.values(FIXED).reduce((n, v) => n + v, 0)).toBe(57);
     for (const [file, n] of Object.entries(FIXED)) {
       expect(POINTER_LISTS.filter((l) => l.file === file).length, `${file} hovers read`).toBeGreaterThanOrEqual(n);
     }
-    expect(POINTER_LISTS.length).toBeGreaterThanOrEqual(59 + 25);
+    expect(POINTER_LISTS.length).toBeGreaterThanOrEqual(57 + 25);
   });
 
   for (const list of POINTER_LISTS) {

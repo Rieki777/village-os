@@ -46,15 +46,15 @@ export default function WizardStepper({
               <span
                 className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 text-xs font-bold ${
                   done
-                    ? "border-teal-deep bg-teal-deep text-white"
+                    ? "border-notice bg-notice text-background"
                     : here
-                      ? "border-teal-deep text-teal-deep"
-                      : "border-stone-300 text-stone-400"
+                      ? "border-notice text-notice"
+                      : "border-border text-muted-foreground"
                 }`}
               >
                 {done ? <Check className="w-3.5 h-3.5" aria-hidden="true" /> : i + 1}
               </span>
-              <span className={here ? "font-semibold text-stone-900" : done ? "text-stone-700" : "text-stone-400"}>
+              <span className={here ? "font-semibold text-foreground" : done ? "text-foreground" : "text-muted-foreground"}>
                 {step.label}
               </span>
             </>
@@ -65,7 +65,7 @@ export default function WizardStepper({
                 <button
                   type="button"
                   onClick={() => onGoBack(step.key)}
-                  className="flex min-h-[44px] w-full items-center gap-3 rounded-lg px-2 text-left text-sm hover:bg-stone-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
+                  className="flex min-h-[44px] w-full items-center gap-3 rounded-lg px-2 text-left text-sm hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   {body}
                   <span className="sr-only">, completed. Go back to it</span>
@@ -85,9 +85,9 @@ export default function WizardStepper({
 
       {/* Mobile: one step and a row of dots. */}
       <div className="lg:hidden">
-        <p className="text-sm font-semibold text-stone-900">
+        <p className="text-sm font-semibold text-foreground">
           {walk[at]?.label}
-          <span className="ml-2 font-normal text-stone-500">
+          <span className="ml-2 font-normal text-muted-foreground">
             step {at + 1} of {walk.length}
           </span>
         </p>
@@ -97,7 +97,7 @@ export default function WizardStepper({
               <span
                 aria-current={i === at ? "step" : undefined}
                 className={`block h-1.5 rounded-full ${
-                  i < at ? "bg-teal-deep" : i === at ? "bg-teal-deep/60" : "bg-stone-200"
+                  i < at ? "bg-notice" : i === at ? "bg-notice/60" : "bg-muted"
                 }`}
               >
                 <span className="sr-only">

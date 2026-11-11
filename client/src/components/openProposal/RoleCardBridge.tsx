@@ -87,7 +87,7 @@ export function RoleAsks({
                   <input
                     id={id}
                     type="checkbox"
-                    className="mt-1 size-4 shrink-0 accent-primary"
+                    className="mt-1 size-4 shrink-0 accent-notice"
                     checked={on}
                     disabled={!on && full}
                     onChange={() => {
@@ -140,7 +140,7 @@ export function RoleAsks({
                   <input
                     id={id}
                     type="checkbox"
-                    className="mt-1 size-4 shrink-0 accent-primary"
+                    className="mt-1 size-4 shrink-0 accent-notice"
                     checked={on}
                     disabled={!on && servesFull}
                     onChange={() => {
@@ -226,7 +226,7 @@ export function SeasonServes({
                   <input
                     id={id}
                     type="checkbox"
-                    className="mt-1 size-4 shrink-0 accent-primary"
+                    className="mt-1 size-4 shrink-0 accent-notice"
                     checked={on}
                     disabled={!on && full}
                     onChange={() => {
@@ -258,7 +258,7 @@ export function SeasonServes({
         <legend className="mb-1 text-sm font-semibold text-card-foreground">{t({ message: "Agreements", context: "open proposal card" })}</legend>
         {membership}
         <label className="flex min-h-11 items-start gap-2 text-sm text-foreground">
-          <input type="checkbox" required className="mt-1 size-4 shrink-0 accent-primary" checked={agreed.nda} onChange={(e) => onAgreed({ ...agreed, nda: e.target.checked })} />
+          <input type="checkbox" required className="mt-1 size-4 shrink-0 accent-notice" checked={agreed.nda} onChange={(e) => onAgreed({ ...agreed, nda: e.target.checked })} />
           {t`Once approved into a role, I will align with the village's confidentiality agreement before I see any confidential records or my role starts.`}
         </label>
       </fieldset>
@@ -321,7 +321,7 @@ export function CardSideBySide({
         const time = r.timeCommitment ?? "";
         return (
           <div key={r.id} className="overflow-hidden rounded-xl border border-border" data-side-by-side={r.id}>
-            <p className="bg-primary px-3 py-2 text-sm font-bold text-primary-foreground">{roleName}</p>
+            <p className="border-b border-border bg-muted px-3 py-2 text-sm font-bold text-notice">{roleName}</p>
             <div className="grid sm:grid-cols-2">
               <div className="min-w-0 border-b border-border p-3 sm:border-b-0 sm:border-r">
                 <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">{t({ message: "The role asks", context: "open proposal side by side" })}</p>
@@ -500,7 +500,7 @@ export function Practicalities({ value, onChange }: { value: Practical; onChange
             <label key={w} className="flex min-h-11 items-center gap-2 text-sm text-foreground">
               <input
                 type="checkbox"
-                className="size-4 accent-primary"
+                className="size-4 accent-notice"
                 checked={value.windows.includes(w)}
                 onChange={() => onChange({ ...value, windows: value.windows.includes(w) ? value.windows.filter((x) => x !== w) : [...value.windows, w] })}
               />
@@ -512,11 +512,11 @@ export function Practicalities({ value, onChange }: { value: Practical; onChange
       <fieldset className="grid gap-2">
         <legend className="mb-1 text-sm font-semibold text-card-foreground">{t`The terms on offer`}</legend>
         <label className="flex min-h-11 items-start gap-2 text-sm text-foreground">
-          <input type="radio" name="card-terms" required className="mt-1 size-4 accent-primary" checked={value.terms.choice === "accept"} onChange={() => onChange({ ...value, terms: { ...value.terms, choice: "accept" } })} />
+          <input type="radio" name="card-terms" required className="mt-1 size-4 accent-notice" checked={value.terms.choice === "accept"} onChange={() => onChange({ ...value, terms: { ...value.terms, choice: "accept" } })} />
           {t`I accept the terms on offer.`}
         </label>
         <label className="flex min-h-11 items-start gap-2 text-sm text-foreground">
-          <input type="radio" name="card-terms" required className="mt-1 size-4 accent-primary" checked={value.terms.choice === "talk"} onChange={() => onChange({ ...value, terms: { ...value.terms, choice: "talk" } })} />
+          <input type="radio" name="card-terms" required className="mt-1 size-4 accent-notice" checked={value.terms.choice === "talk"} onChange={() => onChange({ ...value, terms: { ...value.terms, choice: "talk" } })} />
           {t`I'd like to talk about the terms.`}
         </label>
         {value.terms.choice === "talk" && (
