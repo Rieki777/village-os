@@ -22,16 +22,17 @@
  * (`org.ccos_terms`), the words draw exactly as they are and nothing is
  * underlined.
  *
- * TAP TARGETS, 44px on a phone without moving any layout: an invisible inset
- * pseudo-element grows the touch area around the words.
+ * TAP TARGETS, 44px on a phone without moving any layout: padding grows the
+ * button's own box and an equal negative margin gives the space back
+ * (WORDED_TAP in InfoTip.tsx).
  */
 import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import InfoTip from "@/components/InfoTip";
+import InfoTip, { WORDED_TAP } from "@/components/InfoTip";
 
 /** An eyebrow heading: text-xs, so a 16px line grown to 44px. */
-export const EYEBROW_TAP = "relative uppercase before:absolute before:-inset-x-1 before:-inset-y-3.5 before:content-['']";
+export const EYEBROW_TAP = `uppercase ${WORDED_TAP}`;
 /** A phrase inside a text-sm sentence, as the circle card's "This circle exists while". */
-export const INLINE_TAP = "relative before:absolute before:-inset-x-1 before:-inset-y-3 before:content-['']";
+export const INLINE_TAP = WORDED_TAP;
 /** A bold label inside a text-sm block, its own 44px row like the circle card's headings. */
 export const LABEL_TAP = "inline-flex min-h-11 items-center text-left";
 
