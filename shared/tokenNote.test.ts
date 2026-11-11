@@ -1,12 +1,12 @@
 /**
- * The plain-words note on an equity-kind token, and Amora's own wording (the
+ * The plain-words note on an equity-kind token, and the first tenant's own wording (the
  * lead, 2026-11-11): three claims, and no promise of cash or equity.
  */
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { equityTokenNote } from "./tokenNote";
 
-const seed = (f: string) => JSON.parse(readFileSync(new URL(`../server/seeds/amora/${f}`, import.meta.url), "utf8"));
+const seed = (f: string) => JSON.parse(readFileSync(new URL(`../server/seeds/amora/${f}`, import.meta.url), "utf8")); // brand-ok: reads the first tenant's own seed folder
 const PROMISE = /\b(convert\w*|cash(ed)? out|redeem\w*|will be worth|worth more|grow into|turn into|turned into|exchange\w*)\b/i;
 
 function saysTheThreeThings(text: string) {
@@ -27,7 +27,7 @@ describe("the equity token note", () => {
   });
 });
 
-describe("Amora's token words", () => {
+describe("the first tenant's token words", () => {
   it("describes Earned Equity in the three plain claims", () => {
     saysTheThreeThings(seed("token-descriptions-seed.json")["earned-equity"]);
   });
