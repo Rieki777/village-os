@@ -85,14 +85,14 @@ export default function TermsWeOffer({ offer, mayEdit, savePath, onSaved }: { of
     }
   };
 
-  const choiceWords = (c: "accept" | "talk") => (c === "accept" ? t`I accept` : t`Let's talk`);
-  const stateWords = (s: "accept" | "talk" | "waiting") => (s === "waiting" ? t`Waiting for their answer` : s === "talk" ? t`Let's talk` : t`Agreed`);
+  const choiceWords = (c: "accept" | "talk") => (c === "accept" ? t({ message: `I accept`, context: "reviewer's terms panel for a proposal" }) : t({ message: `Let's talk`, context: "reviewer's terms panel for a proposal" }));
+  const stateWords = (s: "accept" | "talk" | "waiting") => (s === "waiting" ? t`Waiting for their answer` : s === "talk" ? t({ message: `Let's talk`, context: "reviewer's terms panel for a proposal" }) : t({ message: `Agreed`, context: "reviewer's terms panel for a proposal" }));
 
   return (
     <section aria-labelledby="terms-we-offer" className={PANEL} data-terms-we-offer="">
-      <p className={EYEBROW}>{t`Counter-offer`}</p>
+      <p className={EYEBROW}>{t({ message: `Counter-offer`, context: "reviewer's terms panel for a proposal" })}</p>
       <h2 id="terms-we-offer" className="font-display text-2xl font-bold text-card-foreground">
-        {t`Terms we offer`}
+        {t({ message: `Terms we offer`, context: "reviewer's terms panel for a proposal" })}
       </h2>
       <p className="mt-1 text-sm text-muted-foreground">
         {mayEdit
@@ -106,13 +106,13 @@ export default function TermsWeOffer({ offer, mayEdit, savePath, onSaved }: { of
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h3 className="font-semibold text-foreground">{r.label}</h3>
               <span className="flex flex-wrap gap-1.5">
-                {r.theirs && <span className={CHIP}>{t`They said: ${choiceWords(r.theirs.choice)}`}</span>}
+                {r.theirs && <span className={CHIP}>{t({ message: `They said: ${choiceWords(r.theirs.choice)}`, context: "reviewer's terms panel for a proposal" })}</span>}
                 {r.changed && <span className={CHIP} data-term-state={r.state}>{stateWords(r.state)}</span>}
               </span>
             </div>
-            <p className="mt-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">{t`The role suggests`}</p>
+            <p className="mt-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">{t({ message: `The role suggests`, context: "reviewer's terms panel for a proposal" })}</p>
             <p className="whitespace-pre-wrap break-words text-sm text-foreground">{r.suggested ?? t`Not written. We'll set this together.`}</p>
-            {r.theirs?.note && <p className="mt-2 whitespace-pre-wrap break-words text-sm text-foreground">{t`Their note: ${r.theirs.note}`}</p>}
+            {r.theirs?.note && <p className="mt-2 whitespace-pre-wrap break-words text-sm text-foreground">{t({ message: `Their note: ${r.theirs.note}`, context: "reviewer's terms panel for a proposal" })}</p>}
             {mayEdit ? (
               <label className="mt-3 block">
                 <span className="text-sm font-semibold text-foreground">{t`Our wording for this proposal`}</span>
@@ -125,14 +125,14 @@ export default function TermsWeOffer({ offer, mayEdit, savePath, onSaved }: { of
                 />
               </label>
             ) : (
-              r.changed && <p className="mt-2 whitespace-pre-wrap break-words text-sm text-foreground">{t`Our wording: ${r.current ?? ""}`}</p>
+              r.changed && <p className="mt-2 whitespace-pre-wrap break-words text-sm text-foreground">{t({ message: `Our wording: ${r.current ?? ""}`, context: "reviewer's terms panel for a proposal" })}</p>
             )}
           </li>
         ))}
         <li className={TILE} data-term-row="commitment">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h3 className="font-semibold text-foreground">{t`Commitment`}</h3>
-            <span className={CHIP}>{offer.theirCommitment == null ? t`They have not chosen` : t`They chose ${offer.theirCommitment}%`}</span>
+            <h3 className="font-semibold text-foreground">{t({ message: `Commitment`, context: "reviewer's terms panel for a proposal" })}</h3>
+            <span className={CHIP}>{offer.theirCommitment == null ? t`They have not chosen` : t({ message: `They chose ${offer.theirCommitment}%`, context: "reviewer's terms panel for a proposal" })}</span>
           </div>
           {offer.roleCommitment != null && <p className="mt-2 text-sm text-foreground">{t`The role asks ${offer.roleCommitment}%`}</p>}
           <p className="mt-1 text-sm text-muted-foreground">{t`Energy and attention. We agree it together.`}</p>
@@ -140,7 +140,7 @@ export default function TermsWeOffer({ offer, mayEdit, savePath, onSaved }: { of
             <label className="mt-3 block">
               <span className="text-sm font-semibold text-foreground">{t`The commitment we'd agree on`}</span>
               <select value={pct === "" ? String(offer.ourCommitment ?? "") : pct} onChange={(e) => setPct(e.target.value)} className={`${FIELD} mt-1 min-h-11`}>
-                {offer.ourCommitment == null && <option value="">{t`Choose`}</option>}
+                {offer.ourCommitment == null && <option value="">{t({ message: `Choose`, context: "reviewer's terms panel for a proposal" })}</option>}
                 {COMMITMENT_CHOICES.map((c) => (
                   <option key={c} value={c}>
                     {c}%
@@ -149,7 +149,7 @@ export default function TermsWeOffer({ offer, mayEdit, savePath, onSaved }: { of
               </select>
             </label>
           ) : (
-            <p className="mt-2 text-sm text-foreground">{offer.ourCommitment == null ? "" : t`We'd agree ${offer.ourCommitment}%`}</p>
+            <p className="mt-2 text-sm text-foreground">{offer.ourCommitment == null ? "" : t({ message: `We'd agree ${offer.ourCommitment}%`, context: "reviewer's terms panel for a proposal" })}</p>
           )}
         </li>
       </ul>
@@ -157,7 +157,7 @@ export default function TermsWeOffer({ offer, mayEdit, savePath, onSaved }: { of
       {mayEdit && (
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <button type="button" disabled={busy || !dirty} onClick={() => void save()} className={BTN_PRIMARY}>
-            {t`Save revision ${offer.revision + 1}`}
+            {t({ message: `Save revision ${offer.revision + 1}`, context: "reviewer's terms panel for a proposal" })}
           </button>
           {said && (
             <p role="status" className={said.ok ? "text-sm text-foreground" : "text-sm text-destructive"}>
@@ -168,7 +168,7 @@ export default function TermsWeOffer({ offer, mayEdit, savePath, onSaved }: { of
       )}
 
       <details className="mt-5" data-terms-history="">
-        <summary className="min-h-11 cursor-pointer py-2 text-sm font-semibold text-notice">{t`History (${offer.history.length})`}</summary>
+        <summary className="min-h-11 cursor-pointer py-2 text-sm font-semibold text-notice">{t({ message: `History (${offer.history.length})`, context: "reviewer's terms panel for a proposal" })}</summary>
         {offer.history.length === 0 ? (
           <p className="text-sm text-muted-foreground">{t`Nothing has been changed yet.`}</p>
         ) : (
@@ -180,9 +180,9 @@ export default function TermsWeOffer({ offer, mayEdit, savePath, onSaved }: { of
                   {h.changes.map((c) => (
                     <li key={c.key} className="break-words text-foreground">
                       <span className="font-semibold">{c.label}: </span>
-                      <span className="text-muted-foreground">{c.from ?? t`not set`}</span>
+                      <span className="text-muted-foreground">{c.from ?? t({ message: `not set`, context: "reviewer's terms panel for a proposal" })}</span>
                       {` → `}
-                      <span>{c.to ?? t`not set`}</span>
+                      <span>{c.to ?? t({ message: `not set`, context: "reviewer's terms panel for a proposal" })}</span>
                     </li>
                   ))}
                 </ul>

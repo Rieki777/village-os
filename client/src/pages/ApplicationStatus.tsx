@@ -76,19 +76,19 @@ export function ChangedTerms({ offer, answerUrl, onSaved }: { offer: ServedOffer
       setBusy(false);
     }
   };
-  const choice = (c: "accept" | "talk") => (c === "accept" ? t`I accept` : t`Let's talk`);
+  const choice = (c: "accept" | "talk") => (c === "accept" ? t({ message: `I accept`, context: "applicant's application status, terms" }) : t({ message: `Let's talk`, context: "applicant's application status, terms" }));
   return (
     <section aria-labelledby="changed-terms" className="rounded-2xl border-2 border-notice/60 bg-card p-5 shadow-sm sm:p-6" data-changed-terms="">
-      <p className="text-xs font-semibold uppercase tracking-widest text-notice">{t`Terms`}</p>
+      <p className="text-xs font-semibold uppercase tracking-widest text-notice">{t({ message: `Terms`, context: "applicant's application status, terms" })}</p>
       <h2 id="changed-terms" className="font-display text-2xl font-bold text-card-foreground">{t`We changed some of the terms`}</h2>
       <p className="mt-1 text-sm text-muted-foreground">{t`Here is our new wording beside what you answered. Settings we did not change stay as you accepted them.`}</p>
       <ul className="mt-4 grid gap-3">
         {offer.rows.map((r) => (
           <li key={r.key} className="rounded-xl border border-border bg-muted p-4" data-changed-term={r.key}>
             <h3 className="font-semibold text-foreground">{r.label}</h3>
-            <p className="mt-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">{t`Our wording now`}</p>
+            <p className="mt-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">{t({ message: `Our wording now`, context: "applicant's application status, terms" })}</p>
             <p className="whitespace-pre-wrap break-words text-foreground">{r.ours}</p>
-            <p className="mt-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">{t`What you answered`}</p>
+            <p className="mt-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">{t({ message: `What you answered`, context: "applicant's application status, terms" })}</p>
             <p className="whitespace-pre-wrap break-words text-foreground">
               {r.theirCommitment != null ? `${r.theirCommitment}%` : r.theirs ? `${choice(r.theirs.choice)}${r.theirs.note ? `: ${r.theirs.note}` : ""}` : t`You did not answer this one.`}
             </p>
@@ -137,7 +137,7 @@ export function ChangedTerms({ offer, answerUrl, onSaved }: { offer: ServedOffer
             onClick={() => void send()}
             className="inline-flex min-h-11 items-center justify-center rounded-xl bg-notice px-5 py-2 font-semibold text-background hover:bg-notice/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
           >
-            {t`Send my answers`}
+            {t({ message: `Send my answers`, context: "applicant's application status, terms" })}
           </button>
           {said && <p role="status" className={said.ok ? "text-sm text-foreground" : "text-sm text-destructive"}>{said.text}</p>}
         </div>

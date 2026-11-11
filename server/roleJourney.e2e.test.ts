@@ -175,7 +175,7 @@ describe.skipIf(!DB_CONFIGURED)("the role journey: one stranger takes one role t
     const card = {
       roles: [{ roleId: state.roleId, moves: [{ text: "A cash view every Monday", target: "every Monday" }], firstMoon: [{ quest: "Publish the first cash view", doneWhen: "every circle lead has it" }] }],
       serves: [{ goalId: state.goalId, how: "One model every figure traces to." }],
-      hours: "roughly 40 a week",
+      commitmentPct: 50,
       agreed: { loveLetter: true, nda: true },
       terms: { choice: "accept", note: "" },
       timeZone: "America/Costa_Rica",
