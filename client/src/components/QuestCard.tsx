@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import type { QuestClaim } from "@/lib/gameApi";
 import WorkPayBlock from "@/components/WorkPayBlock";
+import RootTags from "@/components/roots/RootTags";
 import {
   gateLabel, questScene, sceneGradient, statusIs, type BoardQuest,
 } from "@/lib/questBoard";
@@ -185,6 +186,9 @@ export default function QuestCard({
               </span>
             )}
           </div>
+
+          {/* The roots it grows from, drawn as small roots (shared/archetypeRoots.ts). */}
+          {quest.archetypes?.length ? <RootTags roots={quest.archetypes} size="sm" /> : null}
 
           {(active > 0 || done > 0) && (
             <div className="flex flex-wrap items-center gap-3 text-xs">

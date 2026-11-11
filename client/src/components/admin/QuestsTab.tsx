@@ -28,6 +28,7 @@ import WorkValueEditor, { draftFrom, draftToBody, usePayOptions, type WorkValueD
 import QuestEnginePrice, { type EngineUse } from "@/components/valuation/QuestEnginePrice";
 import { usePrefill } from "@/lib/profilePrefill";
 import { linesToList, listToLines } from "@/lib/questBoard";
+import QuestRootsEditor from "./QuestRootsEditor";
 import QuestSafetyEditor from "@/components/admin/QuestSafetyEditor";
 
 export default function QuestsTab({ password }: { password: string }) {
@@ -330,6 +331,24 @@ export default function QuestsTab({ password }: { password: string }) {
                     A poster comes through the village's own upload, so its path starts with /api/uploads/. Leave it empty and the card paints a scene from the quest's circle.
                   </p>
                 </details>
+                {/* The roots it grows from (the five archetypes as roots): its
+                    own Save, like safety below. */}
+                {!q.isExample && (
+                  <details className="mt-3 rounded-lg border border-border bg-muted/40 px-3 py-2">
+                    <summary className="text-xs font-semibold text-muted-foreground cursor-pointer select-none min-h-11 flex items-center">
+                      <Trans context="admin quest roots">Roots it grows from</Trans>
+                      {Array.isArray(q.archetypes) && q.archetypes.length ? ` (${q.archetypes.length})` : ""}
+                    </summary>
+                    <div className="mt-3">
+                      <QuestRootsEditor
+                        questId={q.id}
+                        roots={Array.isArray(q.archetypes) ? q.archetypes : []}
+                        suggested={q.archetypesSuggested === true}
+                        password={password}
+                      />
+                    </div>
+                  </details>
+                )}
                 {/* What it asks of the body (build days S5): its own Save, so a
                     safety change never rides an unrelated edit. */}
                 {!q.isExample && (

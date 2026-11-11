@@ -55,6 +55,7 @@ import { runSeasonTurn } from "../lib/seasonTurn";
 import { readOpenProposal } from "../repos/openProposals";
 import { usersRepo } from "../repos/users";
 import { register, tidyOpenProposals } from "./openProposals";
+import { foundingSetupFrom, FOUNDING_KEYS } from "../../shared/foundingApplication";
 
 const configured = testDbConfigured();
 if (!configured) console.warn("[openProposalDecide] TEST_DATABASE_URL not set - DB cases SKIPPED. A skip is not a pass.");
@@ -140,6 +141,8 @@ describe.skipIf(!configured)("open role proposals, the decision, on a real schem
       projectName: () => "Test Village",
       escapeHtml,
       seasonState: () => ({ current: NOW_SEASON, seasons: [NOW_SEASON, NEXT], timezone: "UTC" }),
+      // The ways to get to know the village it lists (Phase A), so a tick for one is kept.
+      founding: () => foundingSetupFrom((key) => (key === FOUNDING_KEYS.knowUs ? "Visit the land\nShare a meal" : "")),
       postEmail: async (email: OutgoingEmail) => {
         state.sent.push(email);
         return state.answer;
@@ -270,7 +273,8 @@ describe.skipIf(!configured)("open role proposals, the decision, on a real schem
   describe("confirming asks the circle", () => {
     it("asks every other live holder in the roles' circles once, for 2 business days, and tells the deciders, each on a stable key", async () => {
       const before = new Date();
-      const { id, token } = await confirmed("rowan-has@example.test", [gate, well]);
+      // One role per application (the lead, 11 Nov 2026): the server refuses a second.
+      const { id, token } = await confirmed("rowan-has@example.test", [gate]);
       const after = new Date();
       const asks = await asksOf(id);
       // Ana and Ben hold roles in the Land Circle; the proposer's own account (u-has) is not asked.
@@ -284,7 +288,7 @@ describe.skipIf(!configured)("open role proposals, the decision, on a real schem
 
       const asked = state.notices.filter((n) => n.type === "open_role_proposal_consent_ask");
       expect(asked.map((n) => n.userId).sort()).toEqual([ANA.id, BEN.id]);
-      expect(asked[0]).toMatchObject({ title: CONSENT_WORDS.askTitle(["Gate Keeper", "Well Keeper"]), link: `/open-proposals/${id}` });
+      expect(asked[0]).toMatchObject({ title: CONSENT_WORDS.askTitle(["Gate Keeper"]), link: `/open-proposals/${id}` });
       expect(asked.map((n) => n.dedupeKey).sort()).toEqual([`op:${id}:ask:${ANA.id}`, `op:${id}:ask:${BEN.id}`]);
       const waiting = state.notices.filter((n) => n.type === "open_role_proposal_waiting");
       expect(waiting).toEqual([expect.objectContaining({ userId: FOUNDER.id, link: `/open-proposals/${id}`, dedupeKey: `op:${id}:waiting:${FOUNDER.id}` })]);
@@ -484,6 +488,45 @@ describe.skipIf(!configured)("open role proposals, the decision, on a real schem
       for (const secret of ["Ines Vargas", "ines.vargas", "Tomas Rey", "8888 1234", "Pavones", "Uvita"]) expect(JSON.stringify(mo.body), secret).not.toContain(secret);
       // A visitor with no session reads no page at all.
       expect((await page(id, null)).status).toBe(401);
+    });
+
+    it("FOUNDING: deciders read the ways they got to know us and the ramp-up; Human Design or Gene Keys never reaches a decider", async () => {
+      const before = state.sent.length;
+      const res = await fetch(`${base}/api/open-proposals`, { // module-review-ok: a test calling its own local server, never an outside host
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          name: "Rowan Field",
+          email: "founding1@example.test",
+          roles: [{ roleId: gate, note: "I open gates for a living." }],
+          why: "I live up the road and the gate is always shut.",
+          aim: "The gate opens at dawn every day.",
+          knowUs: ["Share a meal"],
+          rampUp: true,
+          selfKnowledge: "Projector 5/1, gate of the hidden spring",
+        }),
+      });
+      expect(res.status, await res.clone().text()).toBe(200);
+      const mail = state.sent[before];
+      const id = mail.idempotencyKey.split(":")[1];
+      expect((await call("POST", "/api/open-proposals/confirm", { token: tokenOf(mail) }, null)).status).toBe(200);
+      // CONTROL: it was kept, so its absence below is the gate and not a dropped field.
+      expect((await readOpenProposal(pool, id))?.body.selfKnowledge).toBe("Projector 5/1, gate of the hidden spring");
+      for (const reader of [FOUNDER.id, ANA.id]) {
+        const r = await page(id, reader);
+        expect(r.status).toBe(200);
+        expect(r.body.proposal.founding).toEqual({ knowUs: ["Share a meal"], rampUp: true });
+        expect(JSON.stringify(r.body)).not.toContain("Projector");
+        expect(JSON.stringify(r.body)).not.toContain("selfKnowledge");
+      }
+      // A member who does not decide it reads neither.
+      const mo = await page(id, MO.id);
+      expect(mo.status).toBe(200);
+      expect(mo.body.proposal.founding).toBeNull();
+      expect(JSON.stringify(mo.body)).not.toContain("Projector");
+      // Nor does any letter or notice the proposal sent.
+      expect(JSON.stringify(state.sent)).not.toContain("Projector");
+      expect(JSON.stringify(state.notices)).not.toContain("Projector");
     });
 
     it("ABOUT YOU: a holder of the power reads none of their own proposal's references", async () => {
@@ -1019,7 +1062,7 @@ describe.skipIf(!configured)("open role proposals, the decision, on a real schem
     it("the language chosen on the site is kept and the confirmation comes in it", async () => {
       const p = await proposeIn("es-chosen@example.test", { locale: "es", acceptLanguage: "en" });
       expect(p.locale).toBe("es");
-      expect(p.mail.subject).toBe("Confirma tu propuesta a Test Village");
+      expect(p.mail.subject).toBe("Confirma tu solicitud a Test Village");
       expect(p.mail.text).toContain("Hola Rowan,");
     });
 
@@ -1042,7 +1085,7 @@ describe.skipIf(!configured)("open role proposals, the decision, on a real schem
       const p = await proposeIn("ana-es@example.test", { locale: "es" });
       const statusPath = await confirmIt(p.token);
       const statusMail = state.sent.find((m) => m.origin === "open_proposal.status");
-      expect(statusMail?.subject).toBe("Dónde está tu propuesta");
+      expect(statusMail?.subject).toBe("Dónde está tu solicitud");
       const note = "Gracias <b>de verdad</b> & hasta pronto";
       const r = await call("POST", `/api/governance/open-proposals/${p.id}/decline`, { note }, FOUNDER.id);
       expect(r.status).toBe(200);

@@ -38,7 +38,7 @@ const role = (over: Partial<OrgRole> = {}): OrgRole =>
     ...over,
   }) as OrgRole;
 
-const ctx: SeatProjectionCtx = { route: "org", now: NOW, nameOf: () => "Mara", firstName: (s) => s, roleNames: new Map([["visionary", "Visionary Channel"]]), cardWords: { firstConversationRole: "Human Operations & Onboarding Lead Steward", paidConsentCircle: "Anchor Circle" } };
+const ctx: SeatProjectionCtx = { route: "org", now: NOW, nameOf: () => "Mara", firstName: (s) => s, roleNames: new Map([["visionary", "Visionary Channel"]]), cardWords: { firstConversationRole: "Human Operations & Onboarding Lead Steward", paidConsentCircle: "Anchor Circle", showPayRanges: true } };
 const base = { editing: false, viewPeople: false, peopleArePublic: true, mapStructure: false } as const;
 const VISITOR = orgSeatTier({ ...base });
 const GUEST = orgSeatTier({ ...base, mapStructure: true });
@@ -105,6 +105,19 @@ describe("the public pay range", () => {
     expect((filled.card as object)).not.toHaveProperty("publicPay");
     // An unlisted role is hidden by the list, and sends no range even if asked directly.
     expect(card(role({ listed: false }), VISITOR)).not.toHaveProperty("publicPay");
+  });
+
+  // Phase A (lead, 11 Nov): ranges stay hidden whatever the role data holds. The village setting
+  // `org.show_pay_ranges` ships off, and a card built without saying reads that setting.
+  it("is never sent while the village keeps ranges hidden, its default (control: the same role with ranges shown carries it)", () => {
+    const hidden = { ...ctx, cardWords: { ...ctx.cardWords, showPayRanges: undefined } };
+    for (const tier of [VISITOR, GUEST, MEMBER]) {
+      const c = projectSeat(role(), held, tier, hidden).card as Record<string, any>;
+      expect(c).not.toHaveProperty("publicPay");
+      expect(JSON.stringify(c)).not.toContain("300000");
+    }
+    expect(projectSeat(role(), held, VISITOR, { ...ctx, cardWords: { ...ctx.cardWords, showPayRanges: false } }).card).not.toHaveProperty("publicPay");
+    expect(card(role(), VISITOR)).toHaveProperty("publicPay");
   });
 
   it("is absent when the offer writes no pay", () => {

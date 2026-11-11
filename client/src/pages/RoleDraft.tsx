@@ -343,7 +343,7 @@ export default function RoleDraft() {
           <p className={EYEBROW}>{t({ message: "Open roles · select yours", context: "role draft eyebrow" })}</p>
           <h1 className={`mt-2 text-balance ${H1}`}>{t`Select your roles at ${villageName}`}</h1>
           <p className={`mt-3 ${LEDE}`}>
-            {t`Pick the characters you play, scout every open role by what it asks, open any card in full, and select up to three. Your selection stays in this browser until you propose, and nothing is sent before then.`}
+            {t`Pick the characters you play, scout every open role by what it asks, open any card in full, and select up to three. Your selection stays in this browser until you apply, and nothing is sent before then.`}
           </p>
 
           <div className="sm:sticky sm:top-24 z-20 -mx-4 bg-background/95 px-4 pb-3 pt-1 backdrop-blur">
@@ -353,7 +353,7 @@ export default function RoleDraft() {
                 t({ message: "Your R-Ikigai and your characters", context: "role draft step" }),
                 t({ message: "Scout the open roles", context: "role draft step" }),
                 t({ message: "Select up to three", context: "role draft step" }),
-                t({ message: "Propose", context: "role draft step" }),
+                t({ message: "Apply", context: "role draft step" }),
               ]}
               step={step}
               reached={4}
@@ -587,14 +587,8 @@ export default function RoleDraft() {
                   );
                 })}
               </div>
-              <div className="mt-6 flex justify-end">
-                <NextAct here={step === 2} deskOnly>
-              <button type="button" onClick={() => go(3)} className={BTN_PRIMARY} data-select-next="">
-                  {t({ message: "Next: review my selection", context: "role draft next" })}
-                  <ArrowRight className="size-4" aria-hidden="true" />
-                </button>
-                </NextAct>
-              </div>
+              {/* "Next: review my selection" stood here. It only scrolled to the tray beside it, so it read
+                  as a dead button (build list section 3): the tray is in view, and its Apply is the next act. */}
             </section>
 
             <aside id="sel-select" aria-label={t({ message: "Your selection", context: "role draft tray" })} className="relative order-first scroll-mt-52 rounded-2xl border-2 border-notice/60 bg-card p-4 shadow-sm lg:order-last lg:sticky lg:top-56">
@@ -641,7 +635,7 @@ export default function RoleDraft() {
               {full && <p role="status" className="mt-2 text-sm text-foreground">{t`Your selection holds three. Take one off to select another.`}</p>}
               {visitorClosed && pickCount > 0 && (
                 <p role="status" className="mt-3 rounded-xl bg-muted p-3 text-sm text-foreground">
-                  {form?.message ?? t`Proposals are closed right now. Your selection stays here, and you can propose when they open.`}
+                  {form?.message ?? t`Applications are closed right now. Your selection stays here, and you can apply when they open.`}
                 </p>
               )}
               {applyHref && (
@@ -649,11 +643,11 @@ export default function RoleDraft() {
                 <Link href={applyHref} onClick={(e) => applyWithBurst(e, applyHref)} className={`relative w-full ${BTN_PRIMARY}`} data-select-apply="">
                   {member
                     ? pickCount === 1
-                      ? t`Propose for this role`
-                      : t`Propose for these ${pickCount} roles`
+                      ? t`Apply for this role`
+                      : t`Apply for these ${pickCount} roles`
                     : pickCount === 1
-                      ? t`Propose with my pick`
-                      : t`Propose with my ${pickCount} picks`}
+                      ? t`Apply with my pick`
+                      : t`Apply with my ${pickCount} picks`}
                   <ArrowRight className="size-4" aria-hidden="true" />
                   <Burst play={applyBurst} size="sm" />
                 </Link>
@@ -669,9 +663,9 @@ export default function RoleDraft() {
 
           <section id="sel-apply" className="mt-12 grid scroll-mt-52 gap-6 lg:grid-cols-2" aria-labelledby="draft-next">
             <div>
-              <h2 id="draft-next" className={H2}>{t`What happens after you propose`}</h2>
+              <h2 id="draft-next" className={H2}>{t`What happens after you apply`}</h2>
               {member ? (
-                <ol aria-label={t({ message: "After you propose", context: "role draft steps" })} className="mt-3 grid list-decimal gap-2 pl-5 text-sm text-foreground">
+                <ol aria-label={t({ message: "After you apply", context: "role draft steps" })} className="mt-3 grid list-decimal gap-2 pl-5 text-sm text-foreground">
                   <li>{t`One proposal carries all your picks, with the terms each role offers.`}</li>
                   <li>{t`Each role's circle is asked to consent, and a holder of the power to place people in roles adopts it, never their own.`}</li>
                   <li>{t`Once you are approved into a role, you align with the village's confidentiality agreement (NDA), before you see any confidential records.`}</li>
@@ -685,8 +679,8 @@ export default function RoleDraft() {
                   </li>
                 </ol>
               ) : (
-                <ol aria-label={t({ message: "After you propose", context: "role draft steps" })} className="mt-3 grid list-decimal gap-2 pl-5 text-sm text-foreground">
-                  <li>{t`You align with the Love Letter, the village's membership agreement, when you propose. Aligning is the village's way of signing.`}</li>
+                <ol aria-label={t({ message: "After you apply", context: "role draft steps" })} className="mt-3 grid list-decimal gap-2 pl-5 text-sm text-foreground">
+                  <li>{t`You align with the Love Letter, the village's membership agreement, when you apply. Aligning is the village's way of signing.`}</li>
                   <li>{t`You confirm your email within 48 hours. Nothing reaches the village before you do.`}</li>
                   <li>{t`You meet the people the role works with, in the order the role sets, when it sets one.`}</li>
                   <li>{t`Each role's circle is asked to consent. A holder of the power to place people in roles adopts or declines your proposal, and never their own.`}</li>
@@ -749,24 +743,22 @@ export default function RoleDraft() {
             {applyHref && pickCount > 0 ? (
               <NextAct here block>
                 <Link href={applyHref} onClick={(e) => applyWithBurst(e, applyHref)} className={`relative w-full shadow-sm ${BTN_PRIMARY}`} data-select-thumb-apply="">
-                  {pickCount === 1 ? t`Propose with this role` : t`Propose with these ${pickCount} roles`}
+                  {pickCount === 1 ? t`Apply for this role` : t`Apply for these ${pickCount} roles`}
                   <ArrowRight className="size-4" aria-hidden="true" />
                 </Link>
               </NextAct>
-            ) : step < 3 ? (
+            ) : step < 2 ? (
               <NextAct here block>
                 <button type="button" onClick={() => go(step + 1)} className={`${BTN_PRIMARY} w-full shadow-sm`}>
                   {step === 0
                     ? t({ message: "Next: your R-Ikigai and characters", context: "role draft next" })
-                    : step === 1
-                      ? t({ message: "Next: scout the open roles", context: "role draft next" })
-                      : t({ message: "Next: review my selection", context: "role draft next" })}
+                    : t({ message: "Next: scout the open roles", context: "role draft next" })}
                   <ArrowRight className="size-4" aria-hidden="true" />
                 </button>
               </NextAct>
             ) : (
               <button type="button" onClick={() => go(2)} className={`${BTN_PRIMARY} w-full shadow-sm`}>
-                {t({ message: "Select a role to propose", context: "role draft next" })}
+                {t({ message: "Select a role to apply for", context: "role draft next" })}
                 <ArrowRight className="size-4" aria-hidden="true" />
               </button>
             )}

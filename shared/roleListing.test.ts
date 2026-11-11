@@ -46,6 +46,31 @@ describe("circles", () => {
     expect(circlesToShow(circles, rolesWithParent, { seesUnlisted: false }).map((c) => c.id).sort()).toEqual(["b", "child", "p"]);
     expect(circlesToShow(circles, rolesWithParent, { seesUnlisted: true })).toHaveLength(4);
   });
+  // Phase A, verify 2.2: the shape production served on 11 Nov after "List only these" kept one
+  // role. /api/org listed the one role and still served eleven circles, ten of them projected
+  // councils holding no role at all, which read to a visitor as the projected structure being public.
+  it("a curating village shows only the circles holding a listed role, empty projected ones gone", () => {
+    const circles = [
+      { id: "anchor", parentCircleId: null },
+      { id: "council-1", parentCircleId: null },
+      { id: "council-2", parentCircleId: null },
+      { id: "old", parentCircleId: null },
+    ];
+    const curated = [
+      { circleId: "anchor", listed: null, active: true },
+      { circleId: "old", listed: false, active: true },
+      { circleId: "council-2", listed: false, active: false },
+    ];
+    expect(circlesToShow(circles, curated, { seesUnlisted: false }).map((c) => c.id)).toEqual(["anchor"]);
+    // A steward still sees every circle, in the admin view.
+    expect(circlesToShow(circles, curated, { seesUnlisted: true })).toHaveLength(4);
+  });
+  it("a village that never unlisted a role keeps its empty circles, as before (control)", () => {
+    const circles = [{ id: "anchor" }, { id: "council-1" }];
+    expect(circlesToShow(circles, [{ circleId: "anchor", listed: null }], { seesUnlisted: false }).map((c) => c.id)).toEqual(["anchor", "council-1"]);
+    // An ended unlisted role does not make a village curating.
+    expect(circlesToShow(circles, [{ circleId: "anchor", listed: null }, { circleId: "x", listed: false, active: false }], { seesUnlisted: false })).toHaveLength(2);
+  });
 });
 
 describe("planListOnly", () => {

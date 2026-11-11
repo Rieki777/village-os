@@ -1,21 +1,22 @@
 // @vitest-environment jsdom
 /**
- * THE OPEN FORM'S "ABOUT YOU" SECTION (joining lane PR 2): where it sits, what
- * it holds, what it asks and when the consent tick is required.
+ * THE APPLICATION'S "ABOUT YOU" STEP (joining lane PR 2; step 2 of 6 since
+ * Phase A): where it sits, what it holds, what it asks and when the consent
+ * tick is required.
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { OPEN_AI_DRAFTS, OPEN_WORDS } from "@shared/openProposals";
+import { OPEN_WORDS } from "@shared/openProposals";
 import { CHECK_WORDS, checkConsentVersion } from "@shared/proposalAbout";
 
-// fillGoals is audit B1's helper; the walk along the six stones is the test kit's.
-import { fillGoals, sendNow, stoneNow } from "@/test/proposeStones";
+// fillGoals is audit B1's helper; the walk along the six steps is the test kit's.
+import { SETUP, fillGoals, sendNow, stoneNow } from "@/test/proposeStones";
 
 vi.mock("@/components/Layout", () => ({ default: ({ children }: { children: React.ReactNode }) => <div>{children}</div> }));
 const auth = vi.hoisted(() => ({ user: null as null | { name: string; email: string } }));
 vi.mock("@/contexts/AuthContext", () => ({ useOptionalAuth: () => ({ user: auth.user }) }));
 
-import ProposeARole, { ConfirmProposal } from "./ProposeARole";
+import ProposeARole from "./ProposeARole";
 
 const FORM = {
   open: true,
@@ -28,6 +29,7 @@ const FORM = {
     { id: "r-host", name: "Welcome Host", circle: "People Circle", aim: "Meet every newcomer." },
     { id: "r-cook", name: "Cook", circle: "People Circle", aim: null },
   ],
+  founding: SETUP,
 };
 
 /** The membership letter the form shows and aligns with (Rye's answer 8). */
@@ -61,11 +63,17 @@ afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
   auth.user = null;
+  window.localStorage.clear();
   window.history.pushState({}, "", "/");
 });
 
-
-const box = (id: string) => within(document.querySelector(`[data-role="${id}"]`) as HTMLElement).getByRole("checkbox");
+/** Open the application for one role, as its card's Apply link does. */
+const applyFor = async (id: string) => {
+  window.history.pushState({}, "", `/propose-a-role?role=${id}`);
+  serve(FORM);
+  render(<ProposeARole />);
+  await screen.findByRole("heading", { level: 1 });
+};
 const fillRest = async () => {
   fireEvent.change(screen.getByLabelText(OPEN_WORDS.whyLabel), { target: { value: "The gate is always shut." } });
   fireEvent.change(screen.getByLabelText(OPEN_WORDS.aimLabel), { target: { value: "The gate opens at dawn." } });
@@ -82,44 +90,48 @@ const ref = (n: number, name: string, how: string, contact: string) => {
 };
 
 describe("About you, on the open form", () => {
-  it("is its own stone after the goals and the terms, and holds the links, the files, the time zone and the earliest start (moved, not copied)", async () => {
-    serve(FORM);
-    render(<ProposeARole />);
-    await screen.findByText("Gate Keeper");
-    fireEvent.click(box("r-gate"));
-    // The "About you" stone (the firefly path): its own section, fifth of six.
-    const section = (await waitFor(() => document.querySelector('[data-stone="about"]') as HTMLElement)) as HTMLElement;
+  it("is step 2, after Get to know us and before Your value, and holds who you are, why, links, files, references and Human Design (each once)", async () => {
+    await applyFor("r-gate");
+    const section = document.querySelector('[data-stone="about"]') as HTMLElement;
     expect(section).toBeTruthy();
-    expect(within(section).getByLabelText("Your time zone")).toBeTruthy();
-    expect(within(section).getByLabelText(/earliest you could start/)).toBeTruthy();
+    for (const label of [OPEN_WORDS.nameLabel, OPEN_WORDS.emailLabel, OPEN_WORDS.whyLabel, "Reference 1: name", /Human Design or Gene Keys/]) expect(within(section).getByLabelText(label)).toBeTruthy();
     expect(section.querySelector("[data-attachments]")).toBeTruthy();
-    expect(within(section).getByLabelText("Reference 1: name")).toBeTruthy();
-    // Moved, not duplicated.
+    // The time zone and the start date belong to Your first day now, once.
+    expect(within(section).queryByLabelText("Your time zone")).toBeNull();
+    expect(within(document.querySelector('[data-stone="first"]') as HTMLElement).getByLabelText("Your time zone")).toBeTruthy();
     expect(document.querySelectorAll("[data-attachments]")).toHaveLength(1);
     expect(document.querySelectorAll('input[id="card-tz"]')).toHaveLength(1);
     const form = document.querySelector("[data-open-proposal]") as HTMLElement;
     const order = (sel: string) => Array.from(form.querySelectorAll("*")).indexOf(form.querySelector(sel) as Element);
-    // The brief's order (wave 2, 11 Nov 2026): your role, your moon, why you, your energy, about you, send.
-    expect(order("[data-role-goals], [data-goals-list], [data-role]")).toBeLessThan(order("[data-about-you-section]"));
-    expect(order("[data-commitment]")).toBeLessThan(order("[data-about-you-section]"));
-    expect(order("[data-about-you-section]")).toBeLessThan(order("#propose-name"));
+    // The brief's order (Phase A): Get to know us, About you, Your value, The terms, Your first day, Review & submit.
+    expect(order("[data-know-us]")).toBeLessThan(order("[data-about-you-section]"));
+    expect(order("[data-about-you-section]")).toBeLessThan(order("[data-goals-list]"));
+    expect(order("[data-goals-list]")).toBeLessThan(order("[data-commitment]"));
+  });
+
+  it("Human Design or Gene Keys is optional, says the deciders never see it, and goes with the application on its own", async () => {
+    await applyFor("r-gate");
+    expect(screen.getByText(/The people who decide never see it/)).toBeTruthy();
+    await fillRest();
+    fireEvent.click(screen.getByLabelText(/agree to the background check/i));
+    fireEvent.change(screen.getByLabelText(/Human Design or Gene Keys/), { target: { value: "Projector, 4/6" } });
+    fillGoals();
+    sendNow();
+    await waitFor(() => expect(posted).toHaveLength(1));
+    expect(posted[0].body.selfKnowledge).toBe("Projector, 4/6");
+    // Never inside what the deciders' "about" block carries.
+    expect(JSON.stringify(posted[0].body.about ?? {})).not.toContain("Projector");
   });
 
   it("says the lead's words beside the references and who sees them", async () => {
-    serve(FORM);
-    render(<ProposeARole />);
-    await screen.findByText("Gate Keeper");
-    fireEvent.click(box("r-gate"));
+    await applyFor("r-gate");
     const words = (await screen.findByText(CHECK_WORDS.lines[0])).closest("[data-check-words]") as HTMLElement;
     for (const line of [...CHECK_WORDS.lines, CHECK_WORDS.contactLine]) expect(within(words).getByText(line)).toBeTruthy();
     expect(words.textContent).toMatch(/No AI reads them/);
   });
 
   it("the tick is required with the references blank, and the form says so before anything is sent", async () => {
-    serve(FORM);
-    render(<ProposeARole />);
-    await screen.findByText("Gate Keeper");
-    fireEvent.click(box("r-gate"));
+    await applyFor("r-gate");
     await fillRest();
     fillGoals();
     sendNow();
@@ -127,11 +139,8 @@ describe("About you, on the open form", () => {
     expect(posted).toHaveLength(0);
   });
 
-  it("with references given and no role always checked, the tick is not asked and the references go with the proposal", async () => {
-    serve(FORM);
-    render(<ProposeARole />);
-    await screen.findByText("Gate Keeper");
-    fireEvent.click(box("r-gate"));
+  it("with references given and no role always checked, the tick is not asked and the references go with the application", async () => {
+    await applyFor("r-gate");
     await fillRest();
     ref(1, "Ines Vargas", "We built a fence together", "ines@example.org");
     expect(document.querySelector("[data-check-consent]")).toBeNull();
@@ -145,10 +154,7 @@ describe("About you, on the open form", () => {
   });
 
   it("a half-filled reference is stopped with the shared rule's words", async () => {
-    serve(FORM);
-    render(<ProposeARole />);
-    await screen.findByText("Gate Keeper");
-    fireEvent.click(box("r-gate"));
+    await applyFor("r-gate");
     await fillRest();
     fireEvent.change(screen.getByLabelText("Reference 1: name"), { target: { value: "Ines" } });
     fillGoals();
@@ -158,11 +164,8 @@ describe("About you, on the open form", () => {
   });
 
   it("an always-checked role says a check happens whatever the references say, and asks the tick even with references", async () => {
-    serve(FORM);
-    render(<ProposeARole />);
-    await screen.findByText("Gate Keeper");
-    fireEvent.click(box("r-bank"));
-    // On the role's own row, and again on the role card beside the stone.
+    await applyFor("r-bank");
+    // On the role beside the step, and again beside the references.
     expect((await screen.findAllByText(/A background check happens for this role whatever the references say/)).length).toBeGreaterThan(0);
     expect(document.querySelector("[data-check-role]")).toBeTruthy();
     await fillRest();
@@ -172,7 +175,7 @@ describe("About you, on the open form", () => {
     sendNow();
     expect((await screen.findByRole("alert")).textContent).toMatch(/Tick the box/);
     expect(stoneNow()).toBe("about");
-    // The cursor lands on the tick itself, never the first box at the top of the stone (final verification).
+    // The cursor lands on the tick itself, never the first box at the top of the step (final verification).
     await waitFor(() => expect(document.activeElement?.id).toBe("propose-about-consent"));
     expect(posted).toHaveLength(0);
     fireEvent.click(screen.getByLabelText(/agree to the background check/i));

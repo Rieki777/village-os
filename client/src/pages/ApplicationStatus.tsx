@@ -27,7 +27,7 @@ import { BreathingLoader, useReducedMotion } from "@/components/natural";
 import { gameFetch } from "@/lib/gameApi";
 import { DECLINED_PAGE_WORDS } from "@shared/openProposalDecide";
 import { chooseApplicantLanguage } from "@shared/applicantLanguage";
-import { statusView, wordsIn } from "@shared/applicantWords";
+import { applicantSteps, statusView, wordsIn } from "@shared/applicantWords";
 import { useLingui } from "@lingui/react/macro";
 import { TERM_NOTE_MAX } from "@shared/termsWords";
 
@@ -49,6 +49,12 @@ interface Served {
   note?: string | null;
   /** The terms we changed for this proposal, beside what the applicant answered (joining lane PR 4). Never the log. */
   offer?: ServedOffer | null;
+  /** Our review comes before the conversations on this application (Phase A). */
+  reviewFirst?: boolean;
+  /** Our review ended it with the not-invited letter. */
+  notInvited?: boolean;
+  /** The village's own way to stay close, named in the not-invited answer. */
+  stayClose?: { name: string; href: string } | null;
 }
 
 interface ServedOffer {
@@ -236,7 +242,8 @@ export default function ApplicationStatus() {
             ref,
             statusHref: `/application-status/${encodeURIComponent(ref)}${token ? `?token=${encodeURIComponent(token)}` : ""}`,
             status: s.outcome === "declined" ? "declined" : s.outcome === "withdrawn" ? "withdrawn" : "confirmed",
-            step: s.outcome ? null : s.step === "first_reply" || s.step === "interview" || s.step === "consent" ? s.step : null,
+            // Our review is the village's first reply: the same "we write to you" step on every other surface.
+            step: s.outcome ? null : s.step === "review" ? "first_reply" : s.step === "first_reply" || s.step === "interview" || s.step === "consent" ? s.step : null,
             by: s.by && !s.outcome ? new Date(s.by).toISOString().slice(0, 10) : null,
             withRole: /^(.+) talks with you for \d+ minutes/.exec(s.actsNext)?.[1] ?? null,
             // The changed terms are answered on this very page, in the panel below, so they are never a step that leads away.
@@ -263,7 +270,7 @@ export default function ApplicationStatus() {
         {state === "ready" && s && view && (
           <article className="space-y-6" data-application-step={s.step}>
             <header>
-              <h1 className={H1}>{w.status.heading}</h1>
+              <h1 className={H1}>{view.heading}</h1>
               {s.roles.length > 0 && <p className="mt-1 text-muted-foreground">{s.roles.join(", ")}</p>}
             </header>
             {/* Phone: the seed across the top, then one thing at a time. Desktop: the seed and whose move it is
@@ -297,7 +304,20 @@ export default function ApplicationStatus() {
                 <p className="mt-1 whitespace-pre-line text-foreground">{s.note}</p>
               </section>
             )}
-            {s.outcome === "declined" && (
+            {view.notInvited && (
+              <section aria-label={w.status.notInvited.heading} className={CARD} data-not-invited="">
+                <h2 className={H2}>{w.status.notInvited.heading}</h2>
+                <p className="mt-1 text-foreground">{w.status.notInvited.line}</p>
+                <div className="mt-3 grid gap-2">
+                  {s.stayClose && (
+                    <a className={DOOR} href={s.stayClose.href} data-stay-close="">{w.status.notInvited.program(s.stayClose.name)}<ArrowRight className="size-4 shrink-0" aria-hidden="true" /></a>
+                  )}
+                  <a className={DOOR} href="/quests">{w.status.notInvited.quests}<ArrowRight className="size-4 shrink-0" aria-hidden="true" /></a>
+                  {eventsOn && <a className={DOOR} href="/events">{w.status.notInvited.events}<ArrowRight className="size-4 shrink-0" aria-hidden="true" /></a>}
+                </div>
+              </section>
+            )}
+            {s.outcome === "declined" && !view.notInvited && (
               <section aria-label={w.page.declinedHeading} className="rounded-xl border border-border bg-card p-4" data-declined="">
                 <h2 className="font-display text-xl font-bold text-foreground">{w.page.declinedHeading}</h2>
                 <p className="mt-1 text-foreground">{w.page.declinedLine}</p>
@@ -335,6 +355,20 @@ export default function ApplicationStatus() {
                 </li>
               ))}
             </ol>
+            {/* What happens next, and roughly when: the one list of the applicant's steps (shared/applicantWords.ts APPLICANT_STEPS). */}
+            {s.reviewFirst && s.outcome == null && (
+              <section aria-labelledby="what-happens-next" className={TILE} data-what-happens-next="">
+                <h2 id="what-happens-next" className="font-display text-xl font-bold text-foreground">{w.status.nextLabel}</h2>
+                <dl className="mt-2 grid gap-2">
+                  {applicantSteps(lang, typeof s.replyDays === "number" ? s.replyDays : 7).map((st) => (
+                    <div key={st.key} data-applicant-step={st.key}>
+                      <dt className="font-semibold text-foreground">{st.name}</dt>
+                      <dd className="text-sm text-muted-foreground">{st.when}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </section>
+            )}
             {view.references && (
               <p className="text-sm text-muted-foreground" data-references-given="">{view.references}</p>
             )}
