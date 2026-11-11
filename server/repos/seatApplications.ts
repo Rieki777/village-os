@@ -20,7 +20,7 @@
  * Raw SQL only, never `dbCollection`: its `replaceAll` resets every column a
  * caller leaves out.
  */
-import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
+import type { Pool, PoolConnection, ResultSetHeader, RowDataPacket } from "mysql2/promise";
 import type { SeatSettings } from "../../shared/seatSettings";
 import { parseApplicationAnswers, type ApplicationAnswers, type ApplicationStatus } from "../../shared/seatApplications";
 import { seatingsChanged } from "../lib/orgChart";
@@ -647,4 +647,16 @@ export async function alwaysCheckedAmong(db: Db, roleIds: readonly string[]): Pr
   if (!roleIds.length) return [];
   const [rows] = await db.query<RowDataPacket[]>(`SELECT id FROM org_roles WHERE always_checked = 1 AND id IN (${roleIds.map(() => "?").join(",")})`, [...roleIds]);
   return rows.map((r) => String(r.id));
+}
+
+/**
+ * Write a member-door application's counter-offer (shared/counterOffer.ts), whole, into its answers.
+ * Guarded on `awaiting-holder`. The caller holds the row lock (`readApplication(conn, id, true)`).
+ */
+export async function setApplicationCounterOffer(db: Db, id: string, counterOffer: unknown): Promise<boolean> {
+  const [result] = await db.query<ResultSetHeader>(
+    "UPDATE seat_applications SET answers = JSON_SET(COALESCE(answers, JSON_OBJECT()), '$.counterOffer', CAST(? AS JSON)) WHERE id = ? AND status = 'awaiting-holder'",
+    [JSON.stringify(counterOffer), id],
+  );
+  return Number(result.affectedRows ?? 0) === 1;
 }

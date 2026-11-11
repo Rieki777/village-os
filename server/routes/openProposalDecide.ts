@@ -95,6 +95,8 @@ import { asksFor, type StoredAsk } from "../repos/roleProposals";
 import { PROPOSAL_FILE_ID, PROPOSAL_FILE_TYPES, proposalFileHref } from "../../shared/proposalAttachments";
 import { readProposalFile } from "../lib/proposalFiles";
 import { seatsWithCircles } from "../repos/seatApplications";
+import { baseOf, deciderOffer, loadSubject, saveOffer } from "../lib/counterOffer";
+import { OFFER_WORDS, openTalks, OFFER_LABELS } from "../../shared/counterOffer";
 
 export type DecideRouteDeps = Pick<
   AppDeps,
@@ -315,6 +317,9 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
     const aboutYou = decidesIt(may, asks, viewerId)
       ? { references: p.body.references ?? [], about: p.body.about ?? {}, backgroundCheck: p.body.backgroundCheck ?? null }
       : null;
+    // The terms we offer, with the history: for the deciders only (joining lane PR 4). The applicant reads the current offer at their status page, never the log.
+    const subject = decidesIt(may, asks, viewerId) ? await loadSubject(pool, p.id) : null;
+    const offer = subject ? deciderOffer(subject, await baseOf(pool, subject.roleIds)) : null;
     res.set("Cache-Control", "no-store").json({
       proposal: {
         id: p.id,
@@ -339,7 +344,9 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
         invitation,
         attached,
         aboutYou,
+        offer,
         you: {
+          mayEditTerms: open && may.ok,
           holdsThePower,
           own: !!may.own && may.own === viewerId,
           mayAdopt: open && may.ok && !former,
@@ -382,6 +389,36 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
     res.send(bytes);
   });
 
+  // ── The terms we offer: a counter-offer, one revision per save ─────────────
+  /*
+   * WHO MAY EDIT is whoever may adopt: the same `deciding` the adopt door asks, so no new power.
+   * A visitor is answered 401 by the reader, a member who holds no seating power 403, the applicant
+   * (by account or by address) 403. Each save appends one revision and tells the applicant once:
+   * the update's key carries the revision number, and a retried save is refused by its stale
+   * `expectedRevision`, so nothing is sent twice.
+   */
+  app.post(`${BASE}/:id/terms`, async (req, res) => {
+    const viewer = await reader(req, res);
+    if (!viewer) return;
+    const actorId = String(viewer.id);
+    if (await limited(res, `open-proposal-terms:${actorId}`)) return;
+    const p = await found(req, res);
+    if (!p) return;
+    if (p.status !== "confirmed") return res.status(409).json({ error: DECIDE_WORDS.decided, status: p.status });
+    const may = await deciding(p, actorId);
+    if (!may.ok) return res.status(may.status).json(may.body);
+    const body = req.body && typeof req.body === "object" ? req.body : {};
+    const out = await saveOffer(getPool(), p.id, {
+      edit: { words: body.words && typeof body.words === "object" && !Array.isArray(body.words) ? body.words : undefined, commitmentPct: body.commitmentPct },
+      expectedRevision: body.expectedRevision,
+      by: { id: actorId, name: String(viewer.name ?? "").trim() || "A holder" },
+      now: now(),
+    });
+    if (!out.ok) return res.status(out.status).json({ error: "terms_not_saved", message: out.error, ...(out.key ? { field: out.key } : {}) });
+    await tell(p.id, "terms", { part: String(out.revision.n) });
+    res.json({ success: true, offer: deciderOffer(out.subject, await baseOf(getPool(), out.subject.roleIds)) });
+  });
+
   // ── The circle answers ────────────────────────────────────────────────────
 
   app.post(`${BASE}/:id/consent`, async (req, res) => {
@@ -418,6 +455,14 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
 
     const pool = getPool();
     const at = now();
+    // Terms still being talked about: say so before adopting, and adopt on a second, deliberate click (joining lane PR 4).
+    {
+      const subject = await loadSubject(pool, p.id);
+      const talks = subject ? openTalks({ answers: subject.answers, co: subject.co }) : [];
+      if (talks.length && req.body?.confirmOpenTalks !== true) {
+        return res.status(409).json({ error: "terms_open", message: OFFER_WORDS.stillTalking(talks.map((k) => OFFER_LABELS[k])), settings: talks.map((k) => OFFER_LABELS[k]) });
+      }
+    }
     // The moon this was proposed for has ended before the decision: the holder may adopt for the moon running now (Rye, role journey 4a).
     let theMoonNow = false;
     if (moonEnded(p.body.term, at, tz())) {

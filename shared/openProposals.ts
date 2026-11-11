@@ -22,6 +22,7 @@
 import { cleanNote, isApplicantLanguage, wordsIn, type ApplicantLanguage } from "./applicantWords";
 import { termOf, type OpenProposalTerm } from "./openProposalTerm";
 import { cardOf, parseCard, type OpenProposalCard } from "./openProposalCard";
+import { counterOfferOf, type CounterOffer } from "./counterOffer";
 import { aboutOf, backgroundCheckOf, parseAboutYou, referencesOf, type BackgroundCheck, type ProposalAbout, type ProposalReference } from "./proposalAbout";
 import { filesOf, linksOf, parseProposalLinks, type ProposalFile, type ProposalLink } from "./proposalAttachments";
 import type { TermKey } from "./termsWords";
@@ -136,6 +137,8 @@ export interface OpenProposalBody {
   locale?: ApplicantLanguage;
   /** A note a decider wrote for the applicant. The applicant's own data: shown to them on the status page and in the email, never to anybody else, never to an AI, removed when the proposal is anonymised or deleted. */
   note?: string;
+  /** The steward's counter-offer on the terms, appended revision by revision (shared/counterOffer.ts). Written only by the decider door, never by the form. */
+  counterOffer?: CounterOffer;
 }
 
 export interface OpenProposalInput {
@@ -176,6 +179,7 @@ export function openBodyOf(raw: unknown): OpenProposalBody {
     ...(Object.keys(aboutOf(o.about)).length ? { about: aboutOf(o.about) } : {}),
     ...(isApplicantLanguage(o.locale) ? { locale: o.locale } : {}),
     ...(cleanNote(o.note) ? { note: cleanNote(o.note) as string } : {}),
+    ...(counterOfferOf(o.counterOffer) ? { counterOffer: counterOfferOf(o.counterOffer) as CounterOffer } : {}),
   };
 }
 

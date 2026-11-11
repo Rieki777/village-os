@@ -24,6 +24,7 @@
  * score for a `waiting` interview is refused, and the update that closes an
  * interview is guarded on `open`, so two scorers at once cannot both win.
  */
+import { applicantOffer } from "./counterOffer";
 import crypto from "node:crypto";
 import type { Pool, PoolConnection } from "mysql2/promise";
 import {
@@ -495,7 +496,7 @@ export async function requestSplit(deps: ReviewDeps, ref: string): Promise<{ ok:
 // ── The applicant's status ──────────────────────────────────────────────────
 
 /** The status page's data. Steps, roles and times only: never a score, a note or a person. */
-export async function statusOf(deps: ReviewDeps, ref: string): Promise<(Status & { roles: string[]; booking: string | null; mode: ConversationMode; outcome: "adopted" | "declined" | "withdrawn" | null; replyDays: number; referencesGiven: number | null; locale: ApplicantLanguage; note: string | null }) | null> {
+export async function statusOf(deps: ReviewDeps, ref: string): Promise<(Status & { roles: string[]; booking: string | null; mode: ConversationMode; outcome: "adopted" | "declined" | "withdrawn" | null; replyDays: number; referencesGiven: number | null; locale: ApplicantLanguage; note: string | null; offer: Awaited<ReturnType<typeof applicantOffer>> }) | null> {
   const pool = deps.getPool();
   const steps = await repo.stepsOf(pool, ref);
   const confirmed = steps.find((s) => s.kind === "confirmed");
@@ -524,7 +525,7 @@ export async function statusOf(deps: ReviewDeps, ref: string): Promise<(Status &
   // The language and the decider's note belong to the applicant: they ride on the applicant's own page only (token or their account), never on a decider's read.
   const own = kindOfRef(ref) === "open" ? await proposals.readOpenProposal(pool, ref) : null;
   const referencesGiven = own && own.body.backgroundCheck ? (own.body.references ?? []).length : null;
-  return { ...s, roles: (d?.roleIds ?? []).map((id) => roleNames.get(id) ?? id), booking, mode, outcome, replyDays: numberVar("org.applicant_reply_days"), referencesGiven, locale: own ? languageOf(own) : "en", note: own?.body.note ?? null };
+  return { ...s, roles: (d?.roleIds ?? []).map((id) => roleNames.get(id) ?? id), booking, mode, outcome, replyDays: numberVar("org.applicant_reply_days"), referencesGiven, locale: own ? languageOf(own) : "en", note: own?.body.note ?? null, offer: outcome ? null : await applicantOffer(pool, ref) };
 }
 
 /** The status page for an emailed link: the ref and the token it was given. Constant-time compare. */

@@ -25,6 +25,8 @@ export interface ServedApplication {
   /** The goals for the first moon: the member's list, or an older application's words as one goal (joining lane PR 1). */
   goals?: ProposalGoal[];
   /** About you (joining lane PR 2): sent only to the people who decide it, never to anybody else. */
+  /** The terms we offer, with the history: the deciders only (joining lane PR 4). */
+  offer?: import("@/components/openProposal/TermsWeOffer").ServedDeciderOffer | null;
   aboutYou?: { references: Array<{ name: string; how: string; contact: string }>; about: { based?: string; languages?: string; story?: string }; backgroundCheck: { needed: boolean; because: "no_references" | "role" | null; consent?: { at: string; version: string } } | null } | null;
   /** For the candidate: how many references they gave, a count and nothing more. */
   referencesGiven?: number | null;
@@ -55,6 +57,7 @@ export interface ServedApplication {
   you?: {
     isCandidate: boolean;
     mayAdopt: boolean;
+    mayEditTerms?: boolean;
     mayPutToVillage: boolean;
     mayWithdraw: boolean;
     holdsThePower: boolean;

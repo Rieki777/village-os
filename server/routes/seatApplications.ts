@@ -62,6 +62,8 @@
  */
 import { publicTermsOf } from "../../shared/seatTermsOffer";
 import { judgeTermsStep, writtenKeys } from "../../shared/termsWords";
+import { OFFER_LABELS, OFFER_WORDS, openTalks } from "../../shared/counterOffer";
+import { baseOf, deciderOffer, loadSubject, saveOffer } from "../lib/counterOffer";
 import type { Express } from "express";
 import type { PoolConnection } from "mysql2/promise";
 import { isVillageHeld, type Capability } from "../../shared/capabilities";
@@ -443,6 +445,13 @@ export function register(app: Express, deps: Deps): void {
         viewerId && !isCandidate && ((rule?.who === "live-holders" && rule.holders.includes(viewerId)) || asks.some((k) => k.userId === viewerId))
           ? { references: a.answers?.references ?? [], about: a.answers?.about ?? {}, backgroundCheck: a.answers?.backgroundCheck ?? null }
           : null,
+      // The terms we offer, with the history: the deciders only, on the one-application read (joining lane PR 4).
+      offer: await (async () => {
+        const decider = !!viewerId && !isCandidate && ((rule?.who === "live-holders" && rule.holders.includes(viewerId)) || asks.some((k) => k.userId === viewerId));
+        if (known || !decider) return null;
+        const subject = await loadSubject(pool, a.id);
+        return subject ? deciderOffer(subject, await baseOf(pool, subject.roleIds)) : null;
+      })(),
       referencesGiven: isCandidate && a.answers?.backgroundCheck ? (a.answers.references ?? []).length : null,
       goals: goalsOfApplication(a),
       deliverables: deliverablesBesideGoals(a),
@@ -470,6 +479,7 @@ export function register(app: Express, deps: Deps): void {
             you: {
               isCandidate,
               mayAdopt: awaiting && adoptRefusal(rule, viewerId, a.candidateUserId) === null,
+              mayEditTerms: awaiting && adoptRefusal(rule, viewerId, a.candidateUserId) === null,
               // A proposal that changes roles: the candidate opens the vote, in the two cases nobody else can adopt it (R164).
               mayPutToVillage: awaiting && (changes ? isCandidate && proposalMayGoToVote(rule, a.candidateUserId) : putToVillageRefusal(rule, viewerId) === null),
               mayWithdraw: isCandidate && (await withdrawable(a, ballot)),
@@ -962,6 +972,35 @@ export function register(app: Express, deps: Deps): void {
     return { user, a, rule: await adoptionRule(user), proposal };
   }
 
+  // ── The terms we offer: a counter-offer, one revision per save (joining lane PR 4) ──
+  /* Whoever may adopt may edit (`adoptRefusal`, the same call), the candidate never their own. */
+  app.post("/api/governance/role-applications/:id/terms", async (req, res) => {
+    const got = await forHolder(req, res, "seat-application-terms");
+    if (!got) return;
+    const { user, a, rule } = got;
+    const refusal = adoptRefusal(rule, String(user.id), a.candidateUserId);
+    if (refusal) return res.status(refusal.status).json({ error: refusal.error, message: refusal.message });
+    const body = req.body && typeof req.body === "object" ? req.body : {};
+    const out = await saveOffer(getPool(), a.id, {
+      edit: { words: body.words && typeof body.words === "object" && !Array.isArray(body.words) ? body.words : undefined, commitmentPct: body.commitmentPct },
+      expectedRevision: body.expectedRevision,
+      by: { id: String(user.id), name: String(user.name ?? "").trim() || "A holder" },
+      now: new Date(),
+    });
+    if (!out.ok) return res.status(out.status).json({ error: "terms_not_saved", message: out.error, ...(out.key ? { field: out.key } : {}) });
+    // One bell per revision: the key carries the revision number, and a retried save was refused above.
+    await notify({
+      userId: a.candidateUserId,
+      type: "applicant_update",
+      title: "The terms for your application changed",
+      body: "We changed some of the terms we suggest. Open your status page to read them, and tell us what you think.",
+      link: `/application-status/${a.id}`,
+      actorUserId: null,
+      dedupeKey: `sa:${a.id}:update:terms:${out.revision.n}:${a.candidateUserId}`,
+    });
+    res.json({ success: true, offer: deciderOffer(out.subject, await baseOf(getPool(), out.subject.roleIds)) });
+  });
+
   // ── Adopt, for the village ────────────────────────────────────────────────
   /*
    * A ROLE PROPOSAL IS ADOPTED HERE TOO (role proposals PR B). Path (a) is a
@@ -984,6 +1023,14 @@ export function register(app: Express, deps: Deps): void {
     // The holder aligns for the village: money terms ask them the re-confirm too.
     const money = moneyRefusal(user, a.settings);
     if (money) return res.status(403).json(money);
+    // Terms still being talked about: say so, and adopt on a second, deliberate click.
+    {
+      const subject = await loadSubject(getPool(), a.id);
+      const talks = subject ? openTalks({ answers: subject.answers, co: subject.co }) : [];
+      if (talks.length && req.body?.confirmOpenTalks !== true) {
+        return res.status(409).json({ error: "terms_open", message: OFFER_WORDS.stillTalking(talks.map((k) => OFFER_LABELS[k])), settings: talks.map((k) => OFFER_LABELS[k]) });
+      }
+    }
 
     const carrying = rolesCarrying(ADOPTING_POWER);
     const seatedIn = loadRoleHolders().find((h) => h.userId === actorId && carrying.some((r) => r.id === h.roleId))?.roleId ?? "badge";
