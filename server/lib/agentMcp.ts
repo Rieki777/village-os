@@ -517,7 +517,7 @@ export const MCP_TOOLS: readonly ToolDef[] = [
     kind: "write",
     title: "Call an admin path",
     description:
-      "Calls one admin path the village has opened to agents, as the holder, with the holder's own admin checks. GET answers at once. A write answers first with what it would do and a confirmToken; call again with the same arguments and the token to make it. Some writes a person makes in the app, and the answer says so. Every write also carries summary, the first argument: one plain sentence a non-technical person can read in the permission box, naming the people and roles by name, with no ids and no jargon, such as: Remove the duplicate record of Ana on the Gardener role. She keeps the role. It is shown to the person with the platform's own line on what the call does, and kept in the audit. A role card, org draft, wording or seating write carries approvedBy and approvalNote in its body: who approved it and their approval in this chat, quoted; it is kept in the village's audit and its organisational memory. Erasure, powers, money, secrets and the agent accounts are never reachable here.",
+      "Calls one admin path the village has opened to agents, as the holder, with the holder's own admin checks. GET answers at once. A write answers first with what it would do and a confirmToken; call again with the same arguments and the token to make it. Some writes a person makes in the app, and the answer says so. Every write also carries summary, the first argument: one plain sentence a non-technical person can read in the permission box, naming the people and roles by name, with no ids and no jargon, such as: Remove the duplicate record of Ana on the Gardener role. She keeps the role. A client that connected before summary existed, whose tool list has no summary argument, puts the same sentence in body.summary; it is taken out before the route sees the body, and summary wins when both are there. The sentence is shown to the person with the platform's own line on what the call does, and kept in the audit. A role card, org draft, wording or seating write carries approvedBy and approvalNote in its body: who approved it and their approval in this chat, quoted; it is kept in the village's audit and its organisational memory. Erasure, powers, money, secrets and the agent accounts are never reachable here.",
     inputSchema: {
       type: "object",
       properties: {
@@ -542,8 +542,14 @@ export const MCP_TOOLS: readonly ToolDef[] = [
       if (!ctx.adminPaths || !ctx.recordAction) return { ok: false, error: "The admin tool is not open on this server." };
       const method = String(args.method ?? "").toUpperCase();
       const path = typeof args.path === "string" ? args.path : "";
-      const body = args.body && typeof args.body === "object" && !Array.isArray(args.body) ? (args.body as Record<string, unknown>) : undefined;
-      const summary = typeof args.summary === "string" ? args.summary.replace(/\s+/g, " ").trim().slice(0, 400) : "";
+      const rawBody = args.body && typeof args.body === "object" && !Array.isArray(args.body) ? (args.body as Record<string, unknown>) : undefined;
+      // A client that connected before `summary` existed holds a cached schema that refuses the argument, so the
+      // sentence may ride in body.summary instead. It is read and taken out of the body the same way at both calls,
+      // so the echo the confirm token covers is stable, and it never reaches the route. The top-level one wins.
+      const { summary: bodySummary, ...bodyRest } = rawBody ?? {};
+      const body = rawBody ? bodyRest : undefined;
+      const plain = (v: unknown) => (typeof v === "string" ? v.replace(/\s+/g, " ").trim().slice(0, 400) : "");
+      const summary = plain(args.summary) || plain(bodySummary);
       // The summary is the caller's words to the person, never the route's input. It rides in the echo so the
       // sentence the person read at the preview is the one the confirmToken covers.
       const echo = summary ? { summary, method, path, body: body ?? null } : { method, path, body: body ?? null };
@@ -590,7 +596,7 @@ export const MCP_TOOLS: readonly ToolDef[] = [
       }
       if (summary.length < 8) {
         await record("refused");
-        return { ok: false, error: "Say what this does in one plain sentence, naming the people and roles: summary. The person sees it before they approve.", detail: { code: "summary_required" } };
+        return { ok: false, error: "Say what this does in one plain sentence, naming the people and roles, in summary or, if your connector has no summary argument yet, in body.summary. The person sees it before they approve.", detail: { code: "summary_required" } };
       }
       // What the platform itself says the call does, where it has a line for it, so the person reads both.
       const platformSays = lead ? leadApprovalSubject(lead, path, body, seatRoleId).what : null;
