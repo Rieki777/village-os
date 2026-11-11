@@ -306,6 +306,26 @@ export interface VillagePay {
 export const NO_VILLAGE_PAY: VillagePay = { shape: [], atRisk: "", note: "" };
 
 /**
+ * One share as written ("Cash 40", "Equity: 55%", "Credits=5"): its label and
+ * its 1 to 3 digit percent, with a space, colon or equals sign between. Read
+ * from the end by hand, with no backtracking pattern, so a long run of spaces
+ * or tabs in a setting costs linear time (CodeQL, polynomial regex, batch 155).
+ */
+function splitShare(part: string): { label: string; pct: string } | null {
+  let end = part.length;
+  if (end && part[end - 1] === "%") end--;
+  while (end && /\s/.test(part[end - 1])) end--;
+  let start = end;
+  while (start > 0 && end - start < 4 && part[start - 1] >= "0" && part[start - 1] <= "9") start--;
+  const pct = part.slice(start, end);
+  if (!pct || pct.length > 3) return null;
+  let cut = start;
+  while (cut > 0 && /[\s:=]/.test(part[cut - 1])) cut--;
+  if (cut === start) return null;
+  return { label: part.slice(0, cut), pct };
+}
+
+/**
  * The village's shape as its setting is written: "Cash 40, Equity 55, Credits 5"
  * (commas, semicolons or new lines between shares, a percent sign optional).
  * A setting that does not read cleanly reads as no shape, so a typo never puts
@@ -315,9 +335,9 @@ export function readVillagePayShape(setting: string): PayShare[] {
   const parts = String(setting ?? "").split(/[,;\n]+/).map((x) => x.trim()).filter(Boolean);
   const raw: Array<{ label: string; pct: string }> = [];
   for (const p of parts) {
-    const m = /^(.*?)[\s:=]+(\d{1,3})\s*%?$/.exec(p);
-    if (!m || !m[1].trim()) return [];
-    raw.push({ label: m[1].trim(), pct: m[2] });
+    const m = splitShare(p);
+    if (!m || !m.label.trim()) return [];
+    raw.push({ label: m.label.trim(), pct: m.pct });
   }
   const read = readPayShape(raw);
   return read.ok ? read.value : [];

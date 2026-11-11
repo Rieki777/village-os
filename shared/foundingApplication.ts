@@ -76,6 +76,26 @@ export function linesOf(raw: unknown, max = 12, each = 300): string[] {
 }
 
 /**
+ * One share as written ("Cash 40", "Equity: 55%", "Credits=5"): its label and
+ * its 1 to 3 digit percent, with a space, colon or equals sign between. Read
+ * from the end by hand, with no backtracking pattern, so a long run of spaces
+ * or tabs in a setting costs linear time (CodeQL, polynomial regex, batch 155).
+ */
+function splitShare(part: string): { label: string; pct: string } | null {
+  let end = part.length;
+  if (end && part[end - 1] === "%") end--;
+  while (end && /\s/.test(part[end - 1])) end--;
+  let start = end;
+  while (start > 0 && end - start < 4 && part[start - 1] >= "0" && part[start - 1] <= "9") start--;
+  const pct = part.slice(start, end);
+  if (!pct || pct.length > 3) return null;
+  let cut = start;
+  while (cut > 0 && /[\s:=]/.test(part[cut - 1])) cut--;
+  if (cut === start) return null;
+  return { label: part.slice(0, cut), pct };
+}
+
+/**
  * The shape as the setting is written: "Cash 40, Equity 55, Credits 5" (commas,
  * semicolons or new lines between shares, a percent sign optional). Anything
  * that does not read cleanly, or adds up past 100, reads as no shape, so a
@@ -86,9 +106,9 @@ export function payShapeOf(setting: unknown): PayShare[] {
   const parts = String(typeof setting === "string" ? setting : "").split(/[,;\n]+/).map((x) => x.trim()).filter(Boolean);
   const out: PayShare[] = [];
   for (const p of parts) {
-    const m = /^(.*?)[\s:=]+(\d{1,3})\s*%?$/.exec(p);
-    const label = m?.[1].trim().slice(0, 40) ?? "";
-    const pct = m ? Number(m[2]) : NaN;
+    const m = splitShare(p);
+    const label = m?.label.trim().slice(0, 40) ?? "";
+    const pct = m ? Number(m.pct) : NaN;
     if (!label || !(pct >= 0 && pct <= 100)) return [];
     out.push({ label, pct });
   }
