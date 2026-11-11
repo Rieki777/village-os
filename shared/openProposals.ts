@@ -334,17 +334,83 @@ export function andList(items: readonly string[]): string {
  */
 export const OPEN_AI_DRAFTS = "An AI may help draft our replies to you; a person always reads and sends them, and no AI takes part in choosing.";
 
-/** The email that asks the address to confirm. Nothing else reaches anybody until it is answered. `when` is already in the reader's language. */
-export function confirmLetter(i: { firstName: string | null; village: string; roleNames: readonly string[]; link: string; when?: string; lang?: ApplicantLanguage }): { subject: string; text: string } {
+/**
+ * "APPLICATION" FOR A LISTED ROLE (Phase A vocabulary: Apply is for a listed
+ * role, Propose only for a new one). The confirmation email and the status
+ * email for an application say "application"; every other line comes from
+ * the applicant's words (shared/applicantWords.ts, lane A2). When A2's table
+ * carries these lines itself, the integrator points `confirmLetter` and the
+ * status email at it and deletes this table.
+ */
+export const APPLY_EMAIL_WORDS: Record<ApplicantLanguage, {
+  subject(village: string): string;
+  applied(roles: string, village: string, when: string | null): string;
+  ask: string;
+  statusSubject: string;
+  statusText(link: string, replyPromise: string): string;
+}> = {
+  en: {
+    subject: (v) => `Confirm your application to ${v}`,
+    applied: (roles, v, when) => `You applied for ${roles} in ${v}${when ? ` for ${when}` : ""}.`,
+    ask: "Confirm it's you, and your application reaches us:",
+    statusSubject: "Where your application is",
+    statusText: (link, promise) => `Your application is with us. Follow where it is, who acts next and by when:\n\n${link}\n\n${promise} Keep this link to yourself: it is how we know it is you.`,
+  },
+  es: {
+    subject: (v) => `Confirma tu solicitud a ${v}`,
+    applied: (roles, v, when) => `Postulaste a ${roles} en ${v}${when ? ` para ${when}` : ""}.`,
+    ask: "Confirma que eres tú, y tu solicitud nos llega:",
+    statusSubject: "Dónde está tu solicitud",
+    statusText: (link, promise) => `Tu solicitud está con nosotros. Sigue dónde está, quién actúa ahora y para cuándo:\n\n${link}\n\n${promise} Guarda este enlace para ti: es la forma en que sabemos que eres tú.`,
+  },
+};
+
+/** One step after submit, in the applicant's language: its key, its name and its time line. */
+export interface StepAfterSubmit {
+  key: string;
+  name: string;
+  when: string;
+}
+
+/**
+ * INTEGRATOR SLOT (Phase A): the applicant's steps after submit, in one
+ * language. The one list is lane A2's `APPLICANT_STEPS` (received, review,
+ * invitation, conversations, decision, first_cycle) in shared/applicantWords.ts,
+ * read with `applicantSteps(lang, replyDays)` (PR 1197). It is not on main
+ * yet, so this answers none and every reader falls back to its own short
+ * lines. Once both land, the body is one line:
+ *
+ *   return applicantSteps(lang, replyDays);
+ *
+ * Its readers: the status email below (server/routes/openProposals.ts) and
+ * the confirmed page (`steps` on the confirm route's answer, drawn by
+ * components/fireflyPath/Thresholds.tsx).
+ */
+export function stepsAfterSubmit(_lang: ApplicantLanguage | null | undefined, _replyDays: number): StepAfterSubmit[] {
+  return [];
+}
+
+/** The steps as lines of an email: "Name: when". */
+export function stepsAsLines(steps: readonly StepAfterSubmit[]): string {
+  return steps.map((s, i) => `${i + 1}. ${s.name}: ${s.when}`).join("\n");
+}
+
+/**
+ * The email that asks the address to confirm. Nothing else reaches anybody until it is answered. `when` is already in the reader's language.
+ * `kind: "application"` (the form for a listed role) says application; a proposal for a new role keeps its own words.
+ */
+export function confirmLetter(i: { firstName: string | null; village: string; roleNames: readonly string[]; link: string; when?: string; lang?: ApplicantLanguage; kind?: "application" | "proposal" }): { subject: string; text: string } {
   const w = wordsIn(i.lang);
+  const a = i.kind === "application" ? APPLY_EMAIL_WORDS[isApplicantLanguage(i.lang) ? i.lang : "en"] : null;
+  const roles = w.list(i.roleNames) || w.aRole;
   return {
-    subject: w.confirm.subject(i.village),
+    subject: a ? a.subject(i.village) : w.confirm.subject(i.village),
     text: [
       w.hello(i.firstName),
       "",
-      w.confirm.proposed(w.list(i.roleNames) || w.aRole, i.village, i.when ?? null),
+      a ? a.applied(roles, i.village, i.when ?? null) : w.confirm.proposed(roles, i.village, i.when ?? null),
       "",
-      w.confirm.ask,
+      a ? a.ask : w.confirm.ask,
       i.link,
       "",
       w.confirm.validFor(OPEN_CONFIRM_HOURS),
@@ -375,9 +441,9 @@ export const OPEN_WORDS = {
   /** The retention, in one plain line on the form (sheet 19i). */
   keptFor: `If you don't confirm within ${OPEN_CONFIRM_HOURS} hours, we delete what you sent. If the village says no, or says yes and you never make your account, we remove your name and email ${OPEN_ANONYMISE_DAYS} days later.`,
   send: "Send my application",
-  sent: (email: string) => `Check ${email}. We sent a link to confirm it's you. Your proposal reaches the village once you open it.`,
-  confirmed: "Confirmed. Your proposal is with the village now, and you'll hear back by email.",
-  confirmGone: "That link has run out or was already used. Send your proposal again, and open the new link within 48 hours.",
+  sent: (email: string) => `Check ${email}. We sent a link to confirm it's you. Your application reaches us once you open it.`,
+  confirmed: "Confirmed. Your application is with us now, and you'll hear back by email.",
+  confirmGone: "That link has run out or was already used. Send your application again, and open the new link within 48 hours.",
   // Refusals, each with what to do.
   needName: "Add your name.",
   needEmail: "Add an email address we can reach you at.",

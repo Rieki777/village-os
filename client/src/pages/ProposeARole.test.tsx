@@ -646,6 +646,20 @@ describe("the confirmation link", () => {
     expect(screen.queryByRole("link", { name: "Follow your application" })).toBeNull();
   });
 
+  it("draws the steps after submit when the confirm route carries them (lane A2's one list), in order", async () => {
+    window.history.pushState({}, "", "/propose-a-role/confirm?token=abc");
+    const steps = [
+      { key: "received", name: "Received", when: "Today" },
+      { key: "review", name: "Our review", when: "Within 7 days" },
+    ];
+    serve({}, { status: 200, body: { confirmed: true, message: OPEN_WORDS.confirmed, steps } });
+    render(<ConfirmProposal />);
+    await screen.findByRole("heading", { name: "Confirmed" });
+    const items = Array.from(document.querySelectorAll("[data-step-after]")).map((li) => li.getAttribute("data-step-after"));
+    expect(items).toEqual(["received", "review"]);
+    expect(document.querySelector('[data-step-after="review"]')?.textContent).toBe("Our review Within 7 days");
+  });
+
   it("a link that ran out says so, and offers to apply again", async () => {
     window.history.pushState({}, "", "/propose-a-role/confirm?token=old");
     serve({}, { status: 410, body: { error: OPEN_WORDS.confirmGone } });

@@ -187,7 +187,7 @@ describe.skipIf(!DB_CONFIGURED)("the role journey: one stranger takes one role t
     const sent = await call("POST", "/api/open-proposals", { ...body, aim: "Money kept true, every Monday." });
     expect(sent.status, JSON.stringify(sent.json)).toBe(200);
 
-    const confirm = mailTo(APPLICANT.email, /^Confirm your proposal/).pop();
+    const confirm = mailTo(APPLICANT.email, /^Confirm your application/).pop();
     expect(confirm, "the confirmation email went").toBeTruthy();
     expect(String(confirm!.body.text)).toContain("for this moon");
     const token = new URL(linkIn(confirm!.body.text, "/propose-a-role/confirm")).searchParams.get("token");
@@ -254,7 +254,7 @@ describe.skipIf(!DB_CONFIGURED)("the role journey: one stranger takes one role t
     const card = { roles: [{ roleId: state.roleId, moves: [], firstMoon: [{ quest: "Read last moon's books", doneWhen: "the notes are shared" }] }], serves: [{ goalId: state.goalId, how: "Fresh eyes on the numbers." }], commitmentPct: 40, agreed: { loveLetter: true, nda: true }, terms: { choice: "accept", note: "" } };
     const sent = await call("POST", "/api/open-proposals", { name: SECOND.name, email: SECOND.email, roles: [{ roleId: state.roleId, note: "I audit cooperatives." }], why: "I can step in when the seat frees.", aim: "Books anyone can read.", hp: "", card });
     expect(sent.status, JSON.stringify(sent.json)).toBe(200);
-    const confirm = mailTo(SECOND.email, /^Confirm your proposal/).pop();
+    const confirm = mailTo(SECOND.email, /^Confirm your application/).pop();
     const token = new URL(linkIn(confirm!.body.text, "/propose-a-role/confirm")).searchParams.get("token");
     expect((await call("POST", "/api/open-proposals/confirm", { token })).status).toBe(200);
     const id = String((await call("GET", "/api/admin/open-proposals", undefined, state.founder)).json.proposals.find((p: any) => p.email === SECOND.email).id);

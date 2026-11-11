@@ -67,6 +67,9 @@ import {
   ipBucket,
   limiterAddressKey,
   safeGreeting,
+  APPLY_EMAIL_WORDS,
+  stepsAfterSubmit,
+  stepsAsLines,
 } from "../../shared/openProposals";
 import type { AppDeps } from "../lib/appDeps";
 import { post } from "../lib/comms/postOffice";
@@ -420,6 +423,8 @@ export function register(app: Express, deps: Deps): void {
       roleNames: proposal.roles.map((r) => byId.get(r.roleId) ?? "").filter(Boolean),
       link: `${site()}/propose-a-role/confirm?token=${encodeURIComponent(token)}`,
       lang: locale,
+      // The form is for a listed role: an application (Phase A vocabulary).
+      kind: "application",
       ...(t.term ? { when: wordsIn(locale).confirm.thisMoon(wordsIn(locale).day(t.term.startsOn), wordsIn(locale).day(t.term.endsOn)) } : {}),
     });
     const sent = await postEmail({
@@ -488,14 +493,17 @@ export function register(app: Express, deps: Deps): void {
       statusPath = `/application-status/${encodeURIComponent(confirmed.proposal.id)}?token=${encodeURIComponent(confirmed.review.statusToken)}`;
       if (confirmed.proposal.email) {
         const lang = languageOf(confirmed.proposal);
-        const text = wordsIn(lang).statusEmail.text(`${site()}${statusPath}`, wordsIn(lang).replyPromise(numberVar("org.applicant_reply_days")));
+        const apply = APPLY_EMAIL_WORDS[lang];
+        // The steps after submit (lane A2's one list, through the slot in shared/openProposals.ts), when there are any.
+        const steps = stepsAsLines(stepsAfterSubmit(lang, numberVar("org.applicant_reply_days")));
+        const text = `${apply.statusText(`${site()}${statusPath}`, wordsIn(lang).replyPromise(numberVar("org.applicant_reply_days")))}${steps ? `\n\n${steps}` : ""}`;
         try {
           await postEmail({
             idempotencyKey: `open-proposal:${confirmed.proposal.id}:status`,
             kind: "essential",
             origin: "open_proposal.status",
             to: { email: confirmed.proposal.email },
-            subject: wordsIn(lang).statusEmail.subject,
+            subject: apply.statusSubject,
             html: `<!doctype html><html><body style="font-family:system-ui,sans-serif;color:#1f2937">${text
               .split("\n\n")
               .map((para) => `<p>${escapeHtml(para).replace(/\n/g, "<br>")}</p>`)
@@ -510,7 +518,9 @@ export function register(app: Express, deps: Deps): void {
     // Somebody who already has an account reads it on their profile too; the email above is theirs either way.
     await tellApplicant(confirmed.proposal.id, "confirmed");
     // The language the applicant proposed in, so the confirmed page can speak it, and the first-reply window to date the next step.
-    res.json({ confirmed: true, message: OPEN_WORDS.confirmed, statusPath, locale: languageOf(confirmed.proposal), replyDays: numberVar("org.applicant_reply_days") });
+    const replyDays = numberVar("org.applicant_reply_days");
+    const steps = stepsAfterSubmit(languageOf(confirmed.proposal), replyDays);
+    res.json({ confirmed: true, message: OPEN_WORDS.confirmed, statusPath, locale: languageOf(confirmed.proposal), replyDays, ...(steps.length ? { steps } : {}) });
   });
 
   // ── The desk ──────────────────────────────────────────────────────────────

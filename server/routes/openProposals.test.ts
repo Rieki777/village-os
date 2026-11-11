@@ -294,8 +294,10 @@ describe.skipIf(!configured)("open role proposals, the intake, on a real schema"
   describe("nothing unconfirmed reaches a person", () => {
     it("a proposal is kept unconfirmed and its address gets one essential email with a link, and nothing else", async () => {
       const { id, mail } = await send();
-      expect(mail).toMatchObject({ kind: "essential", origin: "open_proposal.confirm", to: { email: "rowan@example.test", name: "Rowan" }, subject: "Confirm your proposal to Test Village" });
-      expect(mail.text).toContain("You proposed to hold Gate Keeper in Test Village next season.");
+      expect(mail).toMatchObject({ kind: "essential", origin: "open_proposal.confirm", to: { email: "rowan@example.test", name: "Rowan" }, subject: "Confirm your application to Test Village" });
+      // A listed role is applied for (Phase A vocabulary): the email says application.
+      expect(mail.text).toContain("You applied for Gate Keeper in Test Village.");
+      expect(mail.text).toContain("Confirm it's you, and your application reaches us:");
       expect(mail.text).toContain(`${ORIGIN}/propose-a-role/confirm?token=`);
       expect(state.sent).toHaveLength(1);
       const row = await readOpenProposal(pool, id);

@@ -27,7 +27,7 @@ import { i18n } from "@/i18n/i18n";
 import { LOCALE_STORAGE_KEY, useLocale } from "@/i18n/LocaleProvider";
 import { storedText } from "@/lib/safeStorage";
 import { isApplicantLanguage } from "@shared/applicantWords";
-import { OPEN_CONFIRM_HOURS } from "@shared/openProposals";
+import { OPEN_CONFIRM_HOURS, type StepAfterSubmit } from "@shared/openProposals";
 import { confirmBy, inboxFor, replyBy } from "./stones";
 
 const BUTTON = `${BTN_PRIMARY} py-3`;
@@ -81,9 +81,10 @@ function whenWords(d: Date, withTime: boolean): string {
  * WHAT HAPPENS NEXT, after an application is sent and after it is confirmed:
  * the one place these words live on this side (Phase A coordination note).
  * Lane A2 owns the applicant's list of steps after submit (received, our
- * review, invitation, conversations, decision, first cycle); when both land,
- * the integrator points this hook at that list. Until then it names only
- * the next two, in the same order: we read it, and we write by a date.
+ * review, invitation, conversations, decision, first cycle). The confirmed
+ * page draws that list whenever the confirm route carries it (`steps`, from
+ * the INTEGRATOR SLOT `stepsAfterSubmit` in shared/openProposals.ts); these
+ * two short lines are the fallback, and the sent page's own two.
  */
 export function useWhatComesNext(): (at: { confirmBy?: string; replyBy?: string }) => string[] {
   const { t } = useLingui();
@@ -142,7 +143,7 @@ export function ConfirmProposal() {
   const whatComesNext = useWhatComesNext();
   const locale = useLocale();
   const gone = t({ message: `That link has run out or was already used. Send your application again, and open the new link within ${OPEN_CONFIRM_HOURS} hours.`, context: "founding application confirm" });
-  const [said, setSaid] = useState<{ ok: boolean; message: string; statusPath?: string | null; replyDays?: number | null } | null>(null);
+  const [said, setSaid] = useState<{ ok: boolean; message: string; statusPath?: string | null; replyDays?: number | null; steps?: StepAfterSubmit[] } | null>(null);
   const [met, setMet] = useState(false);
   useEffect(() => {
     const token = new URLSearchParams(window.location.search).get("token") ?? "";
@@ -154,7 +155,9 @@ export function ConfirmProposal() {
         // The page speaks the language they proposed in, unless this browser has already chosen one.
         if (r.ok && isApplicantLanguage(data?.locale) && data.locale !== i18n.locale && !storedText("local", LOCALE_STORAGE_KEY) && locale.supported.includes(data.locale)) locale.setLocale(data.locale);
         const replyDays = typeof data?.replyDays === "number" ? data.replyDays : null;
-        setSaid({ ok: r.ok, message: typeof data?.message === "string" ? data.message : typeof data?.error === "string" ? data.error : gone, statusPath, replyDays });
+        // The steps after submit, in their language, when the server carries them (the slot in shared/openProposals.ts).
+        const steps: StepAfterSubmit[] = Array.isArray(data?.steps) ? data.steps.filter((x: any) => x && typeof x.name === "string" && typeof x.when === "string").slice(0, 8) : [];
+        setSaid({ ok: r.ok, message: typeof data?.message === "string" ? data.message : typeof data?.error === "string" ? data.error : gone, statusPath, replyDays, steps });
       })
       .catch(() => setSaid({ ok: false, message: gone }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -197,11 +200,17 @@ export function ConfirmProposal() {
           <ConfirmedHeading title={t({ message: "Confirmed", context: "open proposal confirm" })} />
           <p className={`${LEDE} mx-auto lg:mx-0`}>{t({ message: "Your application is with us now. We read every word, and we write to you by email.", context: "founding application confirm" })}</p>
           <ol className="grid gap-2 text-left text-sm text-foreground" data-dated-steps="">
-            {whatComesNext(by ? { replyBy: byWords } : {}).map((line) => (
-              <li key={line} className={TILE}>
-                {line}
-              </li>
-            ))}
+            {said.steps?.length
+              ? said.steps.map((step) => (
+                  <li key={step.key || step.name} className={TILE} data-step-after={step.key}>
+                    <span className="font-semibold">{step.name}</span> <span className="text-muted-foreground">{step.when}</span>
+                  </li>
+                ))
+              : whatComesNext(by ? { replyBy: byWords } : {}).map((line) => (
+                  <li key={line} className={TILE}>
+                    {line}
+                  </li>
+                ))}
           </ol>
           {said.statusPath && (
             <div className="sticky bottom-[calc(var(--tabbar-h)+0.75rem)] z-10 grid justify-items-center gap-2 lg:static lg:justify-items-start">
