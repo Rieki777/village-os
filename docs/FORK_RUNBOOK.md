@@ -2185,3 +2185,7 @@ Admin, Integrations has two new cards, `railway_project_token` (one Railway proj
 ## Living places (module `places`, migration 0354)
 
 - No env var and nothing at boot. A village's places start as a seed file beside its other records (Amora's is `server/seeds/amora/places-seed.json`); a holder of `place.tend` imports it by posting `{ seed }` to `POST /api/place-registry/import`, which refuses the whole seed, naming every problem, when it drops a key on the published map or claims a standing stage for an unconfirmed place. A second import adds only what is new. The module ships off.
+
+## Lead-approved connector writes (game variable `agents.lead_approved_writes`, 2026-11-11, no migration)
+
+- Off by default; nothing changes for a village that leaves it off. To open it: a person turns on `agents.lead_approved_writes` in Admin, Variables; the village grants its agent account `story.tell` (content, FAQs, story pages) and `org.seat` (seating, unseating, the onboarding path), and `dial.set` where the village holds that key, through a seat or a badge, as for any member; then a person saves the agent paths list (Admin, Agents) naming the lead-approved routes with confirm `agent`. Amora's list is `server/seeds/amora/agent-paths-seed.json`. The rules are `LEAD_APPROVED_WRITES` in `shared/agentAdmin.ts`.

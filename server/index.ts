@@ -6884,7 +6884,7 @@ async function startServer() {
     });
 
     registerAgentMapRoutes(app, { resolveAgent, capabilityCtx, getPool, confirmSecret: AUTH_TOKEN_SECRET });
-    registerAgentMcpRoutes(app, { resolveAgent, getPool, confirmSecret: AUTH_TOKEN_SECRET, villageName: () => mergedConfig().project.name, port: () => parseInt(String(process.env.PORT || 3000), 10), listDefault: () => boolVar("memberTasks.listDefault"), today: () => villageDayKey(new Date(), getSeasonConfig().timezone), clientIp, isAdmin });
+    registerAgentMcpRoutes(app, { resolveAgent, getPool, confirmSecret: AUTH_TOKEN_SECRET, villageName: () => mergedConfig().project.name, port: () => parseInt(String(process.env.PORT || 3000), 10), listDefault: () => boolVar("memberTasks.listDefault"), today: () => villageDayKey(new Date(), getSeasonConfig().timezone), clientIp, isAdmin, notifyAdmins, powerGroups: () => rolesRepo.all() });
     registerAgentProposalsRoutes(app, { authedUser, getPool, isAdmin, overLimit, members, liveHoldersOf }); // role journey L13: what the connector proposes waits for a person (server/routes/agentProposals.ts)
     registerAgentAccountRoutes(app, { authedUser, getPool, isAdmin });
     registerAgentOAuthRoutes(app, {

@@ -3727,6 +3727,23 @@ export const VARIABLES: VariableDef[] = [
     default: "true",
   },
 
+  // ── The connector: writes the lead approves in the chat ───────────────────
+  //
+  // READ by server/routes/agentMcp.ts on every `admin_request` call, and by
+  // the agent paths list when a person saves it (server/routes/agentAccounts.ts).
+  // The ruling and the exact list are in shared/agentAdmin.ts, beside
+  // LEAD_APPROVED_WRITES. OFF by default: with it off, nothing changes for any
+  // village. No variable under `agents.` is one an agent may set itself.
+  {
+    key: "agents.lead_approved_writes",
+    category: "Connector",
+    label: "Our agent may make the changes we approve in the chat",
+    description:
+      "When on, an agent account using the village connector may write a role's words, draft the wording of its terms, seat and unseat a person, and change the village's own wording, each time a person has approved it in the chat. Every seating names who approved it and quotes the approval, and every admin and founder is told. Pay, money, erasure, secrets, agent accounts and powers stay a person's act. Off, the connector does only what it did before.",
+    type: "boolean",
+    default: "false",
+  },
+
   // ── Live Sessions: the room's own words and its usual length ──────────────
   //
   // READ by server/lib/liveSessions.ts: `placeLine` reads the first into the
