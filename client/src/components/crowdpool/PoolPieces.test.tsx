@@ -258,17 +258,17 @@ describe("the three-slot meter, given counts that cannot all be true", () => {
  * people, the whole back catalogue would change meaning the day the field
  * arrived.
  */
-describe("a need counted in hours a week says so, in the caption and to a screen reader", () => {
+describe("a need counted in commitment percent says so, in the caption and to a screen reader", () => {
   it("prints the unit in the caption", () => {
     const m = meter(40, 15, 10, "hours_per_week");
-    expect(m.caption).toContain("10 hours a week arrived");
-    expect(m.caption).toContain("5 hours a week spoken for");
-    expect(m.caption).toContain("40 hours a week wanted");
+    expect(m.caption).toContain("10% of energy and attention arrived");
+    expect(m.caption).toContain("5% of energy and attention spoken for");
+    expect(m.caption).toContain("40% of energy and attention wanted");
   });
 
   it("puts the unit in the SPOKEN label, which has no card around it to explain", () => {
     const m = meter(40, 15, 10, "hours_per_week");
-    expect(m.spoken).toBe("10 hours a week delivered, 15 hours a week claimed, 40 hours a week wanted");
+    expect(m.spoken).toBe("10% of energy and attention delivered, 15% of energy and attention claimed, 40% of energy and attention wanted");
   });
 
   it("counts PEOPLE when the unit is absent, so the back catalogue does not change meaning", () => {
