@@ -43,7 +43,6 @@ import { readsTerms } from "@/components/characters/RolesThatFit";
 import { proposeRoleHref } from "@/components/roleProposal/QuickPath";
 import DiscoverStep from "@/components/roleDraft/DiscoverStep";
 import { BTN_PRIMARY, BTN_SECONDARY, CARD_FEATURED, CHIP_SOFT, DOOR, EYEBROW, H1, H2, LEDE, LINK, WORLD } from "@/components/journey/look";
-import { commitmentWords } from "@shared/termsWords";
 import SelectStepper from "@/components/roleDraft/SelectStepper";
 import ArtImage from "@/components/roleDraft/ArtImage";
 import Burst, { reducedMotion } from "@/components/roleDraft/Burst";
@@ -196,7 +195,7 @@ export default function RoleDraft() {
   /** What the role asks, read from its own terms first (a role that asks 100% says 100%), then from its card's line. */
   const commitmentLine = (roleId: string, fromCard: string | null): string => {
     const pct = form?.roles.find((r) => r.id === roleId)?.terms?.commitmentPct;
-    if (typeof pct === "number") return commitmentWords(pct);
+    if (typeof pct === "number") return t({ message: `Commitment: ${pct}%`, context: "role draft stat" });
     return /^Commitment: \d{1,3}%$/.test(fromCard ?? "") ? (fromCard as string) : t({ message: "Part or full commitment", context: "role draft stat" });
   };
   const cardRef = useRef<HTMLDivElement | null>(null);

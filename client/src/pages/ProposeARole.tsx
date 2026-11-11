@@ -43,7 +43,7 @@ import { BTN_PRIMARY, FIELD as LOOK_FIELD, WORLD } from "@/components/journey/lo
 import { useOptionalAuth } from "@/contexts/AuthContext";
 import { readStoredJson } from "@/lib/safeStorage";
 import { IKIGAI_KEY, ikigaiFromStored, whyFromIkigai } from "@shared/roleDiscover";
-import { OPEN_AIM_MAX, OPEN_NOTE_MAX, OPEN_PROPOSAL_MAX_ROLES, OPEN_WHY_MAX, OPEN_WORDS } from "@shared/openProposals";
+import { OPEN_AIM_MAX, OPEN_ANONYMISE_DAYS, OPEN_CONFIRM_HOURS, OPEN_NOTE_MAX, OPEN_PROPOSAL_MAX_ROLES, OPEN_WHY_MAX, OPEN_WORDS } from "@shared/openProposals";
 // Form v2's pieces, on their own line so the membership lane's edit to the line above them merges clean.
 import TermsEight, { EMPTY_TERMS_STEP, type TermsStepValue } from "@/components/governance/TermsEight";
 import { judgeTermsStep, writtenKeys, type TermsWords } from "@shared/termsWords";
@@ -157,6 +157,7 @@ function Notice({ title, children }: { title: string; children: React.ReactNode 
 /** The link in the confirmation email. */
 export function ConfirmProposal() {
   const { t } = useLingui();
+  const gone = t`That link has run out or was already used. Send your proposal again, and open the new link within ${OPEN_CONFIRM_HOURS} hours.`;
   const [said, setSaid] = useState<{ ok: boolean; message: string; statusPath?: string | null } | null>(null);
   useEffect(() => {
     const token = new URLSearchParams(window.location.search).get("token") ?? "";
@@ -165,14 +166,14 @@ export function ConfirmProposal() {
         const data = await r.json().catch(() => ({}));
         // The applicant's own page (role journey L5): shown once here as well as mailed, and only an address of its own.
         const statusPath = typeof data?.statusPath === "string" && data.statusPath.startsWith("/application-status/") ? data.statusPath : null;
-        setSaid({ ok: r.ok, message: typeof data?.message === "string" ? data.message : typeof data?.error === "string" ? data.error : OPEN_WORDS.confirmGone, statusPath });
+        setSaid({ ok: r.ok, message: typeof data?.message === "string" ? data.message : typeof data?.error === "string" ? data.error : gone, statusPath });
       })
-      .catch(() => setSaid({ ok: false, message: OPEN_WORDS.confirmGone }));
+      .catch(() => setSaid({ ok: false, message: gone }));
   }, []);
   return (
     <Shell>
       {said ? (
-        <Notice title={said.ok ? "Confirmed" : "That link didn't work"}>
+        <Notice title={said.ok ? t({ message: "Confirmed", context: "open proposal confirm" }) : t`That link didn't work`}>
           <p>{said.message}</p>
           {said.ok && said.statusPath && (
             <>
@@ -184,7 +185,7 @@ export function ConfirmProposal() {
           )}
           {!said.ok && (
             <a href="/propose-a-role" className={`${BUTTON} mt-6`}>
-              Propose again
+              {t({ message: "Propose again", context: "open proposal confirm" })}
             </a>
           )}
         </Notice>
@@ -232,6 +233,9 @@ export default function ProposeARole() {
   const [unoffered, setUnoffered] = useState(0);
   const me = useOptionalAuth()?.user ?? null;
   const { t } = useLingui();
+  const maxRoles = OPEN_PROPOSAL_MAX_ROLES;
+  const confirmHours = OPEN_CONFIRM_HOURS;
+  const anonymiseDays = OPEN_ANONYMISE_DAYS;
 
   useEffect(() => {
     // Every role a link or the draft board sent, in order (role draft board, 9 Nov).
@@ -402,7 +406,7 @@ export default function ProposeARole() {
     return (
       <Shell>
         <p role="alert" className="text-foreground">
-          This page didn't load. Check your connection and try again.
+          {t`This page didn't load. Check your connection and try again.`}
         </p>
       </Shell>
     );
@@ -410,7 +414,7 @@ export default function ProposeARole() {
   if (form.kind === "closed") {
     return (
       <Shell>
-        <Notice title="Not open right now">
+        <Notice title={t`Not open right now`}>
           <p>{form.message}</p>
         </Notice>
       </Shell>
@@ -421,7 +425,7 @@ export default function ProposeARole() {
       <Shell>
         <div className="relative">
           <Burst play={1} />
-          <Notice title="Check your email">
+          <Notice title={t({ message: "Check your email", context: "open proposal sent" })}>
             <p>{sent}</p>
             {/* The steps after confirming, for the roles picked (Rye's answer 7): conversations in order, the booking link. */}
             {form.kind === "open" && <NextForRoles roles={form.roles.filter((r) => r.id in picked)} />}
@@ -431,7 +435,10 @@ export default function ProposeARole() {
     );
   }
 
-  const seasonName = form.season?.name || "next season";
+  const seasonName = form.season?.name || t({ message: "next season", context: "open proposal season" });
+  const village = form.village;
+  const moonFrom = form.term ? civilDayWords(form.term.startsOn) : "";
+  const moonTo = form.term ? civilDayWords(form.term.endsOn) : "";
   // Only when a door sent the visitor here with `from`; a shared link stands on its own.
   const cameFrom = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("from") ? doorBackOf(window.location.search, "", window.location.origin) : null;
   const invalid = (field: string) => (error?.field === field ? { "aria-invalid": true, "aria-describedby": `propose-problem-${field}` } : {});
@@ -450,14 +457,14 @@ export default function ProposeARole() {
             {cameFrom.card ? t`Back to the role` : cameFrom.circle ? t`Back to the circle` : t`Back to the roles`}
           </Link>
         )}
-        <h1 className="font-display text-4xl font-bold text-foreground">{OPEN_WORDS.heading(form.village)}</h1>
+        <h1 className="font-display text-4xl font-bold text-foreground">{t`Propose a role in ${village}`}</h1>
         <CastStrip href="/roles/select" size="size-16" />
         <p className="mt-3 text-muted-foreground">
           {form.term
-            ? OPEN_WORDS.ledeMoon(civilDayWords(form.term.startsOn), civilDayWords(form.term.endsOn))
+            ? t`Pick up to ${maxRoles} roles for this moon, from ${moonFrom} to the next new moon on ${moonTo}, say what you bring, and send it. You don't need an account.`
             : form.season
-              ? OPEN_WORDS.lede(seasonName)
-              : OPEN_WORDS.noSeason}
+              ? t`Pick up to ${maxRoles} roles for ${seasonName}, say what you bring, and send it. You don't need an account.`
+              : t`The village hasn't set its next season yet, so there's nothing to propose for right now. Check back soon.`}
         </p>
       </div>
 
@@ -498,14 +505,14 @@ export default function ProposeARole() {
           {/* Guide v2: why you and your aim, then each role card (its goals, the first moon's goals, the season goal it serves), then the practicalities. */}
           <div>
             <label htmlFor="propose-why" className="mb-2 block text-sm font-semibold text-card-foreground">
-              {OPEN_WORDS.whyLabel}
+              {t`Why you, and why now`}
             </label>
             <textarea id="propose-why" required rows={5} maxLength={OPEN_WHY_MAX} value={why} onChange={(e) => setWhy(e.target.value)} className={FIELD} {...invalid("why")} />
             <Beside id="propose-problem-why" message={problemOn("why")} />
           </div>
           <div>
             <label htmlFor="propose-aim" className="mb-2 block text-sm font-semibold text-card-foreground">
-              {OPEN_WORDS.aimLabel}
+              {t`Your aim for the season`}
             </label>
             <input id="propose-aim" required maxLength={OPEN_AIM_MAX} value={aim} onChange={(e) => setAim(e.target.value)} className={FIELD} {...invalid("aim")} />
             <Beside id="propose-problem-aim" message={problemOn("aim")} />
@@ -518,7 +525,7 @@ export default function ProposeARole() {
           </div>
           <fieldset id="propose-roles" tabIndex={-1} className="scroll-mt-24 space-y-4 outline-none" {...invalid("roles")}>
             <legend className="mb-2 text-sm font-semibold text-card-foreground">
-              {OPEN_WORDS.pickRoles} <span className="font-normal text-muted-foreground">({count} of {OPEN_PROPOSAL_MAX_ROLES})</span>
+              {t`Pick up to ${maxRoles} roles`} <span className="font-normal text-muted-foreground">{t({ message: `(${count} of ${maxRoles})`, context: "open proposal roles count" })}</span>
             </legend>
             {unoffered > 0 && (
               <p role="status" className="rounded-lg border border-border bg-muted p-3 text-sm text-foreground">
@@ -554,7 +561,7 @@ export default function ProposeARole() {
                       )}
                       {on && (
                         <label className="mt-3 grid gap-1 text-sm font-medium text-card-foreground">
-                          {OPEN_WORDS.noteLabel} <span className="font-normal text-muted-foreground">(optional)</span>
+                          {t`What you bring to this role`} <span className="font-normal text-muted-foreground">{t({ message: "(optional)", context: "open proposal field" })}</span>
                           <textarea
                             rows={3}
                             maxLength={OPEN_NOTE_MAX}
@@ -650,23 +657,23 @@ export default function ProposeARole() {
           </div>
           <div>
             <label htmlFor="propose-name" className="mb-2 block text-sm font-semibold text-card-foreground">
-              {OPEN_WORDS.nameLabel}
+              {t({ message: "Your name", context: "open proposal field" })}
             </label>
             <input id="propose-name" autoComplete="name" required value={name} onChange={(e) => setName(e.target.value)} className={FIELD} {...invalid("name")} />
             <Beside id="propose-problem-name" message={problemOn("name")} />
           </div>
           <div>
             <label htmlFor="propose-email" className="mb-2 block text-sm font-semibold text-card-foreground">
-              {OPEN_WORDS.emailLabel}
+              {t({ message: "Your email", context: "open proposal field" })}
             </label>
             <input id="propose-email" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} className={FIELD} {...invalid("email")} />
             <Beside id="propose-problem-email" message={problemOn("email")} />
-            <p className="mt-2 text-sm text-muted-foreground">{OPEN_WORDS.emailNote}</p>
+            <p className="mt-2 text-sm text-muted-foreground">{t`We'll only write to you about this proposal.`}</p>
             <p className="mt-1 text-sm text-muted-foreground" data-after-approval="">
               {t`We will write to this address with every reply. If we approve your proposal, you will get an email with a button to create your profile, where your tasks and our replies live.`}
             </p>
             <p className="mt-1 text-sm text-muted-foreground" data-kept-for="">
-              {OPEN_WORDS.keptFor}
+              {t`If you don't confirm within ${confirmHours} hours, we delete what you sent. If the village says no, or says yes and you never make your account, we remove your name and email ${anonymiseDays} days later.`}
             </p>
             {/* The same words as OPEN_AI_DRAFTS, which the confirmation email carries (Rye, 9 Nov 2026). */}
             <p className="mt-1 text-sm text-muted-foreground" data-ai-drafts="">
@@ -678,7 +685,7 @@ export default function ProposeARole() {
             <input type="text" name="hp" tabIndex={-1} autoComplete="off" value={hp} onChange={(e) => setHp(e.target.value)} />
           </div>
           <button type="submit" disabled={sending || count === 0} className={`${BUTTON} w-full`}>
-            {sending ? t`Sending...` : OPEN_WORDS.send}
+            {sending ? t({ message: "Sending...", context: "open proposal send" }) : t({ message: "Send my proposal", context: "open proposal send" })}
             {!sending && <ArrowRight className="h-5 w-5" aria-hidden="true" />}
           </button>
         </form>
