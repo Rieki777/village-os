@@ -11,7 +11,7 @@ This describes a FRESH village: what a village standing up a new instance holds 
 <!-- written by a person: generated -->
 This file is generated. `scripts/generate-governance-doc.mjs` reads the engine, the subject registry, the dials, the capability tables, the module definition, the clock and the route registrations, works out the facts, and writes the whole document. `scripts/check-governance-doc.mjs` regenerates it and fails the build when the committed text and the code have come apart.
 
-It describes the sources at fingerprint `a648c991d0d88651`, which regenerating reproduces.
+It describes the sources at fingerprint `b6dfceb19d446769`, which regenerating reproduces.
 
 <!-- written by a person: editing -->
 Editing this file by hand does not hold. Change the code, then run:
@@ -500,6 +500,7 @@ What a village publishes, read from the route registrations. The door on each ro
 | GET | `/api/governance/applications/:ref/scorecards` | signed in | none |
 | POST | `/api/governance/applications/:ref/split` | signed in | none |
 | GET | `/api/governance/applications/:ref/status` | signed in | none |
+| POST | `/api/governance/applications/:ref/terms` | signed in | none |
 | GET | `/api/governance/ballots` | anyone, including a stranger | none |
 | GET | `/api/governance/ballots/:id` | administrator | none |
 | POST | `/api/governance/ballots/:id/close` | capability | `proposal.decide` |
@@ -533,6 +534,7 @@ What a village publishes, read from the route registrations. The door on each ro
 | POST | `/api/governance/power-grants` | signed in | none |
 | POST | `/api/governance/power-returns` | signed in | none |
 | POST | `/api/governance/power-transfers` | signed in | none |
+| POST | `/api/governance/proposal-drafts` | signed in | none |
 | GET | `/api/governance/purpose` | signed in | none |
 | POST | `/api/governance/purpose-changes` | signed in | none |
 | POST | `/api/governance/quorum-fallback/failsafe` | administrator | none |
@@ -543,6 +545,7 @@ What a village publishes, read from the route registrations. The door on each ro
 | GET | `/api/governance/role-applications/:id/card` | signed in | none |
 | POST | `/api/governance/role-applications/:id/consent` | signed in | none |
 | POST | `/api/governance/role-applications/:id/put-to-village` | signed in | none |
+| POST | `/api/governance/role-applications/:id/terms` | signed in | none |
 | POST | `/api/governance/role-applications/:id/withdraw` | signed in | none |
 | POST | `/api/governance/role-applications/words` | signed in | none |
 | POST | `/api/governance/role-declarations` | signed in | none |
@@ -563,7 +566,7 @@ What a village publishes, read from the route registrations. The door on each ro
 | GET | `/api/governance/weights` | signed in | none |
 | GET | `/api/governance/wizard` | signed in | none |
 
-85 routes: 71 under the governance prefix and 14 under the mechanics prefix. 10 of them answer a stranger, 5 ask for a named power, and 0 could not be classified from the code by this reader.
+88 routes: 74 under the governance prefix and 14 under the mechanics prefix. 10 of them answer a stranger, 5 ask for a named power, and 0 could not be classified from the code by this reader.
 
 The routes that answer a stranger are the village's public record. At the module's `public` lifecycle a stranger reads the ballot list, one decision and the objection lineage as titles, counts, tallies, dials and status. Who voted, how, who has not voted yet, who objected and the document itself are for signed-in members, and ruling 22, still staged, is about what members read.
 
@@ -1099,7 +1102,7 @@ The same facts, for anything that would sooner parse than read. Regenerated with
 
 ```json
 {
-  "commit": "a648c991d0d88651",
+  "commit": "b6dfceb19d446769",
   "module": {
     "id": "governance",
     "shipsAs": "off",
@@ -2168,6 +2171,13 @@ The same facts, for anything that would sooner parse than read. Regenerated with
       "file": "server/routes/applicationReview.ts"
     },
     {
+      "method": "POST",
+      "path": "/api/governance/applications/:ref/terms",
+      "door": "signed in",
+      "capability": null,
+      "file": "server/routes/applicationReview.ts"
+    },
+    {
       "method": "GET",
       "path": "/api/governance/ballots",
       "door": "anyone, including a stranger",
@@ -2399,6 +2409,13 @@ The same facts, for anything that would sooner parse than read. Regenerated with
       "file": "server/index.ts"
     },
     {
+      "method": "POST",
+      "path": "/api/governance/proposal-drafts",
+      "door": "signed in",
+      "capability": null,
+      "file": "server/routes/proposalDrafts.ts"
+    },
+    {
       "method": "GET",
       "path": "/api/governance/purpose",
       "door": "signed in",
@@ -2464,6 +2481,13 @@ The same facts, for anything that would sooner parse than read. Regenerated with
     {
       "method": "POST",
       "path": "/api/governance/role-applications/:id/put-to-village",
+      "door": "signed in",
+      "capability": null,
+      "file": "server/routes/seatApplications.ts"
+    },
+    {
+      "method": "POST",
+      "path": "/api/governance/role-applications/:id/terms",
       "door": "signed in",
       "capability": null,
       "file": "server/routes/seatApplications.ts"
@@ -3189,7 +3213,7 @@ The tables and columns the rules above rest on. The generator checks every one a
 | `delegations.accepted_at` | a delegation carries a choice only once the delegate accepts it |
 | `role_holder_terms` | a term survives an unrelated appointment |
 
-Checked against the 254 migration files in `drizzle/`.
+Checked against the 256 migration files in `drizzle/`.
 
 ## What this file is made from
 

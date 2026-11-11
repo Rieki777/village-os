@@ -58,6 +58,8 @@ export interface RoleParams {
   reviewAfterDays: number | null;
   accessBundle: string[] | null;
   bookingUrl: string | null;
+  /** A check happens for this role whatever the references say (0370). */
+  alwaysChecked: boolean;
 }
 
 export const ROLE_PARAM_KEYS = [
@@ -73,6 +75,7 @@ export const ROLE_PARAM_KEYS = [
   "reviewAfterDays",
   "accessBundle",
   "bookingUrl",
+  "alwaysChecked",
 ] as const satisfies readonly (keyof RoleParams)[];
 export type RoleParamKey = (typeof ROLE_PARAM_KEYS)[number];
 
@@ -90,6 +93,7 @@ export const ROLE_PARAM_COLUMNS: Record<RoleParamKey, string> = {
   reviewAfterDays: "review_after_days",
   accessBundle: "access_bundle",
   bookingUrl: "booking_url",
+  alwaysChecked: "always_checked",
 };
 
 export const ROLE_PARAM_LABELS: Record<RoleParamKey, string> = {
@@ -105,6 +109,7 @@ export const ROLE_PARAM_LABELS: Record<RoleParamKey, string> = {
   reviewAfterDays: "Review",
   accessBundle: "Access it needs",
   bookingUrl: "Booking link",
+  alwaysChecked: "Always background-checked",
 };
 
 // ── Parsing ──────────────────────────────────────────────────────────────────
@@ -217,6 +222,7 @@ export function parseRoleParams(body: unknown): Parsed<Partial<RoleParams>> {
   if (o.reviewAfterDays !== undefined) problems.push(put("reviewAfterDays", parseDays(o.reviewAfterDays)));
   if (o.accessBundle !== undefined) problems.push(put("accessBundle", parseTextList(asJson(o.accessBundle), "The access list", 12, 120)));
   if (o.bookingUrl !== undefined) problems.push(put("bookingUrl", parseBooking(o.bookingUrl)));
+  if (o.alwaysChecked !== undefined) problems.push(put("alwaysChecked", typeof o.alwaysChecked === "boolean" ? ok(o.alwaysChecked) : bad<boolean>("Say whether the role is always background-checked.")));
   const first = problems.find((p): p is string => !!p);
   return first ? bad(first) : ok(value);
 }
@@ -233,7 +239,7 @@ export function roleParamColumns(value: Partial<RoleParams>): Array<[string, str
   for (const key of ROLE_PARAM_KEYS) {
     if (!(key in value)) continue;
     const v = value[key];
-    const bound = v === null || v === undefined ? null : Array.isArray(v) ? JSON.stringify(v) : (v as string | number);
+    const bound = v === null || v === undefined ? (key === "alwaysChecked" ? 0 : null) : typeof v === "boolean" ? (v ? 1 : 0) : Array.isArray(v) ? JSON.stringify(v) : (v as string | number);
     out.push([ROLE_PARAM_COLUMNS[key], bound]);
   }
   return out;
@@ -265,6 +271,7 @@ export function roleParamsFromRow(r: Record<string, unknown>): RoleParams {
     reviewAfterDays: days.ok ? days.value : null,
     accessBundle: list(r.access_bundle, 12, 120),
     bookingUrl: url.ok ? url.value : null,
+    alwaysChecked: r.always_checked === 1 || r.always_checked === true || r.always_checked === "1",
   };
 }
 
@@ -299,7 +306,7 @@ export const CARD_PART_WORDS: Record<CardPart, string> = {
   aim: "its aim",
   decides: "what it decides on",
   answers: "what it answers for",
-  hours: "rough hours",
+  hours: "its commitment",
   track: "its track",
   reward: "its reward type",
   term: "its term",
@@ -314,6 +321,8 @@ export interface CardGateInput {
   domain: string | null | undefined;
   accountabilities: readonly string[] | null | undefined;
   timeCommitment: string | null | undefined;
+  /** The commitment the role asks in its terms on offer (0 to 100); it satisfies the part the time text used to. */
+  commitmentPct?: number | null;
   track: RoleTrack | null | undefined;
   /** The pay group's kind in the terms on offer, or null when none is written. */
   payKind: string | null;
@@ -338,7 +347,7 @@ const has = (s: string | null | undefined) => !!s && s.trim() !== "";
 
 /**
  * "Apply" shows only when the aim, what it decides on, what it answers for,
- * rough hours, track, reward type, term, a village goal, selection criteria
+ * commitment, track, reward type, term, a village goal, selection criteria
  * and the interviewing roles are written, and, when paid, a range is on offer.
  */
 export function roleCardGate(i: CardGateInput): CardGate {
@@ -347,7 +356,7 @@ export function roleCardGate(i: CardGateInput): CardGate {
     aim: has(i.aim),
     decides: has(i.domain),
     answers: (i.accountabilities ?? []).some((a) => has(a)),
-    hours: has(i.timeCommitment),
+    hours: has(i.timeCommitment) || (typeof i.commitmentPct === "number"),
     track: !!i.track,
     reward: i.payKind !== null || i.track === "volunteer" || i.track === "ai",
     term: i.hasTerm,

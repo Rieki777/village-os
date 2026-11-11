@@ -147,7 +147,11 @@ describe("the walk", () => {
     // An agreement has no subject to pick: writing it is picking it.
     expect(walkFor("agreement").map((s) => s.key)).not.toContain("subject");
     // And a type that skips nothing walks all five.
-    expect(walkFor("role_application")).toHaveLength(WIZARD_STEPS.length);
+    // A member door skips the type step and keeps About you; a start that carries on a seat asks no references.
+    expect(walkFor("role_application", { door: true }).map((s) => s.key)).toEqual(["subject", "details", "about", "terms", "review"]);
+    expect(walkFor("role_application").map((s) => s.key)).toEqual(["type", "subject", "details", "terms", "review"]);
+    // Every other type skips About you.
+    for (const t of WIZARD_TYPES.filter((x) => x !== "role_application")) expect(walkFor(t).map((s) => s.key), t).not.toContain("about");
   });
 
   it("steps over a gap in BOTH directions", () => {

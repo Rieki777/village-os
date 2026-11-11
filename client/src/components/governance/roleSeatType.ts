@@ -38,6 +38,7 @@ export const ROLE_SEAT_TYPE: WizardTypeConfig = {
     }),
   },
   steps: {
+    about: { skip: true },
     subject: {
       label: "Member and role",
       intro: "Who would sit, and in which role.",

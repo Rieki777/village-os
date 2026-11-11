@@ -19,6 +19,7 @@ import { useState } from "react";
 import type { CalendarItem } from "@shared/gatherings";
 import type { GuestDoor } from "@shared/comms/guests";
 import { useModule } from "@/modules/ModuleProvider";
+import { i18n } from "@/i18n/i18n";
 
 const jsonHeaders = (): Record<string, string> => ({ "Content-Type": "application/json" });
 
@@ -82,7 +83,7 @@ export default function GuestRsvpForm({ gathering }: { gathering: CalendarItem }
       const res = await fetch(base, {
         method: "POST",
         headers: jsonHeaders(),
-        body: JSON.stringify({ name, email, timezone: browserZone(), occurrenceKey: occ || undefined }),
+        body: JSON.stringify({ name, email, timezone: browserZone(), locale: i18n.locale, occurrenceKey: occ || undefined }),
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) setProblem(String(body?.error ?? "That didn't go through. Try again."));

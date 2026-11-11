@@ -49,6 +49,7 @@ import * as repo from "../repos/applicationReview";
 import * as store from "../repos/openProposals";
 import type { DecideRouteDeps } from "./openProposalDecide";
 import { makeApplicantTeller } from "../lib/applicantUpdates";
+import { applicantOffer, replyOffer } from "../lib/counterOffer";
 
 const MINUTE = 60_000;
 const CLOCK_EVERY_MS = 60 * MINUTE;
@@ -109,6 +110,30 @@ export function registerApplicationReview(app: Express, deps: DecideRouteDeps & 
     const s = await statusOf(work, ref);
     if (!s) return res.status(404).json(NOT_HERE);
     res.set("Cache-Control", "no-store").json({ status: s });
+  });
+
+  // ── The applicant answers the terms we changed (joining lane PR 4) ────────
+  /* Accept or talk again, for the changed settings only; saved into the proposal. Same proof of who as the status page. */
+
+  app.post("/api/application-status/:ref/terms", async (req, res) => {
+    const ref = refOf(req);
+    const token = typeof req.query.token === "string" ? req.query.token.slice(0, 100) : "";
+    if (await overLimit(`application-terms:${deps.clientIp ? deps.clientIp(req) : "x"}`, 20, 10 * MINUTE)) return res.status(429).json({ error: "too_many" });
+    if (!ref || !token || !(await statusByToken(work, ref, token))) return res.status(404).json(NOT_HERE);
+    const out = await replyOffer(getPool(), ref, req.body?.replies, now());
+    if (!out.ok) return res.status(out.status).json({ error: "terms_not_saved", message: out.error, ...(out.key ? { field: out.key } : {}) });
+    res.json({ success: true, offer: await applicantOffer(getPool(), ref) });
+  });
+
+  app.post("/api/governance/applications/:ref/terms", async (req, res) => {
+    const viewer = await authedUser(req);
+    if (!viewer) return res.status(401).json({ error: "auth_required" });
+    if (await overLimit(`application-terms:${String(viewer.id)}`, 20, 10 * MINUTE)) return res.status(429).json({ error: "too_many" });
+    const ref = refOf(req);
+    if (!ref || !(await isApplicant(work, ref, String(viewer.id)))) return res.status(404).json(NOT_HERE);
+    const out = await replyOffer(getPool(), ref, req.body?.replies, now());
+    if (!out.ok) return res.status(out.status).json({ error: "terms_not_saved", message: out.error, ...(out.key ? { field: out.key } : {}) });
+    res.json({ success: true, offer: await applicantOffer(getPool(), ref) });
   });
 
   // ── Splitting the conversations over days (D30) ───────────────────────────

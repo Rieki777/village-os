@@ -17,7 +17,9 @@
  * the review's recorded steps, under the same keys the live notices use. No
  * column is needed: the steps already say what happened and when.
  *
- * Emails here are English, as every other letter this server sends is.
+ * LANGUAGE AND NOTE. Each update is written in the language kept on the
+ * proposal (server/lib/applicantLanguage.ts), and carries the decider's note
+ * when they wrote one (the proposal's `note`, plain text, escaped in the email).
  */
 import type { OutgoingEmail, PostResult } from "../../shared/comms/contracts";
 import { applicantUpdate, greetingName, UPDATE_EMAILS, type ApplicantUpdateKind } from "../../shared/openProposalDecide";
@@ -28,6 +30,8 @@ import { isExampleUser } from "./examples";
 import { isTombstone } from "./oauthAccounts";
 import { numberVar } from "./variables";
 import { escapeHtml } from "./comms/mailer";
+import { languageOf } from "./applicantLanguage";
+import { STATUS_LINK_STARTS } from "../../shared/applicantWords";
 
 const WENT: ReadonlySet<PostResult["status"]> = new Set<PostResult["status"]>(["sending", "sent", "delivered", "duplicate"]);
 
@@ -63,6 +67,8 @@ async function wordsFor(deps: Pick<TellDeps, "getPool" | "projectName">, p: prop
     replyDays: numberVar("org.applicant_reply_days"),
     withRole: facts.withRole ?? null,
     minutes: facts.minutes ?? null,
+    lang: languageOf(p),
+    note: p.body.note ?? null,
   });
 }
 
@@ -101,7 +107,7 @@ export function makeApplicantTeller(deps: TellDeps): TellApplicant {
 export function withoutStatusLink(text: string): string {
   const kept: string[] = [];
   for (const line of text.split("\n")) {
-    if (!line.startsWith("Your status page link")) { kept.push(line); continue; }
+    if (!STATUS_LINK_STARTS.some((start) => line.startsWith(start))) { kept.push(line); continue; }
     while (kept.length && kept[kept.length - 1].trim() === "") kept.pop();
   }
   return kept.join("\n").trim();

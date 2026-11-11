@@ -121,7 +121,7 @@ describe("a role with none of the CCOS words written", () => {
       "Signs I'm stretched",
       "What flows back",
       "How I can step back",
-      "Time",
+      "Commitment",
     ]) {
       expect(screen.getByRole("button", { name: `Edit: ${heading}, ${TITLE}` }), heading).toBeTruthy();
     }

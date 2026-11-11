@@ -19,7 +19,7 @@ import { invitesApplications, isListed } from "../../shared/roleListing";
 import { conversationModeOf } from "../../shared/interviewerRoles";
 import { roleCardGate } from "../../shared/roleParams";
 import { payStatesRange, publicPayOf } from "../../shared/rolePublicPay";
-import { readTermsOffer } from "../../shared/seatTermsOffer";
+import { publicTermsOf, readTermsOffer } from "../../shared/seatTermsOffer";
 import type { OrgRole } from "./orgChart";
 
 export interface RoleCardTier {
@@ -48,6 +48,7 @@ export function gateOf(role: OrgRole, defaultTrack?: string | null) {
       domain: role.domain,
       accountabilities: role.accountabilities,
       timeCommitment: role.timeCommitment,
+      commitmentPct: settings?.clocks?.commitmentPct ?? null,
       track: trackOf(role.track, defaultTrack),
       payKind: pay?.kind ?? null,
       hasRange: payStatesRange(pay),
@@ -94,6 +95,10 @@ export function roleCard(
     whereWorked: role.whereWorked ?? null,
     languages: role.languages ?? null,
     reviewAfterDays: role.reviewAfterDays ?? null,
+    // The commitment the role asks (joining lane PR 3): energy and attention, never hours. A planning signal read by no pay code.
+    commitmentPct: publicTermsOf(role.termsOffer).commitmentPct,
+    // Joining lane PR 2 (0370): a check happens for this role whatever the references say; the forms tell the applicant.
+    alwaysChecked: role.alwaysChecked === true,
     firstConversation: opts.words?.firstConversationRole ?? null,
     ...(isPaid(role, pay?.kind, opts.words?.defaultTrack) && opts.words?.paidConsentCircle ? { consentCircle: opts.words.paidConsentCircle } : {}),
     ...(pay && open && isListed(role) ? { publicPay: pay } : {}),

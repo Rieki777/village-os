@@ -24,9 +24,14 @@ import { EMPTY_ROLE_CARD, goalsToFirstMoon, RoleAsks, SeasonServes, type RoleCar
 import { MembershipAtApplication, type MembershipChoice } from "@/components/openProposal/MembershipAtApplication";
 import { AttachmentFields, linksToSend } from "@/components/openProposal/ProposalAttachments";
 import type { ProposalLink } from "@shared/proposalAttachments";
+import { AskSera, DraftMark } from "@/components/proposalDrafts/AskSera";
+import { DRAFT_WORDS, goalsFromDraft, isTextDraft, placeDraftGoals, unconfirmedDrafts, type DraftMarks } from "@shared/seraDrafts";
+import { GOAL_LIMITS } from "@shared/proposalGoals";
+import { AboutYouFacts, ReferencesBlock, EMPTY_ABOUT_YOU, aboutYouBody, aboutYouProblem, type AboutYouValue } from "@/components/openProposal/AboutYou";
 import { termOf, type OpenProposalTerm } from "@shared/openProposalTerm";
 import { civilDayWords } from "@shared/seasonPlans";
 import { useLingui } from "@lingui/react/macro";
+import { i18n } from "@/i18n/i18n";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "wouter";
 import { ArrowLeft, ArrowRight, MailCheck } from "lucide-react";
@@ -38,7 +43,9 @@ import { readStoredJson } from "@/lib/safeStorage";
 import { IKIGAI_KEY, ikigaiFromStored, whyFromIkigai } from "@shared/roleDiscover";
 import { OPEN_AIM_MAX, OPEN_NOTE_MAX, OPEN_PROPOSAL_MAX_ROLES, OPEN_WHY_MAX, OPEN_WORDS } from "@shared/openProposals";
 // Form v2's pieces, on their own line so the membership lane's edit to the line above them merges clean.
-import { HoursField, NextForRoles, Practicalities, browserTimeZone, type Practical } from "@/components/openProposal/RoleCardBridge";
+import TermsEight, { EMPTY_TERMS_STEP, type TermsStepValue } from "@/components/governance/TermsEight";
+import { judgeTermsStep, writtenKeys, type TermsWords } from "@shared/termsWords";
+import { NextForRoles, Practicalities, browserTimeZone, type Practical } from "@/components/openProposal/RoleCardBridge";
 /** The goals are asked on each role card now (guide v2); the global pick is left empty. */
 const NO_GLOBAL_SERVES: Record<string, string> = {};
 
@@ -54,9 +61,13 @@ interface FormRole {
   /** The open card's own sections, to answer with the applicant's card (shared/openProposalCard.ts). */
   accountabilities?: string[];
   timeCommitment?: string | null;
+  /** The role's suggested wording for the eight settings and the commitment it asks (joining lane PR 3). */
+  terms?: { words?: TermsWords; commitmentPct?: number | null };
   /** Filled by the role-conversations lane and PR-A; nothing shows until they are. */
   conversations?: Array<{ role: string; minutes: number; finalApproval?: boolean }>;
   bookingUrl?: string | null;
+  /** A check happens for this role whatever the references say (0370). */
+  alwaysChecked?: boolean;
 }
 
 type FormState =
@@ -147,12 +158,17 @@ export default function ProposeARole() {
   const [sent, setSent] = useState<string | null>(null);
   /** The applicant's own card (components/openProposal/RoleCardBridge.tsx). */
   const [cards, setCards] = useState<Record<string, RoleCardState>>({});
-  const [practical, setPractical] = useState<Practical>(() => ({ timeZone: browserTimeZone(), windows: [], earliestStart: "", terms: { choice: "", note: "" } }));
-  const [hours, setHours] = useState("");
+  const [practical, setPractical] = useState<Practical>(() => ({ timeZone: browserTimeZone(), windows: [], earliestStart: "" }));
+  /** The eight settings answered and the commitment chosen (components/governance/TermsEight.tsx). */
+  const [termsStep, setTermsStep] = useState<TermsStepValue>(EMPTY_TERMS_STEP);
   const [agreed, setAgreed] = useState({ nda: false });
   /** Links to their work and files, for the deciders only (Rye, 10 Nov 2026). */
   const [links, setLinks] = useState<ProposalLink[]>([]);
   const [files, setFiles] = useState<File[]>([]);
+  /** About you: facts, references and the consent (components/openProposal/AboutYou.tsx). */
+  const [about, setAbout] = useState<AboutYouValue>(EMPTY_ABOUT_YOU);
+  /** The words Sera drafted, until they are edited or kept (shared/seraDrafts.ts). Never sent. */
+  const [marks, setMarks] = useState<DraftMarks>({});
   /** The membership alignment made here (Rye's answer 8); it answers the Love Letter tick. */
   const [membership, setMembership] = useState<MembershipChoice>({ kind: "none" });
   const [letterRead, setLetterRead] = useState(0);
@@ -200,6 +216,8 @@ export default function ProposeARole() {
   }, [form]);
 
   const count = Object.keys(picked).length;
+  /** The roles picked and the candidate's note on each: the only role words a draft is asked from. */
+  const askRoles = Object.entries(picked).map(([roleId, note]) => ({ roleId, note }));
   const toggle = (id: string) =>
     setPicked((p) => {
       const next = { ...p };
@@ -211,6 +229,26 @@ export default function ProposeARole() {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (sending) return;
+    // A draft from Sera is the candidate's only once they edit or keep it. Nothing is stored about which parts were drafted.
+    const pending = unconfirmedDrafts({ aim, story: about.story, marks, goals: Object.keys(picked).flatMap((id) => (cards[id] ?? EMPTY_ROLE_CARD).goals) });
+    if (pending.length > 0) {
+      setError({ field: null, message: DRAFT_WORDS.blocked(pending) });
+      return;
+    }
+    // The consent is asked before anything goes, in the words the shared rules use; the server judges it again.
+    const aboutProblem = form.kind === "open" ? aboutYouProblem(about, form.roles.some((r) => r.id in picked && r.alwaysChecked === true)) : null;
+    if (aboutProblem) {
+      setError({ field: "checkConsent", message: aboutProblem });
+      return;
+    }
+    // Every written setting answered and the commitment chosen, in the shared rules' words; the server judges it again.
+    if (form.kind === "open") {
+      const judged = judgeTermsStep({ answers: termsStep.answers, commitmentPct: termsStep.commitmentPct }, writtenKeys(form.roles.filter((r) => r.id in picked).map((r) => ({ words: r.terms?.words, commitmentPct: r.terms?.commitmentPct ?? null }))));
+      if (!judged.ok) {
+        setError({ field: "terms", message: judged.error });
+        return;
+      }
+    }
     setSending(true);
     setError(null);
     try {
@@ -235,17 +273,22 @@ export default function ProposeARole() {
           timeZone: practical.timeZone.trim(),
           windows: practical.windows,
           earliestStart: practical.earliestStart,
-          terms: practical.terms.choice ? { choice: practical.terms.choice, note: practical.terms.note.trim() } : undefined,
+          // The eight settings, each answered, and the commitment chosen: the server judges both again.
+          terms: { answers: termsStep.answers },
+          commitmentPct: termsStep.commitmentPct ?? undefined,
           // Guide v2: each role card names the season goals its work serves.
           serves: Object.keys(picked).flatMap((roleId) => Object.entries(cards[roleId]?.serves ?? {}).map(([goalId, how]) => ({ goalId, how, roleId }))),
-          hours,
           // The NDA promise only: the membership letter is aligned with below, never ticked.
           agreed,
         },
+        // The site language they are reading this in: their emails and status page follow it (shared/applicantLanguage.ts).
+        locale: i18n.locale,
         // The letter version the applicant aligned with here; recorded once the address confirms.
         ...(membership.kind === "aligned" ? { membership: { letterVersion: membership.letterVersion } } : {}),
         // Links only when there are some: a proposal without them sends what it always sent.
         ...(linksToSend(links).length ? { links: linksToSend(links) } : {}),
+        // About you: references, facts and the consent with the wording version shown.
+        ...aboutYouBody(about),
       };
       // With files, the proposal goes as one field of a multipart post (server/routes/openProposals.ts).
       let request: RequestInit;
@@ -362,6 +405,12 @@ export default function ProposeARole() {
               {OPEN_WORDS.aimLabel}
             </label>
             <input id="propose-aim" required maxLength={OPEN_AIM_MAX} value={aim} onChange={(e) => setAim(e.target.value)} className={FIELD} {...invalid("aim")} />
+            {count > 0 && (
+              <div className="mt-2 grid gap-2">
+                {(!aim.trim() || isTextDraft(aim, marks.aim)) && <AskSera kind="aim" roles={askRoles} why={why} aim={aim} onDraft={(r) => { if (r.aim) { setAim(r.aim.slice(0, OPEN_AIM_MAX)); setMarks((m) => ({ ...m, aim: r.aim!.slice(0, OPEN_AIM_MAX) })); } }} />}
+                {isTextDraft(aim, marks.aim) && <DraftMark onKeep={() => setMarks((m) => ({ ...m, aim: undefined }))} />}
+              </div>
+            )}
           </div>
           <fieldset className="space-y-4" {...invalid("roles")}>
             <legend className="mb-2 text-sm font-semibold text-card-foreground">
@@ -394,6 +443,11 @@ export default function ProposeARole() {
                           {r.aim && <span className="break-words text-sm text-muted-foreground">{r.aim}</span>}
                         </span>
                       </label>
+                      {on && r.alwaysChecked && (
+                        <p className="mt-3 text-sm text-foreground" data-role-checked="">
+                          {t({ message: "A background check happens for this role whatever the references say.", context: "open proposal role" })}
+                        </p>
+                      )}
                       {on && (
                         <label className="mt-3 grid gap-1 text-sm font-medium text-card-foreground">
                           {OPEN_WORDS.noteLabel} <span className="font-normal text-muted-foreground">(optional)</span>
@@ -411,11 +465,25 @@ export default function ProposeARole() {
                           roleId={r.id}
                           roleName={r.name}
                           aim={r.aim}
-                          timeCommitment={r.timeCommitment ?? null}
+                          commitmentPct={r.terms?.commitmentPct ?? null}
                           accountabilities={r.accountabilities ?? []}
                           goals={form.goals}
                           value={cards[r.id] ?? EMPTY_ROLE_CARD}
                           onChange={(next) => setCards((c) => ({ ...c, [r.id]: next }))}
+                          assist={
+                            <AskSera
+                              kind="goals"
+                              roles={[{ roleId: r.id, note: picked[r.id] }]}
+                              why={why}
+                              aim={aim}
+                              onDraft={(reply) =>
+                                setCards((c) => {
+                                  const card = c[r.id] ?? EMPTY_ROLE_CARD;
+                                  return { ...c, [r.id]: { ...card, goals: placeDraftGoals(card.goals, goalsFromDraft((reply.goals ?? []).filter((g) => g.roleId === r.id)), GOAL_LIMITS.max) } };
+                                })
+                              }
+                            />
+                          }
                         />
                       )}
                     </div>
@@ -425,19 +493,52 @@ export default function ProposeARole() {
             ))}
           </fieldset>
 
-          {/* The practicalities (the time first), then the agreements, then who you are (guide v2; role audit, 10 Nov 2026). */}
-          <HoursField hours={hours} onHours={setHours} />
-          <Practicalities value={practical} onChange={setPractical} />
-          <SeasonServes goals={form.goals} serves={NO_GLOBAL_SERVES} onServes={() => {}} showGoals={false} showHours={false} hours={hours} onHours={setHours} agreed={agreed}
+          {/* The practicalities, then the agreements, then who you are (guide v2; role audit, 10 Nov 2026). */}
+          {/* About you: after the goals, before the terms. The links and files moved here from below. */}
+          <section aria-labelledby="propose-about-h" className="grid gap-5 border-t border-border pt-6" data-about-you-section="">
+            <h2 id="propose-about-h" className="font-display text-2xl font-bold text-card-foreground">
+              {t({ message: "About you", context: "open proposal section" })}
+            </h2>
+            <AboutYouFacts
+              value={about}
+              onChange={setAbout}
+              idPrefix="propose-about"
+              storyAssist={
+                count > 0 ? (
+                  <>
+                    {(!about.story.trim() || isTextDraft(about.story, marks.story)) && <AskSera kind="story" roles={askRoles} why={why} aim={aim} onDraft={(r) => { if (r.story) { setAbout((a) => ({ ...a, story: r.story! })); setMarks((m) => ({ ...m, story: r.story })); } }} />}
+                    {isTextDraft(about.story, marks.story) && <DraftMark onKeep={() => setMarks((m) => ({ ...m, story: undefined }))} />}
+                  </>
+                ) : null
+              }
+            />
+            <Practicalities value={practical} onChange={setPractical} part="about" />
+            <AttachmentFields
+              links={links}
+              onLinks={setLinks}
+              files={files}
+              onFiles={setFiles}
+              invalid={error && (error.field === "links" || error.field === "files") ? { field: error.field, message: error.message } : null}
+            />
+            <ReferencesBlock value={about} onChange={setAbout} idPrefix="propose-about" alwaysChecked={form.roles.some((r) => r.id in picked && r.alwaysChecked === true)} invalid={error?.field === "checkConsent" || error?.field === "references"} />
+          </section>
+          <Practicalities value={practical} onChange={setPractical} part="rest" />
+          {/* The terms: all eight settings with each role's suggestion, then the commitment (joining lane PR 3). */}
+          <section aria-labelledby="propose-terms-h" className="grid gap-4 border-t border-border pt-6" data-terms-section="">
+            <h2 id="propose-terms-h" className="font-display text-2xl font-bold text-card-foreground">
+              {t({ message: "The terms", context: "open proposal section" })}
+            </h2>
+            <TermsEight
+              roles={form.roles.filter((r) => r.id in picked).map((r) => ({ id: r.id, name: r.name, words: r.terms?.words, commitmentPct: r.terms?.commitmentPct ?? null }))}
+              value={termsStep}
+              onChange={setTermsStep}
+              problem={error?.field === "terms" ? error.message : null}
+              idPrefix="propose-terms"
+            />
+          </section>
+          <SeasonServes goals={form.goals} serves={NO_GLOBAL_SERVES} onServes={() => {}} showGoals={false} agreed={agreed}
             onAgreed={setAgreed}
             membership={<MembershipAtApplication signedIn={!!me} choice={membership} onChoice={setMembership} refreshKey={letterRead} />}
-          />
-          <AttachmentFields
-            links={links}
-            onLinks={setLinks}
-            files={files}
-            onFiles={setFiles}
-            invalid={error && (error.field === "links" || error.field === "files") ? { field: error.field, message: error.message } : null}
           />
           <div>
             <label htmlFor="propose-name" className="mb-2 block text-sm font-semibold text-card-foreground">

@@ -19,6 +19,7 @@
  * with. Nothing here fetches, writes or moves value: money stays a record.
  */
 import { canonicalJson } from "./canonicalJson";
+import type { TermsWords } from "./termsWords";
 import { presetById, type SeatPreset } from "./seatPresets";
 import {
   GROUP_LABELS,
@@ -82,6 +83,16 @@ export function readTermsOffer(
     return { ok: false, problem: parsed.problems[0]?.message ?? "These terms could not be read." };
   }
   return { ok: true, settings: parsed.settings };
+}
+
+/**
+ * WHAT A CANDIDATE MAY READ of a role's offer before they are a member: the suggested wording for each
+ * of the eight settings, and the commitment the role asks. Nothing else of the offer leaves through here.
+ */
+export function publicTermsOf(raw: unknown): { words: TermsWords; commitmentPct: number | null } {
+  const read = readTermsOffer(raw);
+  const settings = read.ok ? read.settings : null;
+  return { words: settings?.words ?? {}, commitmentPct: settings?.clocks?.commitmentPct ?? null };
 }
 
 /** The groups whose values differ between two offers, in season-card order. */
