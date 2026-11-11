@@ -95,7 +95,7 @@ export interface SeatInput {
   name: string;
   isExample: boolean;
   /** `decidesByGloss` is the circle's own line for a way called "Other". */
-  circle: { id: string; name: string; decidesBy: string | null; decidesByGloss?: string | null; color: string | null } | null;
+  circle: { id: string; name: string; anchor?: boolean; decidesBy: string | null; decidesByGloss?: string | null; color: string | null } | null;
   /** A proposal that names a circle not yet placed. */
   circleNameOnly: string | null;
   aim: string | null;

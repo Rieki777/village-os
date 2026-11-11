@@ -41,7 +41,9 @@ import { effectiveLifecycle } from "../lib/modules";
 import { recordEvent } from "../lib/events";
 import { recordAgentAction } from "../repos/agentAccounts";
 import { readConfigDocument } from "../repos/appConfigDocs";
-import { AGENT_ADMIN_PATHS_DOC, effectiveAgentAdminPaths } from "../../shared/agentAdmin";
+import { AGENT_ADMIN_PATHS_DOC, effectiveAgentAdminPaths, LEAD_APPROVED_WRITES_VARIABLE } from "../../shared/agentAdmin";
+import { boolVar } from "../lib/variables";
+import { readLeadSeatFacts, recordLeadApproval, type PowerGroupFacts } from "../lib/agentLeadApproval";
 import { PLATFORM_VERSION } from "../lib/identity";
 import { AI_APPROVAL_DOC, parseAiApproval } from "../../shared/agentProposals";
 import { runSeraTool, undoSeraAction } from "../lib/seraAgent";
@@ -70,6 +72,10 @@ type Deps = Pick<AppDeps, "getPool"> & {
   clientIp: (req: express.Request) => string;
   /** Whether the request's holder is an admin, the same answer the token mint reads. */
   isAdmin: (req: express.Request) => Promise<boolean>;
+  /** One notice to every admin and founder (server/index.ts `notifyAdmins`), for a lead-approved seating. */
+  notifyAdmins?: (type: string, title: string, dedupeKey: string, link?: string) => Promise<void>;
+  /** The power groups on the roles plane, to read what a seat carries before an agent seats anybody in it. */
+  powerGroups?: () => readonly PowerGroupFacts[];
 };
 
 /** The origin this server answers at, from the configured address or the request's own host. */
@@ -125,7 +131,7 @@ async function asHolder(
 }
 
 export function register(app: Express, deps: Deps): void {
-  const { resolveAgent, confirmSecret, getPool, villageName, port, listDefault, today, clientIp, isAdmin } = deps;
+  const { resolveAgent, confirmSecret, getPool, villageName, port, listDefault, today, clientIp, isAdmin, notifyAdmins, powerGroups } = deps;
   const spendBook = createConfirmSpendBook();
 
   app.get("/api/agent/v1/mcp", (_req, res) => {
@@ -188,6 +194,14 @@ export function register(app: Express, deps: Deps): void {
         },
         adminPaths: async () => effectiveAgentAdminPaths(await readConfigDocument(getPool(), AGENT_ADMIN_PATHS_DOC)),
         applicantDataOpen: async () => parseAiApproval(await readConfigDocument(getPool(), AI_APPROVAL_DOC)).approved,
+        // The lead's ruling of 10 and 11 Nov 2026 (shared/agentAdmin.ts): off unless the village turns the variable on.
+        // Without the power groups or the notice wired, the opt-in reads as off, so nothing opens half-built.
+        leadApproved: {
+          on: async () => !!notifyAdmins && !!powerGroups && boolVar(LEAD_APPROVED_WRITES_VARIABLE),
+          seat: (target) => readLeadSeatFacts(getPool(), powerGroups ?? (() => []), target),
+          recorded: (a) =>
+            recordLeadApproval({ pool: getPool(), agentUserId: userId, tokenPrefix: row.prefix, notifyAdmins: notifyAdmins ?? (async () => {}) }, a),
+        },
         recordAction: async (a) => {
           await recordAgentAction(getPool(), { ...a, tokenId: row.id, actorUserId: userId });
         },

@@ -12,6 +12,8 @@
  * Every write reads `res.ok` before it claims anything, and a refusal shows
  * the server's own sentence.
  */
+import type { PickerCircle } from "@shared/circlePicker";
+import CirclePicker from "@/components/circles/CirclePicker";
 import { useState } from "react";
 import { Link } from "wouter";
 import { ArrowDown, ArrowUp } from "lucide-react";
@@ -72,7 +74,7 @@ export default function MeetingTemplates({
   onChanged,
 }: {
   payload: TemplatesPayload;
-  circles: readonly { id: string; name: string }[];
+  circles: readonly PickerCircle[];
   onChanged(): Promise<void> | void;
 }) {
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -255,14 +257,7 @@ export default function MeetingTemplates({
           <div className="grid gap-3 sm:grid-cols-3">
             <label className={LABEL}>
               {TEMPLATE_COPY.circleLabel}
-              <select className={LIST_UI.input} value={draft.circleId} onChange={(e) => setDraft({ ...draft, circleId: e.target.value })}>
-                <option value="">{TEMPLATE_COPY.anyCircle}</option>
-                {circles.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
+              <CirclePicker className={LIST_UI.input} circles={circles} value={draft.circleId} onChange={(id) => setDraft({ ...draft, circleId: id })} leading={<option value="">{TEMPLATE_COPY.anyCircle}</option>} />
             </label>
             <label className={LABEL}>
               {TEMPLATE_COPY.durationLabel}

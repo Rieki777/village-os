@@ -16,6 +16,8 @@
  * the button that opened it. A log that did not load can be tried again, and
  * the chosen circle follows the circles the viewer may keep as they change.
  */
+import type { PickerCircle } from "@shared/circlePicker";
+import CirclePicker from "@/components/circles/CirclePicker";
 import { useEffect, useRef, useState } from "react";
 import {
   DECISION_COPY,
@@ -183,7 +185,7 @@ export default function CircleDecisions({
   myCircleIds,
   lede,
 }: {
-  circles: { id: string; name: string }[];
+  circles: PickerCircle[];
   keepCircleIds: string[];
   myCircleIds: string[];
   /** The words under the heading, for a page that shows one circle (its card); /sessions keeps its own. */
@@ -252,13 +254,7 @@ export default function CircleDecisions({
             <label htmlFor="decisions-circle" className={LABEL}>
               {DECISION_COPY.circleLabel}
             </label>
-            <select id="decisions-circle" className={`mt-1 ${INPUT}`} value={circleId} onChange={(e) => setCircleId(e.target.value)}>
-              {keepable.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
+            <CirclePicker id="decisions-circle" className={`mt-1 ${INPUT}`} circles={keepable} value={circleId} onChange={setCircleId} />
           </div>
         )}
         {error && (

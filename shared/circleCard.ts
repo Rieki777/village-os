@@ -67,6 +67,8 @@ export interface CircleIn {
   purpose: string | null;
   /** `circles.status`: active, forming or dormant. */
   status: string | null;
+  /** This circle is the village's anchor (from data, shared/circlePicker.ts). */
+  anchor?: boolean;
   /** The circle this one sits in, when it sits in one. */
   parent: { id: string; name: string } | null;
 }
@@ -227,6 +229,7 @@ export interface CircleCard {
   header: {
     eyebrow: string;
     name: string;
+    anchor?: boolean;
     parent: { name: string; href: string; label: string } | null;
     /** "Forming" or "Resting"; null for an active circle. */
     status: string | null;
@@ -432,6 +435,7 @@ export function buildCircleCard(input: CircleCardIn): CircleCard {
     header: {
       eyebrow: W.eyebrow,
       name: clean(circle.name) ?? circle.id,
+      anchor: circle.anchor === true,
       parent: circle.parent
         ? { name: circle.parent.name, href: circleCardHref(circle.parent.id), label: W.partOf }
         : null,

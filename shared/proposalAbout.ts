@@ -66,9 +66,7 @@ export const CHECK_WORDS = {
   heading: "References and a background check",
   referencesHint: "Up to three people who know your work. Leave all three blank if you prefer a background check.",
   lines: [
-    "If you leave the three references blank, we'll run a background check instead. Its cost comes out of your first contractor pay.",
-    "If we don't seat you, we cover it.",
-    "The cost and the provider depend on your country, and we keep the cost as low as we can.",
+    "If you leave the three references blank, we'll run a background check instead. We cover its cost. The provider depends on your country.",
   ],
   contactLine: "We contact your references only after our first conversation, and only with your OK.",
   roleLine: "A check happens for this role whatever the references say.",

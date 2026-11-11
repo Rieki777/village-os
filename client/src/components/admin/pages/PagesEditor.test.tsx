@@ -118,7 +118,8 @@ describe("Admin, Pages", () => {
     render(<PagesEditor password="pw" />);
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/Saving is off/);
-    expect(screen.getByRole("button", { name: /^Save$/ })).toBeDisabled();
+    // Nothing changed, so the floating save bar has nothing to offer.
+    expect(screen.queryByRole("button", { name: /^Save$/ })).toBeNull();
     expect(screen.getByRole("button", { name: "Keep these words as ours" })).toBeDisabled();
   });
 

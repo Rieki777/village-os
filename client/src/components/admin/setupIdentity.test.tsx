@@ -79,7 +79,9 @@ describe("the Setup Wizard's Identity step", () => {
     render(<Router><SetupWizard password="secret" onOpenTab={vi.fn()} /></Router>);
     await screen.findByText("Project name");
 
-    await userEvent.click(screen.getByRole("button", { name: "Save identity" }));
+    // Identity saves from the floating bar once a box changed.
+    await userEvent.type(screen.getByLabelText("Project name"), "x");
+    await userEvent.click(await screen.findByRole("button", { name: "Save" }));
 
     const put = (globalThis.fetch as any).mock.calls.find(
       (c: any[]) => c[1]?.method === "PUT" && String(c[0]).includes("/admin/brand"),

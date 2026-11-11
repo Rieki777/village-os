@@ -62,9 +62,7 @@ describe("the background-check consent", () => {
     expect(parseAboutYou({ references: [], consent: { given: true, version: "cc-00000000" } }, { alwaysChecked: false, at: AT })).toMatchObject({ ok: false, error: ABOUT_WORDS.consentChanged });
   });
   it("says the lead's words, and its version moves when a word does", () => {
-    expect(CHECK_WORDS.lines[0]).toBe("If you leave the three references blank, we'll run a background check instead. Its cost comes out of your first contractor pay.");
-    expect(CHECK_WORDS.lines[1]).toBe("If we don't seat you, we cover it.");
-    expect(CHECK_WORDS.lines[2]).toBe("The cost and the provider depend on your country, and we keep the cost as low as we can.");
+    expect(CHECK_WORDS.lines).toEqual(["If you leave the three references blank, we'll run a background check instead. We cover its cost. The provider depends on your country."]);
     expect(CHECK_WORDS.contactLine).toBe("We contact your references only after our first conversation, and only with your OK.");
     expect(checkConsentVersion()).toMatch(/^cc-[0-9a-f]{8}$/);
   });
