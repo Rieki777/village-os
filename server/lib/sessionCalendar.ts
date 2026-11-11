@@ -87,7 +87,7 @@ export function feedKeyBucket(raw: string): string {
 
 /** What the rules need: the live circles, and for a test the module's lifecycle. */
 export interface CalendarDeps {
-  circles: () => { id: string; name: string }[];
+  circles: () => { id: string; name: string; anchor?: boolean }[];
   lifecycle?: () => string;
 }
 
@@ -243,7 +243,7 @@ export async function followFor(pool: Pool, who: { userId: string }, deps: Calen
   }));
   const [key] = no == null ? [] : await store.keyRow(pool, no);
   return {
-    circles: deps.circles().map((c) => ({ id: c.id, name: c.name, followed: all || ids.has(c.id), rhythm: words.get(c.id) ?? null })),
+    circles: deps.circles().map((c) => ({ id: c.id, name: c.name, anchor: c.anchor === true, followed: all || ids.has(c.id), rhythm: words.get(c.id) ?? null })),
     all,
     address: key ? { madeAt: toIso(key.created_at) ?? "", lastReadAt: toIso(key.last_used_at) } : null,
     serving: openToMembers(deps),

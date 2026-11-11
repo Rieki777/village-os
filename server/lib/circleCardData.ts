@@ -21,6 +21,7 @@
  * member holder rows (`map.viewPeople`), so below that tier a filled role
  * carries no link and the card says once that holder cards are for members.
  */
+import { anchorCircleId } from "../../shared/circlePicker";
 import type { Pool } from "mysql2/promise";
 import { buildCircleCard, type CircleCard, type CircleRoleIn } from "../../shared/circleCard";
 import { charterFromRow } from "../../shared/circleCharter";
@@ -150,6 +151,7 @@ export async function buildCircleCardFor(
       name: circle.name,
       purpose: circle.purpose ?? null,
       status: circle.status ?? null,
+      anchor: anchorCircleId(circles as any[]) === String(circle.id),
       parent: parent ? { id: parent.id, name: parent.name } : null,
     },
     charter: charterFromRow(charterRow),

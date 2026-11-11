@@ -20,6 +20,7 @@
  * on the ~50 KB/s links this platform is built for is a cost paid for nothing.
  * The dist budget is measured on this tree rather than assumed.
  */
+import CirclePicker from "@/components/circles/CirclePicker";
 import { useCallback, useEffect, useState } from "react";
 import { Circle, Save } from "lucide-react";
 import { toast } from "sonner";
@@ -31,6 +32,11 @@ import { CIRCLE_LAYERS, parentChoicesFor, type CircleLayer } from "@shared/circl
  * Keyed by the union, so a layer added in shared/circleView.ts cannot draw an
  * empty option here.
  */
+const STATUS_WORDS: Record<(typeof CIRCLE_STATUSES)[number], string> = {
+  active: "Operating",
+  forming: "Forming (listed below the operating circles)",
+  dormant: "Dormant (hidden from pickers)",
+};
 const LAYER_WORDS: Record<CircleLayer, string> = {
   link: "Link: the circle that links the others",
   lead: "Lead: holds the middle of what it sits inside",
@@ -223,7 +229,7 @@ export function OrgChartTab({ password }: { password: string }) {
               {(() => {
                 const cd = circleDraft[c.id] ?? c;
                 // The purpose is not edited here: it changes by consent, on the circle's card.
-                const cDirty = ["name", "status", "layer", "parentCircleId"].some((k) => (cd[k] ?? "") !== (c[k] ?? ""));
+                const cDirty = ["name", "status", "layer", "parentCircleId"].some((k) => (cd[k] ?? "") !== (c[k] ?? "")) || !!cd.isAnchor !== !!c.isAnchor;
                 const setCircle = (patch: any) => setCircleDraft({ ...circleDraft, [c.id]: { ...cd, ...patch } });
                 return (
                   <div className="mb-4">
@@ -235,8 +241,12 @@ export function OrgChartTab({ password }: { password: string }) {
                       <label className="text-xs text-gray-500">Status
                         <select value={cd.status ?? "active"} className={`${inputCls} w-full mt-1 min-h-[44px]`} disabled={!!c.isExample}
                           onChange={(e) => setCircle({ status: e.target.value })}>
-                          {CIRCLE_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+                          {CIRCLE_STATUSES.map((s) => <option key={s} value={s}>{STATUS_WORDS[s]}</option>)}
                         </select>
+                      </label>
+                      <label className="text-xs text-gray-500 flex items-center gap-2 min-h-[44px] sm:self-end">
+                        <input type="checkbox" checked={!!cd.isAnchor} disabled={!!c.isExample} onChange={(e) => setCircle({ isAnchor: e.target.checked })} />
+                        <span>Anchor circle (shown with an anchor before its name)</span>
                       </label>
                       {/* THE GOVERNANCE LAYER (0286). The circles map puts a link or
                           lead circle in the middle of the circle it sits inside, and
@@ -281,7 +291,7 @@ export function OrgChartTab({ password }: { password: string }) {
                       disabled={!cDirty || !!c.isExample}
                       className="mt-2 text-sm border border-gray-200 rounded-lg px-3 py-2 min-h-[44px] disabled:opacity-40 focus:outline-none focus:ring-2 focus:ring-teal-deep"
                       onClick={async () => {
-                        const ok = await call(`/admin/circles/${c.id}`, { name: cd.name, status: cd.status, layer: cd.layer || null, parentCircleId: cd.parentCircleId || null }, "PUT");
+                        const ok = await call(`/admin/circles/${c.id}`, { name: cd.name, status: cd.status, isAnchor: !!cd.isAnchor, layer: cd.layer || null, parentCircleId: cd.parentCircleId || null }, "PUT");
                         if (ok) { toast.success("Circle saved"); setCircleDraft({ ...circleDraft, [c.id]: undefined }); void load(); }
                       }}
                     >Save circle</button>
@@ -310,11 +320,7 @@ export function OrgChartTab({ password }: { password: string }) {
                             onChange={(e) => setDraft({ ...draft, [r.id]: { ...d, name: e.target.value } })} />
                         </label>
                         <label className="text-xs text-gray-500">Circle
-                          <select value={d.circleId ?? ""} className={`${inputCls} w-full mt-1`}
-                            onChange={(e) => setDraft({ ...draft, [r.id]: { ...d, circleId: e.target.value } })}>
-                            <option value="">Unplaced</option>
-                            {circles.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
-                          </select>
+                          <CirclePicker value={d.circleId ?? ""} className={`${inputCls} w-full mt-1`} circles={circles} onChange={(id) => setDraft({ ...draft, [r.id]: { ...d, circleId: id } })} leading={<option value="">Unplaced</option>} />
                         </label>
                         <label className="text-xs text-gray-500">Holds up to
                           <input type="number" min={1} value={d.seats ?? 1} className={`${inputCls} w-full mt-1`}

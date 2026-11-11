@@ -385,6 +385,8 @@ export function changeLine(c: { op: string; orgRoleId: string; payload: Record<s
       return `Retiring ${role}`;
     case "rest_circle":
       return `Retiring the circle ${circle}`;
+    case "set_circle_standing":
+      return `A change to the standing of the circle ${circle}`;
     case "update_seat":
       if (c.payload.name !== undefined) return `A new name for ${role}`;
       if (c.payload.aim !== undefined) return `New words for ${role}'s purpose`;

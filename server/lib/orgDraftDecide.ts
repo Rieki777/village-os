@@ -292,6 +292,11 @@ export function publicDraftLines(draft: Pick<Draft, "changes">, context: Pick<Pr
           (layer !== undefined ? (layer ? `, as ${/^[aeiou]/.test(layer) ? "an" : "a"} ${layer} circle` : ", with no governance layer") : "")
         );
       }
+      case "set_circle_standing": {
+        const st = c.payload?.status;
+        const an = c.payload?.isAnchor;
+        return `Setting the circle ${circle(bare(c.orgRoleId))}${st !== undefined ? ` to ${st === "forming" ? "forming" : "operating"}` : ""}${an === true ? ", as the anchor circle" : an === false ? ", no longer the anchor circle" : ""}`;
+      }
       case "rest_circle":
         return `Retire the circle ${circle(bare(c.orgRoleId))}, so it rests as dormant`;
       case "update_circle":

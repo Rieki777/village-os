@@ -76,7 +76,9 @@ export type DraftOp =
   | "move_circle"
   | "rest_circle"
   // 0270: a circle's words, changed by consent (server/lib/circleWordsDraft.ts).
-  | "update_circle";
+  | "update_circle"
+  // 0373: a circle's standing (active or forming) and whether it is the anchor.
+  | "set_circle_standing";
 export type DraftStatus = "open" | "published" | "reverted" | "withdrawn";
 
 export interface DraftChange {
@@ -1061,6 +1063,23 @@ export function previewLoadedDraft(
       continue;
     }
 
+    if (c.op === "set_circle_standing") {
+      // 0373: operating or forming, and the anchor mark. Retiring stays with rest_circle.
+      const sid = c.orgRoleId.startsWith("circle:") ? c.orgRoleId.slice("circle:".length) : c.orgRoleId;
+      const target = working.find((x) => x.id === sid);
+      const st = c.payload?.status;
+      const an = c.payload?.isAnchor;
+      reads = `Set "${target?.name ?? sid}"${st !== undefined ? ` to ${st === "forming" ? "forming" : "operating"}` : ""}${an === true ? ", as the anchor circle" : an === false ? ", no longer the anchor circle" : ""}`;
+      if (!target) blocked = "That circle does not exist";
+      else if (target.isExample) blocked = "A standing example is not changed. Publish your own circles and it is removed";
+      else if (target.status === "dormant") blocked = "That circle is dormant. It is brought back by an admin, not by a draft";
+      else if (st === undefined && an === undefined) blocked = "Say which standing to set: status, isAnchor, or both";
+      else if (st !== undefined && st !== "active" && st !== "forming") blocked = "status must be active or forming";
+      else if (an !== undefined && typeof an !== "boolean") blocked = "isAnchor must be true or false";
+      lines.push({ changeId: c.id, op: c.op, orgRoleId: c.orgRoleId, reads, blocked });
+      continue;
+    }
+
     if (c.op === "rest_circle") {
       /*
        * A CIRCLE A DRAFT RETIRES (0243): it rests as `dormant`, the status the
@@ -1502,6 +1521,12 @@ async function captureBefore(conn: PoolConnection, c: DraftChange): Promise<any>
     const [[row]] = await conn.query<any[]>("SELECT id, name, status FROM circles WHERE id = ?", [c.orgRoleId.slice("circle:".length)]); // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
     return row ?? null;
   }
+  if (c.op === "set_circle_standing") {
+    const sid = c.orgRoleId.slice("circle:".length);
+    const [[row]] = await conn.query<any[]>("SELECT id, name, status, is_anchor FROM circles WHERE id = ?", [sid]); // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
+    const [prev] = await conn.query<any[]>("SELECT id FROM circles WHERE is_anchor = 1 AND id <> ?", [sid]); // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
+    return row ? { ...row, otherAnchors: prev.map((r: any) => String(r.id)) } : null;
+  }
   if (c.op === "move_circle") {
     const [[row]] = await conn.query<any[]>("SELECT id, parent_circle_id, sort_order, layer FROM circles WHERE id = ?", [c.orgRoleId.slice("circle:".length)]); // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
     return row ?? null;
@@ -1727,6 +1752,19 @@ async function applyChange(
     await applyCircleWords(conn, c);
     return null;
   }
+  if (c.op === "set_circle_standing") {
+    const sid = c.orgRoleId.slice("circle:".length);
+    if (c.payload?.status === "active" || c.payload?.status === "forming") {
+      await conn.query("UPDATE circles SET status = ? WHERE id = ? AND is_example = 0", [c.payload.status, sid]); // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
+    }
+    if (typeof c.payload?.isAnchor === "boolean") {
+      // At most one anchor: marking this one clears the mark from the rest.
+      if (c.payload.isAnchor) await conn.query("UPDATE circles SET is_anchor = 0 WHERE id <> ?", [sid]); // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
+      await conn.query("UPDATE circles SET is_anchor = ? WHERE id = ?", [c.payload.isAnchor ? 1 : 0, sid]); // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
+    }
+    await conn.query("UPDATE collection_versions SET version = version + 1 WHERE collection = 'circles'"); // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
+    return null;
+  }
   if (c.op === "rest_circle") {
     // Raw SQL in the transaction and a version bump, for the reason create_circle gives above.
     await conn.query("UPDATE circles SET status = 'dormant' WHERE id = ? AND is_example = 0", [c.orgRoleId.slice("circle:".length)]); // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
@@ -1923,6 +1961,16 @@ export async function revertDraft(
         // circle is edited.
         if (c.beforeJson?.status) {
           await conn.query("UPDATE circles SET status = ? WHERE id = ?", [String(c.beforeJson.status), c.orgRoleId.slice("circle:".length)]); // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
+          await conn.query("UPDATE collection_versions SET version = version + 1 WHERE collection = 'circles'"); // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
+        }
+      } else if (c.op === "set_circle_standing") {
+        // Put the standing back as it was, and the mark back on the circle that held it.
+        const b = c.beforeJson;
+        if (b?.id) {
+          await conn.query("UPDATE circles SET status = ?, is_anchor = ? WHERE id = ?", [String(b.status ?? "active"), b.is_anchor ? 1 : 0, String(b.id)]); // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
+          for (const other of Array.isArray(b.otherAnchors) ? b.otherAnchors : []) {
+            await conn.query("UPDATE circles SET is_anchor = 1 WHERE id = ?", [String(other)]); // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
+          }
           await conn.query("UPDATE collection_versions SET version = version + 1 WHERE collection = 'circles'"); // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
         }
       } else if (c.op === "update_circle") {

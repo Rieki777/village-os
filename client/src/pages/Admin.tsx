@@ -1,6 +1,7 @@
 ﻿import { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from "react";
 // Nineteen icons left this list when navGroups and CONTENT_SECTIONS moved to
 // client/src/components/admin/: they were the nav's icons, not this file's.
+import CirclePicker from "@/components/circles/CirclePicker";
 import { Circle, Trash2, ChevronDown, ChevronUp, Save, RefreshCw, FileText, Upload, ExternalLink, ArrowUp, ArrowDown, Plus, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { toast } from "sonner";
@@ -3453,14 +3454,13 @@ function CirclesMapTab({ password }: { password: string }) {
                     {r.name}
                     {r.isExample && <ExampleChip className="ml-2 align-middle" />}
                   </span>
-                  <select
-                    defaultValue={(r as any).circleId ?? ""}
-                    onChange={(e) => assignRole(r.id, e.target.value)}
+                  <CirclePicker
+                    value={(r as any).circleId ?? ""}
+                    onChange={(id) => assignRole(r.id, id)}
                     className="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white"
-                  >
-                    <option value="">unassigned</option>
-                    {circles.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  </select>
+                    circles={circles as any[]}
+                    leading={<option value="">unassigned</option>}
+                  />
                 </div>
               ))}
             </div>
@@ -5625,20 +5625,10 @@ export function ExitsAdminTab({ password }: { password: string }) {
           */}
           <div className="grid sm:grid-cols-2 gap-3 mb-4">
             <label className="text-xs text-gray-500">Which circle decides an involuntary exit
-              <select value={policyDraft.involuntary?.decidingDomainId ?? ""}
-                onChange={(e) => setInv({ decidingDomainId: e.target.value })}
-                className={`${inputCls} w-full mt-1 min-h-[44px]`}>
-                <option value="">not stated on the page</option>
-                {circles.map((c: any) => <option key={c.id} value={c.id}>{c.name ?? c.id}</option>)}
-              </select>
+              <CirclePicker value={policyDraft.involuntary?.decidingDomainId ?? ""} onChange={(id) => setInv({ decidingDomainId: id })} className={`${inputCls} w-full mt-1 min-h-[44px]`} circles={circles as any[]} leading={<option value="">not stated on the page</option>} />
             </label>
             <label className="text-xs text-gray-500">Which circle hears an appeal
-              <select value={policyDraft.involuntary?.appealDomainId ?? ""}
-                onChange={(e) => setInv({ appealDomainId: e.target.value })}
-                className={`${inputCls} w-full mt-1 min-h-[44px]`}>
-                <option value="">not stated on the page</option>
-                {circles.map((c: any) => <option key={c.id} value={c.id}>{c.name ?? c.id}</option>)}
-              </select>
+              <CirclePicker value={policyDraft.involuntary?.appealDomainId ?? ""} onChange={(id) => setInv({ appealDomainId: id })} className={`${inputCls} w-full mt-1 min-h-[44px]`} circles={circles as any[]} leading={<option value="">not stated on the page</option>} />
             </label>
           </div>
 

@@ -16,6 +16,7 @@
  * player card uses (`bg-card`, `text-card-foreground`, `text-muted-foreground`,
  * `text-notice`); no colour of its own.
  */
+import CircleName from "@/components/circles/CircleName";
 import { useState, type ReactNode } from "react";
 import { Link } from "wouter";
 import { Pencil } from "lucide-react";
@@ -301,7 +302,7 @@ export default function CircleCardView({
         ) : null}
         <div className="grid gap-1">
           <p className={EYEBROW}>{header.eyebrow}</p>
-          <h1 className="font-display text-3xl font-bold text-card-foreground break-words sm:text-4xl">{header.name}</h1>
+          <h1 className="font-display text-3xl font-bold text-card-foreground break-words sm:text-4xl"><CircleName name={header.name} anchor={header.anchor} /></h1>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
             {header.parent ? (
               <span>

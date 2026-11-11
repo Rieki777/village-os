@@ -14,6 +14,8 @@
  * write reads `res.ok` before it says anything, then the page reads the list
  * again, and the focus returns to the button that opened the form.
  */
+import type { PickerCircle } from "@shared/circlePicker";
+import CirclePicker from "@/components/circles/CirclePicker";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { OWN_CALENDAR_COPY, ownCalendarUrl, type OwnCalendarView } from "@shared/sessionCalendar";
 import { RHYTHM_COPY } from "@shared/sessionRhythm";
@@ -54,7 +56,7 @@ export default function OwnCalendarPanel({
   onSaid,
 }: {
   /** The circles this person may keep. */
-  circles: { id: string; name: string }[];
+  circles: PickerCircle[];
   ownCalendars: Record<string, OwnCalendarView>;
   /** Whether the village can seal an address, so one can be attached. */
   available: boolean;
@@ -174,16 +176,7 @@ export default function OwnCalendarPanel({
             <label htmlFor="own-calendar-circle" className={LABEL}>
               {OWN_CALENDAR_COPY.circleLabel}
             </label>
-            <select id="own-calendar-circle" autoFocus className={`mt-1 ${INPUT}`} value={circleId} onChange={(e) => setCircleId(e.target.value)}>
-              <option value="" disabled>
-                {OWN_CALENDAR_COPY.circleChoose}
-              </option>
-              {circles.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
+            <CirclePicker id="own-calendar-circle" className={`mt-1 ${INPUT}`} circles={circles} value={circleId} onChange={setCircleId} placeholder={OWN_CALENDAR_COPY.circleChoose} autoDefault />
           </div>
           <div>
             <label htmlFor="own-calendar-url" className={LABEL}>
