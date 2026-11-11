@@ -24,6 +24,9 @@ import { EMPTY_ROLE_CARD, goalsToFirstMoon, RoleAsks, SeasonServes, type RoleCar
 import { MembershipAtApplication, type MembershipChoice } from "@/components/openProposal/MembershipAtApplication";
 import { AttachmentFields, linksToSend } from "@/components/openProposal/ProposalAttachments";
 import type { ProposalLink } from "@shared/proposalAttachments";
+import { AskSera, DraftMark } from "@/components/proposalDrafts/AskSera";
+import { DRAFT_WORDS, goalsFromDraft, isTextDraft, placeDraftGoals, unconfirmedDrafts, type DraftMarks } from "@shared/seraDrafts";
+import { GOAL_LIMITS } from "@shared/proposalGoals";
 import { AboutYouFacts, ReferencesBlock, EMPTY_ABOUT_YOU, aboutYouBody, aboutYouProblem, type AboutYouValue } from "@/components/openProposal/AboutYou";
 import { termOf, type OpenProposalTerm } from "@shared/openProposalTerm";
 import { civilDayWords } from "@shared/seasonPlans";
@@ -164,6 +167,8 @@ export default function ProposeARole() {
   const [files, setFiles] = useState<File[]>([]);
   /** About you: facts, references and the consent (components/openProposal/AboutYou.tsx). */
   const [about, setAbout] = useState<AboutYouValue>(EMPTY_ABOUT_YOU);
+  /** The words Sera drafted, until they are edited or kept (shared/seraDrafts.ts). Never sent. */
+  const [marks, setMarks] = useState<DraftMarks>({});
   /** The membership alignment made here (Rye's answer 8); it answers the Love Letter tick. */
   const [membership, setMembership] = useState<MembershipChoice>({ kind: "none" });
   const [letterRead, setLetterRead] = useState(0);
@@ -211,6 +216,8 @@ export default function ProposeARole() {
   }, [form]);
 
   const count = Object.keys(picked).length;
+  /** The roles picked and the candidate's note on each: the only role words a draft is asked from. */
+  const askRoles = Object.entries(picked).map(([roleId, note]) => ({ roleId, note }));
   const toggle = (id: string) =>
     setPicked((p) => {
       const next = { ...p };
@@ -222,6 +229,12 @@ export default function ProposeARole() {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (sending) return;
+    // A draft from Sera is the candidate's only once they edit or keep it. Nothing is stored about which parts were drafted.
+    const pending = unconfirmedDrafts({ aim, story: about.story, marks, goals: Object.keys(picked).flatMap((id) => (cards[id] ?? EMPTY_ROLE_CARD).goals) });
+    if (pending.length > 0) {
+      setError({ field: null, message: DRAFT_WORDS.blocked(pending) });
+      return;
+    }
     // The consent is asked before anything goes, in the words the shared rules use; the server judges it again.
     const aboutProblem = form.kind === "open" ? aboutYouProblem(about, form.roles.some((r) => r.id in picked && r.alwaysChecked === true)) : null;
     if (aboutProblem) {
@@ -392,6 +405,12 @@ export default function ProposeARole() {
               {OPEN_WORDS.aimLabel}
             </label>
             <input id="propose-aim" required maxLength={OPEN_AIM_MAX} value={aim} onChange={(e) => setAim(e.target.value)} className={FIELD} {...invalid("aim")} />
+            {count > 0 && (
+              <div className="mt-2 grid gap-2">
+                {(!aim.trim() || isTextDraft(aim, marks.aim)) && <AskSera kind="aim" roles={askRoles} why={why} aim={aim} onDraft={(r) => { if (r.aim) { setAim(r.aim.slice(0, OPEN_AIM_MAX)); setMarks((m) => ({ ...m, aim: r.aim!.slice(0, OPEN_AIM_MAX) })); } }} />}
+                {isTextDraft(aim, marks.aim) && <DraftMark onKeep={() => setMarks((m) => ({ ...m, aim: undefined }))} />}
+              </div>
+            )}
           </div>
           <fieldset className="space-y-4" {...invalid("roles")}>
             <legend className="mb-2 text-sm font-semibold text-card-foreground">
@@ -451,6 +470,20 @@ export default function ProposeARole() {
                           goals={form.goals}
                           value={cards[r.id] ?? EMPTY_ROLE_CARD}
                           onChange={(next) => setCards((c) => ({ ...c, [r.id]: next }))}
+                          assist={
+                            <AskSera
+                              kind="goals"
+                              roles={[{ roleId: r.id, note: picked[r.id] }]}
+                              why={why}
+                              aim={aim}
+                              onDraft={(reply) =>
+                                setCards((c) => {
+                                  const card = c[r.id] ?? EMPTY_ROLE_CARD;
+                                  return { ...c, [r.id]: { ...card, goals: placeDraftGoals(card.goals, goalsFromDraft((reply.goals ?? []).filter((g) => g.roleId === r.id)), GOAL_LIMITS.max) } };
+                                })
+                              }
+                            />
+                          }
                         />
                       )}
                     </div>
@@ -466,7 +499,19 @@ export default function ProposeARole() {
             <h2 id="propose-about-h" className="font-display text-2xl font-bold text-card-foreground">
               {t({ message: "About you", context: "open proposal section" })}
             </h2>
-            <AboutYouFacts value={about} onChange={setAbout} idPrefix="propose-about" />
+            <AboutYouFacts
+              value={about}
+              onChange={setAbout}
+              idPrefix="propose-about"
+              storyAssist={
+                count > 0 ? (
+                  <>
+                    {(!about.story.trim() || isTextDraft(about.story, marks.story)) && <AskSera kind="story" roles={askRoles} why={why} aim={aim} onDraft={(r) => { if (r.story) { setAbout((a) => ({ ...a, story: r.story! })); setMarks((m) => ({ ...m, story: r.story })); } }} />}
+                    {isTextDraft(about.story, marks.story) && <DraftMark onKeep={() => setMarks((m) => ({ ...m, story: undefined }))} />}
+                  </>
+                ) : null
+              }
+            />
             <Practicalities value={practical} onChange={setPractical} part="about" />
             <AttachmentFields
               links={links}

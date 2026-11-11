@@ -43,6 +43,7 @@ import AboutYouField from "./AboutYouField";
 import GoalsField from "./GoalsField";
 import SeasonGoalField from "./SeasonGoalField";
 import TermsOnOfferField from "./TermsOnOfferField";
+import { AimAssist } from "./SeraDraftFields";
 import { useVillagePresets } from "@/lib/seatPresetsRead";
 
 export interface MechanicsVariableLite {
@@ -81,6 +82,8 @@ export default function WizardField({
   dials,
   /** Every answer so far, for a field whose meaning depends on another one. */
   answers,
+  /** Sets another answer: the drafts from Sera keep their marks under their own key (seraDraftAnswers.ts). */
+  setAnswer,
 }: {
   field: FieldSpec;
   value: unknown;
@@ -88,6 +91,7 @@ export default function WizardField({
   onChange: (next: unknown) => void;
   dials?: MechanicsVariableLite[];
   answers?: Record<string, unknown>;
+  setAnswer?: (key: string, value: unknown) => void;
 }) {
   const id = useId();
   // The village's own presets, offered after the platform's (PR3). Asked only
@@ -295,7 +299,7 @@ export default function WizardField({
       return <SeasonGoalField field={field} value={value} onChange={onChange} problem={problem} />;
 
     case "aboutYou":
-      return <AboutYouField field={field} value={value} onChange={onChange} answers={answers ?? {}} problem={problem} />;
+      return <AboutYouField field={field} value={value} onChange={onChange} answers={answers ?? {}} problem={problem} setAnswer={setAnswer} />;
 
     case "goalsList":
       return <GoalsField field={field} value={value} onChange={onChange} answers={answers ?? {}} problem={problem} />;
@@ -330,6 +334,7 @@ export default function WizardField({
             value={text}
             onChange={(e) => onChange(e.target.value)}
           />
+          {field.key === "aim" && <AimAssist value={text} answers={answers ?? {}} onChange={onChange} setAnswer={setAnswer} />}
           {footer}
         </div>
       );

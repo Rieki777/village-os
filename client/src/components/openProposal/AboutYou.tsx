@@ -13,6 +13,7 @@
  * The references are third-party data. The form says who sees them, and the
  * server keeps them for the deciders only, away from every AI.
  */
+import type { ReactNode } from "react";
 import { useLingui } from "@lingui/react/macro";
 import {
   ABOUT_BASED_MAX,
@@ -92,11 +93,14 @@ export function AboutYouFacts({
   onChange,
   fieldClass = ABOUT_FIELD,
   idPrefix = "about",
+  storyAssist,
 }: {
   value: AboutYouValue;
   onChange: (next: AboutYouValue) => void;
   fieldClass?: string;
   idPrefix?: string;
+  /** "Ask Sera for a first draft" and the draft mark for the story line, when the page can offer them (shared/seraDrafts.ts). */
+  storyAssist?: ReactNode;
 }) {
   const { t } = useLingui();
   return (
@@ -120,6 +124,7 @@ export function AboutYouFacts({
           {t({ message: "Your story with us, in a line (optional)", context: "about you" })}
         </label>
         <input id={`${idPrefix}-story`} maxLength={ABOUT_STORY_MAX} value={value.story} onChange={(e) => onChange({ ...value, story: e.target.value })} className={fieldClass} />
+        {storyAssist && <div className="mt-2 grid gap-2">{storyAssist}</div>}
       </div>
     </div>
   );

@@ -13,10 +13,12 @@
  * It shows no share, percentage or amount: the goals together are the value of
  * the moon's contract, and that is all it says.
  */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useLingui } from "@lingui/react/macro";
 import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react";
 import { BLANK_GOAL, GOAL_LIMITS, goalDateWindow, goalsNudge, type ProposalGoal } from "@shared/proposalGoals";
+import { DraftMark } from "@/components/proposalDrafts/AskSera";
+import type { DraftableGoal } from "@shared/seraDrafts";
 
 const FIELD = "w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 const ICON_BTN =
@@ -44,9 +46,13 @@ export default function GoalsList({
   idPrefix = "goals",
   problem,
   today = new Date().toISOString().slice(0, 10),
+  assist,
 }: {
-  goals: ProposalGoal[];
-  onChange: (next: ProposalGoal[]) => void;
+  /** A goal Sera drafted carries `seraDraft` until it is edited or kept (shared/seraDrafts.ts). */
+  goals: DraftableGoal[];
+  onChange: (next: DraftableGoal[]) => void;
+  /** "Ask Sera for a first draft", drawn above the list when the page can offer it. */
+  assist?: ReactNode;
   /** The role or roles the goals belong to. With one, a goal never asks which. */
   roles: readonly GoalRole[];
   seasonGoals?: readonly GoalSeasonOption[];
@@ -73,7 +79,9 @@ export default function GoalsList({
   const nudge = goalsNudge(goals.length, roles.length);
   const fid = (key: string, part: string) => `${idPrefix}-${key}-${part}`;
 
-  const set = (i: number, patch: Partial<ProposalGoal>) => onChange(goals.map((g, j) => (j === i ? { ...g, ...patch } : g)));
+  // Any edit to a goal makes it the person's own: the draft flag goes with it.
+  const set = (i: number, patch: Partial<ProposalGoal>) => onChange(goals.map((g, j) => (j === i ? { ...g, ...patch, seraDraft: undefined } : g)));
+  const keep = (i: number) => onChange(goals.map((g, j) => (j === i ? { ...g, seraDraft: undefined } : g)));
   const add = () => {
     if (full) return;
     const key = newKey();
@@ -106,6 +114,7 @@ export default function GoalsList({
       <p className="text-sm text-muted-foreground">
         {t`These are your goals for your first moon. Once you are seated, we issue your tasks on your profile each moon. We track both your goals and your tasks for your compensation. Together, your goals are the value of your contract for the moon.`}
       </p>
+      {assist}
       <ol className="grid gap-3" aria-label={t({ message: "Your goals", context: "proposal goals list" })}>
         {goals.map((g, i) => {
           const key = keys.current[i]!;
@@ -135,6 +144,7 @@ export default function GoalsList({
                   </button>
                 </div>
               </div>
+              {g.seraDraft === true && <DraftMark onKeep={() => keep(i)} />}
               <label className="grid gap-1 text-sm font-medium text-foreground" htmlFor={fid(key, "title")}>
                 {t({ message: "The goal", context: "proposal goals list" })}
                 <input

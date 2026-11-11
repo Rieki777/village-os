@@ -29,6 +29,7 @@ const MODEL_FACING = [
   "server/lib/seraAgent.ts",
   "server/lib/seraGuideCall.ts",
   "server/lib/seraGuideQuestion.ts",
+  "server/lib/seraDrafts.ts",
   "server/lib/agentMcp.ts",
   "server/lib/agentMcpTierB.ts",
   "server/lib/agentInbox.ts",
@@ -84,6 +85,9 @@ describe("what a model may be handed of a proposal", () => {
   it("BREAK-THE-FIX CONTROL: a door that copies the whole body is caught by the same check", () => {
     const leaky = (body: unknown) => ({ ...(body as object) });
     expect(leaks(leaky(planted)).length).toBeGreaterThan(5);
+  });
+  it("the allow-list is exactly the candidate's own words about the work: roles, why, aim", () => {
+    expect([...AI_SAFE_PROPOSAL_FIELDS]).toEqual(["roles", "why", "aim"]);
   });
   it("the allow-list names no About-you field", () => {
     expect(AI_SAFE_PROPOSAL_FIELDS.filter((f) => /refer|check|consent|about|link|file|name|email/i.test(f))).toEqual([]);

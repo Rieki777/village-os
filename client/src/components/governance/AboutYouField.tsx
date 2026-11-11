@@ -13,6 +13,7 @@
  */
 import { useEffect, useState } from "react";
 import type { FieldSpec } from "./wizardConfig";
+import { StoryAssist } from "./SeraDraftFields";
 import { AboutYouFacts, ReferencesBlock, aboutYouOf, aboutYouProblem } from "@/components/openProposal/AboutYou";
 import { loadOrg } from "./pickSources";
 import { pickedSeats } from "./SeatPicksField";
@@ -51,19 +52,27 @@ export default function AboutYouField({
   onChange,
   answers,
   problem,
+  setAnswer,
 }: {
   field: FieldSpec;
   value: unknown;
   onChange: (next: unknown) => void;
   answers: Record<string, unknown>;
   problem?: string | null;
+  setAnswer?: (key: string, value: unknown) => void;
 }) {
   const v = aboutYouOf(value);
   const always = useAlwaysChecked(pickedSeats(answers.seatIds ?? answers.seatId));
   return (
     <div className="grid gap-5" data-about-field="">
       {field.help && <p className="text-sm text-muted-foreground">{field.help}</p>}
-      <AboutYouFacts value={v} onChange={onChange} fieldClass={FIELD} idPrefix="door-about" />
+      <AboutYouFacts
+        value={v}
+        onChange={onChange}
+        fieldClass={FIELD}
+        idPrefix="door-about"
+        storyAssist={<StoryAssist story={v.story} answers={answers} onStory={(story) => onChange({ ...v, story })} setAnswer={setAnswer} />}
+      />
       <ReferencesBlock value={v} onChange={onChange} alwaysChecked={always} fieldClass={FIELD} idPrefix="door-about" invalid={!!problem} />
       {problem && (
         <p role="alert" className="text-sm font-medium text-destructive">

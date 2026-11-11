@@ -13,6 +13,7 @@ import { useLingui } from "@lingui/react/macro";
 import { BLANK_GOAL, legacyGoals, type ProposalGoal } from "@shared/proposalGoals";
 import type { FieldSpec } from "./wizardConfig";
 import GoalsList, { type GoalRole } from "./GoalsList";
+import { GoalsAssist } from "./SeraDraftFields";
 import { loadOrg } from "./pickSources";
 import { pickedSeats } from "./SeatPicksField";
 import { openGoals } from "./SeasonGoalField";
@@ -80,6 +81,7 @@ export default function GoalsField({
           idPrefix="door-goals"
           goals={goals ?? []}
           onChange={onChange}
+          assist={<GoalsAssist goals={goals ?? []} answers={answers} roles={roles} onChange={onChange} />}
           roles={roles.length ? roles : [{ id: "", name: t({ message: "this role", context: "proposal goals list" }), goals: [] }]}
           seasonGoals={(season ?? []).map((g) => ({ value: g.text, label: g.text }))}
           problem={problem}
