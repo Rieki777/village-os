@@ -51,7 +51,7 @@ describe("the button", () => {
     vi.stubGlobal("fetch", fetchMock);
     const got: unknown[] = [];
     render(wrap(<AskSera kind="aim" roles={ROLES} why="  my why " aim=" my aim " onDraft={(r) => got.push(r)} />));
-    const button = await screen.findByRole("button", { name: "Ask Sera for a first draft" });
+    const button = await screen.findByRole("button", { name: "Get help drafting from Sera, our regeneratively trained digital assistant" });
     expect(screen.getByText(/It sends the roles you picked, your "Why you" and your aim, and nothing else/)).toBeTruthy();
     expect(fetchMock).not.toHaveBeenCalled();
     fireEvent.click(button);
@@ -67,7 +67,7 @@ describe("the button", () => {
     vi.stubGlobal("fetch", vi.fn(async () => ({ ok: false, status: 503, json: async () => ({ error: DRAFT_WORDS.unavailable }) })));
     const onDraft = vi.fn();
     render(wrap(<AskSera kind="goals" roles={ROLES} why="why" aim="" onDraft={onDraft} />));
-    fireEvent.click(await screen.findByRole("button", { name: "Ask Sera for a first draft" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Get help drafting from Sera, our regeneratively trained digital assistant" }));
     expect((await screen.findByRole("alert")).textContent).toContain("Your form works without it");
     expect(onDraft).not.toHaveBeenCalled();
     // The form can still be sent: nothing is marked, nothing blocks.
@@ -77,7 +77,7 @@ describe("the button", () => {
   it("says so when the guide is slow, and the form carries on", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => { throw Object.assign(new Error("t"), { name: "TimeoutError" }); }));
     render(wrap(<AskSera kind="story" roles={ROLES} why="why" aim="" onDraft={() => {}} />));
-    fireEvent.click(await screen.findByRole("button", { name: "Ask Sera for a first draft" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Get help drafting from Sera, our regeneratively trained digital assistant" }));
     expect((await screen.findByRole("alert")).textContent).toContain("taking longer than it should");
   });
 });

@@ -28,6 +28,7 @@ import BringInCard from "./BringInCard";
 import SeraPanel from "./SeraPanel";
 import HistoryPanel from "./HistoryPanel";
 import CharacterTags from "./CharacterTags";
+import SectionsFields, { sectionsFormOf, sectionsOf, type SectionsForm } from "./SectionsFields";
 
 const text = (v: WordValue | undefined): string => (Array.isArray(v) ? v.join("\n") : (v ?? ""));
 const lines = (s: string): string[] => s.split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
@@ -57,6 +58,8 @@ interface Form {
   conversationMode: string;
   pay: PaySettings | null;
   tags: string[];
+  /** The founding sections, as the editor holds them (lines as text). */
+  sections: SectionsForm;
 }
 
 function formOf(s: EditorState): Form {
@@ -81,6 +84,7 @@ function formOf(s: EditorState): Form {
     conversationMode: p.conversationMode ?? "",
     pay: s.pay,
     tags: [...s.archetypes],
+    sections: sectionsFormOf(s.sections),
   };
 }
 
@@ -103,7 +107,8 @@ function bodyOf(f: Form, s: EditorState): SaveBody {
   if (has("bookingUrl")) parameters.bookingUrl = f.bookingUrl.trim() || null;
   if (has("conversations")) parameters.conversations = f.interviewers;
   if (has("conversationMode")) parameters.conversationMode = f.conversationMode || null;
-  return { words: f.words, parameters, pay: f.pay, archetypes: f.tags };
+  // The sections go only to a server that sent them, so an older server never meets a key it refuses.
+  return { words: f.words, parameters, pay: f.pay, archetypes: f.tags, ...(s.sections ? { sections: sectionsOf(f.sections) } : {}) };
 }
 
 /** A field's gold frame: it differs from the role as it stands, and the words as they stand are a tap away. */
@@ -411,6 +416,8 @@ export default function RoleEditor({ roleId, onClose, onSaved }: { roleId: strin
             {open.mayReadTerms && <UseSeraRange roleId={roleId} onPropose={proposePay} />}
           </Frame>
         </section>
+
+        {base.sections && <SectionsFields value={form.sections} start={start.sections} onChange={(v) => set("sections", v)} />}
 
         <CharacterTags value={form.tags} onChange={(v) => set("tags", v)} changed={!same([...form.tags].sort(), [...start.tags].sort())} />
 

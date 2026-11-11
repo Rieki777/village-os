@@ -78,7 +78,8 @@ export function AskSera({
       <div>
         <button type="button" className={BTN} disabled={busy || disabled} onClick={() => void press()} aria-describedby={`ask-sera-${kind}-sends`}>
           <Sparkles className="size-4" aria-hidden="true" />
-          {t`Ask ${name} for a first draft`}
+          {/* Phase A, build list section 3: the line the visionary asked for, in place of "Ask Sera for a first draft". */}
+          {t`Get help drafting from ${name}, our regeneratively trained digital assistant`}
         </button>
       </div>
       <p id={`ask-sera-${kind}-sends`} className="text-xs text-muted-foreground">

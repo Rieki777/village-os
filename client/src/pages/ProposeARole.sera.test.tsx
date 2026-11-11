@@ -94,7 +94,7 @@ describe("the open form with Ask Sera", () => {
   it("marks a drafted aim, refuses to send it until it is kept, and sends it with no trace of the draft", async () => {
     auth.user = { name: "Rowan Field", email: "rowan@example.test" };
     await open();
-    fireEvent.click(await screen.findByRole("button", { name: "Ask Sera for a first draft", description: /a draft of your aim/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Get help drafting from Sera, our regeneratively trained digital assistant", description: /a draft of your aim/ }));
     await waitFor(() => expect(screen.getByLabelText(OPEN_WORDS.aimLabel)).toHaveProperty("value", "The gate opens at dawn, every day."));
     // Exactly the allow-listed fields went out.
     expect(asked).toEqual([{ kind: "aim", roles: [{ roleId: "r-gate" }], why: "The gate is always shut.", aim: "" }]);
@@ -121,7 +121,7 @@ describe("the open form with Ask Sera", () => {
     auth.user = { name: "Rowan Field", email: "rowan@example.test" };
     seraDown = true;
     await open();
-    fireEvent.click(await screen.findByRole("button", { name: "Ask Sera for a first draft", description: /a draft of your aim/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Get help drafting from Sera, our regeneratively trained digital assistant", description: /a draft of your aim/ }));
     expect(await screen.findByText(/Your form works without it/)).toBeTruthy();
     fireEvent.change(screen.getByLabelText(OPEN_WORDS.aimLabel), { target: { value: "My own aim." } });
     await fillRest();

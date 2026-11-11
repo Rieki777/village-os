@@ -93,6 +93,9 @@ const ctx = (route: "map" | "org"): SeatProjectionCtx => ({
   nameOf: (id) => firstName(NAMES[id] ?? "Member"),
   firstName,
   avatarOf: (id) => (id === "u-mara" ? "/images/avatars/steward-f-olive.webp" : null),
+  // A village that shows its ranges, so the range below is a control for the terms tiers. Ranges ship
+  // hidden (org.show_pay_ranges, phase A); roleCardProjection.test.ts pins that default.
+  cardWords: { showPayRanges: true },
 });
 
 const MAP_MEMBER: SeatTier = mapSeatTier(true);

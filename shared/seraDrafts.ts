@@ -129,8 +129,8 @@ export function goalsFromDraft(drafted: readonly DraftedGoal[]): DraftableGoal[]
 }
 
 export const DRAFT_WORDS = {
-  button: "Ask Sera for a first draft",
-  buttonFor: (name: string) => `Ask ${name} for a first draft`,
+  button: "Get help drafting from Sera, our regeneratively trained digital assistant",
+  buttonFor: (name: string) => `Get help drafting from ${name}, our regeneratively trained digital assistant`,
   kinds: { aim: "a draft of your aim", goals: "three draft goals for your first moon", story: "a draft of your story line" } as Record<DraftKind, string>,
   sends: (name: string) =>
     `Pressing the button sends ${name} the roles you picked, your "Why you" and your aim. Nothing else goes: not your references, links, files, name or email. Nothing is sent until you press it.`,

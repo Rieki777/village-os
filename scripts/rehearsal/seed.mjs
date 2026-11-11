@@ -135,6 +135,32 @@ export async function seedVillage({ base, dbUrl, adminPassword, log = () => {} }
   }
   await call("POST", `/api/admin/org/roles/${state.roles.welcome}/holders`, { userId: state.founderId, action: "add" }, F);
 
+  // Phase A: the founding team leads /roles with two paid roles, each card with its founding sections,
+  // the village's default split under it and a ceiling on the Finance Steward. Made-up words and figures.
+  for (const [k, v] of [
+    ["org.founding_team", true],
+    ["org.founding_team_roles", `${state.roles.finance}, ${state.roles.land}`],
+    ["org.pay_shape", "cash 40, equity 55, village credits 5"],
+    ["org.pay_shape_at_risk", "Part of the pay grows with what the village raises."],
+    ["org.pay_shape_note", "Indicative only. Terms are still being defined and are subject to legal review."],
+  ]) await call("PUT", `/api/admin/variables/${k}`, { value: v }, F);
+  await call(
+    "POST",
+    `/api/org/role-edit/${state.roles.finance}`,
+    {
+      sections: {
+        paid: true,
+        idealBackground: ["Ideally a background in finance", "Experience we'd love to see: shared land models"],
+        qualities: ["Holds the whole domain", "In it for the long run"],
+        aiCompanion: "Heron",
+        aiSupport: "An AI companion keeps the daily books moving, so the steward's time goes to the model.",
+        payCeiling: { amount: 5000, currency: "USD", per: "month" },
+        paySplitNote: "To be decided in the onboarding process.",
+      },
+    },
+    F,
+  );
+
   // The new holder's first steps.
   await call("PUT", "/api/admin/content/confidentiality", { title: "Confidentiality agreement", body: "What you read in our private records stays with you.\n\nYou keep it after you leave." }, F);
   for (const k of ["org.start_after_confidentiality", "org.start_after_membership"]) await call("PUT", `/api/admin/variables/${k}`, { value: true }, F);
