@@ -47,6 +47,7 @@ export function AskSera({
   aim,
   onDraft,
   disabled,
+  founding = false,
 }: {
   kind: DraftKind;
   roles: readonly DraftRoleIn[];
@@ -54,6 +55,8 @@ export function AskSera({
   aim: string;
   onDraft: (reply: DraftReply) => void;
   disabled?: boolean;
+  /** The founding-team application's words (Phase A vocabulary): "Get help drafting from ...", and value items in place of goals. */
+  founding?: boolean;
 }) {
   const { t } = useLingui();
   const name = useAnsweringGuide();
@@ -72,17 +75,26 @@ export function AskSera({
     onDraft(r.reply);
   };
 
-  const what = kind === "aim" ? t`a draft of your aim` : kind === "goals" ? t`three draft goals for your first moon` : t`a draft of your story line`;
+  const what =
+    kind === "aim"
+      ? t`a draft of your aim`
+      : kind === "goals"
+        ? founding
+          ? t({ message: "three draft value items", context: "founding application sera" })
+          : t`three draft goals for your first moon`
+        : t`a draft of your story line`;
   return (
     <div className="grid gap-1.5" data-ask-sera={kind}>
       <div>
         <button type="button" className={BTN} disabled={busy || disabled} onClick={() => void press()} aria-describedby={`ask-sera-${kind}-sends`}>
           <Sparkles className="size-4" aria-hidden="true" />
-          {t`Ask ${name} for a first draft`}
+          {founding ? t({ message: `Get help drafting from ${name}, our regeneratively trained digital assistant`, context: "founding application sera" }) : t`Ask ${name} for a first draft`}
         </button>
       </div>
       <p id={`ask-sera-${kind}-sends`} className="text-xs text-muted-foreground">
-        {t`This asks ${name} for ${what}. It sends the roles you picked, your "Why you" and your aim, and nothing else: not your references, links, files, name or email. Nothing is sent until you press it.`}
+        {founding
+          ? t({ message: `This asks ${name} for ${what}. It sends the role you are applying for, your "Why you" and your aim, and nothing else: not your references, links, files, name or email. Nothing is sent until you press it.`, context: "founding application sera" })
+          : t`This asks ${name} for ${what}. It sends the roles you picked, your "Why you" and your aim, and nothing else: not your references, links, files, name or email. Nothing is sent until you press it.`}
       </p>
       {busy && (
         <p role="status" className="text-sm text-muted-foreground">
@@ -99,7 +111,7 @@ export function AskSera({
 }
 
 /** The mark on a draft until it is edited or kept. */
-export function DraftMark({ onKeep }: { onKeep: () => void }) {
+export function DraftMark({ onKeep, founding = false }: { onKeep: () => void; founding?: boolean }) {
   const { t } = useLingui();
   const name = useAnsweringGuide();
   return (
@@ -110,7 +122,11 @@ export function DraftMark({ onKeep }: { onKeep: () => void }) {
           {t({ message: "Keep this", context: "sera draft mark" })}
         </button>
       </div>
-      <p className="text-xs text-muted-foreground">{t`Edit it or keep it. We cannot send your proposal until you have done one or the other.`}</p>
+      <p className="text-xs text-muted-foreground">
+        {founding
+          ? t({ message: "Edit it or keep it. We cannot send your application until you have done one or the other.", context: "founding application sera" })
+          : t`Edit it or keep it. We cannot send your proposal until you have done one or the other.`}
+      </p>
     </div>
   );
 }

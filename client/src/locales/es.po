@@ -11775,3 +11775,379 @@ msgstr ""
 msgctxt "open proposal review"
 msgid "1 goal for your first moon"
 msgstr "1 meta para tu primera luna"
+
+msgctxt "founding application review"
+msgid "Commitment: {commitment}%, with a ramp-up"
+msgstr "Compromiso: {commitment}%, con un inicio gradual"
+
+msgctxt "founding application sera"
+msgid "three draft value items"
+msgstr "tres borradores de aportes de valor"
+
+msgctxt "founding application value"
+msgid "Add another value item"
+msgstr "Añadir otro aporte de valor"
+
+msgctxt "founding application sent"
+msgid "Check {sentTo}. We sent a link to confirm it's you. Your application reaches us once you open it."
+msgstr "Revisa {sentTo}. Te enviamos un enlace para confirmar que eres tú. Tu solicitud nos llega cuando lo abres."
+
+msgctxt "founding application intro"
+msgid "Who you are, and why this role, now. A few honest lines is enough: the people who decide read every word."
+msgstr "Quién eres, y por qué este rol, ahora. Bastan unas líneas sinceras: las personas que deciden leen cada palabra."
+
+msgctxt "founding application why starter"
+msgid "Why now:"
+msgstr "Por qué ahora:"
+
+msgctxt "founding application compensation"
+msgid "How compensation is shaped"
+msgstr "Cómo se compone la compensación"
+
+msgctxt "founding application check"
+msgid "Say how we will know value {n} is done."
+msgstr "Di cómo sabremos que el aporte {n} está hecho."
+
+msgctxt "founding application choose"
+msgid "No role is open right now. Check back soon."
+msgstr "Ahora mismo no hay ningún rol abierto. Vuelve pronto."
+
+msgctxt "founding application compensation"
+msgid "Cash"
+msgstr "Efectivo"
+
+msgctxt "founding application sera"
+msgid "This asks {name} for {what}. It sends the role you are applying for, your \"Why you\" and your aim, and nothing else: not your references, links, files, name or email. Nothing is sent until you press it."
+msgstr "Esto le pide a {name} {what}. Envía el rol al que postulas, tu \"Por qué tú\" y tu objetivo, y nada más: ni tus referencias, enlaces, archivos, nombre o correo. No se envía nada hasta que lo presionas."
+
+msgctxt "founding application value"
+msgid "The village has not set its goals for this season yet. You can still apply: say in each item what it brings."
+msgstr "La aldea todavía no ha definido sus metas para esta temporada. Aun así puedes postular: di en cada aporte lo que trae."
+
+msgctxt "founding application intro"
+msgid "The value you would bring in your first months, item by item, each tagged to the season goal it serves."
+msgstr "El valor que aportarías en tus primeros meses, uno por uno, cada aporte vinculado a la meta de la temporada a la que sirve."
+
+msgctxt "founding application check"
+msgid "One thing to look at before you continue:"
+msgstr "Una cosa por revisar antes de continuar:"
+
+msgctxt "founding application first day"
+msgid "Your first conversations"
+msgstr "Tus primeras conversaciones"
+
+msgctxt "founding application confirm"
+msgid "Confirming your application"
+msgstr "Confirmando tu solicitud"
+
+msgctxt "founding application intro"
+msgid "Before you apply, come and meet us. Tick what you have done so far."
+msgstr "Antes de postular, ven a conocernos. Marca lo que ya has hecho."
+
+msgctxt "founding application why starter"
+msgid "What I would bring in my first month:"
+msgstr "Lo que aportaría en mi primer mes:"
+
+msgctxt "founding application first day"
+msgid "Your first cycle"
+msgstr "Tu primer ciclo"
+
+msgctxt "founding application choose"
+msgid "Join the founding team"
+msgstr "Únete al equipo fundador"
+
+msgctxt "founding application review"
+msgid "Commitment not chosen yet"
+msgstr "Compromiso todavía sin elegir"
+
+msgctxt "founding application review"
+msgid "1 value item. Aim: {0}"
+msgstr "1 aporte de valor. Objetivo: {0}"
+
+msgctxt "founding application review"
+msgid "Commitment: {commitment}%"
+msgstr "Compromiso: {commitment}%"
+
+msgctxt "founding application about"
+msgid "Your Human Design or Gene Keys (optional)"
+msgstr "Tu Diseño Humano o tus Gene Keys (opcional)"
+
+msgctxt "founding application lede"
+msgid "Six steps. Your name and email come from your account, and your answers are saved on this device as you go."
+msgstr "Seis pasos. Tu nombre y tu correo vienen de tu cuenta, y tus respuestas se guardan en este dispositivo mientras avanzas."
+
+msgctxt "founding application check"
+msgid "Say what value {n} brings."
+msgstr "Di qué trae el aporte {n}."
+
+msgctxt "founding application steps"
+msgid "The six steps of your application"
+msgstr "Los seis pasos de tu solicitud"
+
+msgctxt "founding application value"
+msgid "Value {n}"
+msgstr "Aporte {n}"
+
+msgctxt "founding application send"
+msgid "Send my application"
+msgstr "Enviar mi solicitud"
+
+msgctxt "founding application sera"
+msgid "Edit it or keep it. We cannot send your application until you have done one or the other."
+msgstr "Edítalo o consérvalo. No podemos enviar tu solicitud hasta que hagas una de las dos cosas."
+
+msgctxt "founding application check"
+msgid "Add at least one value item."
+msgstr "Añade al menos un aporte de valor."
+
+msgctxt "founding application value"
+msgid "The season goal it serves"
+msgstr "La meta de la temporada a la que sirve"
+
+msgctxt "founding application confirm"
+msgid "That link has run out or was already used. Send your application again, and open the new link within {OPEN_CONFIRM_HOURS} hours."
+msgstr "Ese enlace venció o ya se usó. Envía tu solicitud de nuevo y abre el enlace nuevo dentro de {OPEN_CONFIRM_HOURS} horas."
+
+msgctxt "founding application"
+msgid "Apply for a different role"
+msgstr "Postular a otro rol"
+
+msgctxt "founding application lede"
+msgid "Six steps, and no account needed. Your answers are saved on this device as you go."
+msgstr "Seis pasos, y no necesitas cuenta. Tus respuestas se guardan en este dispositivo mientras avanzas."
+
+msgctxt "founding application check"
+msgid "{0} things to look at before you continue:"
+msgstr "{0} cosas por revisar antes de continuar:"
+
+msgctxt "founding application about"
+msgid "For your own profile once you join. The people who decide never see it."
+msgstr "Para tu propio perfil cuando te unas. Las personas que deciden nunca lo ven."
+
+msgctxt "founding application sera"
+msgid "Get help drafting from {name}, our regeneratively trained digital assistant"
+msgstr "Pide ayuda para redactar a {name}, nuestra asistente digital formada en lo regenerativo"
+
+msgctxt "founding application compensation"
+msgid "The shape of the whole, before any amount. Amounts come later, in conversation."
+msgstr "La forma del conjunto, antes de cualquier monto. Los montos vienen después, conversando."
+
+msgctxt "founding application draft"
+msgid "We kept your answers from last time. References and files are never saved, so add them again."
+msgstr "Guardamos tus respuestas de la última vez. Las referencias y los archivos nunca se guardan, así que añádelos de nuevo."
+
+msgctxt "founding application terms"
+msgid "I would like a ramp-up"
+msgstr "Me gustaría un inicio gradual"
+
+msgctxt "founding application review"
+msgid "Earliest start: {startDay}"
+msgstr "Inicio más temprano: {startDay}"
+
+msgctxt "founding application step"
+msgid "Review & submit"
+msgstr "Revisar y enviar"
+
+msgctxt "founding application step"
+msgid "Your value"
+msgstr "Tu valor"
+
+msgctxt "founding application terms"
+msgid "Partial pay while you build to your full commitment. We agree the steps together."
+msgstr "Pago parcial mientras llegas a tu compromiso completo. Acordamos los pasos juntos."
+
+msgctxt "founding application step"
+msgid "The terms"
+msgstr "Las condiciones"
+
+msgctxt "founding application compensation"
+msgid "Credits"
+msgstr "Créditos"
+
+msgctxt "founding application review"
+msgid "Not written yet"
+msgstr "Todavía sin escribir"
+
+msgctxt "founding application value"
+msgid "Choose a goal"
+msgstr "Elige una meta"
+
+msgctxt "founding application compensation"
+msgid "Equity"
+msgstr "Participación"
+
+msgctxt "founding application step"
+msgid "About you"
+msgstr "Sobre ti"
+
+msgctxt "founding application review"
+msgid "No start date given"
+msgstr "Sin fecha de inicio"
+
+msgctxt "founding application value"
+msgid "How we will know it is done"
+msgstr "Cómo sabremos que está hecho"
+
+msgctxt "founding application steps"
+msgid "Step {stepNumber} of {stepCount}"
+msgstr "Paso {stepNumber} de {stepCount}"
+
+msgctxt "founding application value"
+msgid "What you will bring"
+msgstr "Lo que aportarás"
+
+msgctxt "founding application value"
+msgid "This season's goals"
+msgstr "Las metas de esta temporada"
+
+msgctxt "founding application intro"
+msgid "A starting point we agree together. Choose your commitment, and mark anything you would like to talk through."
+msgstr "Un punto de partida que acordamos juntos. Elige tu compromiso y marca lo que quieras conversar."
+
+msgctxt "founding application confirm"
+msgid "Your application is with us now. We read every word, and we write to you by email."
+msgstr "Tu solicitud ya está con nosotros. Leemos cada palabra y te escribimos por correo."
+
+msgctxt "founding application confirm"
+msgid "Follow your application"
+msgstr "Sigue tu solicitud"
+
+msgctxt "founding application intro"
+msgid "Read it through once, then send. Nothing reaches us until you confirm your email."
+msgstr "Léela una vez entera y luego envíala. Nada nos llega hasta que confirmes tu correo."
+
+msgctxt "founding application why starter"
+msgid "What I have built before:"
+msgstr "Lo que he construido antes:"
+
+msgctxt "founding application review"
+msgid "{valueCount} value items. Aim: {0}"
+msgstr "{valueCount} aportes de valor. Objetivo: {0}"
+
+msgctxt "founding application value"
+msgid "Remove value {n}"
+msgstr "Quitar el aporte {n}"
+
+msgctxt "founding application next"
+msgid "For {roleName}, if we invite you to the conversations:"
+msgstr "Para {roleName}, si te invitamos a las conversaciones:"
+
+msgctxt "founding application keys"
+msgid "Enter moves on. When the cursor is not in a field, the arrow keys walk between steps."
+msgstr "Enter avanza. Cuando el cursor no está en un campo, las flechas pasan de un paso a otro."
+
+msgctxt "founding application choose"
+msgid "Apply: {0}"
+msgstr "Postular: {0}"
+
+msgctxt "founding application check"
+msgid "Tick that you will align with the village's confidentiality agreement once you are approved."
+msgstr "Marca que te alinearás con el acuerdo de confidencialidad de la aldea una vez aprobada tu solicitud."
+
+msgctxt "founding application know us"
+msgid "Tick the ones you have done"
+msgstr "Marca lo que ya has hecho"
+
+msgctxt "founding application step"
+msgid "Your first day"
+msgstr "Tu primer día"
+
+msgctxt "founding application choose"
+msgid "Choose the role you are applying for. Each application is for one role."
+msgstr "Elige el rol al que postulas. Cada solicitud es para un solo rol."
+
+msgctxt "founding application"
+msgid "Opening the application"
+msgstr "Abriendo la solicitud"
+
+msgctxt "founding application"
+msgid "We'll only write to you about this application."
+msgstr "Solo te escribiremos sobre esta solicitud."
+
+msgctxt "founding application steps"
+msgid "Continue to {nextName}"
+msgstr "Continuar a {nextName}"
+
+msgctxt "founding application wait"
+msgid "While you wait"
+msgstr "Mientras esperas"
+
+msgctxt "founding application beside"
+msgid "The role asks {pct}% of your commitment"
+msgstr "El rol pide el {pct}% de tu compromiso"
+
+msgctxt "founding application why starter"
+msgid "Why this role:"
+msgstr "Por qué este rol:"
+
+msgctxt "founding application step"
+msgid "Get to know us"
+msgstr "Conócenos"
+
+msgctxt "founding application sent"
+msgid "No email after a few minutes? Look in spam or promotions, or fix the address and send again. An application nobody confirms is deleted on its own."
+msgstr "¿No llega el correo después de unos minutos? Mira en spam o promociones, o corrige la dirección y envía de nuevo. Una solicitud que nadie confirma se borra sola."
+
+msgctxt "founding application review"
+msgid "If you don't confirm within {OPEN_CONFIRM_HOURS} hours, we delete what you sent. If we say no, or say yes and you never make your account, we remove your name and email {OPEN_ANONYMISE_DAYS} days later."
+msgstr "Si no confirmas dentro de {OPEN_CONFIRM_HOURS} horas, borramos lo que enviaste. Si decimos que no, o decimos que sí y nunca creas tu cuenta, quitamos tu nombre y tu correo {OPEN_ANONYMISE_DAYS} días después."
+
+msgctxt "founding application intro"
+msgid "What your first month with us would look like, and when you could begin."
+msgstr "Cómo sería tu primer mes con nosotros, y cuándo podrías empezar."
+
+msgctxt "founding application review"
+msgid "Nothing to tick"
+msgstr "Nada que marcar"
+
+msgctxt "founding application know us"
+msgid "We will share how to meet us once you apply."
+msgstr "Te contaremos cómo conocernos cuando postules."
+
+msgctxt "founding application steps"
+msgid "Step {0}: {label}"
+msgstr "Paso {0}: {label}"
+
+msgctxt "founding application value"
+msgid "Your aim in this role, in a line"
+msgstr "Tu objetivo en este rol, en una línea"
+
+msgctxt "founding application review"
+msgid "{ticked} of {ways} done"
+msgstr "{ticked} de {ways} hechos"
+
+msgctxt "founding application title"
+msgid "Apply: {0}"
+msgstr "Postular: {0}"
+
+msgctxt "founding application confirm"
+msgid "Apply again"
+msgstr "Postular de nuevo"
+
+msgctxt "founding application choose"
+msgid "The role in your link is not open any more. These are open now."
+msgstr "El rol de tu enlace ya no está abierto. Estos están abiertos ahora."
+
+msgctxt "founding application check"
+msgid "Choose the season goal value {n} serves."
+msgstr "Elige la meta de la temporada a la que sirve el aporte {n}."
+
+msgctxt "founding application review"
+msgid "We will write to this address with every reply. If we invite you to join, you will get an email with a button to create your profile."
+msgstr "Escribiremos a esta dirección con cada respuesta. Si te invitamos a unirte, recibirás un correo con un botón para crear tu perfil."
+
+msgctxt "founding application next"
+msgid "Open the link in that email by {until}. Until you do, nothing reaches us, and after that we delete what you sent."
+msgstr "Abre el enlace de ese correo antes del {until}. Hasta que lo hagas, nada nos llega, y después de esa fecha borramos lo que enviaste."
+
+msgctxt "founding application next"
+msgid "Our review: we read every application, and write to you by {by}, with an invitation to the conversations or with our thanks."
+msgstr "Nuestra revisión: leemos cada solicitud y te escribimos antes del {by}, con una invitación a las conversaciones o con nuestro agradecimiento."
+
+msgctxt "founding application next"
+msgid "Our review: we read every application, and write to you with an invitation to the conversations or with our thanks."
+msgstr "Nuestra revisión: leemos cada solicitud y te escribimos con una invitación a las conversaciones o con nuestro agradecimiento."
+
+msgctxt "founding application lede"
+msgid "This application is for the cycle from {termFrom} to {termTo}."
+msgstr "Esta solicitud es para el ciclo del {termFrom} al {termTo}."

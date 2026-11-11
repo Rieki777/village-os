@@ -2193,3 +2193,7 @@ Admin, Integrations has two new cards, `railway_project_token` (one Railway proj
 ## The nightly rehearsal (`.github/workflows/rehearsal.yml`, 2026-11-11, no migration)
 
 - Nothing for a village to set: it runs in CI only, against its own scratch database, and the server it boots reads no new variable. Its `REHEARSAL_*` variables (base URL, port, database server, scratch schema, the folder holding Playwright and axe-core) belong to the runner and are listed in `docs/REHEARSAL.md`; its seed (`scripts/rehearsal/seed.mjs`) builds a made-up example village through the founder's own routes and never touches a real one. A fork that keeps the workflow gets it nightly with no setup.
+
+## The founding-team application (Phase A, 2026-11-11, no migration)
+
+- No env var and nothing at boot. Thirteen village settings under Admin, Game Mechanics, The founding team (`FOUNDING_KEYS` in `shared/foundingApplication.ts`) hold every village word the application at `/propose-a-role` shows: the ways to get to know us, the compensation shape's three shares (blank reads "N%") and their words, the plain word on risk, the footer, the first cycle and the first conversations. A new village sees neutral defaults; Amora's own values are `server/seeds/amora/founding-application-seed.json`, applied by hand.

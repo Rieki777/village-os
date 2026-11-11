@@ -36,8 +36,21 @@ export function openProposalHref(roleId?: string | null): string {
   return id ? `${OPEN_PROPOSAL_PATH}?role=${encodeURIComponent(id)}` : OPEN_PROPOSAL_PATH;
 }
 
-/** One to this many roles in one proposal. */
+/** The most roles a stored proposal is read with (an older one may name up to three). */
 export const OPEN_PROPOSAL_MAX_ROLES = 3;
+/**
+ * ONE ROLE PER APPLICATION (the lead, 11 Nov 2026): a person applies from a
+ * role's card, for that role, and the form never sends more than this. The
+ * server still takes up to OPEN_PROPOSAL_MAX_ROLES, so another door (and the
+ * decision suites that send two) keep working while the vocabulary settles;
+ * holding the server to one is a one-line change in `parseOpenProposal`.
+ */
+export const OPEN_APPLY_ROLES = 1;
+/** "Get to know us": how many ways the village may list, and how long each may be. */
+export const KNOW_US_MAX = 8;
+export const KNOW_US_TEXT_MAX = 160;
+/** Human Design or Gene Keys, in the applicant's own words: optional, and never served to the people who decide. */
+export const SELF_KNOWLEDGE_MAX = 300;
 export const OPEN_NAME_MAX = 120;
 export const OPEN_NOTE_MAX = 600;
 export const OPEN_WHY_MAX = 1200;
@@ -145,6 +158,19 @@ export interface OpenProposalBody {
    * route, never by the public form. Absent on every person's proposal.
    */
   agent?: AgentProposalPart;
+  /**
+   * "Get to know us" (step 1 of the application): the ways the applicant
+   * ticked, in the village's words as they read when it was sent. Never
+   * required: the step never locks (build list 1.12).
+   */
+  knowUs?: string[];
+  /** The ramp-up option on The terms: partial pay while building to full capacity (build list 6.8). */
+  rampUp?: true;
+  /**
+   * Human Design or Gene Keys, in the applicant's own words (About you). Kept
+   * for the person's own profile; the decider routes never serve it.
+   */
+  selfKnowledge?: string;
 }
 
 export interface OpenProposalInput {
@@ -187,7 +213,22 @@ export function openBodyOf(raw: unknown): OpenProposalBody {
     ...(cleanNote(o.note) ? { note: cleanNote(o.note) as string } : {}),
     ...(counterOfferOf(o.counterOffer) ? { counterOffer: counterOfferOf(o.counterOffer) as CounterOffer } : {}),
     ...(agentPartOf(o.agent) ? { agent: agentPartOf(o.agent) as AgentProposalPart } : {}),
+    ...(knowUsOf(o.knowUs).length ? { knowUs: knowUsOf(o.knowUs) } : {}),
+    ...(o.rampUp === true ? { rampUp: true as const } : {}),
+    ...(text(o.selfKnowledge, SELF_KNOWLEDGE_MAX).slice(0, SELF_KNOWLEDGE_MAX) ? { selfKnowledge: text(o.selfKnowledge, SELF_KNOWLEDGE_MAX).slice(0, SELF_KNOWLEDGE_MAX) } : {}),
   };
+}
+
+/** The "Get to know us" ticks as stored: plain lines, deduplicated, capped. */
+export function knowUsOf(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const out: string[] = [];
+  for (const v of raw) {
+    const line = typeof v === "string" ? v.trim().slice(0, KNOW_US_TEXT_MAX) : "";
+    if (line && !out.includes(line)) out.push(line);
+    if (out.length >= KNOW_US_MAX) break;
+  }
+  return out;
 }
 
 /**
@@ -197,7 +238,18 @@ export function openBodyOf(raw: unknown): OpenProposalBody {
  */
 export function parseOpenProposal(
   raw: unknown,
-  ctx: { roleIds: ReadonlySet<string>; address: (s: string) => string | null; accountabilitiesOf?: (roleId: string) => readonly string[]; goalIds?: ReadonlySet<string>; today?: string; alwaysChecked?: (roleId: string) => boolean; writtenTerms?: (roleIds: readonly string[]) => readonly TermKey[]; now?: Date },
+  ctx: {
+    roleIds: ReadonlySet<string>;
+    address: (s: string) => string | null;
+    accountabilitiesOf?: (roleId: string) => readonly string[];
+    goalIds?: ReadonlySet<string>;
+    today?: string;
+    alwaysChecked?: (roleId: string) => boolean;
+    writtenTerms?: (roleIds: readonly string[]) => readonly TermKey[];
+    now?: Date;
+    /** The ways to get to know the village it lists now; a tick for one no longer listed is dropped, never refused. Absent: none are kept. */
+    knowUs?: readonly string[];
+  },
 ): Parsed<OpenProposalInput> {
   const o = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
   const name = text(o.name, OPEN_NAME_MAX);
@@ -226,6 +278,16 @@ export function parseOpenProposal(
   const linked = parseProposalLinks(o.links);
   if (!linked.ok) return { ok: false, field: "links", error: linked.error };
   const links = linked.links.length ? { links: linked.links } : {};
+  // The application's own answers (the lead, 11 Nov 2026): the ticks, the ramp-up, and Human Design or Gene Keys.
+  const listed = new Set((ctx.knowUs ?? []).map((l) => l.trim()));
+  const knowUs = knowUsOf(o.knowUs).filter((l) => listed.has(l));
+  const selfKnowledge = text(o.selfKnowledge, SELF_KNOWLEDGE_MAX);
+  if (selfKnowledge.length > SELF_KNOWLEDGE_MAX) return { ok: false, field: "selfKnowledge", error: OPEN_WORDS.tooLong("Human Design or Gene Keys", SELF_KNOWLEDGE_MAX) };
+  const own = {
+    ...(knowUs.length ? { knowUs } : {}),
+    ...(o.rampUp === true ? { rampUp: true as const } : {}),
+    ...(selfKnowledge ? { selfKnowledge } : {}),
+  };
   // About you (joining lane PR 2): only when the form sent the section, so a form from before it still goes through.
   let aboutYou: Pick<OpenProposalBody, "references" | "about" | "backgroundCheck"> = {};
   if (o.references !== undefined || o.about !== undefined || o.checkConsent !== undefined) {
@@ -252,9 +314,9 @@ export function parseOpenProposal(
       writtenTerms: ctx.writtenTerms?.(roles.map((r) => r.roleId)),
     });
     if (!card.ok) return { ok: false, field: card.field, error: card.error };
-    return { ok: true, value: { name, email, body: { roles, why, aim, card: card.card, ...links, ...aboutYou } } };
+    return { ok: true, value: { name, email, body: { roles, why, aim, card: card.card, ...links, ...aboutYou, ...own } } };
   }
-  return { ok: true, value: { name, email, body: { roles, why, aim, ...links, ...aboutYou } } };
+  return { ok: true, value: { name, email, body: { roles, why, aim, ...links, ...aboutYou, ...own } } };
 }
 
 /** "A", "A and B", "A, B and C". */
@@ -294,8 +356,9 @@ export function confirmLetter(i: { firstName: string | null; village: string; ro
 }
 
 export const OPEN_WORDS = {
-  // The page.
-  heading: (village: string) => `Propose a role in ${village}`,
+  // The page (the founding-team application since Phase A, 11 Nov 2026).
+  heading: (roleName: string) => `Apply: ${roleName}`,
+  chooseHeading: "Join the founding team",
   lede: (season: string) => `Pick up to ${OPEN_PROPOSAL_MAX_ROLES} roles for ${season}, say what you bring, and send it. You don't need an account.`,
   noSeason: "The village hasn't set its next season yet, so there's nothing to propose for right now. Check back soon.",
   /** The lede when the village's proposals are for the moon. */
@@ -305,25 +368,25 @@ export const OPEN_WORDS = {
   pickRoles: `Pick up to ${OPEN_PROPOSAL_MAX_ROLES} roles`,
   noteLabel: "What you bring to this role",
   whyLabel: "Why you, and why now",
-  aimLabel: "Your aim for the season",
+  aimLabel: "Your aim in this role, in a line",
   nameLabel: "Your name",
   emailLabel: "Your email",
-  emailNote: "We'll only write to you about this proposal.",
+  emailNote: "We'll only write to you about this application.",
   /** The retention, in one plain line on the form (sheet 19i). */
   keptFor: `If you don't confirm within ${OPEN_CONFIRM_HOURS} hours, we delete what you sent. If the village says no, or says yes and you never make your account, we remove your name and email ${OPEN_ANONYMISE_DAYS} days later.`,
-  send: "Send my proposal",
+  send: "Send my application",
   sent: (email: string) => `Check ${email}. We sent a link to confirm it's you. Your proposal reaches the village once you open it.`,
   confirmed: "Confirmed. Your proposal is with the village now, and you'll hear back by email.",
   confirmGone: "That link has run out or was already used. Send your proposal again, and open the new link within 48 hours.",
   // Refusals, each with what to do.
   needName: "Add your name.",
   needEmail: "Add an email address we can reach you at.",
-  needRole: "Pick at least one role.",
+  needRole: "Choose the role you are applying for.",
   tooManyRoles: `Pick up to ${OPEN_PROPOSAL_MAX_ROLES} roles.`,
   unknownRole: "One of those roles isn't open any more. Reload the page and pick again.",
   sameRoleTwice: "You picked the same role twice.",
   needWhy: "Say why you, and why now.",
-  needAim: "Say your aim for this role.",
+  needAim: "Say your aim in this role, in a line.",
   tooLong: (what: string, max: number) => `${what} is too long. Keep it under ${max} characters.`,
   notSent: "We couldn't send the confirmation email just now. Try again later.",
   /** The sending connection already had its five accepted proposals this hour. Refused tries never count toward it. */

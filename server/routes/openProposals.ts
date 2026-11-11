@@ -88,7 +88,8 @@ import { registerOpenProposalDecide, type DecideRouteDeps } from "./openProposal
 import { registerAgentProposals } from "./agentRoleProposals";
 import { registerApplicationReview } from "./applicationReview";
 import { clearReviewOf, refsDueForClearing } from "../repos/applicationReview";
-import { boolVar, numberVar } from "../lib/variables";
+import { boolVar, numberVar, rawValue } from "../lib/variables";
+import { foundingSetupFrom, type FoundingSetup } from "../../shared/foundingApplication";
 import { languageForNewProposal, languageOf } from "../lib/applicantLanguage";
 import { wordsIn } from "../../shared/applicantWords";
 import { makeApplicantTeller } from "../lib/applicantUpdates";
@@ -125,6 +126,8 @@ type Deps = Pick<
   boolVar?: (key: string) => boolean;
   /** A text setting: the village's default track (`org.default_track`) for the card gate. */
   stringVar?: (key: string) => string;
+  /** The application's village words. Absent: read from the village settings (shared/foundingApplication.ts). */
+  founding?: () => FoundingSetup;
 };
 
 /** The admin's switch for the public link (sheet 19i: on unless switched off). */
@@ -211,6 +214,13 @@ export function register(app: Express, deps: Deps): void {
     };
   }
 
+  /**
+   * The application's village words (shared/foundingApplication.ts): the ways
+   * to get to know us, the compensation shape and its words, the first cycle.
+   * Read fresh on every request, so a change in Admin shows at once.
+   */
+  const founding = (): FoundingSetup => (deps.founding ? deps.founding() : foundingSetupFrom(rawValue));
+
   /** Next season by the village's calendar: the first that starts after today, or null. */
   function nextSeason() {
     const state = deps.seasonState();
@@ -283,6 +293,7 @@ export function register(app: Express, deps: Deps): void {
       goals: t?.goals ?? [],
       ...(t ? {} : { message: mode === "moon" ? OPEN_WORDS.noCurrentSeason : OPEN_WORDS.noSeason }),
       roles: t ? await offered() : [],
+      founding: founding(),
     });
   });
 
@@ -350,6 +361,8 @@ export function register(app: Express, deps: Deps): void {
       today: new Date().toISOString().slice(0, 10),
       alwaysChecked: (id) => alwaysChecked.has(id),
       now: now(),
+      // A tick is kept only for a way the village lists now, in its words as they read today.
+      knowUs: founding().knowUs,
     });
     if (!parsed.ok) return res.status(400).json({ error: parsed.error, field: parsed.field });
     // The files, every one checked before any is kept (Rye, 10 Nov 2026).

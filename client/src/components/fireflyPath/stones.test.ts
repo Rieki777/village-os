@@ -1,35 +1,34 @@
 /**
- * THE FIREFLY PATH, its pure rules: which stone each finding belongs to, the
+ * THE APPLICATION'S STEPS, their pure rules: which step each finding belongs to, the
  * walking order of the final review, the inbox door, and the swipe.
  */
 import { describe, expect, it } from "vitest";
 import { LAST_STONE, STONES, confirmBy, inboxFor, onStone, orderByStone, ownsKeys, replyBy, stoneOfField, swipeStep } from "./stones";
 
-describe("the stones", () => {
-  it("are six, in the brief's order", () => {
-    expect(STONES).toEqual(["role", "moon", "why", "energy", "about", "send"]);
+describe("the steps", () => {
+  it("are six, in the brief's order: Get to know us, About you, Your value, The terms, Your first day, Review & submit", () => {
+    expect(STONES).toEqual(["know", "about", "value", "terms", "first", "review"]);
     expect(LAST_STONE).toBe(5);
   });
 
-  it("every field the form or the server names has its stone, and an unknown one stays on Send", () => {
-    expect(["roles", "aim", "card", "serves", "drafts:moon", "why", "terms", "checkConsent", "references", "links", "files", "drafts:about", "agreed", "membership", "name", "email"].map(stoneOfField)).toEqual([
-      0, 1, 1, 1, 1, 2, 3, 4, 4, 4, 4, 4, 5, 5, 5, 5,
-    ]);
+  it("every field the form or the server names has its step, and an unknown one stays on Review & submit", () => {
+    const fields = ["knowUs", "why", "name", "email", "checkConsent", "references", "about", "links", "files", "selfKnowledge", "drafts:about", "aim", "card", "serves", "drafts:moon", "terms", "timeZone", "windows", "earliestStart", "roles", "agreed", "membership"];
+    expect(fields.map(stoneOfField)).toEqual([0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 3, 4, 4, 4, 5, 5, 5]);
     expect(stoneOfField(null)).toBe(LAST_STONE);
     expect(stoneOfField("somethingNew")).toBe(LAST_STONE);
   });
 
   it("the review lists findings in walking order, keeping the order within a stone", () => {
     const found = [
-      { field: "name", n: 1 },
-      { field: "why", n: 2 },
-      { field: "email", n: 3 },
-      { field: "card", n: 4 },
-      { field: "aim", n: 5 },
+      { field: "agreed", n: 1 },
+      { field: "card", n: 2 },
+      { field: "why", n: 3 },
+      { field: "terms", n: 4 },
+      { field: "email", n: 5 },
     ];
-    expect(orderByStone(found).map((p) => p.n)).toEqual([4, 5, 2, 1, 3]);
-    expect(onStone(found, 1).map((p) => p.n)).toEqual([4, 5]);
-    expect(onStone(found, 3)).toEqual([]);
+    expect(orderByStone(found).map((p) => p.n)).toEqual([3, 5, 2, 4, 1]);
+    expect(onStone(found, 1).map((p) => p.n)).toEqual([3, 5]);
+    expect(onStone(found, 4)).toEqual([]);
   });
 });
 
