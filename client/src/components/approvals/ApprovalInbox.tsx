@@ -12,6 +12,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Trans, useLingui } from "@lingui/react/macro";
+import { BTN_PRIMARY, BTN_SECONDARY, CARD, HINT, TILE } from "@/components/journey/look";
 
 interface Card {
   id: string;
@@ -26,9 +27,8 @@ interface Card {
   state: string;
 }
 
-const card = "bg-card border border-border rounded-xl p-5";
-const button = "text-sm border border-border rounded-lg px-4 py-2 min-h-[44px] font-medium disabled:opacity-60";
-const primary = `${button} bg-teal-deep text-white border-transparent`;
+const button = BTN_SECONDARY;
+const primary = BTN_PRIMARY;
 const day = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString() : "");
 
 export default function ApprovalInbox({ headers }: { headers: () => Record<string, string> }) {
@@ -93,14 +93,14 @@ export default function ApprovalInbox({ headers }: { headers: () => Record<strin
 
   if (state === "refused") {
     return (
-      <p className="text-sm text-muted-foreground" data-testid="inbox-refused">
+      <p className={HINT} data-testid="inbox-refused">
         <Trans>The approval inbox is for admins and for holders of the powers it covers.</Trans>
       </p>
     );
   }
   if (state === "failed") {
     return (
-      <p className="text-sm text-muted-foreground" data-testid="inbox-failed">
+      <p className={HINT} data-testid="inbox-failed">
         <Trans>The approval inbox could not be read. Reload to try again.</Trans>
       </p>
     );
@@ -110,11 +110,11 @@ export default function ApprovalInbox({ headers }: { headers: () => Record<strin
 
   return (
     <div className="space-y-4" data-testid="approval-inbox">
-      <p className="text-sm text-muted-foreground">
+      <p className={HINT}>
         <Trans>Nothing here is live. Approve runs the change through its own page as you, so it only works where you hold the power. A proposal lapses after seven days.</Trans>
       </p>
       {waiting.length === 0 && (
-        <p className="text-sm text-muted-foreground">
+        <p className={HINT}>
           <Trans context="approval inbox">Nothing is waiting.</Trans>
         </p>
       )}
@@ -124,25 +124,25 @@ export default function ApprovalInbox({ headers }: { headers: () => Record<strin
         </button>
       )}
       {waiting.map((c) => (
-        <div key={c.id} className={card} data-testid={`inbox-${c.id}`}>
-          <label className="flex items-start gap-3 min-h-[44px]">
+        <div key={c.id} className={`${CARD} p-5 sm:p-6`} data-testid={`inbox-${c.id}`}>
+          <label className="flex min-h-11 items-start gap-3">
             {waiting.length > 1 && (
-              <input type="checkbox" className="mt-1 h-5 w-5" checked={!!picked[c.id]} onChange={(e) => setPicked((p) => ({ ...p, [c.id]: e.target.checked }))} aria-label={c.title} />
+              <input type="checkbox" className="mt-1 size-5 accent-notice" checked={!!picked[c.id]} onChange={(e) => setPicked((p) => ({ ...p, [c.id]: e.target.checked }))} aria-label={c.title} />
             )}
-            <span className="text-sm font-semibold text-foreground">{c.title}</span>
+            <span className="font-display text-lg font-bold text-card-foreground">{c.title}</span>
           </label>
-          <p className="text-xs text-muted-foreground mt-1">
+          <p className={`${HINT} mt-1`}>
             {c.at ? <Trans>Proposed by {c.by} on {day(c.at)}. Lapses {day(c.expiresAt)}.</Trans> : <Trans context="approval inbox">Proposed by {c.by}.</Trans>}
           </p>
           <dl className="mt-3 space-y-2 text-sm">
-            <div>
-              <dt className="text-xs text-muted-foreground">
+            <div className={TILE}>
+              <dt className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
                 <Trans context="approval inbox">Now</Trans>
               </dt>
               <dd className="text-foreground whitespace-pre-line break-words">{c.words.before}</dd>
             </div>
-            <div>
-              <dt className="text-xs text-muted-foreground">
+            <div className={`${TILE} border-notice/60`}>
+              <dt className="text-xs font-semibold uppercase tracking-widest text-notice">
                 <Trans context="approval inbox">If you approve</Trans>
               </dt>
               <dd className="text-foreground whitespace-pre-line break-words">{c.words.after}</dd>
@@ -160,13 +160,13 @@ export default function ApprovalInbox({ headers }: { headers: () => Record<strin
       ))}
       {decided.length > 0 && (
         <section aria-label={t({ message: `Decided`, context: "approval inbox" })} className="space-y-2">
-          <h3 className="text-sm font-semibold text-foreground">
+          <h3 className="font-display text-lg font-bold text-card-foreground">
             <Trans>Decided in the last 30 days</Trans>
           </h3>
           {decided.map((c) => (
-            <div key={c.id} className="border-t border-border pt-2 text-sm" data-testid={`decided-${c.id}`}>
+            <div key={c.id} className="border-t border-border pt-3 text-sm" data-testid={`decided-${c.id}`}>
               <p className="text-foreground">{c.title}</p>
-              <p className="text-xs text-muted-foreground">
+              <p className={HINT}>
                 {c.state}
                 {c.decision ? ` · ${day(c.decision.at)}` : ""}
               </p>
