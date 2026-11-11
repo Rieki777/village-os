@@ -655,7 +655,7 @@ export default function Profile() {
               <YourRolesSection />
               <PlayerRoleCard />
               <MyMoonMount />
-              <SeasonPlanSection />
+              {!firstDays && <SeasonPlanSection />}
             </div>
             {config && prog ? (
               <div className={tabOf("roles")}>
