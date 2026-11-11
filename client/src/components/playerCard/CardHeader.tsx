@@ -14,6 +14,7 @@
  * full.
  */
 import { useState, type ReactNode } from "react";
+import FramelessImg from "@/components/FramelessImg";
 import { CARD_WORDS as W, type HeaderOut, type PlayerCard } from "@shared/playerCard";
 import { RoleIconSvg } from "./roleIcons";
 
@@ -25,7 +26,7 @@ function Portrait({ header }: { header: HeaderOut }) {
     <div className="pc-portrait" data-portrait={p.kind === "photo" && !broken ? "photo" : "initial"}>
       <div className="pc-crop">
         {p.kind === "photo" && !broken ? (
-          <img src={p.src} alt={W.portraitAlt(header.name)} onError={() => setBroken(true)} />
+          <FramelessImg src={p.src} alt={W.portraitAlt(header.name)} onError={() => setBroken(true)} />
         ) : (
           <span className="pc-initial" aria-hidden="true">
             {p.kind === "sigil" ? p.letter : letter}

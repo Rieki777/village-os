@@ -111,3 +111,30 @@ describe("SeatTermsDrawer", () => {
     expect(tray.textContent).toContain("€800 a month");
   });
 });
+
+describe("the agreed words count as set (verify B4)", () => {
+  it("never lists a setting the parties agreed in words as one still to fill", () => {
+    const agreed: SeatSettings = {
+      v: 1,
+      pay: { kind: "none" },
+      clocks: { commitmentPct: 100 },
+      words: { rhythm: "We meet each Friday.", allowance: "Covers the accounting software.", bonus: "A share of the first year's savings." },
+    };
+    render(<SeatTermsDrawer settings={agreed} defaultOpen />);
+    const tray = document.querySelector("[data-seat-terms]")!;
+    expect(tray.textContent).toContain("We meet each Friday.");
+    expect(tray.textContent).toContain("Covers the accounting software.");
+    expect(tray.textContent).toContain("Commitment: 100%");
+    const open = Array.from(tray.querySelectorAll("p")).find((p) => /fill this together/.test(p.textContent ?? ""))?.textContent ?? "";
+    for (const label of ["Rhythm", "Allowance", "Bonus", "Clocks"]) expect(open, label).not.toContain(label);
+  });
+});
+
+describe("under a card that already named the partner (verify B4)", () => {
+  it("lists what is still open without naming anybody again", () => {
+    render(<SeatTermsDrawer settings={{ v: 1, pay: { kind: "none" } }} defaultOpen namePartner={false} />);
+    const tray = document.querySelector("[data-seat-terms]")!;
+    expect(tray.textContent).toMatch(/We'll fill these together: Term, Clocks/);
+    expect(tray.textContent).not.toMatch(/together with/);
+  });
+});

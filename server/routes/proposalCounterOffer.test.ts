@@ -444,7 +444,7 @@ describe.skipIf(!configured)("open role proposals, the decision, on a real schem
       expect(body).toContain("Allowance: Your accounting software is paid for.");
       expect(body).toContain("Term: We renew together each moon.");
       expect(body).toContain("Clocks: Commitment: 80%");
-      const together = body.split("\n").find((l) => l.startsWith("We'll fill this together")) ?? "";
+      const together = body.split("\n").find((l) => l.startsWith("We'll fill")) ?? "";
       for (const label of ["Term", "Clocks", "Allowance", "Ending"]) expect(together).not.toContain(label);
     });
 
@@ -492,6 +492,9 @@ describe.skipIf(!configured)("open role proposals, the decision, on a real schem
       expect(letter?.text).toContain("Every place in Bee Keeper is filled right now, so your role starts when a place opens.");
       expect(letter?.text).not.toContain("within the hour");
       expect(letter?.text).not.toContain("Your roles start when");
+      // Never a day it cannot keep (verify B153): no "this moon", no "next season", no tasks "for the moon".
+      expect(letter?.text).toContain("adopted your proposal to hold Bee Keeper for when a place opens.");
+      expect(letter?.text).not.toMatch(/this moon|next season|for the moon/);
       // P11: the letter says what comes next.
       expect(letter?.text).toContain("What comes next:");
     });

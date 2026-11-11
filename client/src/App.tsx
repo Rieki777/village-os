@@ -232,6 +232,7 @@ const ConfirmProposal = lazyPage(() => import("./pages/ProposeARole").then((m) =
 const OpenProposal = lazyPage(() => import("./pages/OpenProposal"));
 const RoleMeasures = lazyPage(() => import("./pages/RoleMeasures"));
 const ApplicationStatus = lazyPage(() => import("./pages/ApplicationStatus"));
+const YourPath = lazyPage(() => import("./pages/YourPath")); // the whole path, unrolled (the Root)
 const Feed = lazyPage(() => import("./pages/Feed"));
 const Stay = lazyPage(() => import("./pages/Stay"));
 const Wallet = lazyPage(() => import("./pages/Wallet"));
@@ -420,6 +421,7 @@ function Router() {
       <Route path="/open-proposals/:id" component={OpenProposal} />
       <Route path="/role-measures" component={RoleMeasures} />
       <Route path="/application-status/:ref" component={ApplicationStatus} />
+      <Route path="/path" component={YourPath} />
       <Route path="/seat-applications/:id" component={SeatApplicationsAlias} />
       {/* Propose my roles for next season. /new and /shared/:token before /:id, which would take them. */}
       <Route path="/role-proposals/new" component={NewRoleProposal} />

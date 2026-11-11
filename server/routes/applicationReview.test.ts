@@ -404,7 +404,7 @@ describe.skipIf(!configured)("application review, on a real schema", () => {
       const token = new URL(`${ORIGIN}${confirm.statusPath}`).searchParams.get("token");
       const before = await call("GET", `/api/application-status/${id}?token=${token}`, undefined, null);
       expect(before.body.status.mode).toBe("block");
-      expect(before.body.status.booking).toContain("one block of 2 hours");
+      expect(before.body.status.booking).toContain("one block of 120 minutes");
       expect(before.body.status.booking).toContain("Channel Role");
       const split = await call("POST", `/api/application-status/${id}/split?token=${token}`, {}, null);
       expect(split.status).toBe(200);
@@ -701,7 +701,7 @@ describe.skipIf(!configured)("application review, on a real schema", () => {
       const ivs = await interviews(id);
       await call("POST", `/api/governance/applications/${id}/first-reply`, {}, FOUNDER.id);
       await score(id, Number(ivs[0].id), IA.id, "strong");
-      const mail = state.sent.find((m) => m.to.email === "letterlink@example.test" && m.subject === "A conversation is asked for");
+      const mail = state.sent.find((m) => m.to.email === "letterlink@example.test" && m.subject === "We would love to talk with you");
       expect(mail, "the conversation letter was sent").toBeTruthy();
       // The audit's finding: this letter used to say the link was "in the first email".
       const link = /https?:\/\/\S+\/application-status\/\S+/.exec(mail!.text)?.[0];

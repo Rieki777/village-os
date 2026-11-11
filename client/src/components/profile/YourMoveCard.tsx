@@ -22,7 +22,8 @@ export function waitingOnYou(alignments: readonly ServedAlignment[] | null | und
   return alignments.filter((a) => a.you && !a.you.aligned && a.you.mayAlign);
 }
 
-export default function YourMoveCard() {
+/** `embedded`: inside the profile's "Your path" card (the Root), as a list with a small heading and no frame or footer of its own. */
+export default function YourMoveCard({ embedded = false }: { embedded?: boolean } = {}) {
   const { t } = useLingui();
   const [waiting, setWaiting] = useState<ServedAlignment[]>([]);
   useEffect(() => {
@@ -37,8 +38,8 @@ export default function YourMoveCard() {
   }, []);
   if (!waiting.length) return null;
   return (
-    <section aria-labelledby="your-move" className="rounded-2xl border-2 border-primary/40 bg-card p-5" data-your-move="">
-      <h2 id="your-move" className="font-display text-2xl font-bold text-card-foreground">
+    <section aria-labelledby="your-move" className={embedded ? "rounded-xl border border-border bg-muted p-4" : "rounded-2xl border-2 border-primary/40 bg-card p-5"} data-your-move="">
+      <h2 id="your-move" className={`font-display font-bold text-card-foreground ${embedded ? "text-lg" : "text-2xl"}`}>
         {t({ message: "Your move", context: "profile, what waits on you" })}
       </h2>
       <ul className="mt-3 grid gap-2">
@@ -48,7 +49,11 @@ export default function YourMoveCard() {
             <li key={`${a.textId ?? a.title}-${a.version}`}>
               <Link
                 href={a.href ?? "/aligned"}
-                className="inline-flex min-h-11 items-center gap-2 rounded-full bg-primary px-4 text-sm font-bold text-primary-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                className={
+                  embedded
+                    ? "inline-flex min-h-11 items-center gap-2 rounded-lg border border-border px-4 text-sm font-semibold text-foreground hover:bg-card focus-visible:outline-2 focus-visible:outline-ring"
+                    : "inline-flex min-h-11 items-center gap-2 rounded-full bg-primary px-4 text-sm font-bold text-primary-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                }
               >
                 {t({ message: `Align with ${title}`, context: "profile, your move" })}
                 <ArrowRight className="size-4" aria-hidden="true" />
@@ -57,7 +62,8 @@ export default function YourMoveCard() {
           );
         })}
       </ul>
-      <p className="mt-3 text-sm text-muted-foreground">{t`Aligning is the village's way of signing. Your role starts once every agreement it needs is aligned with.`}</p>
+      {/* The footer spoke of a role starting to anybody with any text waiting, role or not (STATE_MAP C24). Inside the path card it goes. */}
+      {!embedded && <p className="mt-3 text-sm text-muted-foreground">{t`Aligning is the village's way of signing. Your role starts once every agreement it needs is aligned with.`}</p>}
     </section>
   );
 }

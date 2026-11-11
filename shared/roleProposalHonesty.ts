@@ -51,6 +51,26 @@ export function operationsRoleName(
   return hits[0] ?? null;
 }
 
+/**
+ * THE ROLE THAT WELCOMES PEOPLE, picked by the village's own setting
+ * (`org.onboarding_role`, "The role that sends first replies to applicants"),
+ * the same role the first-reply door lets in (server/routes/applicationReview.ts).
+ * Read by the role's id, never by a word in its name: "Operations" in a title
+ * named a conversation role as the partner (verify report B4). Null when the
+ * village names none, or names a role that is gone, paused or an example; the
+ * sentence then carries no name.
+ */
+export function onboardingRoleName(
+  roles: readonly { id?: unknown; name?: unknown; isExample?: unknown; active?: unknown }[] | null | undefined,
+  onboardingRoleId: string | null | undefined,
+): string | null {
+  const id = String(onboardingRoleId ?? "").trim();
+  if (!id) return null;
+  const role = (roles ?? []).find((r) => r && String(r.id ?? "") === id && r.active !== false && r.isExample !== true);
+  const name = String(role?.name ?? "").trim();
+  return name && !name.includes("@") ? name : null;
+}
+
 /** Who fills an open row: the chart's name, or the fallback with no name. */
 export function opsPartner(name: string | null | undefined): string {
   const n = String(name ?? "").trim();

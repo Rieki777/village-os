@@ -166,7 +166,8 @@ export function useDashData(userId: string | number | null | undefined): DashDat
         if (!cur?.name) return put({ season: null });
         const day = s?.today ? dayOf(cur.startsOn, s.today) : null;
         const of = cur.endsOn ? dayOf(cur.startsOn, cur.endsOn) : null;
-        put({ season: { name: cur.name, day, of: of !== null ? Math.max(1, of - 1) : null } });
+        // The season's last day is inside the season: 21 June to 31 December is 194 days, the count /roles shows (verify B5).
+        put({ season: { name: cur.name, day, of: of !== null ? Math.max(1, of) : null } });
       });
       read<{ toConsent?: WaitingConsent[] }>(WAITING_URL).then((w) => put({ consents: w ? (w.toConsent ?? []) : null }));
       read<AsksPayload>(ASKS_URL).then((a) =>

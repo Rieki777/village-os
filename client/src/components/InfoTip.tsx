@@ -73,6 +73,24 @@ import { useEffect, useId, useRef, useState } from "react";
 
 const PLAQUE_MAX_W = 264;
 
+/**
+ * THE WORDED TRIGGER'S 44px TAP AREA (nightly rehearsal, 11 Nov 2026). The
+ * rehearsal measured worded triggers at 16 to 22px tall on a 390px phone (a
+ * role card's "Commitment", a card's eyebrow headings). Padding grows the
+ * button's own box, so the area a thumb hits IS the box every measurement
+ * reads, and an equal negative margin gives the same space back, so the line
+ * the words sit on keeps its height and nothing around it moves. A 16px line
+ * becomes a 44px target; a taller line only grows. The width grows by an
+ * invisible inset either side: horizontal padding with a matching negative
+ * margin was measured wrapping a short word one letter per line ("rol" became
+ * 24 by 116 on /roles at 390), because the trigger may break anywhere. It is
+ * the default for a worded trigger; a caller passing `triggerClassName`
+ * chooses its own.
+ */
+export const WORDED_TAP = "relative py-3.5 -my-3.5 before:absolute before:inset-y-0 before:-inset-x-2.5 before:content-['']";
+/** How far WORDED_TAP grows the box on each side vertically, so the plaque still opens beside the words. */
+const WORDED_PAD_Y = 14;
+
 interface InfoTipProps {
   /** The plain mechanics, one to three short sentences. Text only. */
   tip: string;
@@ -90,6 +108,8 @@ interface InfoTipProps {
 }
 
 export default function InfoTip({ tip, children, label, className = "", triggerClassName = "" }: InfoTipProps) {
+  const tap = triggerClassName || WORDED_TAP;
+  const padded = children != null && tap.includes(WORDED_TAP);
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<{ top: number; left: number; above: boolean } | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
@@ -104,7 +124,10 @@ export default function InfoTip({ tip, children, label, className = "", triggerC
   const place = () => {
     const el = triggerRef.current;
     if (!el) return;
-    const r = el.getBoundingClientRect();
+    const box = el.getBoundingClientRect();
+    // The padded tap area is not where the words are: open beside the words.
+    const pad = padded ? WORDED_PAD_Y : 0;
+    const r = { left: box.left, width: box.width, top: box.top + pad, bottom: box.bottom - pad };
     const vw = window.innerWidth;
     const vh = window.innerHeight;
     const w = Math.min(PLAQUE_MAX_W, vw - 16);
@@ -186,7 +209,7 @@ export default function InfoTip({ tip, children, label, className = "", triggerC
             // reflow every one of them; an invisible inset pseudo-element
             // takes the hit area to 28 by 28 and moves no layout anywhere.
             ? "relative inline-flex items-center justify-center align-middle w-4 h-4 ml-1 rounded-full border border-current/40 text-[10px] leading-none opacity-70 hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep/60 cursor-help select-none before:absolute before:-inset-1.5 before:content-['']"
-            : `underline decoration-dotted decoration-1 underline-offset-4 cursor-help rounded-sm max-w-full text-left [overflow-wrap:anywhere] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep/60 ${triggerClassName}`
+            : `underline decoration-dotted decoration-1 underline-offset-4 cursor-help rounded-sm max-w-full text-left [overflow-wrap:anywhere] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep/60 ${tap}`
         }
       >
         {bare ? <span aria-hidden="true">?</span> : children}

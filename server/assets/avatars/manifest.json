@@ -62,7 +62,21 @@
       "derivedFromBase": false,
       "file": "catalyzing-f-light.webp",
       "model": "gemini-3-pro-image",
-      "webpQuality": 80
+      "webpQuality": 80,
+      "trimmed": {
+        "at": "2026-11-11",
+        "cropFrom765x1024": [
+          40,
+          48,
+          727,
+          968
+        ],
+        "size": [
+          687,
+          920
+        ],
+        "why": "painted paper frame cropped away at the source"
+      }
     },
     "catalyzing-f-olive": {
       "at": "2026-08-10T16:18:34+00:00",
@@ -78,7 +92,21 @@
       "derivedFromBase": false,
       "file": "catalyzing-m-deep.webp",
       "model": "gemini-3-pro-image",
-      "webpQuality": 80
+      "webpQuality": 80,
+      "trimmed": {
+        "at": "2026-11-11",
+        "cropFrom765x1024": [
+          113,
+          129,
+          646,
+          842
+        ],
+        "size": [
+          533,
+          713
+        ],
+        "why": "painted paper frame cropped away at the source"
+      }
     },
     "catalyzing-m-light": {
       "at": "2026-08-10T16:19:26+00:00",
@@ -118,7 +146,21 @@
       "derivedFromBase": false,
       "file": "facilitating-f-olive.webp",
       "model": "gemini-3-pro-image",
-      "webpQuality": 79
+      "webpQuality": 79,
+      "trimmed": {
+        "at": "2026-11-11",
+        "cropFrom765x1024": [
+          45,
+          56,
+          721,
+          961
+        ],
+        "size": [
+          676,
+          905
+        ],
+        "why": "painted paper frame cropped away at the source"
+      }
     },
     "facilitating-m-deep": {
       "at": "2026-08-10T16:17:05+00:00",
@@ -126,7 +168,21 @@
       "derivedFromBase": false,
       "file": "facilitating-m-deep.webp",
       "model": "gemini-3-pro-image",
-      "webpQuality": 77
+      "webpQuality": 77,
+      "trimmed": {
+        "at": "2026-11-11",
+        "cropFrom765x1024": [
+          47,
+          52,
+          721,
+          954
+        ],
+        "size": [
+          674,
+          902
+        ],
+        "why": "painted paper frame cropped away at the source"
+      }
     },
     "facilitating-m-light": {
       "at": "2026-08-10T16:17:32+00:00",
@@ -134,7 +190,21 @@
       "derivedFromBase": false,
       "file": "facilitating-m-light.webp",
       "model": "gemini-3-pro-image",
-      "webpQuality": 80
+      "webpQuality": 80,
+      "trimmed": {
+        "at": "2026-11-11",
+        "cropFrom765x1024": [
+          133,
+          155,
+          632,
+          823
+        ],
+        "size": [
+          499,
+          668
+        ],
+        "why": "painted paper frame cropped away at the source"
+      }
     },
     "facilitating-m-olive": {
       "at": "2026-08-10T16:16:36+00:00",
@@ -142,7 +212,21 @@
       "derivedFromBase": false,
       "file": "facilitating-m-olive.webp",
       "model": "gemini-3-pro-image",
-      "webpQuality": 80
+      "webpQuality": 80,
+      "trimmed": {
+        "at": "2026-11-11",
+        "cropFrom765x1024": [
+          89,
+          105,
+          676,
+          891
+        ],
+        "size": [
+          587,
+          786
+        ],
+        "why": "painted paper frame cropped away at the source"
+      }
     },
     "researching-f-deep": {
       "at": "2026-08-10T16:12:47+00:00",
@@ -166,7 +250,21 @@
       "derivedFromBase": false,
       "file": "researching-f-olive.webp",
       "model": "gemini-3-pro-image",
-      "webpQuality": 79
+      "webpQuality": 79,
+      "trimmed": {
+        "at": "2026-11-11",
+        "cropFrom765x1024": [
+          42,
+          50,
+          723,
+          962
+        ],
+        "size": [
+          681,
+          912
+        ],
+        "why": "painted paper frame cropped away at the source"
+      }
     },
     "researching-m-deep": {
       "at": "2026-08-10T16:13:41+00:00",
@@ -174,7 +272,21 @@
       "derivedFromBase": false,
       "file": "researching-m-deep.webp",
       "model": "gemini-3-pro-image",
-      "webpQuality": 80
+      "webpQuality": 80,
+      "trimmed": {
+        "at": "2026-11-11",
+        "cropFrom765x1024": [
+          70,
+          84,
+          695,
+          921
+        ],
+        "size": [
+          625,
+          837
+        ],
+        "why": "painted paper frame cropped away at the source"
+      }
     },
     "researching-m-light": {
       "at": "2026-08-10T16:14:46+00:00",
@@ -182,7 +294,21 @@
       "derivedFromBase": false,
       "file": "researching-m-light.webp",
       "model": "gemini-3-pro-image",
-      "webpQuality": 80
+      "webpQuality": 80,
+      "trimmed": {
+        "at": "2026-11-11",
+        "cropFrom765x1024": [
+          33,
+          40,
+          732,
+          976
+        ],
+        "size": [
+          699,
+          936
+        ],
+        "why": "painted paper frame cropped away at the source"
+      }
     },
     "researching-m-olive": {
       "at": "2026-08-10T16:14:08+00:00",
@@ -190,7 +316,21 @@
       "derivedFromBase": false,
       "file": "researching-m-olive.webp",
       "model": "gemini-3-pro-image",
-      "webpQuality": 80
+      "webpQuality": 80,
+      "trimmed": {
+        "at": "2026-11-11",
+        "cropFrom765x1024": [
+          29,
+          35,
+          738,
+          984
+        ],
+        "size": [
+          709,
+          949
+        ],
+        "why": "painted paper frame cropped away at the source"
+      }
     },
     "storytelling-f-deep": {
       "at": "2026-08-10T16:21:26+00:00",
@@ -238,7 +378,21 @@
       "derivedFromBase": false,
       "file": "storytelling-m-olive.webp",
       "model": "gemini-3-pro-image",
-      "webpQuality": 76
+      "webpQuality": 76,
+      "trimmed": {
+        "at": "2026-11-11",
+        "cropFrom765x1024": [
+          71,
+          94,
+          695,
+          929
+        ],
+        "size": [
+          624,
+          835
+        ],
+        "why": "painted paper frame cropped away at the source"
+      }
     }
   },
   "updatedAt": "2026-08-10T16:23:13+00:00",

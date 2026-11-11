@@ -145,6 +145,9 @@ describe.skipIf(!configured)("an agent proposed for a role by its keeper, on a r
     state.seatAgent = [FOUNDER.id];
     state.notices.length = 0;
     await q("UPDATE org_roles SET held_by = NULL");
+    // Each case starts with no agent proposed and no agent seated, so one case's record of keeping is not the next one's.
+    await q("DELETE FROM open_role_proposals");
+    await q("UPDATE org_role_assignments SET ended_at = NOW(), ended_reason = 'test reset' WHERE is_agent = 1 AND ended_at IS NULL");
   });
 
   const call = async (method: string, path: string, body: unknown, as: string | null) => {
@@ -223,6 +226,60 @@ describe.skipIf(!configured)("an agent proposed for a role by its keeper, on a r
       expect(page.body.proposal.agent.reach.map((x: any) => x.scope)).toEqual(["moon.read", "roles.read"]);
       expect(page.body.proposal.aboutYou).toBeNull();
       expect(page.body.proposal.membership).toBeNull();
+    });
+  });
+
+  describe("the member door holds to the record (verify B153, B8)", () => {
+    it("refuses the same agent for the same role while the first proposal waits, and for a role it already holds", async () => {
+      expect((await propose()).status).toBe(200);
+      const again = await propose();
+      expect(again.status).toBe(409);
+      expect(again.body.field).toBe("roles");
+      expect(again.body.roles).toEqual([secretary]);
+      expect(again.body.error).toBe(AGENT_PROPOSAL_WORDS.alreadyAsked("Secretary"));
+      // A different role for the same agent is a new question for the circle.
+      expect((await propose({ roles: [{ roleId: gate, note: "" }] })).status).toBe(200);
+      // Seated already: refused for that role too.
+      await q("DELETE FROM open_role_proposals");
+      await seatHolder(pool, secretary, { isAgent: true, agentSlug: "scribe", displayName: SCRIBE.name, keeperUserId: KEEPER.id });
+      const held = await propose();
+      expect(held.status).toBe(409);
+      expect(held.body.roles).toEqual([secretary]);
+    });
+
+    it("offers and accepts only an agent this member keeps, or one nobody is recorded as keeping", async () => {
+      // Nobody keeps either agent on the record yet: both are offered to any member.
+      const open = await call("GET", "/api/governance/agent-proposals/form", undefined, ANA.id);
+      expect(open.body.agents.map((a: any) => a.id).sort()).toEqual([OTHER_AGENT.id, SCRIBE.id].sort());
+      // Kai proposes Scribe: the record now says Kai keeps it.
+      expect((await propose()).status).toBe(200);
+      const ana = await call("GET", "/api/governance/agent-proposals/form", undefined, ANA.id);
+      expect(ana.body.agents.map((a: any) => a.id)).toEqual([OTHER_AGENT.id]);
+      const claim = await propose({ roles: [{ roleId: gate, note: "" }] }, ANA.id);
+      expect(claim.status).toBe(403);
+      expect(claim.body.error).toBe(AGENT_PROPOSAL_WORDS.keptByAnother);
+      // Kai still may, for another role.
+      const kai = await call("GET", "/api/governance/agent-proposals/form", undefined, KEEPER.id);
+      expect(kai.body.agents.map((a: any) => a.id)).toContain(SCRIBE.id);
+      // A seating that names its keeper is a record too.
+      const seatedBot = await seatHolder(pool, secretary, { isAgent: true, agentSlug: "ledger-bot", displayName: OTHER_AGENT.name, keeperUserId: FOUNDER.id });
+      expect(seatedBot.ok).toBe(true);
+      const kaiNow = await call("GET", "/api/governance/agent-proposals/form", undefined, KEEPER.id);
+      expect(kaiNow.body.agents.map((a: any) => a.id)).not.toContain(OTHER_AGENT.id);
+      const seized = await propose({ agentUserId: OTHER_AGENT.id }, KEEPER.id);
+      expect(seized.status).toBe(403);
+      expect(seized.body.error).toBe(AGENT_PROPOSAL_WORDS.keptByAnother);
+    });
+
+    it("never shows a person's terms to the deciders, and refuses a counter-offer on an agent", async () => {
+      const { body } = await propose();
+      const page = await call("GET", `/api/governance/open-proposals/${body.id}`, undefined, FOUNDER.id);
+      expect(page.status).toBe(200);
+      expect(page.body.proposal.offer).toBeNull();
+      expect(page.body.proposal.you.mayEditTerms).toBe(false);
+      const counter = await call("POST", `/api/governance/open-proposals/${body.id}/terms`, { words: { allowance: "Paid for." }, commitmentPct: 50, expectedRevision: 0 }, FOUNDER.id);
+      expect(counter.status).toBe(409);
+      expect(counter.body.error).toBe("no_terms_for_an_agent");
     });
   });
 

@@ -198,7 +198,7 @@ const en: ApplicantMessages = {
     confirmed: (roles, promise) => `Your proposal to hold ${roles} is with us. ${promise}`,
     firstReplyTitle: "We have taken up your proposal",
     firstReply: (roles) => `The role that welcomes people has taken up your proposal to hold ${roles} and is writing to you about a time to talk.`,
-    conversationTitle: "A conversation is asked for",
+    conversationTitle: "We would love to talk with you",
     conversation: (roles, withRole, minutes) => `The next step on your proposal to hold ${roles} is a conversation${withRole ? ` with ${withRole}` : ""}${minutes ? `, about ${minutes} minutes` : ""}. We will write to you about a time.`,
     consentTitle: "The circle is weighing your proposal",
     consent: (roles) => `The conversations are written up, and the circle is now asked to consent to your proposal to hold ${roles}. We will tell you what it decides.`,
@@ -222,7 +222,7 @@ const en: ApplicantMessages = {
     seasonStarts: (season, startsOn) => `Your roles start when ${season || "next season"} begins, on ${startsOn}.`,
     firstDay: "the season's first day",
     nextSeasonName: "next season",
-    nextAfterProfile: "Then check your profile. Your tasks for the moon appear there, and it is where we run our sessions and track our work together.",
+    nextAfterProfile: "Then check your profile. Your tasks appear there once your role starts, and it is where we run our sessions and track our work together.",
     button: "Create your profile",
     signFirst: () => "Before you are seated, align with the Love Letter, the village's membership agreement (aligning is the village's way of signing). Aligning with it is what makes you a member, with a voice in the village's decisions:",
   },
@@ -327,7 +327,7 @@ const es: ApplicantMessages = {
     confirmed: (roles, promise) => `Tu propuesta para ocupar ${roles} ya está con nosotros. ${promise}`,
     firstReplyTitle: "Hemos recibido tu propuesta",
     firstReply: (roles) => `El rol que da la bienvenida a las personas ha recibido tu propuesta para ocupar ${roles} y te está escribiendo para acordar un momento para conversar.`, // check
-    conversationTitle: "Te pedimos una conversación",
+    conversationTitle: "Nos encantaría conversar contigo",
     conversation: (roles, withRole, minutes) => `El siguiente paso de tu propuesta para ocupar ${roles} es una conversación${withRole ? ` con ${withRole}` : ""}${minutes ? `, de unos ${minutes} minutos` : ""}. Te escribiremos para acordar un momento.`,
     consentTitle: "El círculo está considerando tu propuesta", // check: "círculo" is the village's term for circle
     consent: (roles) => `Las conversaciones ya están escritas, y ahora le pedimos al círculo su consentimiento para tu propuesta de ocupar ${roles}. Te contaremos lo que decida.`,
@@ -351,7 +351,7 @@ const es: ApplicantMessages = {
     seasonStarts: (season, startsOn) => `Tus roles comienzan cuando empieza ${season || "la próxima temporada"}, el ${startsOn}.`,
     firstDay: "el primer día de la temporada",
     nextSeasonName: "la próxima temporada",
-    nextAfterProfile: "Después revisa tu perfil. Allí aparecen tus tareas de la luna, y es donde hacemos nuestras sesiones y seguimos nuestro trabajo juntos.",
+    nextAfterProfile: "Después revisa tu perfil. Allí aparecen tus tareas cuando empiece tu rol, y es donde hacemos nuestras sesiones y seguimos nuestro trabajo juntos.",
     button: "Crea tu perfil",
     signFirst: () => "Antes de ocupar tu rol, alínea con la Carta de Amor, el acuerdo de membresía de la aldea (alinear es nuestra forma de firmar). Alinear con ella es lo que te hace miembro, con voz en las decisiones de la aldea:", // check: "Love Letter" name, "alinear", "membresía"
   },

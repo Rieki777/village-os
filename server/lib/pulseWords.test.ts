@@ -45,6 +45,18 @@ describe("the read-time rewrite of stored lines", () => {
   });
 });
 
+describe("stage lines and capitalisation, pure", () => {
+  it("hides every stage or level line from the public, whatever its kind", () => {
+    expect(publicPulseText({ kind: "stage", text: "Rick advanced to Role Holder", entityType: "stage" })).toBeNull();
+    expect(publicPulseText({ kind: "misc", text: "Ann advanced to Steward" })).toBeNull();
+    expect(publicPulseText({ kind: "misc", text: "Ann levelled up" })).toBeNull();
+  });
+  it("capitalises a lowercase first letter", () => {
+    expect(publicPulseText({ kind: "quest", text: "made version 7 of the living map" })).toBe("Made version 7 of the living map");
+    expect(publicPulseText({ kind: "quest", text: "Already fine" })).toBe("Already fine");
+  });
+});
+
 describe.skipIf(!testDbConfigured())("public and admin reads", () => {
   let db: TestDb;
   let pool: Pool;
@@ -57,7 +69,7 @@ describe.skipIf(!testDbConfigured())("public and admin reads", () => {
     await db?.drop();
   });
   beforeEach(async () => {
-    await pool.query("DELETE FROM health_events WHERE kind = 'settings'"); // module-review-ok: scratch schema teardown
+    await pool.query("DELETE FROM health_events WHERE kind IN ('settings','stage','quest')"); // module-review-ok: scratch schema teardown
   });
 
   const seedOld = (id: string, key: string) =>
@@ -86,5 +98,18 @@ describe.skipIf(!testDbConfigured())("public and admin reads", () => {
     await recordEvent(pool, { kind: "settings", text: line.text, entityType: "variable", entityRef: SENSITIVE, audience: line.audience });
     const admin = (await recentEvents(pool, "admin", 50)).filter((e) => e.kind === "settings");
     expect(admin.map((e) => e.text).join("\n")).toContain(SENSITIVE);
+  });
+
+  it("a public read never carries a stage line, old or new; admins still do", async () => {
+    await pool.query( // module-review-ok: seeding the public stage line an older release wrote
+      "INSERT INTO health_events (id, kind, text, entity_type, entity_ref, audience) VALUES ('old-stage','stage','Rick advanced to Role Holder','stage','role-holder','public')",
+    );
+    await recordEvent(pool, { kind: "stage", text: "Wren advanced to Steward", entityType: "stage", entityRef: "steward", audience: "admin" });
+    await recordEvent(pool, { kind: "quest", text: "made version 7 of the living map" });
+    const pub = (await recentEvents(pool, "public", 50)).map((e) => e.text);
+    expect(pub.join("\n")).not.toContain("advanced to");
+    expect(pub).toContain("Made version 7 of the living map");
+    const admin = (await recentEvents(pool, "admin", 50)).map((e) => e.text);
+    expect(admin).toContain("Wren advanced to Steward");
   });
 });

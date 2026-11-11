@@ -14,7 +14,8 @@ import {
   whyNotSent,
 } from "./openProposalDecide";
 import { readWaiting } from "./waitingOnYou";
-import { agreedTerms, seatCountLine, SEAT_OPENS_WORDS, ADOPT_MORE } from "./openProposalDecide";
+import { agreedTerms, seatCountLine, SEAT_OPENS_WORDS, ADOPT_MORE, roleStartsOn } from "./openProposalDecide";
+import { LANGUAGES } from "./applicantWords";
 import { withAgreedWords } from "./termsWords";
 import { NOT_SET, settingsWords } from "./seatSettings";
 
@@ -128,5 +129,35 @@ describe("a role with every place filled", () => {
       expect(acc.text).toContain(ADOPT_MORE[lang].nextHeading);
       expect(acc.text).toContain(ADOPT_MORE[lang].stepSignIn);
     }
+  });
+});
+
+describe("the adoption letters say true days (verify B153, 11 Nov 2026)", () => {
+  const base = { firstName: "Ana", village: "Test Village", roleNames: ["Cook"], season: null, startsOn: "1 May 2099", moon: { from: "1 May", to: "29 May" } };
+
+  it("a letter for when a place opens never says this moon, or tasks for the moon, in either language", () => {
+    for (const lang of ["en", "es"] as const) {
+      const w = LANGUAGES[lang].adopt;
+      for (const letter of [
+        adoptedInviteLetter({ ...base, lang, link: "https://x.test/i", days: 7, waitsForSeat: true }),
+        adoptedAccountLetter({ ...base, lang, signIn: "https://x.test/profile", waitsForSeat: true }),
+      ]) {
+        expect(letter.text).not.toContain(w.forThisMoon);
+        expect(letter.text).not.toContain(w.forNextSeason);
+        expect(letter.text).toContain(ADOPT_MORE[lang].forAPlace);
+        expect(letter.text).not.toMatch(/for the moon|de la luna/);
+      }
+    }
+  });
+
+  it("a moon role starts on the day it is adopted, never before the moon's first day", () => {
+    expect(roleStartsOn("2026-11-09", "2026-11-11")).toBe("2026-11-11");
+    expect(roleStartsOn("2026-11-09", "2026-11-02")).toBe("2026-11-09");
+    expect(roleStartsOn("2026-11-09", "2026-11-09")).toBe("2026-11-09");
+  });
+
+  it("the conversation's subject says what we want, in our own voice", () => {
+    expect(applicantUpdate("conversation", { firstName: "Ana", village: "V", roleNames: ["Cook"], replyDays: 3 }).title).toBe("We would love to talk with you");
+    expect(applicantUpdate("conversation", { firstName: "Ana", village: "V", roleNames: ["Cook"], replyDays: 3, lang: "es" }).title).toBe("Nos encantaría conversar contigo");
   });
 });

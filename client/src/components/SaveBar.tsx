@@ -34,7 +34,7 @@ const UNREACHABLE = msg`The save could not reach the server.`;
 const BOTTOM_BARS = "[data-admin-bottom-bar], [data-mobile-tabbar]";
 
 /** The height of whichever bottom bar is showing, so the save bar sits above it. */
-function bottomBarHeight(): number {
+export function bottomBarHeight(): number {
   let h = 0;
   document.querySelectorAll<HTMLElement>(BOTTOM_BARS).forEach((el) => {
     const r = el.getBoundingClientRect();

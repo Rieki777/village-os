@@ -298,8 +298,8 @@ export default function YourListCard() {
         )}
       </div>
       {sharing !== null && (
-        <label className="mt-4 flex items-start gap-2 text-sm text-foreground">
-          <input type="checkbox" className="mt-1" checked={sharing} onChange={flipSharing} />
+        <label className="mt-4 flex min-h-11 cursor-pointer items-start gap-3 text-sm text-foreground">
+          <input type="checkbox" className="mt-0.5 size-5 shrink-0" checked={sharing} onChange={flipSharing} />
           <span>
             Help Organisational Memory learn from my choices. When this is on, the reason you pick for a task it sent you goes back to it.
             Your journal words never do.

@@ -1,0 +1,198 @@
+/*
+ * THE NATURE KIT'S MOTION (game feel wave 2). Imported by the kit's own
+ * components, so it ships in their lazy chunk and never in the first page.
+ *
+ * The art direction: glow is firefly light, ceremony is a bloom and never a
+ * burst, sacred geometry is the structure. The motion rule:
+ *   - ambient fireflies only around the one next act and in illustrations,
+ *     and they REST after about 20 seconds without input (data-rest);
+ *   - a one-time bloom or unfurl may take up to 1.6s;
+ *   - only transform, opacity and stroke-dashoffset move;
+ *   - every animation sits inside prefers-reduced-motion: no-preference, and
+ *     the components render their still drawing themselves (data-motion).
+ *
+ * PHONE AND DESKTOP, each at its best. A fine pointer that can hover draws
+ * the fireflies toward the act it rests on and lifts a circle's edge under
+ * it; a touch screen keeps fewer, calmer lights and gathers them on press.
+ *
+ * Colours ride the sheet's own knobs (--sheet-*), so a village that re-tints
+ * its night world re-tints the kit with it.
+ */
+.nk {
+  --nk-firefly: var(--sheet-dash-gold-lit, #f3d891);
+  --nk-gold: var(--sheet-notice, #8d5e19);
+  --nk-green: var(--sheet-open, #3d6e4a);
+  --nk-ease: cubic-bezier(0.3, 0.7, 0.3, 1);
+}
+
+/* ---------- Fireflies ---------- */
+.nk-ff-host {
+  position: relative;
+  display: inline-flex;
+}
+.nk-ff-host[data-block="true"] {
+  display: flex;
+}
+.nk-ff-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  container-type: size;
+  z-index: 0;
+}
+.nk-ff-host > :not(.nk-ff-layer) {
+  position: relative;
+  z-index: 1;
+}
+/* The outer light holds its place on the spiral and answers hover; the inner dot drifts and pulses. */
+.nk-ff {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 0;
+  height: 0;
+  --nk-k: 1;
+  transform: translate(calc(var(--nk-fx) * 50cqw * var(--nk-k)), calc(var(--nk-fy) * 50cqh * var(--nk-k)));
+}
+.nk-ff-dot {
+  position: absolute;
+  left: -2.5px;
+  top: -2.5px;
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--nk-firefly);
+  box-shadow:
+    0 0 8px 3px color-mix(in srgb, var(--nk-firefly) 55%, transparent),
+    0 0 18px 6px color-mix(in srgb, var(--nk-gold) 18%, transparent);
+  opacity: 0.75;
+}
+.nk-ff-host[data-size="lg"] .nk-ff-dot {
+  left: -3px;
+  top: -3px;
+  width: 6px;
+  height: 6px;
+}
+
+/* A phone: one thumb, one thing at a time, so five calm lights at most. */
+@media (hover: none) {
+  .nk-ff:nth-child(n + 6) {
+    display: none;
+  }
+}
+
+/* ---------- Seed and Flower of Life ---------- */
+.nk-life circle[data-state="open"] {
+  stroke-dasharray: 0.012 0.03;
+}
+.nk-life circle.nk-current {
+  color: var(--nk-firefly);
+}
+.nk-life .nk-bloom path {
+  transform-box: view-box;
+}
+
+/* ---------- Fern ---------- */
+.nk-fern-frond {
+  transform-box: view-box;
+}
+
+/* ---------- Root strip ---------- */
+.nk-root-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes nk-drift {
+    from { transform: translate(0, 0); }
+    to { transform: translate(var(--nk-dx, 4px), var(--nk-dy, -6px)); }
+  }
+  @keyframes nk-pulse {
+    0%, 100% { opacity: 0.25; }
+    50% { opacity: 0.95; }
+  }
+  @keyframes nk-draw {
+    from { stroke-dashoffset: 1.02; }
+    to { stroke-dashoffset: 0; }
+  }
+  @keyframes nk-petal {
+    from { opacity: 0; transform: rotate(var(--nk-r)) scale(0.15); }
+    to { opacity: 1; transform: rotate(var(--nk-r)) scale(1); }
+  }
+  @keyframes nk-unfurl {
+    from { opacity: 0.2; transform: rotate(-38deg) scale(0.35); }
+    60% { opacity: 1; }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes nk-fade {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  .nk[data-motion="live"] .nk-ff-dot {
+    animation:
+      nk-drift var(--nk-drift, 9s) ease-in-out var(--nk-delay, 0s) infinite alternate,
+      nk-pulse var(--nk-pulse, 3.4s) ease-in-out var(--nk-delay, 0s) infinite;
+  }
+  .nk[data-motion="live"] .nk-ff {
+    transition: transform 0.9s var(--nk-ease);
+  }
+  /* Rest: after about 20 seconds without input the lights stop where they are and glow softly. */
+  .nk[data-rest="true"] .nk-ff-dot {
+    animation-play-state: paused;
+  }
+
+  /* Desktop: hover or focus draws the lights in toward the act they wait on. */
+  @media (hover: hover) and (pointer: fine) {
+    .nk-ff-host[data-motion="live"]:hover .nk-ff,
+    .nk-ff-host[data-motion="live"]:focus-within .nk-ff {
+      --nk-k: 0.85;
+    }
+    .nk-ff-host[data-motion="live"]:hover .nk-ff-dot {
+      animation-play-state: running;
+    }
+    .nk-life[data-motion="live"] circle[data-state]:hover {
+      stroke-width: 2.2;
+    }
+  }
+  /* A phone: the press gathers them. */
+  @media (hover: none) {
+    .nk-ff-host[data-motion="live"]:active .nk-ff {
+      --nk-k: 0.85;
+    }
+  }
+
+  /* A circle closing draws its stroke once. The dash runs a little past the
+     path's length so the drawn line closes with no hairline gap at its seam. */
+  .nk[data-motion="live"] .nk-draw {
+    stroke-dasharray: 1.02 1.02;
+    animation: nk-draw 1.2s var(--nk-ease) var(--nk-delay, 0s) both;
+  }
+  /* The bloom: the seed's own petals open once, inside 1.6s in all. */
+  .nk[data-motion="live"] .nk-bloom path {
+    animation: nk-petal 1.1s var(--nk-ease) var(--nk-delay, 0s) both;
+  }
+  .nk[data-motion="live"] .nk-fern-frond {
+    animation: nk-unfurl 1.5s var(--nk-ease) both;
+  }
+  .nk[data-motion="live"] .nk-fern-frond .nk-draw {
+    animation-duration: 1s;
+  }
+  .nk[data-motion="live"] .nk-fade {
+    animation: nk-fade 0.6s ease both;
+  }
+  .nk-vesica circle {
+    transition: transform 1.2s var(--nk-ease);
+  }
+  .nk-vesica .nk-lens {
+    transition: opacity 0.8s ease 0.6s;
+  }
+}
+
+.nk-bloom path {
+  transform: rotate(var(--nk-r));
+}

@@ -6,6 +6,7 @@ import { writeStored } from "./safeStorage";
 // hand-kept mirror the house rules warn about: a branch added in `shared/`
 // and missed here renders nothing, with no error anywhere.
 import type { StageRule } from "@shared/gameConfig";
+import type { PathAnswer, PathMilestone, SaidPath } from "@shared/yourPath";
 import type { Capability } from "@shared/capabilities";
 import type { PlanWindowPayload } from "@shared/seasonPlans";
 import { removeStored, storedText } from "./safeStorage";
@@ -541,6 +542,12 @@ export interface GameMe {
    */
   consentedQuests: number;
   nextAction: { id: string; label: string; href: string };
+  /**
+   * The member's path: the ONE next step, what comes after, and the milestones
+   * walked (shared/yourPath.ts). `nextAction` above is the same answer in the
+   * old shape. Absent on a server older than the path.
+   */
+  path?: PathAnswer & { today: string; said: SaidPath; also: PathAnswer[]; dates: Partial<Record<PathMilestone, string>> };
   /**
    * The most recent rung this member crossed, and the capability keys it
    * opened, straight from `recordStageEvent`'s own diff. Null for a member

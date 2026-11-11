@@ -109,10 +109,17 @@ export function todayCards(d: Pick<DashData, "consents" | "tasks" | "messages" |
   return out;
 }
 
-export default function TodayStrip({ data, stepsWaiting = false }: { data: DashData; stepsWaiting?: boolean }) {
+/**
+ * `pathSpeaks`: the "Your path" card above already names the one next step
+ * (the Root), so an empty Today draws no line of its own. Two voices saying
+ * "nothing waits" and "align with this" on one screen is the defect the path
+ * exists to end.
+ */
+export default function TodayStrip({ data, stepsWaiting = false, pathSpeaks = false }: { data: DashData; stepsWaiting?: boolean; pathSpeaks?: boolean }) {
   const cards = todayCards(data);
   const anyRead = data.consents !== null || data.tasks !== null || data.messages !== null || data.session !== null || data.asks !== null;
   if (!anyRead) return null;
+  if (pathSpeaks && cards.length === 0) return null;
   const waiting =
     (data.asks?.waiting ?? 0) + (data.consents?.length ?? 0) + (data.tasks?.waiting ?? 0) + (data.messages && data.messages.unreadTotal > 0 ? 1 : 0);
 

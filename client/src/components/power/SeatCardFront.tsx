@@ -18,6 +18,7 @@
  * displayed once at any width, so a screen reader meets one).
  */
 import { useState, type ReactNode, type Ref } from "react";
+import FramelessImg from "@/components/FramelessImg";
 import { RotateCcw, Sparkles, Star } from "lucide-react";
 import { SHEET_WORDS, speaksForGloss, speaksForLabel, type Pip, type SeatSheetView, type SeatStateWord } from "@shared/roleSheet";
 import { ExampleChip } from "@/components/ExamplesBanner";
@@ -131,16 +132,14 @@ function ArtWindowPicture({ view }: { view: SeatSheetView }) {
   const [brokenSrc, setBrokenSrc] = useState<string | null>(null);
   const p = view.portrait;
   if (p.kind === "class" && brokenSrc !== p.src) {
-    // A drawing painted on a paper margin (`FRAMED_PORTRAITS`) is zoomed a
-    // quarter about a point just above the window's middle, which puts its
-    // margin, 8.5% of the width at most, outside every window this card draws,
-    // from 272px wide to 650.
+    // The stock drawings are painted to their edges (cropped at the source,
+    // held there by roleSheet.test.ts); FramelessImg covers any other art.
     return (
-      <img
+      <FramelessImg
         src={p.src}
         alt={p.alt}
         onError={() => setBrokenSrc(p.src)}
-        className={`absolute inset-0 h-full w-full object-cover object-[50%_5%] ${p.framed ? "origin-[50%_45%] scale-125" : ""}`}
+        className="absolute inset-0 h-full w-full object-cover object-[50%_5%]"
       />
     );
   }

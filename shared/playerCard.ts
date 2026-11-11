@@ -77,7 +77,7 @@ function nameOpenRowsOnce<T>(card: T, line: string): T {
 import { MONEY_LINE, type SeatSettings } from "./seatSettings";
 import type { AccomplishmentMoon } from "./taskAccomplishments";
 import { roleProposalsOut, type RoleProposalIn, type RoleProposalOut } from "./playerCardProposals";
-import { heroOf, moonLineOf, moonNameOf, trackOf, type HeroOut, type TrackOut } from "./playerCardHero";
+import { heroOf, moonLineOf, moonNameOf, seatWithCommitment, trackOf, type HeroOut, type TrackOut } from "./playerCardHero";
 import { roleIcon, type RoleIcon } from "./roleIcons";
 
 export * from "./playerCardWords";
@@ -803,7 +803,8 @@ function roleOut(role: PlayerRoleIn, input: PlayerCardInput): RoleOut {
 
   return {
     id: role.id,
-    cardSeat: role.cardSeat ?? null,
+    // The agreed commitment over the card's, so the block reads what was agreed (verify report B3).
+    cardSeat: seatWithCommitment(role),
     anchor: ROLE_ANCHOR(role.id),
     title: role.name,
     purpose: {

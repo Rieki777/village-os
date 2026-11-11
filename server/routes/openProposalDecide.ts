@@ -70,6 +70,7 @@ import {
   openInviteId,
   openProposalHref,
   OPEN_PROPOSAL_ID,
+  roleStartsOn,
   whyNotSent,
   type NotSentWhy,
 } from "../../shared/openProposalDecide";
@@ -273,16 +274,18 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
   }
 
   /** What the letters say about the season the roles start in. */
-  const seasonWords = (p: store.StoredOpenProposal) => {
+  /** The letter's days. A moon role starts on the day it is adopted, never before the moon's first day (audit: "from 9 November" for a role adopted on the 11th). */
+  const seasonWords = (p: store.StoredOpenProposal, adoptedAt: Date) => {
     const s = seasonOf(p);
     const t = p.body.term;
     const lang = languageOf(p);
     const w = wordsIn(lang);
     const civilDayWords = w.day;
+    const from = t ? roleStartsOn(t.startsOn, civilDateKey(adoptedAt, tz())) : null;
     return {
       season: s?.name ? String(s.name) : null,
-      startsOn: t ? civilDayWords(t.startsOn) : s?.startsOn ? civilDayWords(String(s.startsOn)) : w.adopt.firstDay,
-      moon: t ? { from: civilDayWords(t.startsOn), to: civilDayWords(t.endsOn) } : null,
+      startsOn: t && from ? civilDayWords(from) : s?.startsOn ? civilDayWords(String(s.startsOn)) : w.adopt.firstDay,
+      moon: t && from ? { from: civilDayWords(from), to: civilDayWords(t.endsOn) } : null,
       lang,
     };
   };
@@ -322,7 +325,8 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
       ? { references: p.body.references ?? [], about: p.body.about ?? {}, backgroundCheck: p.body.backgroundCheck ?? null }
       : null;
     // The terms we offer, with the history: for the deciders only (joining lane PR 4). The applicant reads the current offer at their status page, never the log.
-    const subject = decidesIt(may, asks, viewerId) ? await loadSubject(pool, p.id) : null;
+    // An agent is never offered a person's pay, allowance or commitment (audit B8a), so its page carries no terms.
+    const subject = !p.body.agent && decidesIt(may, asks, viewerId) ? await loadSubject(pool, p.id) : null;
     const offer = subject ? deciderOffer(subject, await baseOf(pool, subject.roleIds)) : null;
     // What is left before Adopt (audit M10, B3): the conversations not written up, and the roles with every seat taken. Deciders only.
     const deciderHere = open && may.ok && !former && holdsThePower;
@@ -379,7 +383,7 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
         offer,
         beforeAdopt,
         you: {
-          mayEditTerms: open && may.ok,
+          mayEditTerms: open && may.ok && !p.body.agent,
           holdsThePower,
           own: !!may.own && may.own === viewerId,
           mayAdopt: open && may.ok && !former,
@@ -440,6 +444,8 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
     if (p.status !== "confirmed") return res.status(409).json({ error: DECIDE_WORDS.decided, status: p.status });
     const may = await deciding(p, actorId);
     if (!may.ok) return res.status(may.status).json(may.body);
+    // An agent's proposal has no terms to offer: no pay, allowance or commitment (audit B8a).
+    if (p.body.agent) return res.status(409).json({ error: "no_terms_for_an_agent", message: DECIDE_WORDS.noTermsForAnAgent });
     const body = req.body && typeof req.body === "object" ? req.body : {};
     const out = await saveOffer(getPool(), p.id, {
       edit: { words: body.words && typeof body.words === "object" && !Array.isArray(body.words) ? body.words : undefined, commitmentPct: body.commitmentPct },
@@ -504,7 +510,8 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
     const pool = getPool();
     const at = now();
     // Terms still being talked about: say so before adopting, and adopt on a second, deliberate click (joining lane PR 4).
-    {
+    // An agent has no terms (audit B8a), so nothing about terms holds its adoption back.
+    if (!p.body.agent) {
       const subject = await loadSubject(pool, p.id);
       const talks = subject ? openTalks({ answers: subject.answers, co: subject.co }) : [];
       if (talks.length && req.body?.confirmOpenTalks !== true) {
@@ -597,7 +604,7 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
       }
       const why = await sent(
         p.email
-          ? letter(`open-proposal:${p.id}:adopted`, "open_proposal.adopted", { email: p.email, name: firstName }, adoptedAccountLetter({ firstName, village, roleNames: namesOf(roles), ...seasonWords(p), signIn: `${site()}/profile`, loveLetter: letterLine, note, waitsForSeat }))
+          ? letter(`open-proposal:${p.id}:adopted`, "open_proposal.adopted", { email: p.email, name: firstName }, adoptedAccountLetter({ firstName, village, roleNames: namesOf(roles), ...seasonWords(p, at), signIn: `${site()}/profile`, loveLetter: letterLine, note, waitsForSeat }))
           : null,
       );
       await tell(p.id, "adopted");
@@ -639,7 +646,7 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
     // Keyed by the link, so a new invitation goes out again, and one link never goes twice.
     const why = await sent(
       p.email
-        ? letter(`open-proposal:${p.id}:adopted:${input.tokenHash.slice(0, 16)}`, "open_proposal.adopted", { email: p.email, name: firstName }, adoptedInviteLetter({ firstName, village, roleNames: namesOf(roles), ...seasonWords(p), link, days: INVITE_DAYS, loveLetter: letterLine, note, waitsForSeat }))
+        ? letter(`open-proposal:${p.id}:adopted:${input.tokenHash.slice(0, 16)}`, "open_proposal.adopted", { email: p.email, name: firstName }, adoptedInviteLetter({ firstName, village, roleNames: namesOf(roles), ...seasonWords(p, at), link, days: INVITE_DAYS, loveLetter: letterLine, note, waitsForSeat }))
         : null,
     );
     await store.noteInvitationSent(pool, p.id, at, why === null);
@@ -739,7 +746,7 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
     const firstName = greetingName(p.name);
     const why = await sent(
       p.email
-        ? letter(`open-proposal:${p.id}:adopted:${input.tokenHash.slice(0, 16)}`, "open_proposal.adopted", { email: p.email, name: firstName }, adoptedInviteLetter({ firstName, village: projectName(), roleNames: namesOf(await rolesOf(pool, p)), ...seasonWords(p), link, days: INVITE_DAYS, loveLetter: letterLine, note: p.body.note ?? null, waitsForSeat: (await roomFor(work, p, null)).length > 0 }))
+        ? letter(`open-proposal:${p.id}:adopted:${input.tokenHash.slice(0, 16)}`, "open_proposal.adopted", { email: p.email, name: firstName }, adoptedInviteLetter({ firstName, village: projectName(), roleNames: namesOf(await rolesOf(pool, p)), ...seasonWords(p, p.decidedAt ?? now()), link, days: INVITE_DAYS, loveLetter: letterLine, note: p.body.note ?? null, waitsForSeat: (await roomFor(work, p, null)).length > 0 }))
         : null,
     );
     await store.noteInvitationSent(pool, p.id, now(), why === null);

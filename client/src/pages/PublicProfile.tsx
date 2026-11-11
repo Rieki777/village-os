@@ -13,6 +13,7 @@
  * to say about why.
  */
 import Layout from "@/components/Layout";
+import FramelessImg from "@/components/FramelessImg";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { useRoute } from "wouter";
 import { authToken } from "@/lib/gameApi";
@@ -184,7 +185,7 @@ export default function PublicProfile() {
             }`}
           >
             {hero?.avatar ? (
-              <img
+              <FramelessImg
                 src={hero.avatar}
                 alt={nameOf(hero.archetypeKey)}
                 loading="lazy"
@@ -250,7 +251,7 @@ export default function PublicProfile() {
                 >
                   <div className="aspect-[3/4] w-full">
                     {c.avatar ? (
-                      <img
+                      <FramelessImg
                         src={c.avatar}
                         alt={nameOf(c.archetypeKey)}
                         loading="lazy"

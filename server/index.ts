@@ -4,7 +4,8 @@ import { markNameFreeJournalLinesPublic } from "./repos/orgSeatErasure";
 import { leftTheVillage, withoutFormerMembers } from "./lib/formerMember";
 import { proposalsAboutMember } from "./lib/externalProposals";
 import { ideasProposedBy, landPublicSubmission } from "./lib/publicForms";
-import { founderStepFor, joiningOf, pickNextAction } from "./lib/nextAction";
+import { joiningOf, nextActionOf } from "./lib/nextAction";
+import { pathFor, type ServedPath } from "./lib/pathFacts";
 import { ideaReceipt } from "./lib/questIdeaReceipt";
 // Local dev reads .env (PORT=3001 so the API doesn't collide with Vite's 3000);
 // on Railway the real environment always wins over the file.
@@ -289,7 +290,7 @@ import { register as registerFeedbackRoutes } from "./routes/feedback";
 import { register as registerSubmissionHandlingRoutes } from "./routes/submissionHandling";
 import { register as registerCharacterPortraitRoutes } from "./routes/characterPortraits";
 import { register as registerCompanionRoutes } from "./routes/companions";
-import { onboardingOpenFor, register as registerOnboardingRoutes } from "./routes/onboarding";
+import { register as registerOnboardingRoutes } from "./routes/onboarding";
 import { exportMemberTasks, register as registerMemberTaskRoutes } from "./routes/memberTasks";
 import { register as registerMemberTaskBridgeRoutes } from "./routes/memberTaskBridge";
 import { register as registerMemberAskRoutes } from "./routes/memberAsks";
@@ -3018,7 +3019,7 @@ async function recordStageEvent(user: any, from: string, to: string, reason: str
     at: new Date().toISOString(),
   });
   commsSink.fire({ type: "stage_advanced", userId: user.id, stage: to });
-  await addActivity("stage", `${firstName(user.name)} advanced to ${stageName(to)}`, { actorUserId: user.id, entityType: "stage", entityRef: to });
+  await addActivity("stage", `${firstName(user.name)} advanced to ${stageName(to)}`, { actorUserId: user.id, entityType: "stage", entityRef: to, audience: "admin" });
   await notify({
     userId: user.id,
     type: "stage_advanced",
@@ -4675,25 +4676,18 @@ async function runRetentionSweep(): Promise<string> {
  * TOLD: an unconfirmed store is named, never counted as done.
  */
 
-async function nextActionFor(user: any): Promise<{ id: string; label: string; href: string }> {
+/**
+ * A member's path: the ONE next step and what comes after, from the conductor
+ * (shared/yourPath.ts) over the facts server/lib/pathFacts.ts gathers. The
+ * rules, their order and their words live there; this only hands over what
+ * this file alone holds. `me.nextAction` is the same answer in the old shape,
+ * kept for one release (server/lib/pathFacts.ts `nextActionOf`).
+ */
+async function servedPath(user: any): Promise<ServedPath> {
   // The letter is a member's door (shared/brochure.ts, MEMBER_DOORS), served to anybody signed in; a signing it has not answered is its own step (lib/nextAction.ts).
   const joining = !hasMembership(user) ? joiningOf(submissionsRepo.all(), user.id) : null;
-  return pickNextAction(GAME_CONFIG.nextActions, {
-    trained: trainingDoneHere(await completionsFor(getPool(), user.id)), joining, claims: await claimsRepo.forUser(user.id), budget: await gratitudeBudget(user), geneKeysMissing: await geneKeysMissing(getPool(), String(user.id)), onboardingOpen: await onboardingOpenFor(getPool(), String(user.id)),
-  });
-}
-
-/**
- * The next action a member is shown, with this village's own words in it.
- *
- * `nextActionFor` returns a rule straight out of the static GAME_CONFIG, and
- * one of those labels carries `{commitment}`. Every caller goes through here
- * so the substitution cannot be forgotten at one call site and done at
- * another, which is how the two ladder serializers already diverged once.
- */
-async function servedNextAction(user: any): Promise<{ id: string; label: string; href: string }> {
-  const rule = founderStepFor(user?.role, await founderPowerStands(getPool())) ?? (await nextActionFor(user));
-  return { ...rule, label: withCommitmentName(rule.label, mergedConfig().project.commitmentName) };
+  const member = { trained: trainingDoneHere(await completionsFor(getPool(), user.id)), joining, claims: await claimsRepo.forUser(user.id), budget: await gratitudeBudget(user), geneKeysMissing: await geneKeysMissing(getPool(), String(user.id)) };
+  return pathFor({ pool: getPool(), now: new Date(), timeZone: getSeasonConfig().timezone || "UTC", clock: activeClock(), role: String(user?.role ?? ""), founderPowerStands: await founderPowerStands(getPool()), member, commitment: mergedConfig().project.commitmentName }, String(user.id));
 }
 
 function getWorkWithUs() {
@@ -18520,6 +18514,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
           at: advances[0].at,
         }
       : null;
+    const path = await servedPath(user);
     res.json({
       stage: servedStage(stageId),
       stageIndex: stageIndex(stageId),
@@ -18539,7 +18534,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
       // "granted", which is a decision the team makes and not a thing anyone
       // can be shown progress toward.
       consentedQuests,
-      nextAction: await servedNextAction(user),
+      nextAction: nextActionOf(path), path, // the path is the one conductor; nextAction is its old shape, for one release
       lastAdvance,
       // Revision 2: progression is no longer decoration. The client renders
       // what you can DO, so the gates are legible instead of mysterious.
@@ -24029,7 +24024,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
   registerRoleGuideRoutes(app, { authedUser, mayAct, getPool, clientIp, overLimit, members, seasonState, lapse: lapseContext, villageGuideName: () => String(getWorkWithUs().assistantName ?? ""), villageName: () => mergedConfig().project.name || "the village" });
   registerAlignmentRoutes(app, { authedUser, guardCapability, getPool, notify, notifyAdmins, overLimit, members, confirmIdentity, googleAvailable: () => googleSignInAvailability().available, authSecret: AUTH_TOKEN_SECRET, seatCalendar, capabilityCtx, liveHoldersOf });
   registerMembershipLetterRoutes(app, { letterSource: () => letterSourceFrom(mergedConfig(), contentRepo.get()) });
-  registerConfidentialityRoutes(app, { authedUser, getPool, overLimit, members, content: () => contentRepo.get(), boolVar, guardCapability, documentDir: path.join(DATA_DIR, "private-documents"), googleAvailable: () => googleSignInAvailability().available, authSecret: AUTH_TOKEN_SECRET }); // the confidentiality agreement, and the agreements before a role starts (L7)
+  registerConfidentialityRoutes(app, { authedUser, getPool, overLimit, members, content: () => contentRepo.get(), boolVar, guardCapability, documentDir: path.join(DATA_DIR, "private-documents"), googleAvailable: () => googleSignInAvailability().available, authSecret: AUTH_TOKEN_SECRET, calendar: seatCalendar }); // the confidentiality agreement, and the agreements before a role starts (L7)
 
   /**
    * ── TAKE A SEAT BACK ───────────────────────────────────────────────────────
