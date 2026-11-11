@@ -1,0 +1,139 @@
+# The nightly rehearsal: five made-up people walk the whole joining path
+# against a freshly built server on a scratch database, at 390 and at 1280,
+# with screenshots, captured emails and a stub AI endpoint. The summary flags
+# anything that changed since the last complete run. docs/REHEARSAL.md is the
+# guide; scripts/rehearsal/ is the code.
+#
+# WHY A SCHEDULE AND NEVER A PULL REQUEST GATE. The walks follow real pages
+# with real selectors, so a deliberate page change can stop a walk until the
+# walk is updated. As a gate that would block unrelated work. As a nightly run
+# it is a list somebody reads in the morning, and a red run means a person
+# could not get through on main last night.
+#
+# WHAT FAILS THE RUN: an act that did not complete. Console errors, failed
+# requests, sideways scroll, axe violations, the phone and desktop findings and
+# visual change are reported in the summary and fail nothing, at first.
+#
+# NEVER PRODUCTION. The runner refuses any base URL that is not loopback and
+# any database that is not a loopback schema named village_rehearsal*, mail goes
+# to a fake, the AI endpoint is a stub, and every browser request that leaves
+# loopback is aborted and listed. This workflow holds no secrets.
+name: rehearsal
+
+on:
+  schedule:
+    # 04:41 UTC daily: before the daily release (05:17), off the hour, and in
+    # the evening for the village it was first written for.
+    - cron: "41 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rehearsal
+  cancel-in-progress: false
+
+jobs:
+  rehearse:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      # The same MySQL as ci.yml's jobs, for the same reasons; read the comments
+      # on ci.yml's verify service before changing either.
+      mysql:
+        image: mirror.gcr.io/library/mysql:9.7.2
+        env:
+          MYSQL_ROOT_PASSWORD: ci-test
+        ports:
+          - 3306:3306
+        options: >-
+          --tmpfs /var/lib/mysql:rw,size=4g
+          --health-cmd "mysqladmin ping -h localhost -pci-test"
+          --health-interval 5s --health-timeout 3s --health-retries 20
+    env:
+      REHEARSAL_DB_SERVER: mysql://root:ci-test@127.0.0.1:3306
+      REHEARSAL_SCHEMA: village_rehearsal
+      REHEARSAL_DEPS: ${{ github.workspace }}/../rehearsal-deps
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Match production's sql_mode
+        # The same statement as ci.yml, so the server migrates under the mode
+        # production runs.
+        run: >-
+          node -e "const m=require('mysql2/promise');(async()=>{const c=await m.createConnection(process.env.REHEARSAL_DB_SERVER+'/mysql');
+          await c.query(\"SET GLOBAL sql_mode='IGNORE_SPACE,ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION'\");
+          const [r]=await c.query('SELECT VERSION() AS v, @@GLOBAL.sql_mode AS m');console.log(r[0]);await c.end()})().catch(e=>{console.error(e);process.exit(1)})"
+
+      - name: Build
+        run: pnpm build
+
+      - name: Install the browser and axe
+        # Outside the repository on purpose: Playwright and axe-core are tools
+        # of this one workflow, so they stay out of package.json and the
+        # lockfile. Exact versions, so a night's change is the app's and not
+        # the tool's.
+        run: |
+          mkdir -p "$REHEARSAL_DEPS"
+          cd "$REHEARSAL_DEPS"
+          echo '{"name":"rehearsal-deps","private":true}' > package.json
+          npm install --no-audit --no-fund playwright@1.63.0 axe-core@4.10.2
+          npx playwright install --with-deps chromium
+
+      - name: Restore the last complete run's screenshots
+        # The newest cache under this prefix is the previous complete run. A
+        # first run, or one after the cache expired, compares with nothing and
+        # says so in the summary.
+        uses: actions/cache/restore@v4
+        with:
+          path: .rehearsal/baseline
+          key: rehearsal-shots-${{ github.run_id }}
+          restore-keys: rehearsal-shots-
+
+      - name: Rehearse
+        id: rehearse
+        # The exit code is read on the next line, never through a pipe.
+        run: |
+          set +e
+          node --import tsx scripts/rehearsal/run.mjs --baseline .rehearsal/baseline --save-baseline .rehearsal/baseline
+          code=$?
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          echo "the rehearsal exited $code"
+
+      - name: Keep these screenshots for tomorrow
+        # Only after a complete run: the runner writes the baseline only when
+        # every act passed, and a stopped run would leave tomorrow nothing to
+        # compare most pages with.
+        if: ${{ steps.rehearse.outputs.code == '0' }}
+        uses: actions/cache/save@v4
+        with:
+          path: .rehearsal/baseline
+          key: rehearsal-shots-${{ github.run_id }}
+
+      - name: Upload the run
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: rehearsal-${{ github.run_id }}
+          path: |
+            .rehearsal/runs/
+            .rehearsal/latest.txt
+          retention-days: 14
+          if-no-files-found: warn
+
+      - name: Someone was stopped
+        if: ${{ steps.rehearse.outputs.code != '0' }}
+        run: |
+          echo "::error::The rehearsal exited ${{ steps.rehearse.outputs.code }}: 1 means a person could not finish an act, 2 means the rehearsal could not start. The summary is in this run's summary page and in the artifact."
+          exit 1
