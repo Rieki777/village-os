@@ -77,6 +77,8 @@ export interface CirclePayload {
   purpose: string;
   parentCircleId?: string | null;
   status?: CircleStatus;
+  /** A suggestion may name this circle the anchor; a person approves it like the rest. */
+  isAnchor?: boolean;
 }
 
 /** An RSVP the assistant proposed and the member has not yet confirmed. */
@@ -107,7 +109,7 @@ type AnyDraftKind = DraftKind | MemberDraftKind | SuggestionDraftKind;
 
 const ALLOWED_KEYS: Record<AnyDraftKind, string[]> = {
   role: ["name", "description", "capabilities", "minStage", "sortOrder"],
-  circle: ["name", "purpose", "parentCircleId", "status"],
+  circle: ["name", "purpose", "parentCircleId", "status", "isAnchor"],
   event_rsvp: ["eventId", "status", "occurrenceKey"],
   admin_edit: ["control", "capability", "version", "base", "payload"],
 };
@@ -180,6 +182,9 @@ export function validateDraftPayload(kind: string, payload: unknown): string | n
   }
   if (p.status !== undefined && !["active", "forming", "dormant"].includes(String(p.status))) {
     return "status must be active, forming, or dormant";
+  }
+  if (p.isAnchor !== undefined && typeof p.isAnchor !== "boolean") {
+    return "isAnchor must be true or false";
   }
   return null;
 }

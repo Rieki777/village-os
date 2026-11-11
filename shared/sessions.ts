@@ -1019,7 +1019,7 @@ export interface SessionView {
    */
   sentTensions: Record<string, { circleName: string | null }>;
   /** The village's live circles, for choosing which circle's agenda items a tension goes to. Empty for somebody not in the room. */
-  circleOptions: { id: string; name: string }[];
+  circleOptions: { id: string; name: string; status?: string; anchor?: boolean }[];
   /**
    * Every task from this circle's earlier sessions that is still open, or that
    * was answered since the circle last met, with its latest answer, as this

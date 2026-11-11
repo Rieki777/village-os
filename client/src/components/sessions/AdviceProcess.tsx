@@ -19,6 +19,7 @@
  * in one polite line, and the focus goes into the form when it opens and back
  * to the button that opened it.
  */
+import CirclePicker from "@/components/circles/CirclePicker";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ADVICE_API,
@@ -82,13 +83,7 @@ function AskForm({
         <label htmlFor="advice-circle" className={LABEL}>
           {ADVICE_COPY.circleLabel}
         </label>
-        <select id="advice-circle" className={`mt-1 ${INPUT}`} value={circleId} onChange={(e) => setCircleId(e.target.value)}>
-          {payload.circles.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </select>
+        <CirclePicker id="advice-circle" className={`mt-1 ${INPUT}`} circles={payload.circles} value={circleId} onChange={setCircleId} />
       </div>
       <div>
         <label htmlFor="advice-intent" className={LABEL}>

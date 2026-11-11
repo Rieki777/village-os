@@ -99,6 +99,7 @@ export const CALENDAR_LIMITS = {
 // ── Wire shapes ──────────────────────────────────────────────────────────────
 
 export interface FollowCircle {
+  anchor?: boolean;
   id: string;
   name: string;
   followed: boolean;

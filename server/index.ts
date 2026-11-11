@@ -13349,6 +13349,8 @@ Send an empty drafts array when you are still listening. A role payload is {name
       // listed, so an omitted field is NULL rather than a default. `isExample`
       // and `grownFromOrgRoleId` matter beyond this insert, because a later
       // replaceAll would otherwise launder them away.
+      // 0372: an anchor mark a person approved here moves the mark; there is at most one.
+      if (payload.isAnchor === true) await circlesRepo.replaceAll((circlesRepo.all() as any[]).map((c) => ({ ...c, isAnchor: false })));
       await circlesRepo.insert({
         id,
         name: String(payload.name).trim().slice(0, 120),
@@ -13360,6 +13362,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
         icon: null,
         color: null,
         status: payload.status ?? "forming",
+        isAnchor: payload.isAnchor === true,
         isExample: false,
         order: circlesRepo.all().length + 1,
       } as any);
