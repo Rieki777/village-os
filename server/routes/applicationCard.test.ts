@@ -230,6 +230,35 @@ describe.skipIf(!configured)("the proposal card and the grouped list, on a real 
     }
   });
 
+  it("verify item 7: an adopted open proposal's card reads her aim and picked goals, and no line says it waits for adoption", async () => {
+    await file("sa-00000000000000c8", {
+      status: "adopted",
+      answers: {
+        aim: "A clean close every moon.",
+        servesGoal: null,
+        serves: [{ goal: "Money we can read", howItHelps: "a monthly cash view" }],
+        timeZone: null,
+        windows: [],
+        earliestStart: null,
+        terms: null,
+        goals: [],
+      },
+    });
+    try {
+      const r = await h.call("/api/governance/role-applications/sa-00000000000000c8/card");
+      expect(r.status, JSON.stringify(r.body)).toBe(200);
+      const card = r.body.card;
+      expect(card.across.aim).toEqual({ kind: "shown", value: "A clean close every moon." });
+      expect(card.across.goals.value).toEqual([{ goal: "Money we can read", howItHelps: "a monthly cash view" }]);
+      const text = JSON.stringify(r.body);
+      expect(text).not.toContain("once the role is adopted");
+      expect(text).not.toContain("No season plan filed yet");
+      expect(card.header.rolesLine.startsWith("Proposes to hold ")).toBe(false);
+    } finally {
+      await pool.query("DELETE FROM seat_applications WHERE id = 'sa-00000000000000c8'"); // module-review-ok: fixture SQL against this suite's scratch schema
+    }
+  });
+
   it("one person applying for five roles is one card, in proposal mode, at the member tier", async () => {
     const r = await h.call("/api/governance/role-applications/sa-00000000000000a1/card");
     expect(r.status, JSON.stringify(r.body)).toBe(200);

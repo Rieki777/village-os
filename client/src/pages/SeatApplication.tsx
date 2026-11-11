@@ -152,7 +152,8 @@ function ApplicationCard({ app }: { app: ServedApplication }) {
     <ApplicantGeneKeys userId={app.candidate.id} firstName={(app.candidate.name ?? "The candidate").split(" ")[0]} />
     <PlayerRoleCard
       applicationId={app.id}
-      mode="proposal"
+      // Once adopted the card reads as hers: the model fills it from the adopted application (verify item 7).
+      mode={app.status === "adopted" ? "adopted" : "proposal"}
       fallback={<SeatCards app={app} />}
       footer={
         <div data-package-terms="" className="sheet-night mt-6 rounded-xl bg-card p-4 text-foreground">
