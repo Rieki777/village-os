@@ -4,54 +4,59 @@
  * The application at /propose-a-role is six steps: Get to know us, About you,
  * Your value, The terms, Your first day, Review & submit. Everything on it that
  * belongs to one village, and not to the platform, is a village setting read
- * here: the ways to get to know us, the shape of the compensation, the words
- * beside it, and the first cycle. A new village sees plain defaults with no
- * village's name, and a share nobody has set reads "N%".
+ * here: the ways to get to know us, the shape of the compensation with the
+ * words beside it, and the first cycle. A new village sees plain defaults with
+ * no village's name, and a shape nobody has written reads "N%".
  *
  * The compensation shape is DATA and never anyone's pay (build list 7.1, 7.4):
- * three shares a village may set while its pay ranges stay hidden, the words
- * for each part, and the footer. Nothing here is a price, a cap or an amount.
+ * shares of the whole, never a range, a minimum or a budget figure.
  *
  * PURE: the server reads the variables and hands them in as `get`, and the page
  * reads the result from the form's answer, so both read one spelling.
  */
 import { KNOW_US_MAX, KNOW_US_TEXT_MAX } from "./openProposals";
 
-/** The settings, by what they hold. Each is registered in shared/gameVariables.ts under "The founding team". */
+/** The application's own settings, each registered in shared/gameVariables.ts under "The founding team". */
 export const FOUNDING_KEYS = {
   knowUs: "org.founding_know_us",
   knowUsNote: "org.founding_know_us_note",
-  cashPct: "org.founding_comp_cash_pct",
-  equityPct: "org.founding_comp_equity_pct",
-  creditsPct: "org.founding_comp_credits_pct",
-  cashWords: "org.founding_comp_cash_words",
-  equityWords: "org.founding_comp_equity_words",
-  creditsWords: "org.founding_comp_credits_words",
-  compNotes: "org.founding_comp_notes",
-  atRisk: "org.founding_comp_at_risk",
-  footer: "org.founding_comp_footer",
   firstCycle: "org.founding_first_cycle",
   firstConversations: "org.founding_first_conversations",
 } as const;
 
-export type FoundingKey = (typeof FOUNDING_KEYS)[keyof typeof FOUNDING_KEYS];
+/**
+ * THE PAY SHAPE IS LANE A3's (Phase A coordination, 11 Nov 2026): one village
+ * setting shown on every role card and here alike, so the two never disagree.
+ * `org.pay_shape` ("Cash 40, Equity 55, Credits 5"), `org.pay_shape_at_risk`
+ * and `org.pay_shape_note`. They are registered by A3's branch; until it lands
+ * the server reads them as empty (`foundingSetupFrom` is handed "" for a key
+ * the registry does not know), and the page shows the placeholder shape.
+ */
+export const PAY_SHAPE_KEYS = {
+  shape: "org.pay_shape",
+  atRisk: "org.pay_shape_at_risk",
+  note: "org.pay_shape_note",
+} as const;
 
-/** The three parts of the compensation shape, in the order they are shown. */
-export const SHARE_PARTS = ["cash", "equity", "credits"] as const;
-export type SharePart = (typeof SHARE_PARTS)[number];
+export type FoundingKey = (typeof FOUNDING_KEYS)[keyof typeof FOUNDING_KEYS] | (typeof PAY_SHAPE_KEYS)[keyof typeof PAY_SHAPE_KEYS];
+
+/** One share of the whole: its name and percent. Never an amount. */
+export interface PayShare {
+  label: string;
+  pct: number;
+}
+
+/** The placeholder the page shows while the village has written no shape: "N%" for each (build list 7.1). */
+export const PLACEHOLDER_PARTS = ["Cash", "Equity", "Credits"] as const;
 
 export interface FoundingSetup {
   /** The ways to get to know the village, each one a tick on step 1. */
   knowUs: string[];
   /** The note step 1 shows while a way is not ticked: it encourages, and never locks (build list 1.12). */
   knowUsNote: string;
-  /** Each part's share in whole percent, or null where the village has not set one (shown as "N%"). */
-  shares: Record<SharePart, number | null>;
-  /** What each part is, in the village's words. */
-  shareWords: Record<SharePart, string>;
-  /** Further lines under the shape (tokens, a tools allowance, AI support), one per line. */
-  compNotes: string[];
-  /** Plain words that the equity, credits and tokens are at risk (traceability T68). Shown beside the footer. */
+  /** The village's pay shape (A3's `org.pay_shape`), or none: the page then shows the placeholder with N%. */
+  shares: PayShare[];
+  /** Plain words that the equity, credits and tokens are at risk (traceability T68), shown beside the footer. */
   atRisk: string;
   /** The footer under the shape (build list 7.5). */
   footer: string;
@@ -70,26 +75,36 @@ export function linesOf(raw: unknown, max = 12, each = 300): string[] {
     .slice(0, max);
 }
 
-/** A share as a village wrote it: a whole percent from 0 to 100, or null for blank or anything else. */
-export function shareOf(raw: unknown): number | null {
-  const s = String(raw ?? "").trim();
-  if (!/^\d{1,3}$/.test(s)) return null;
-  const n = Number(s);
-  return n >= 0 && n <= 100 ? n : null;
+/**
+ * The shape as the setting is written: "Cash 40, Equity 55, Credits 5" (commas,
+ * semicolons or new lines between shares, a percent sign optional). Anything
+ * that does not read cleanly, or adds up past 100, reads as no shape, so a
+ * typo never shows half a breakdown. A3's `readVillagePayShape` reads the same
+ * spelling for the cards.
+ */
+export function payShapeOf(setting: unknown): PayShare[] {
+  const parts = String(typeof setting === "string" ? setting : "").split(/[,;\n]+/).map((x) => x.trim()).filter(Boolean);
+  const out: PayShare[] = [];
+  for (const p of parts) {
+    const m = /^(.*?)[\s:=]+(\d{1,3})\s*%?$/.exec(p);
+    const label = m?.[1].trim().slice(0, 40) ?? "";
+    const pct = m ? Number(m[2]) : NaN;
+    if (!label || !(pct >= 0 && pct <= 100)) return [];
+    out.push({ label, pct });
+  }
+  return out.slice(0, 6).reduce((n, s) => n + s.pct, 0) > 100 ? [] : out.slice(0, 6);
 }
 
 const words = (raw: unknown, max = 1200): string => String(typeof raw === "string" ? raw : "").trim().slice(0, max);
 
-/** The setup from the village's settings, read through `get` (the setting's current value, its default when unset). */
+/** The setup from the village's settings, read through `get` (the setting's current value; "" for one the registry does not know). */
 export function foundingSetupFrom(get: (key: FoundingKey) => string): FoundingSetup {
   return {
     knowUs: linesOf(get(FOUNDING_KEYS.knowUs), KNOW_US_MAX, KNOW_US_TEXT_MAX),
     knowUsNote: words(get(FOUNDING_KEYS.knowUsNote)),
-    shares: { cash: shareOf(get(FOUNDING_KEYS.cashPct)), equity: shareOf(get(FOUNDING_KEYS.equityPct)), credits: shareOf(get(FOUNDING_KEYS.creditsPct)) },
-    shareWords: { cash: words(get(FOUNDING_KEYS.cashWords), 600), equity: words(get(FOUNDING_KEYS.equityWords), 600), credits: words(get(FOUNDING_KEYS.creditsWords), 600) },
-    compNotes: linesOf(get(FOUNDING_KEYS.compNotes)),
-    atRisk: words(get(FOUNDING_KEYS.atRisk)),
-    footer: words(get(FOUNDING_KEYS.footer), 300),
+    shares: payShapeOf(get(PAY_SHAPE_KEYS.shape)),
+    atRisk: words(get(PAY_SHAPE_KEYS.atRisk), 600),
+    footer: words(get(PAY_SHAPE_KEYS.note), 300),
     firstCycle: words(get(FOUNDING_KEYS.firstCycle)),
     firstConversations: linesOf(get(FOUNDING_KEYS.firstConversations)),
   };
@@ -98,21 +113,20 @@ export function foundingSetupFrom(get: (key: FoundingKey) => string): FoundingSe
 /** The setup as the form's answer carries it, read back safely: anything missing is empty, nothing throws. */
 export function foundingSetupOf(raw: unknown): FoundingSetup {
   const o = raw && typeof raw === "object" ? (raw as Record<string, any>) : {};
-  const lines = (v: unknown) => (Array.isArray(v) ? linesOf(v.filter((x) => typeof x === "string").join("\n")) : []);
+  const lines = (v: unknown, max = 12, each = 300) => (Array.isArray(v) ? linesOf(v.filter((x) => typeof x === "string").join("\n"), max, each) : []);
+  const shares = Array.isArray(o.shares) ? payShapeOf(o.shares.filter((x: any) => x && typeof x.label === "string" && typeof x.pct === "number").map((x: any) => `${x.label} ${x.pct}`).join(", ")) : [];
   return {
-    knowUs: Array.isArray(o.knowUs) ? linesOf(o.knowUs.filter((x: unknown) => typeof x === "string").join("\n"), KNOW_US_MAX, KNOW_US_TEXT_MAX) : [],
+    knowUs: lines(o.knowUs, KNOW_US_MAX, KNOW_US_TEXT_MAX),
     knowUsNote: words(o.knowUsNote),
-    shares: { cash: shareOf(o.shares?.cash), equity: shareOf(o.shares?.equity), credits: shareOf(o.shares?.credits) },
-    shareWords: { cash: words(o.shareWords?.cash, 600), equity: words(o.shareWords?.equity, 600), credits: words(o.shareWords?.credits, 600) },
-    compNotes: lines(o.compNotes),
-    atRisk: words(o.atRisk),
+    shares,
+    atRisk: words(o.atRisk, 600),
     footer: words(o.footer, 300),
     firstCycle: words(o.firstCycle),
     firstConversations: lines(o.firstConversations),
   };
 }
 
-/** A share as the page shows it: "40%", or "N%" where the village has not set it. */
+/** A share as the page shows it: "40%", or "N%" where the village has written none. */
 export function shareWords(n: number | null): string {
   return n === null ? "N%" : `${n}%`;
 }

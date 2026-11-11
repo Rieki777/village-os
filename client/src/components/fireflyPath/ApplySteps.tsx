@@ -25,7 +25,7 @@ import { BTN_SECONDARY, DOOR, EYEBROW, FIELD, HINT, LABEL, QUIET, TILE } from "@
 import { DraftMark } from "@/components/proposalDrafts/AskSera";
 import { BLANK_GOAL, GOAL_LIMITS } from "@shared/proposalGoals";
 import type { DraftableGoal } from "@shared/seraDrafts";
-import { SHARE_PARTS, shareWords, type FoundingSetup, type SharePart } from "@shared/foundingApplication";
+import { PLACEHOLDER_PARTS, shareWords, type FoundingSetup } from "@shared/foundingApplication";
 
 /** A gold rule, the register's one ornament. */
 export const GOLD_RULE = "border-t border-notice/40";
@@ -247,17 +247,19 @@ export function ValueItems({
 }
 
 /**
- * Step 4's compensation shape: the village's design, as data. "N%" where it
- * has set nothing. Never anyone's real pay (build list 7.4); the plain word
- * on risk sits beside the footer (traceability T68).
+ * Step 4's compensation shape, drawn as the role cards draw it (lane A3): the
+ * village's split as shares of the whole, "N%" where it has written none, the
+ * line that the mix is settled in onboarding, the plain word on risk (T68) and
+ * the footer (build list 7.5). Never a range, a minimum or a budget figure.
  */
 export function CompensationShape({ setup }: { setup: FoundingSetup }) {
   const { t } = useLingui();
-  const names: Record<SharePart, string> = {
-    cash: t({ message: "Cash", context: "founding application compensation" }),
-    equity: t({ message: "Equity", context: "founding application compensation" }),
-    credits: t({ message: "Credits", context: "founding application compensation" }),
+  const placeholder: Record<(typeof PLACEHOLDER_PARTS)[number], string> = {
+    Cash: t({ message: "Cash", context: "founding application compensation" }),
+    Equity: t({ message: "Equity", context: "founding application compensation" }),
+    Credits: t({ message: "Credits", context: "founding application compensation" }),
   };
+  const shares: Array<{ label: string; pct: number | null }> = setup.shares.length ? setup.shares : PLACEHOLDER_PARTS.map((p) => ({ label: placeholder[p], pct: null }));
   return (
     <section aria-labelledby="comp-shape-h" className="grid gap-5" data-comp-shape="">
       <div className={`${GOLD_RULE} pt-5`}>
@@ -266,29 +268,22 @@ export function CompensationShape({ setup }: { setup: FoundingSetup }) {
         </h3>
         <p className={`mt-1 ${HINT}`}>{t({ message: "The shape of the whole, before any amount. Amounts come later, in conversation.", context: "founding application compensation" })}</p>
       </div>
-      <dl className="grid gap-3 sm:grid-cols-3">
-        {SHARE_PARTS.map((part) => (
-          <div key={part} className={`${TILE} grid content-start gap-1`} data-share={part}>
-            <dt className={EYEBROW}>{names[part]}</dt>
-            <dd className="font-display text-4xl leading-none text-foreground" data-share-pct="">
-              {shareWords(setup.shares[part])}
+      <dl className="grid grid-cols-3 gap-3">
+        {shares.map((s) => (
+          <div key={s.label} className={`${TILE} grid min-w-0 content-start gap-1`} data-share={s.label}>
+            <dt className={`${EYEBROW} break-words`}>{s.label}</dt>
+            <dd className="font-display text-3xl leading-none text-foreground sm:text-4xl" data-share-pct="">
+              {shareWords(s.pct)}
             </dd>
-            {setup.shareWords[part] && <dd className="whitespace-pre-line text-sm text-muted-foreground">{setup.shareWords[part]}</dd>}
           </div>
         ))}
       </dl>
-      {setup.compNotes.length > 0 && (
-        <ul className="grid gap-2 text-sm text-foreground" data-comp-notes="">
-          {setup.compNotes.map((line) => (
-            <li key={line} className="border-l-2 border-notice/40 pl-3">
-              {line}
-            </li>
-          ))}
-        </ul>
-      )}
+      <p className="text-sm text-foreground" data-comp-onboarding="">
+        {t({ message: "To be decided in the onboarding process.", context: "founding application compensation" })}
+      </p>
       <div className="grid gap-2">
         {setup.atRisk && (
-          <p className="whitespace-pre-line text-sm leading-relaxed text-foreground" data-at-risk="">
+          <p className="text-sm leading-relaxed text-foreground" data-at-risk="">
             {setup.atRisk}
           </p>
         )}

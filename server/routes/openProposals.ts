@@ -90,6 +90,7 @@ import { registerApplicationReview } from "./applicationReview";
 import { clearReviewOf, refsDueForClearing } from "../repos/applicationReview";
 import { boolVar, numberVar, rawValue } from "../lib/variables";
 import { foundingSetupFrom, type FoundingSetup } from "../../shared/foundingApplication";
+import { VARIABLES_BY_KEY } from "../../shared/gameVariables";
 import { languageForNewProposal, languageOf } from "../lib/applicantLanguage";
 import { wordsIn } from "../../shared/applicantWords";
 import { makeApplicantTeller } from "../lib/applicantUpdates";
@@ -216,10 +217,11 @@ export function register(app: Express, deps: Deps): void {
 
   /**
    * The application's village words (shared/foundingApplication.ts): the ways
-   * to get to know us, the compensation shape and its words, the first cycle.
-   * Read fresh on every request, so a change in Admin shows at once.
+   * to get to know us, the pay shape the role cards show, the first cycle.
+   * Read fresh on every request, so a change in Admin shows at once. A setting
+   * the registry does not know yet (the pay shape is lane A3's) reads as empty.
    */
-  const founding = (): FoundingSetup => (deps.founding ? deps.founding() : foundingSetupFrom(rawValue));
+  const founding = (): FoundingSetup => (deps.founding ? deps.founding() : foundingSetupFrom((key) => (VARIABLES_BY_KEY[key] ? rawValue(key) : "")));
 
   /** Next season by the village's calendar: the first that starts after today, or null. */
   function nextSeason() {

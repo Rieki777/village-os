@@ -11924,10 +11924,6 @@ msgctxt "founding application about"
 msgid "For your own profile once you join. The people who decide never see it."
 msgstr "Para tu propio perfil cuando te unas. Las personas que deciden nunca lo ven."
 
-msgctxt "founding application sera"
-msgid "Get help drafting from {name}, our regeneratively trained digital assistant"
-msgstr "Pide ayuda para redactar a {name}, nuestra asistente digital formada en lo regenerativo"
-
 msgctxt "founding application compensation"
 msgid "The shape of the whole, before any amount. Amounts come later, in conversation."
 msgstr "La forma del conjunto, antes de cualquier monto. Los montos vienen después, conversando."
@@ -12151,3 +12147,7 @@ msgstr "Nuestra revisión: leemos cada solicitud y te escribimos con una invitac
 msgctxt "founding application lede"
 msgid "This application is for the cycle from {termFrom} to {termTo}."
 msgstr "Esta solicitud es para el ciclo del {termFrom} al {termTo}."
+
+msgctxt "founding application compensation"
+msgid "To be decided in the onboarding process."
+msgstr "Por decidir en el proceso de incorporación."

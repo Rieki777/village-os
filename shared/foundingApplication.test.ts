@@ -3,11 +3,12 @@
  * and the application's own fields on the body (shared/openProposals.ts).
  */
 import { describe, expect, it } from "vitest";
-import { FOUNDING_KEYS, foundingSetupFrom, foundingSetupOf, linesOf, shareOf, shareWords } from "./foundingApplication";
+import { FOUNDING_KEYS, PAY_SHAPE_KEYS, foundingSetupFrom, foundingSetupOf, linesOf, payShapeOf, shareWords } from "./foundingApplication";
 import { readFileSync } from "node:fs";
 import { VARIABLES_BY_KEY, validateVariable } from "./gameVariables";
 import { OPEN_APPLY_ROLES, openBodyOf, parseOpenProposal } from "./openProposals";
 
+/** What the server hands in: a setting's default, and "" for one the registry does not know (the pay shape until lane A3 lands). */
 const defaults = (key: string) => VARIABLES_BY_KEY[key]?.default ?? "";
 
 describe("the village's words", () => {
@@ -20,48 +21,48 @@ describe("the village's words", () => {
     expect(fresh).not.toMatch(/Amora|Costa Rica|Dominical/i); // brand-ok: proves the platform defaults name no village
   });
 
-  it("a fresh village shows N% for every share: the shares are data a village sets, never a platform figure", () => {
+  it("a fresh village has no pay shape (the page shows N%), no risk line and no footer it did not write", () => {
     const fresh = foundingSetupFrom(defaults);
-    expect(fresh.shares).toEqual({ cash: null, equity: null, credits: null });
-    expect(shareWords(fresh.shares.cash)).toBe("N%");
-    expect(fresh.footer).toBe("Indicative only. Equity, land credit, token and credit terms are still being defined and are subject to legal review.");
-    expect(fresh.atRisk).toMatch(/at risk/);
+    expect(fresh).toMatchObject({ shares: [], atRisk: "", footer: "" });
+    expect(shareWords(null)).toBe("N%");
     expect(fresh.knowUs).toHaveLength(3);
   });
 
-  it("reads a village's own values, the shares as whole percents", () => {
+  it("reads a village's own values: the pay shape in the role cards' spelling, the ways and the conversations by line", () => {
     const set: Record<string, string> = {
-      [FOUNDING_KEYS.cashPct]: "40",
-      [FOUNDING_KEYS.equityPct]: "55",
-      [FOUNDING_KEYS.creditsPct]: "5",
+      [PAY_SHAPE_KEYS.shape]: "Cash 40, Equity 55; Village credits 5%",
+      [PAY_SHAPE_KEYS.atRisk]: "These are at risk.",
       [FOUNDING_KEYS.knowUs]: "Attend the webinar\r\n\r\nCome on a land tour\nJoin the potluck",
       [FOUNDING_KEYS.firstConversations]: "Technical Operations\n",
     };
     const s = foundingSetupFrom((k) => set[k] ?? defaults(k));
-    expect(s.shares).toEqual({ cash: 40, equity: 55, credits: 5 });
+    expect(s.shares).toEqual([{ label: "Cash", pct: 40 }, { label: "Equity", pct: 55 }, { label: "Village credits", pct: 5 }]);
+    expect(s.atRisk).toBe("These are at risk.");
     expect(s.knowUs).toEqual(["Attend the webinar", "Come on a land tour", "Join the potluck"]);
     expect(s.firstConversations).toEqual(["Technical Operations"]);
+  });
+
+  it("a shape that does not read cleanly, or adds up past 100, is no shape: never half a breakdown", () => {
+    for (const bad of ["Cash forty", "Cash 40, 55", "Cash 60, Equity 55", "Cash 101", "$4,000 a month"]) expect(payShapeOf(bad), bad).toEqual([]);
+    expect(payShapeOf("Cash: 40%")).toEqual([{ label: "Cash", pct: 40 }]);
   });
 
   it("the first village's seed sets only these settings, each with a value the settings accept, and the 40/55/5 shares", () => {
     const seed = JSON.parse(readFileSync(new URL("../server/seeds/amora/founding-application-seed.json", import.meta.url), "utf8")) as Record<string, string>; // brand-ok: reads the first tenant's own seed folder
     const keys = Object.keys(seed).filter((k) => !k.startsWith("_"));
-    expect(keys.sort()).toEqual(Object.values(FOUNDING_KEYS).sort());
-    for (const k of keys) expect(validateVariable(VARIABLES_BY_KEY[k], seed[k]), k).toBeNull();
+    expect(keys.sort()).toEqual([...Object.values(FOUNDING_KEYS), ...Object.values(PAY_SHAPE_KEYS)].sort());
+    // Each setting this branch registers takes its value; the pay shape's are lane A3's to register.
+    for (const k of Object.values(FOUNDING_KEYS)) expect(validateVariable(VARIABLES_BY_KEY[k], seed[k]), k).toBeNull();
+    for (const k of Object.values(PAY_SHAPE_KEYS)) if (VARIABLES_BY_KEY[k]) expect(validateVariable(VARIABLES_BY_KEY[k], seed[k]), k).toBeNull();
     const s = foundingSetupFrom((k) => seed[k]);
-    expect(s.shares).toEqual({ cash: 40, equity: 55, credits: 5 });
+    expect(s.shares.map((x) => x.pct)).toEqual([40, 55, 5]);
     expect(s.atRisk).toMatch(/at risk/);
     expect(s.firstConversations.join(" ")).toMatch(/Technical Operations/);
   });
 
-  it("a share that is not a whole percent from 0 to 100 reads as unset", () => {
-    expect(["", " ", "-1", "101", "4.5", "forty", "1000"].map(shareOf)).toEqual([null, null, null, null, null, null, null]);
-    expect(["0", "100", " 7 "].map(shareOf)).toEqual([0, 100, 7]);
-  });
-
   it("the form's answer is read back safely, whatever arrives", () => {
-    expect(foundingSetupOf(undefined)).toMatchObject({ knowUs: [], shares: { cash: null, equity: null, credits: null }, footer: "" });
-    expect(foundingSetupOf({ knowUs: ["A", 3, "B"], shares: { cash: 40, equity: "x" }, compNotes: "not a list" })).toMatchObject({ knowUs: ["A", "B"], shares: { cash: 40, equity: null, credits: null }, compNotes: [] });
+    expect(foundingSetupOf(undefined)).toMatchObject({ knowUs: [], shares: [], footer: "" });
+    expect(foundingSetupOf({ knowUs: ["A", 3, "B"], shares: [{ label: "Cash", pct: 40 }, { label: 7 }], firstConversations: "not a list" })).toMatchObject({ knowUs: ["A", "B"], shares: [{ label: "Cash", pct: 40 }], firstConversations: [] });
     expect(linesOf("a\n\n b \n")).toEqual(["a", "b"]);
   });
 });

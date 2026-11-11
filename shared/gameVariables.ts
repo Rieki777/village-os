@@ -2589,11 +2589,10 @@ export const VARIABLES: VariableDef[] = [
 
   // ── The founding team (Phase A, 11 Nov 2026) ─────────────────────────────
   //
-  // The application for a listed role (/propose-a-role) reads every village
-  // word it shows from here (shared/foundingApplication.ts): the ways to get to
-  // know us, the compensation shape and its words, and the first cycle. The
-  // shares are DATA for a design while pay ranges stay hidden, never anyone's
-  // pay. A share left blank reads "N%".
+  // The application for a listed role (/propose-a-role) reads its own village
+  // words from here (shared/foundingApplication.ts): the ways to get to know
+  // us and the first cycle. The pay shape it shows is the role cards' own
+  // setting (`org.pay_shape` and its two lines), so the two never disagree.
   {
     key: "org.founding_know_us",
     category: "The founding team",
@@ -2611,95 +2610,6 @@ export const VARIABLES: VariableDef[] = [
     type: "longtext",
     default:
       "We encourage you to do these, but if you haven't, you can still apply, especially if you've been invited to, or if you live far away and the next call is more than a week away, or if you feel you're an incredibly strong candidate.",
-  },
-  {
-    key: "org.founding_comp_cash_pct",
-    category: "The founding team",
-    label: "Compensation shape: the cash share",
-    description:
-      "The share of total compensation paid in money, as shown on The terms step of the application. A design figure while pay ranges stay hidden, never anyone's pay. Leave it blank and the page shows N%.",
-    type: "integer",
-    default: "",
-    blank: "shows N%",
-    min: 0,
-    max: 100,
-    unit: "%",
-  },
-  {
-    key: "org.founding_comp_equity_pct",
-    category: "The founding team",
-    label: "Compensation shape: the equity share",
-    description:
-      "The share of total compensation held as intended equity, as shown on The terms step of the application. A design figure, never anyone's pay. Leave it blank and the page shows N%.",
-    type: "integer",
-    default: "",
-    blank: "shows N%",
-    min: 0,
-    max: 100,
-    unit: "%",
-  },
-  {
-    key: "org.founding_comp_credits_pct",
-    category: "The founding team",
-    label: "Compensation shape: the credits share",
-    description:
-      "The share of total compensation given as credits for the village's own offerings, as shown on The terms step of the application. A design figure, never anyone's pay. Leave it blank and the page shows N%.",
-    type: "integer",
-    default: "",
-    blank: "shows N%",
-    min: 0,
-    max: 100,
-    unit: "%",
-  },
-  {
-    key: "org.founding_comp_cash_words",
-    category: "The founding team",
-    label: "Compensation shape: what the cash is",
-    description: "One or two plain sentences under the cash share on The terms step.",
-    type: "longtext",
-    default: "Paid in money each month.",
-  },
-  {
-    key: "org.founding_comp_equity_words",
-    category: "The founding team",
-    label: "Compensation shape: what the equity is",
-    description: "One or two plain sentences under the equity share on The terms step.",
-    type: "longtext",
-    default: "Intended equity in the shared entity we are forming together.",
-  },
-  {
-    key: "org.founding_comp_credits_words",
-    category: "The founding team",
-    label: "Compensation shape: what the credits are",
-    description: "One or two plain sentences under the credits share on The terms step.",
-    type: "longtext",
-    default: "Credits to use on the village's own offerings.",
-  },
-  {
-    key: "org.founding_comp_notes",
-    category: "The founding team",
-    label: "Compensation shape: further lines",
-    description:
-      "Lines shown under the three shares, one per line: what your tokens are, a tools and equipment allowance, the AI support a role comes with. Leave it empty and nothing more is shown.",
-    type: "longtext",
-    default: "",
-  },
-  {
-    key: "org.founding_comp_at_risk",
-    category: "The founding team",
-    label: "Compensation shape: the plain word on risk",
-    description:
-      "Shown beside the footer on The terms step: that the equity, credits and tokens are at risk, what they are worth if the village succeeds, and what they are worth if it does not. Say it warmly and plainly.",
-    type: "longtext",
-    default: "The equity and credits are at risk: they hold value only if the village succeeds.",
-  },
-  {
-    key: "org.founding_comp_footer",
-    category: "The founding team",
-    label: "Compensation shape: the footer",
-    description: "The line under the compensation shape on The terms step.",
-    type: "text",
-    default: "Indicative only. Equity, land credit, token and credit terms are still being defined and are subject to legal review.",
   },
   {
     key: "org.founding_first_cycle",

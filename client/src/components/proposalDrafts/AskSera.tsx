@@ -55,7 +55,7 @@ export function AskSera({
   aim: string;
   onDraft: (reply: DraftReply) => void;
   disabled?: boolean;
-  /** The founding-team application's words (Phase A vocabulary): "Get help drafting from ...", and value items in place of goals. */
+  /** The founding-team application's words (Phase A vocabulary): value items in place of goals, and the role applied for. */
   founding?: boolean;
 }) {
   const { t } = useLingui();
@@ -88,7 +88,8 @@ export function AskSera({
       <div>
         <button type="button" className={BTN} disabled={busy || disabled} onClick={() => void press()} aria-describedby={`ask-sera-${kind}-sends`}>
           <Sparkles className="size-4" aria-hidden="true" />
-          {founding ? t({ message: `Get help drafting from ${name}, our regeneratively trained digital assistant`, context: "founding application sera" }) : t`Ask ${name} for a first draft`}
+          {/* Phase A, build list section 3: the line the visionary asked for, in place of "Ask Sera for a first draft". */}
+          {t`Get help drafting from ${name}, our regeneratively trained digital assistant`}
         </button>
       </div>
       <p id={`ask-sera-${kind}-sends`} className="text-xs text-muted-foreground">

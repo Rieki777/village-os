@@ -368,24 +368,27 @@ describe("the six steps", () => {
 });
 
 describe("the terms", () => {
-  it("shows the village's compensation shape as data, the plain word on risk beside the footer, and the ramp-up option", async () => {
+  it("shows the village's pay shape as the role cards do: shares only, the onboarding line, the plain word on risk beside the footer, and the ramp-up option", async () => {
     await applyFor();
     const shape = document.querySelector("[data-comp-shape]") as HTMLElement;
     expect(Array.from(shape.querySelectorAll("[data-share-pct]")).map((d) => d.textContent)).toEqual(["40%", "55%", "5%"]);
+    expect(shape.querySelector("[data-comp-onboarding]")?.textContent).toBe("To be decided in the onboarding process.");
     expect(shape.querySelector("[data-at-risk]")?.textContent).toBe(SETUP.atRisk);
     expect(shape.querySelector("[data-comp-footer]")?.textContent).toBe(SETUP.footer);
     // The risk sits right beside the footer.
     expect(shape.querySelector("[data-at-risk]")?.nextElementSibling).toBe(shape.querySelector("[data-comp-footer]"));
-    expect(shape.textContent).toContain("Tokens are yet to be defined.");
+    // Never a range, a minimum or a budget figure on this step.
+    expect((document.querySelector('[data-stone="terms"]') as HTMLElement).textContent).not.toMatch(/\$|USD|per month|a month|minimum|budget/i);
     expect(screen.getByLabelText(/I would like a ramp-up/)).toBeTruthy();
   });
 
-  it("a share the village has not set reads N%, and a village with no words shows none", async () => {
-    await applyFor("r-gate", { ...FORM, founding: { ...SETUP, shares: { cash: null, equity: 55, credits: null }, atRisk: "", compNotes: [] } });
+  it("with no shape written the village sees the placeholder at N%, and no line it has not written", async () => {
+    await applyFor("r-gate", { ...FORM, founding: { ...SETUP, shares: [], atRisk: "", footer: "" } });
     const shape = document.querySelector("[data-comp-shape]") as HTMLElement;
-    expect(Array.from(shape.querySelectorAll("[data-share-pct]")).map((d) => d.textContent)).toEqual(["N%", "55%", "N%"]);
+    expect(Array.from(shape.querySelectorAll("dt")).map((d) => d.textContent)).toEqual(["Cash", "Equity", "Credits"]);
+    expect(Array.from(shape.querySelectorAll("[data-share-pct]")).map((d) => d.textContent)).toEqual(["N%", "N%", "N%"]);
     expect(shape.querySelector("[data-at-risk]")).toBeNull();
-    expect(shape.querySelector("[data-comp-notes]")).toBeNull();
+    expect(shape.querySelector("[data-comp-footer]")).toBeNull();
   });
 
   it("each setting the role has written is answered, and the answers travel with the card", async () => {

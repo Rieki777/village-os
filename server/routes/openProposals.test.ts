@@ -259,16 +259,18 @@ describe.skipIf(!configured)("open role proposals, the intake, on a real schema"
   });
 
   describe("the founding-team application (Phase A, 11 Nov 2026)", () => {
-    it("the form carries the village's words from its settings, with a share nobody set as null (the page shows N%)", async () => {
+    it("the form carries the village's words from its settings, and no pay shape the village has not written (the page shows N%)", async () => {
       const r = await call("GET", "/api/open-proposals/form");
       expect(r.body.founding).toMatchObject({
         knowUs: ["Join a community call", "Visit the land", "Share a meal with us"],
-        shares: { cash: null, equity: null, credits: null },
-        footer: "Indicative only. Equity, land credit, token and credit terms are still being defined and are subject to legal review.",
+        shares: [],
+        atRisk: "",
+        footer: "",
         firstConversations: [],
       });
-      expect(r.body.founding.atRisk).toMatch(/at risk/);
       expect(r.body.founding.firstCycle).toMatch(/either side may/);
+      // Shares only: never a range, a minimum or an amount.
+      expect(JSON.stringify(r.body.founding)).not.toMatch(/\$|USD|minimum|budget/i);
     });
 
     it("keeps the ticks for ways the village lists, drops any other, and keeps the ramp-up and Human Design or Gene Keys", async () => {

@@ -49,9 +49,11 @@ export const sendNow = () => {
 export const SETUP = {
   knowUs: ["Join a community call", "Visit the land", "Share a meal with us"],
   knowUsNote: "We encourage you to do these, but you can still apply.",
-  shares: { cash: 40, equity: 55, credits: 5 },
-  shareWords: { cash: "Paid in money each month.", equity: "Intended equity in the shared entity.", credits: "Credits for the village's offerings." },
-  compNotes: ["Tokens are yet to be defined."],
+  shares: [
+    { label: "Cash", pct: 40 },
+    { label: "Equity", pct: 55 },
+    { label: "Credits", pct: 5 },
+  ],
   atRisk: "The equity and credits are at risk: they hold value only if the village succeeds.",
   footer: "Indicative only. Equity, land credit, token and credit terms are still being defined and are subject to legal review.",
   firstCycle: "Your first cycle is one month. At its end, either side may choose to stop there, with thanks.",
