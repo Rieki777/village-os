@@ -161,6 +161,8 @@ describe("yourPath: the higher rule wins", () => {
   for (let i = 0; i + 1 < CASES.length; i++) {
     const hi = CASES[i];
     const lo = CASES[i + 1];
+    // A seated holder is never asked to sign as a step, so these two cannot meet in one person; the named test below holds that.
+    if (hi.state === "membership" && lo.state === "holder-moon") continue;
     const both = merge(hi.facts, lo.facts);
     if (!both) continue;
     pairs++;
@@ -196,8 +198,12 @@ describe("yourPath: the higher rule wins", () => {
   });
 
   it("a seated holder is never sent to training or to sign as a step", () => {
-    const f = account({ member: { ...untrained, joining: "waiting" }, seatings: [seating()], moon });
-    expect(yourPath(f).state).toBe("holder-moon");
+    for (const joining of ["waiting", "unsigned"] as const) {
+      const f = account({ member: { ...untrained, joining }, seatings: [seating()], moon });
+      expect(yourPath(f).state).toBe("holder-moon");
+      expect(yourPathAll(f).map((a) => a.state)).not.toContain("training");
+      expect(yourPathAll(f).map((a) => a.state)).not.toContain("membership");
+    }
   });
 
   it("two applications: the earliest start day speaks, and a tie breaks by role name", () => {

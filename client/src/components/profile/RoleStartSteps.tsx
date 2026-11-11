@@ -25,7 +25,12 @@ import { waitingOnYou } from "./YourMoveCard";
 
 type Waiting = { applicationId: string; roles: string[]; steps: Array<{ step: StartStep; href: string }>; waitsForSeat?: boolean };
 
-export default function RoleStartSteps({ className = "", onShown }: { className?: string; onShown?: (shown: boolean) => void } = {}) {
+/**
+ * `embedded`: drawn inside the profile's "Your path" card (the Root), which
+ * already frames it and says the next step, so this is the list of agreements
+ * and their doors with a small heading and no frame of its own.
+ */
+export default function RoleStartSteps({ className = "", onShown, embedded = false }: { className?: string; onShown?: (shown: boolean) => void; embedded?: boolean } = {}) {
   const [waiting, setWaiting] = useState<Waiting[] | null>(null);
   /** Role terms that wait on this reader and are not one of the steps above: they are listed here too, so "Your move" has no second card (audit M8). */
   const [extra, setExtra] = useState<Array<{ key: string; title: string; href: string }>>([]);
@@ -62,8 +67,13 @@ export default function RoleStartSteps({ className = "", onShown }: { className?
   // Every seat taken (audit B3): the honest line, never "within the hour".
   const full = waiting.filter((w) => w.waitsForSeat).flatMap((w) => w.roles);
   return (
-    <section aria-labelledby="role-start-h" data-role-start-steps="" className={`rounded-2xl border border-border bg-card p-6 text-card-foreground shadow-sm ${className}`}>
-      <h2 id="role-start-h" className="flex items-center gap-2 font-display text-xl font-bold text-foreground">
+    <section
+      id="before-you-start"
+      aria-labelledby="role-start-h"
+      data-role-start-steps=""
+      className={`scroll-mt-28 ${embedded ? "rounded-xl border border-border bg-muted p-4 text-card-foreground" : "rounded-2xl border border-border bg-card p-6 text-card-foreground shadow-sm"} ${className}`}
+    >
+      <h2 id="role-start-h" className={`flex items-center gap-2 font-display font-bold text-foreground ${embedded ? "text-lg" : "text-xl"}`}>
         <Hourglass className="size-5 shrink-0 text-notice" aria-hidden="true" />
         {steps.length === 0 && extra.length === 0 && full.length ? SEAT_OPENS_WORDS.heldTitle : START_WORDS.cardTitle}
       </h2>
@@ -91,9 +101,12 @@ export default function RoleStartSteps({ className = "", onShown }: { className?
           </li>
         ))}
       </ol>
-      <p className="mt-4 text-xs text-muted-foreground" data-start-after={full.length ? "seat" : "hour"}>
-        {full.length ? (steps.length || extra.length ? SEAT_OPENS_WORDS.after(full) : SEAT_OPENS_WORDS.held(full)) : START_WORDS.after}
-      </p>
+      {/* Inside the path card the day the role starts is said once, above, by the path itself: only the full-role line stays (STATE_MAP C2). */}
+      {(!embedded || full.length > 0) && (
+        <p className="mt-4 text-xs text-muted-foreground" data-start-after={full.length ? "seat" : "hour"}>
+          {full.length ? (steps.length || extra.length ? SEAT_OPENS_WORDS.after(full) : SEAT_OPENS_WORDS.held(full)) : START_WORDS.after}
+        </p>
+      )}
     </section>
   );
 }

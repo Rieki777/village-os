@@ -4,12 +4,25 @@
  * It shows steps only: no score, no note and no name ever reaches it
  * (server/routes/applicationReview.ts, shared/applicationReview.ts `statusFor`).
  * A visitor reaches it by the link in their email; a member by their profile.
+ *
+ * THE SEED OF LIFE (the Root, game feel wave 2). The proposal's own steps are
+ * drawn as one circle each, closed as they are walked; at adoption the seed is
+ * whole and opens its petals once. "While you wait" is a set of open doors, and
+ * the one the path names as the next step wears the fireflies.
+ *
+ * Phone and desktop: a phone reads the seed, whose move it is, the steps and
+ * the doors in one column; a desktop keeps the seed and whose move it is
+ * standing on the left while the rest is read on the right.
  */
 import { useEffect, useState } from "react";
 import { useParams } from "wouter";
 import Layout from "@/components/Layout";
-import { BTN_SECONDARY, CARD, CARD_FEATURED, EYEBROW, H1, H2, LINK, TILE, WORLD } from "@/components/journey/look";
-import { Check } from "lucide-react";
+import { BTN_SECONDARY, CARD, CARD_FEATURED, DOOR, EYEBROW, H1, H2, TILE, WORLD } from "@/components/journey/look";
+import { ArrowRight, Check } from "lucide-react";
+import { SeedOfLife } from "@/components/journey/nature";
+import NextAct from "@/components/path/NextAct";
+import { useModuleOn } from "@/modules/ModuleProvider";
+import { sayPath, tokenFacts, yourPath } from "@shared/yourPath";
 import { BreathingLoader, useReducedMotion } from "@/components/natural";
 import { gameFetch } from "@/lib/gameApi";
 import { DECLINED_PAGE_WORDS } from "@shared/openProposalDecide";
@@ -151,7 +164,7 @@ export function ChangedTerms({ offer, answerUrl, onSaved }: { offer: ServedOffer
 }
 
 export default function ApplicationStatus() {
-  const { i18n } = useLingui();
+  const { t, i18n } = useLingui();
   const params = useParams<{ ref: string }>();
   const ref = String(params.ref ?? "");
   const [s, setS] = useState<Served | null>(null);
@@ -195,29 +208,89 @@ export default function ApplicationStatus() {
 
   const still = useReducedMotion();
   const byDay = s?.by && !s.outcome ? w.day(new Date(s.by).toISOString().slice(0, 10)) : null;
+  const mapOn = useModuleOn("map");
+  const eventsOn = useModuleOn("events");
+
+  /*
+   * THE SEED OF LIFE (the Root): one circle per step of this proposal's own
+   * path, closed as each is walked, with firefly light on the one being walked
+   * now. At adoption every circle is closed and the seed opens its petals,
+   * once. Circles only: nothing here is a count of the person, and the words
+   * beside it are the honest ones the page already said.
+   */
+  const total = view ? Math.max(1, view.path.length) : 1;
+  const walked = !view ? 0 : s?.outcome === "adopted" ? total : view.path.filter((p) => p.state === "done").length;
+  const nowAt = view ? view.path.findIndex((p) => p.state === "now") : -1;
+  const seedLabel = t({ message: `Your proposal's path: ${walked} of ${total} steps walked`, context: "applicant's application status, the seed drawing" });
+
+  /*
+   * THE ONE NEXT STEP, from the same conductor every other surface reads
+   * (shared/yourPath.ts), so this page and the strip cannot disagree. An
+   * adoption keeps the page's own words: the invitation lives in the email,
+   * and this page cannot tell which way the person comes in.
+   */
+  const path =
+    s && s.outcome !== "adopted"
+      ? yourPath(
+          tokenFacts(new Date(), "UTC", {
+            ref,
+            statusHref: `/application-status/${encodeURIComponent(ref)}${token ? `?token=${encodeURIComponent(token)}` : ""}`,
+            status: s.outcome === "declined" ? "declined" : s.outcome === "withdrawn" ? "withdrawn" : "confirmed",
+            step: s.outcome ? null : s.step === "first_reply" || s.step === "interview" || s.step === "consent" ? s.step : null,
+            by: s.by && !s.outcome ? new Date(s.by).toISOString().slice(0, 10) : null,
+            withRole: /^(.+) talks with you for \d+ minutes/.exec(s.actsNext)?.[1] ?? null,
+            // The changed terms are answered on this very page, in the panel below, so they are never a step that leads away.
+            termsToAnswer: false,
+            invite: null,
+            ownAccountAtAdoption: false,
+            nextSeason: null,
+          }),
+        )
+      : null;
+  const pathSaid = path ? sayPath(path, lang) : null;
+  const termsWait = !!s?.offer && s.offer.mayAnswer && s.offer.open > 0;
 
   return (
     <Layout>
       <div className={`${WORLD} py-4 sm:py-10`}>
-      <div className="container max-w-2xl px-4 py-8">
+      <div className="container max-w-5xl px-4 py-8">
         {state === "loading" && (
           <div className="flex justify-center py-16">
             <BreathingLoader label={w.status.heading} />
           </div>
         )}
-        {state === "missing" && <p className="sel-rise rounded-2xl border-2 border-dashed border-border bg-card p-6 text-foreground">{w.status.missing}</p>}
+        {state === "missing" && <p className="sel-rise mx-auto max-w-2xl rounded-2xl border-2 border-dashed border-border bg-card p-6 text-foreground">{w.status.missing}</p>}
         {state === "ready" && s && view && (
           <article className="space-y-6" data-application-step={s.step}>
             <header>
               <h1 className={H1}>{w.status.heading}</h1>
               {s.roles.length > 0 && <p className="mt-1 text-muted-foreground">{s.roles.join(", ")}</p>}
             </header>
-            <section aria-label={w.status.nextLabel} className={`sel-rise ${CARD_FEATURED}`}>
-              <p className={EYEBROW}>{view.stepWords}</p>
-              <p className="mt-1 text-lg text-foreground">{view.move}</p>
-              {byDay && <p className="mt-1 text-foreground">{w.status.by(byDay)}</p>}
-              {s.outcome == null && typeof s.replyDays === "number" && <p className="mt-1 text-foreground" data-reply-promise="">{w.replyPromise(s.replyDays)}</p>}
-            </section>
+            {/* Phone: the seed across the top, then one thing at a time. Desktop: the seed and whose move it is
+                stand on the left while the steps and the doors are read on the right. */}
+            <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] lg:items-start lg:gap-10">
+              <div className="flex flex-col gap-6 lg:sticky lg:top-28">
+                <div className="flex justify-center" data-status-seed="" data-seed-walked={walked} data-seed-total={total}>
+                  <SeedOfLife
+                    size="lg"
+                    total={total}
+                    walked={walked}
+                    current={nowAt >= 0 ? nowAt : undefined}
+                    label={seedLabel}
+                    labels={view.path.map((p) => p.label)}
+                    bloom={s.outcome === "adopted"}
+                    glowCurrent={s.outcome == null}
+                  />
+                </div>
+                <section aria-label={w.status.nextLabel} className={`sel-rise ${CARD_FEATURED}`}>
+                  <p className={EYEBROW}>{view.stepWords}</p>
+                  <p className="mt-1 text-lg text-foreground">{view.move}</p>
+                  {byDay && <p className="mt-1 text-foreground">{w.status.by(byDay)}</p>}
+                  {s.outcome == null && typeof s.replyDays === "number" && <p className="mt-1 text-foreground" data-reply-promise="">{w.replyPromise(s.replyDays)}</p>}
+                  {s.outcome === "adopted" && <p className="mt-2 font-medium text-notice">{t({ message: `The circle said yes. Your seed is whole.`, context: "applicant's application status, adoption" })}</p>}
+                </section>
+              </div>
+              <div className="space-y-6">
             {s.note && (
               <section aria-label={w.page.noteHeading} className="rounded-xl border border-border bg-card p-4" data-applicant-note="">
                 <h2 className="font-display text-xl font-bold text-foreground">{w.page.noteHeading}</h2>
@@ -282,14 +355,26 @@ export default function ApplicationStatus() {
             {s.outcome == null && (
               <section aria-labelledby="while-you-wait" className={CARD} data-while-you-wait="">
                 <h2 id="while-you-wait" className={H2}>{w.status.wait.heading}</h2>
-                <p className="mt-1 text-foreground">{w.status.wait.line}</p>
-                <ul className="mt-2 list-disc space-y-1 pl-5 text-foreground">
-                  <li><a className={LINK} href="/quests">{w.status.wait.quests}</a></li>
-                  <li><a className={LINK} href="/map">{w.status.wait.map}</a></li>
-                  <li><a className={LINK} href="/events">{w.status.wait.events}</a></li>
-                </ul>
+                <p className="mt-1 text-foreground">{t({ message: `None of this is required. These are open doors to meet us.`, context: "applicant's application status, while you wait" })}</p>
+                {/* The one next act wears the fireflies; while changed terms wait above, that panel is the act and these are plain doors. */}
+                <div className="mt-3 grid gap-2">
+                  {path && pathSaid && !termsWait ? (
+                    <div data-path-step={path.state}>
+                      <p className="mb-2 font-medium text-foreground">{pathSaid.step}</p>
+                      <NextAct state={path.state} href={path.step.href} block className="sm:w-auto" />
+                    </div>
+                  ) : (
+                    <a className={DOOR} href="/quests">{w.status.wait.quests}<ArrowRight className="size-4 shrink-0" aria-hidden="true" /></a>
+                  )}
+                  {/* A door to a part of the village that is switched off leads to a gate, so it is not offered (STATE_MAP C17). */}
+                  {mapOn && <a className={DOOR} href="/map">{w.status.wait.map}<ArrowRight className="size-4 shrink-0" aria-hidden="true" /></a>}
+                  {eventsOn && <a className={DOOR} href="/events">{w.status.wait.events}<ArrowRight className="size-4 shrink-0" aria-hidden="true" /></a>}
+                  <a className={DOOR} href="/roles">{t({ message: `Read the roles again`, context: "applicant's application status, while you wait" })}<ArrowRight className="size-4 shrink-0" aria-hidden="true" /></a>
+                </div>
               </section>
             )}
+              </div>
+            </div>
             <p className="text-sm text-muted-foreground">{w.status.private}</p>
           </article>
         )}

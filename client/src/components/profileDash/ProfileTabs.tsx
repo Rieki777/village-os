@@ -47,6 +47,11 @@ export const TAB_OF_ANCHOR: Record<string, ProfileTab> = {
   about: "sheet",
   invite: "sheet",
   roles: "roles",
+  // The path's own doors (shared/yourPath.ts): each opens the tab its section lives on.
+  "your-path": "today",
+  "before-you-start": "today",
+  onboarding: "today",
+  "my-moon": "roles",
 };
 
 export default function ProfileTabs({ tab, onTab }: { tab: ProfileTab; onTab: (t: ProfileTab) => void }) {

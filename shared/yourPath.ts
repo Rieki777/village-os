@@ -561,7 +561,8 @@ export const PATH_RULES: ReadonlyArray<{ state: PathState; rule: Rule }> = [
   {
     state: "membership",
     rule: (f) =>
-      isAccount(f) && f.member.joining === "unsigned" ? { state: "membership", whose: "yours", step: stepOf("path.membership.step", "/love-letter", { commitment: commitmentOf(f) }), after: null } : null,
+      // A seated holder is never sent to sign as a step: for them the letter is an agreement before the role starts, or it is done.
+      isAccount(f) && f.member.joining === "unsigned" && liveSeatings(f).length === 0 ? { state: "membership", whose: "yours", step: stepOf("path.membership.step", "/love-letter", { commitment: commitmentOf(f) }), after: null } : null,
   },
   {
     state: "holder-moon",

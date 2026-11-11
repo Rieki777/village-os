@@ -55,6 +55,10 @@ import { Heart, Edit2, LogOut, ArrowRight, CheckCircle2, UserPlus } from "lucide
 import { useTokenName } from "@/hooks/useTokenNames";
 import { usePathLadders } from "@/hooks/usePathLadders";
 import { FIRST_DAYS } from "@shared/roleStartWords";
+import { PATH_MILESTONES } from "@shared/yourPath";
+import YourPathCard from "@/components/path/YourPathCard";
+import { SeedOfLife } from "@/components/journey/nature";
+import { rememberPath, type PathView } from "@/lib/usePath";
 import { lazy, Suspense, useEffect, useState } from "react";
 const OnboardingPath = lazy(() => import("@/components/profile/OnboardingPath"));
 import { Link, useLocation } from "wouter";
@@ -156,7 +160,6 @@ export default function Profile() {
    */
   const [startStepsShown, setStartStepsShown] = useState(false);
   const [pathDay, setPathDay] = useState<number | null>(null);
-  const firstDays = startStepsShown || (pathDay !== null && pathDay <= FIRST_DAYS);
 
   /**
    * The progression read, once for the page.
@@ -206,6 +209,23 @@ export default function Profile() {
       .catch(() => setMeFailed(true));
   };
   useEffect(reloadMe, []);
+  /**
+   * THE PATH (the Root): the one next step, from the conductor the server runs
+   * (`me.path`, shared/yourPath.ts). The card, the strip and the whole-path
+   * page all read this one answer. Null on a server older than the path, where
+   * the page falls back to the cards it had.
+   */
+  const path: PathView | null = me?.path ? { ...me.path, visitor: false } : null;
+  useEffect(() => rememberPath(me), [me]);
+  /**
+   * THE FIRST DAYS, DECIDED BY THE ROLE'S START DAY (verify B6). It used to
+   * follow whether an onboarding path existed, so a new holder in a village
+   * with no path was shown a rank and "Next: Guide" in their first hour. The
+   * path's `fresh` reads the seating's start day and nothing else. Until the
+   * read lands the page shows no rank at all, because a rank that flashes and
+   * goes is still a rank shown.
+   */
+  const firstDays = me ? (path ? path.fresh : startStepsShown || (pathDay !== null && pathDay <= FIRST_DAYS)) : true;
   /*
    * ONE READ, AND IT RE-READS FOR EVERYBODY.
    *
@@ -412,20 +432,30 @@ export default function Profile() {
         <div className="relative mx-auto max-w-[1300px] px-4 sm:px-10">
           <ProfileTabs tab={tab} onTab={setTab} />
           <m.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col gap-6 sm:gap-8">
-            {/* THE STEPS BEFORE A ROLE STARTS, on every tab: a new holder lands
-                here after sign-up, on any tab, and is asked here (role journey L7). */}
-            <RoleStartSteps onShown={setStartStepsShown} />
-            {/* "Our first 14 days" sits directly under the steps card, on Today and Roles (audit M8). */}
+            {/* YOUR PATH, the one featured card (the Root): the next step, what comes after, and the walk so
+                far. The steps before a role starts and the texts waiting on the reader are drawn inside it, so
+                the page has one "next" and no second card. On a server older than the path, the two cards stand alone. */}
+            {path ? (
+              <div className={tabOf(["today", "roles"])}>
+                <YourPathCard path={path}>
+                  <RoleStartSteps embedded onShown={setStartStepsShown} />
+                  {!startStepsShown && <YourMoveCard embedded />}
+                </YourPathCard>
+              </div>
+            ) : (
+              <>
+                <RoleStartSteps onShown={setStartStepsShown} />
+                <div className={`empty:hidden ${tabOf(["today", "roles"])}`}>{!startStepsShown && <YourMoveCard />}</div>
+              </>
+            )}
+            {/* "Our first 14 days" sits directly under the path card, on Today and Roles (audit M8). */}
             <div className={`empty:hidden ${tabOf(["today", "roles"])}`}>
               <Suspense fallback={null}><OnboardingPath onDay={setPathDay} /></Suspense>
             </div>
-            {/* The role proposal, first under the tabs. On a phone it is on
-                Today and on Roles, so it is the first thing on either tab.
-                A desktop shows it here, above the hero. */}
-            <div className={`flex flex-col gap-4 ${tabOf(["today", "roles"])}`}>
-              {/* Guide v2: whose move it is, first: what waits on you to align with, above proposing for next season. */}
-              {!startStepsShown && <YourMoveCard />}
-              {!firstDays && <ProposeBanner />}
+            {/* The door to proposing. The next-season banner is one of the path's own rules now, so it is
+                drawn only where there is no path to say it. */}
+            <div className={`flex flex-col gap-4 empty:hidden ${tabOf(["today", "roles"])}`}>
+              {!path && !firstDays && <ProposeBanner />}
               {!firstDays && <ProposeRolesEntry />}
             </div>
             {/* WHO YOU ARE PLAYING, FIRST. The ladder position comes from the
@@ -435,8 +465,6 @@ export default function Profile() {
               <ProfileHero
                 name={user.name}
                 handle={user.handle}
-                stageIndex={firstDays ? null : stageIndex}
-                stageCount={firstDays ? null : (stages?.length ?? null)}
                 stageLabel={firstDays ? null : stagePill(stages, stageIndex)}
                 season={seasonWords}
                 rolesLine={rolesLine || null}
@@ -478,41 +506,19 @@ export default function Profile() {
                   </div>
                 }
                 footer={
-                  nextRung && !firstDays ? (
-                    <div className="mt-1 flex w-full max-w-[640px] flex-col gap-2 sm:mt-3.5">
-                      <div className="flex justify-between text-xs sm:text-sm">
-                        <span className="font-semibold text-dash-gold-lit">Next: {nextRung.name}</span>
-                        {progress ? (
-                          <span className="text-muted-foreground">
-                            {progress.done} of {progress.total} steps
-                            <span className="hidden sm:inline"> · {progress.total - progress.done} left</span>
-                          </span>
-                        ) : null}
-                      </div>
-                      {progress ? (
-                        <div
-                          role="progressbar"
-                          aria-label={`Toward ${nextRung.name}`}
-                          aria-valuemin={0}
-                          aria-valuemax={progress?.total ?? 1}
-                          aria-valuenow={progress?.done ?? 0}
-                          className="h-2.5 overflow-hidden rounded-md border border-dash-edge bg-dash-track sm:h-3.5"
-                        >
-                          <div
-                            className="h-full bg-[linear-gradient(90deg,var(--color-dash-gold),var(--color-dash-gold-lit))] shadow-[0_0_14px_color-mix(in_srgb,var(--color-dash-gold-lit)_60%,transparent)]"
-                            style={{ width: `${progress ? Math.round((progress.done / Math.max(1, progress.total)) * 100) : 0}%` }}
-                          />
-                        </div>
-                      ) : (
-                        /* A rung that is one act (a grant, being paid, signing)
-                           has no fraction to draw, so it says what opens it. */
-                        <p className="m-0 text-[13px] text-muted-foreground">{nextRung.description}</p>
-                      )}
-                      <a href="#invite" className={`${BTN_GOLD} mt-1.5 w-full sm:hidden`}>
-                        Invite a friend
-                      </a>
-                    </div>
-                  ) : null
+                  /* The walk so far, as the seed: the bar toward the next rung and its "Next:" are gone
+                     (the Root). A person's steps are their own walk, never a fill toward a rank. */
+                  <div className="mt-1 flex w-full max-w-[640px] flex-col items-center gap-3 sm:mt-3.5 sm:flex-row sm:items-center">
+                    {path ? (
+                      <Link href="/path" className="group inline-flex min-h-11 items-center gap-3 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-ring" data-hero-seed="">
+                        <SeedOfLife size="sm" total={PATH_MILESTONES.length} walked={path.walked.length} label={t({ message: `Your path: ${path.walked.length} of ${PATH_MILESTONES.length} steps walked`, context: "your path, the seed drawing" })} />
+                        <span className="underline-offset-4 group-hover:underline">{t({ message: `Your walk so far`, context: "your path, the profile hero" })}</span>
+                      </Link>
+                    ) : null}
+                    <a href="#invite" className={`${BTN_GOLD} w-full sm:hidden`}>
+                      Invite a friend
+                    </a>
+                  </div>
                 }
               />
             </div>
@@ -542,7 +548,7 @@ export default function Profile() {
                   stages={stages}
                   stageIndex={prog.stageIndex}
                   abilities={abilitiesAtStage(prog.capabilityCatalogue ?? [], stages[prog.stageIndex]?.id ?? "")}
-                  nextAction={me?.nextAction ?? null}
+                  nextAction={path ? null : (me?.nextAction ?? null)}
                   progress={progress}
                   progressUnit={nextRung?.rule.type === "training-complete" ? "lessons" : "quests consented"}
                   nextRuleWords={nextRung?.description ?? null}
@@ -552,7 +558,7 @@ export default function Profile() {
             ) : null}
 
             <div className={tabOf("today")}>
-              <TodayStrip data={dash} stepsWaiting={startStepsShown} />
+              <TodayStrip data={dash} stepsWaiting={startStepsShown} pathSpeaks={!!path} />
             </div>
 
             {/* WHO HELPS YOU: the member's guide, chosen once (2026-11-09). On Today, so a phone finds it first. */}
@@ -605,8 +611,9 @@ export default function Profile() {
                     It heads the quest log: the stage panel above carries the
                     server's next step, and the design has nothing between it and Today.
                     `undefined` signing means the progression read has not landed. */}
-                <div className={tabOf("quests")}>
-                  <StartHereCard ownerId={user.id} me={me} signing={prog ? (prog.signing ?? null) : undefined} config={config} catalogue={prog?.capabilityCatalogue} />
+                {/* With a path the card at the top of the page is the one "start here"; this one stands only where there is none. */}
+                <div className={`empty:hidden ${tabOf("quests")}`}>
+                  {!path && <StartHereCard ownerId={user.id} me={me} signing={prog ? (prog.signing ?? null) : undefined} config={config} catalogue={prog?.capabilityCatalogue} />}
                 </div>
                 {/* The quest log: every task taken on in a live session, what
                     this member's roles hold, and what waits on a power they
