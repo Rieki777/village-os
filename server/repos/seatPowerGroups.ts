@@ -68,6 +68,21 @@ export async function seatHeader(pool: Pool, id: string): Promise<{ id: string; 
   return r ? { id: String(r.id), name: String(r.name), isExample: !!r.is_example } : null;
 }
 
+/** One LIVE seating's seat, holder, agent flag and example flag, or null (the connector's lead-approved unseating reads it). */
+export async function liveSeatingHeader(
+  pool: Pool,
+  id: string,
+): Promise<{ id: string; orgRoleId: string; userId: string | null; isAgent: boolean; isExample: boolean } | null> {
+  const [rows]: any = await pool.query(
+    "SELECT id, org_role_id, user_id, is_agent, is_example FROM org_role_assignments WHERE id = ? AND ended_at IS NULL",
+    [id],
+  );
+  const r = (rows as any[])[0];
+  return r
+    ? { id: String(r.id), orgRoleId: String(r.org_role_id), userId: r.user_id ? String(r.user_id) : null, isAgent: !!r.is_agent, isExample: !!r.is_example }
+    : null;
+}
+
 /** Replace one seat's links by the difference, in one transaction. */
 export async function writeSeatGroupLinks(
   pool: Pool,

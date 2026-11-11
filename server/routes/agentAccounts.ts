@@ -24,7 +24,8 @@ import { revokeAllTokens } from "../lib/agentTokens";
 import { agentAccountIds, isAgentAccount, listAgentActions, liveRoleCount, setAgentAccount, namesOf } from "../repos/agentAccounts";
 import { readConfigDocument, writeConfigDocument } from "../repos/appConfigDocs";
 import { undoSeraAction } from "../lib/seraAgent";
-import { AGENT_ADMIN_PATHS_DOC, ALWAYS_A_PERSON, DEFAULT_AGENT_ADMIN_PATHS, effectiveAgentAdminPaths, parseAgentAdminPaths } from "../../shared/agentAdmin";
+import { AGENT_ADMIN_PATHS_DOC, ALWAYS_A_PERSON, DEFAULT_AGENT_ADMIN_PATHS, effectiveAgentAdminPaths, LEAD_APPROVED_WRITES, LEAD_APPROVED_WRITES_VARIABLE, parseAgentAdminPaths } from "../../shared/agentAdmin";
+import { boolVar } from "../lib/variables";
 
 type Deps = Pick<AppDeps, "authedUser" | "getPool" | "isAdmin">;
 
@@ -86,13 +87,16 @@ export function register(app: Express, deps: Deps): void {
       shipped: DEFAULT_AGENT_ADMIN_PATHS,
       edited: stored !== null,
       alwaysAPerson: ALWAYS_A_PERSON.map((r) => ({ key: r.key, words: r.words })),
+      // The lead-approved writes (shared/agentAdmin.ts): whether this village has them on, and which routes they reach.
+      leadApprovedWrites: { on: boolVar(LEAD_APPROVED_WRITES_VARIABLE), routes: LEAD_APPROVED_WRITES.map((e) => ({ kind: e.kind, method: e.method, path: e.path })) },
     });
   });
 
   app.put("/api/admin/agent-admin-paths", async (req, res) => {
     const actor = await person(req, res);
     if (!actor) return;
-    const parsed = parseAgentAdminPaths((req.body as { document?: unknown } | undefined)?.document ?? req.body);
+    // With the village's opt-in on, a lead-approved write may be saved on the list (shared/agentAdmin.ts).
+    const parsed = parseAgentAdminPaths((req.body as { document?: unknown } | undefined)?.document ?? req.body, { leadApprovedWrites: boolVar(LEAD_APPROVED_WRITES_VARIABLE) });
     if (!parsed.ok) return res.status(400).json({ error: parsed.error });
     await writeConfigDocument(getPool(), AGENT_ADMIN_PATHS_DOC, parsed.value as unknown as Record<string, unknown>);
     await recordEvent(getPool(), {

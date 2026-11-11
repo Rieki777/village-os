@@ -80,6 +80,40 @@ describe("the agent accounts panel", () => {
     ]);
   });
 
+  it("pastes a list: shows what it adds and changes, keeps every path, and saves only on Save", async () => {
+    const calls = stub();
+    render(<AgentsPanel password="tok" players={players} />);
+    await screen.findByText("Agent");
+    fireEvent.click(screen.getByText("Paste a list"));
+    fireEvent.change(screen.getByLabelText("Pasted paths"), { target: { value: JSON.stringify({ paths: [
+      { method: "PUT", path: "/api/admin/member-tasks/access/:userId", confirm: "person", label: "Task boards, by a person" },
+      { method: "GET", path: "/api/admin/events", confirm: "agent", label: "Events" },
+    ] }) } });
+    fireEvent.click(screen.getByText("Read the pasted list"));
+    expect(await screen.findByText(/Adds 1, changes 1, already there 0/)).toBeTruthy();
+    expect(calls.some((c) => c.method === "PUT")).toBe(false);
+    fireEvent.click(screen.getByText("Put these on the list"));
+    expect(screen.getAllByLabelText("Path")).toHaveLength(2);
+    fireEvent.click(screen.getByText("Save"));
+    await waitFor(() => expect(calls.some((c) => c.method === "PUT" && c.url.endsWith("/admin/agent-admin-paths"))).toBe(true));
+    expect(calls.find((c) => c.method === "PUT")!.body.document.paths).toEqual([
+      { method: "PUT", path: "/api/admin/member-tasks/access/:userId", confirm: "person", label: "Task boards, by a person" },
+      { method: "GET", path: "/api/admin/events", confirm: "agent", label: "Events" },
+    ]);
+  });
+
+  it("refuses a pasted path the save would refuse, with the reason, and changes nothing", async () => {
+    stub();
+    render(<AgentsPanel password="tok" players={players} />);
+    await screen.findByText("Agent");
+    fireEvent.click(screen.getByText("Paste a list"));
+    fireEvent.change(screen.getByLabelText("Pasted paths"), { target: { value: JSON.stringify([{ method: "DELETE", path: "/api/admin/players/:id", confirm: "agent", label: "x" }]) } });
+    fireEvent.click(screen.getByText("Read the pasted list"));
+    expect((await screen.findByRole("alert")).textContent).toContain("Erasing or anonymising a member is always a person's act.");
+    expect(screen.queryByText("Put these on the list")).toBeNull();
+    expect(screen.getAllByLabelText("Path")).toHaveLength(1);
+  });
+
   it("renders nothing for someone who is not an admin", async () => {
     const calls = stub(401);
     render(<AgentsPanel password="tok" players={players} />);
