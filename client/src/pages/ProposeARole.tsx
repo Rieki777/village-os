@@ -66,7 +66,7 @@ import { OPEN_AIM_MAX, OPEN_ANONYMISE_DAYS, OPEN_CONFIRM_HOURS, OPEN_NOTE_MAX, O
 import TermsEight, { EMPTY_TERMS_STEP, type TermsStepValue } from "@/components/governance/TermsEight";
 import { judgeTermsStep, writtenKeys, type TermsWords } from "@shared/termsWords";
 import { Practicalities, browserTimeZone, type Practical } from "@/components/openProposal/RoleCardBridge";
-import { LAST_STONE, STONES, onStone, orderByStone, ownsKeys, stoneOfField, swipeStep } from "@/components/fireflyPath/stones";
+import { LAST_STONE, STONES, enterWalksOn, onStone, orderByStone, ownsKeys, stoneOfField, swipeStep } from "@/components/fireflyPath/stones";
 import { Notice, SentThreshold, prefersStill, type SentNote } from "@/components/fireflyPath/Thresholds";
 /** The link in the confirmation email lives with the other threshold; App.tsx and the tests still find it here. */
 export { ConfirmProposal } from "@/components/fireflyPath/Thresholds";
@@ -454,6 +454,13 @@ export default function ProposeARole() {
       e.preventDefault();
       if (stone < LAST_STONE) next();
       else void send();
+      return;
+    }
+    // Enter in a one-line field walks on. A browser only submits on Enter when a form has a submit button,
+    // and before Send there is none, so the path says it itself (found walking it in a real browser).
+    if (e.key === "Enter" && stone < LAST_STONE && enterWalksOn(e.target)) {
+      e.preventDefault();
+      next();
       return;
     }
     if (e.altKey || e.metaKey || e.ctrlKey || e.shiftKey || ownsKeys(e.target)) return;

@@ -69,3 +69,18 @@ describe("dates for the next steps", () => {
     expect(replyBy(at, 0)).toBeNull();
   });
 });
+
+describe("Enter walks on", () => {
+  it("from a one-line field, never from a long answer, a choice or a file", async () => {
+    const el = (tag: string, type?: string) => ({ tagName: tag, type: type ?? "" }) as unknown as EventTarget;
+    const { enterWalksOn } = await import("./stones");
+    expect(enterWalksOn(el("INPUT", "text"))).toBe(true);
+    expect(enterWalksOn(el("INPUT", "email"))).toBe(true);
+    expect(enterWalksOn(el("INPUT", "date"))).toBe(true);
+    expect(enterWalksOn(el("TEXTAREA"))).toBe(false);
+    expect(enterWalksOn(el("INPUT", "checkbox"))).toBe(false);
+    expect(enterWalksOn(el("INPUT", "file"))).toBe(false);
+    expect(enterWalksOn(el("SELECT"))).toBe(false);
+    expect(enterWalksOn(null)).toBe(false);
+  });
+});

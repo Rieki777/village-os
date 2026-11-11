@@ -580,7 +580,17 @@ describe("the six stones", () => {
     expect(stoneNow()).toBe("moon");
     fireEvent.change(aimBox, { target: { value: "The gate opens at dawn." } });
     fillGoals();
-    // Enter in a field submits the form, and on a stone before Send that is Next.
+    // Enter in a one-line field is Next. A browser submits on Enter only when the form has a submit
+    // button, and before Send it has none, so the path answers the key itself.
+    fireEvent.keyDown(aimBox, { key: "Enter" });
+    expect(stoneNow()).toBe("why");
+    // Enter in a long answer is a new line.
+    fireEvent.keyDown(screen.getByLabelText(OPEN_WORDS.whyLabel), { key: "Enter" });
+    expect(stoneNow()).toBe("why");
+    expect(posted).toHaveLength(0);
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    expect(stoneNow()).toBe("moon");
+    // A submit (on the way to Send it is Next) never posts early.
     fireEvent.submit(form);
     expect(stoneNow()).toBe("why");
     expect(posted).toHaveLength(0);

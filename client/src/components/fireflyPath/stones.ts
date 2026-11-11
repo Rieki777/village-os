@@ -101,6 +101,13 @@ export function ownsKeys(target: EventTarget | null): boolean {
   return !!el.closest("input, textarea, select, [contenteditable], [role='radiogroup'], [role='slider'], [role='listbox']");
 }
 
+/** A one-line field where Enter means "on to the next stone" (never a long answer, a choice or a file). */
+export function enterWalksOn(target: EventTarget | null): boolean {
+  const el = target as HTMLInputElement | null;
+  if (!el || el.tagName !== "INPUT") return false;
+  return !["checkbox", "radio", "file", "button", "submit", "reset", "image", "range", "color"].includes(String(el.type).toLowerCase());
+}
+
 /** The time a confirmation link stops working, counted from when the proposal was sent. */
 export function confirmBy(sentAt: Date, hours: number): Date {
   return new Date(sentAt.getTime() + hours * 60 * 60_000);
