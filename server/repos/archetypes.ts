@@ -52,6 +52,7 @@
  * Dragging one card does not freeze the other four.
  */
 import type { Pool, RowDataPacket } from "mysql2/promise";
+import { ARCHETYPES, ARCHETYPE_NAMES_RETIRED } from "../../shared/archetypes";
 
 /** Every column the admin surface reads. `key` is here as a READ, and only that. */
 const READ_COLUMNS =
@@ -290,4 +291,30 @@ export async function reorderArchetypes(
       " WHERE `village_id` = ?",
     [...pairs, ...pairs, villageId],
   );
+}
+
+/**
+ * MOVE A NAME THE PLATFORM RETIRED to the platform's new one (the five
+ * archetypes as roots, 11 Nov 2026: "The Catalyst" became "The Connector +
+ * Catalyst" and "The Spaceholder" became "The Space Holder").
+ *
+ * Writes `name` and nothing else, and only on a row that still holds EXACTLY
+ * a retired platform name and that nobody has made their own
+ * (`customized = 0`). So it can never undo a village's word: a typed name is
+ * not on the retired list, and an edited class is customized. It leaves
+ * `customized` at 0, because the platform wrote this name and not a person.
+ * Run by the boot seed (`seedEconomy`); idempotent, since a moved row no
+ * longer matches.
+ */
+export async function moveRetiredArchetypeNames(pool: Pool, villageId: string): Promise<void> {
+  for (const a of ARCHETYPES) {
+    const old = ARCHETYPE_NAMES_RETIRED[a.key] ?? [];
+    if (!old.length) continue;
+    await pool.query(
+      "UPDATE `archetypes` SET `name` = ? WHERE `village_id` = ? AND `key` = ? AND `customized` = 0 AND `name` IN (" +
+        old.map(() => "?").join(",") +
+        ")",
+      [a.name, villageId, a.key, ...old],
+    );
+  }
 }

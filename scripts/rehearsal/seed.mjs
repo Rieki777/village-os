@@ -130,6 +130,18 @@ export async function seedVillage({ base, dbUrl, adminPassword, log = () => {} }
       "Full commitment",
       state.roles.finance,
     ]);
+    // The roots the board's work grows from (the five archetypes as roots). The
+    // starter quests are examples, which the roots route refuses, so the seed
+    // writes them here the way a founder's tags would read: a few quests on
+    // each root, and some left untagged, so the holder's filter has something
+    // to keep and something to set aside.
+    const [quests] = await db.query("SELECT id FROM quests ORDER BY sort_order, id");
+    const cycle = [["building"], ["storytelling", "catalyzing"], ["facilitating"], ["researching", "building"], []];
+    for (const [i, q] of quests.entries()) {
+      await db.query("UPDATE quests SET archetypes = ?, archetypes_suggested = 0 WHERE id = ?", [JSON.stringify(cycle[i % cycle.length]), q.id]);
+    }
+    await db.query("UPDATE org_roles SET archetypes = ?, archetypes_suggested = 0 WHERE id = ?", [JSON.stringify(["researching", "catalyzing", "building"]), state.roles.finance]);
+    await db.query("UPDATE org_roles SET archetypes = ?, archetypes_suggested = 0 WHERE id = ?", [JSON.stringify(["building", "researching"]), state.roles.land]);
   } finally {
     await db.end();
   }

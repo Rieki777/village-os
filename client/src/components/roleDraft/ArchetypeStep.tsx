@@ -1,5 +1,6 @@
 /**
- * STEP ONE on /roles: pick an archetype. The cards read the village's own cast
+ * STEP ONE on /roles: pick an archetype, shown as a root (the five archetypes
+ * as roots, 11 Nov 2026: "roles are the branches"). The cards read the village's own cast
  * (`GET /api/archetypes`: name, subtitle, blurb, examples), the same words the
  * character page and the selection board use, so there is one copy of them.
  * Picking a card opens the selection board with that archetype already chosen
@@ -13,6 +14,7 @@ import { useLingui } from "@lingui/react/macro";
 import { ARCHETYPE_PARAM, characterArt } from "@shared/roleDraft";
 import { BTN_SECONDARY, EYEBROW, LEDE } from "@/components/journey/look";
 import ArtImage from "./ArtImage";
+import { RootGlyph } from "@/components/roots/RootTags";
 
 interface Archetype {
   key: string;
@@ -58,10 +60,10 @@ export default function ArchetypeStep({ onSeeAll, allShown }: { onSeeAll: () => 
     <section aria-labelledby="roles-step-one-h" className="mx-auto mb-12 max-w-5xl text-left">
       <p className={EYEBROW}>{t({ message: "Step one", context: "roles page archetypes" })}</p>
       <h2 id="roles-step-one-h" className="mt-2 font-display text-3xl leading-tight text-foreground text-balance">
-        {t({ message: "Select your archetype to help you find your role", context: "roles page archetypes" })}
+        {t({ message: "Choose the root you grow from", context: "roles page archetypes" })}
       </h2>
       <p className={`mt-2 ${LEDE}`}>
-        {t({ message: "An archetype is the kind of work you do best. Choose the one that fits you most, and you can add more on the next page. Many people play two or three, and you may choose all five.", context: "roles page archetypes" })}
+        {t({ message: "The five archetypes are the roots, and every role grows from one or more of them. Choose the one that fits you most, and you can add more on the next page. Many people grow from two or three, and you may choose all five.", context: "roles page archetypes" })}
       </p>
       {cast.length > 0 && (
         <ul className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -76,6 +78,8 @@ export default function ArchetypeStep({ onSeeAll, allShown }: { onSeeAll: () => 
                   <span className="flex items-center gap-4 p-4 pb-2">
                     <ArtImage src={characterArt(c.key)} className="relative size-20 shrink-0 rounded-full border-2 border-notice ring-0 ring-notice/30 ring-offset-2 ring-offset-card transition-shadow group-hover:ring-4" imgClassName="object-top" />
                     <span className="min-w-0">
+                      {/* The root itself: the same drawing every role and quest that grows from it carries. */}
+                      <RootGlyph rootKey={c.key} className="mb-1 size-7" />
                       <span className="block font-display text-xl leading-tight">{c.name}</span>
                       {c.subtitle && <span className="mt-0.5 block text-xs font-semibold text-muted-foreground">{c.subtitle}</span>}
                     </span>

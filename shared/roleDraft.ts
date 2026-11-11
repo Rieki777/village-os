@@ -23,6 +23,7 @@
  * anyone's to have edited, so it is re-read through `draftFromStored`, which
  * keeps strings only, drops duplicates and caps both lists.
  */
+import { castArt } from "./archetypeRoots";
 import { OPEN_PROPOSAL_MAX_ROLES, openProposalHref } from "./openProposals";
 import { applySeatsHref } from "./seatApplyLinks";
 
@@ -134,9 +135,12 @@ export function fitCountFor(roles: readonly DraftRole[], key: string): number {
   return roles.filter((r) => r.archetypes.includes(key)).length;
 }
 
-/** A character's stock art. The files ship with the platform (server/assets/avatars); the page falls back to a drawn medallion when one is missing. */
+/**
+ * A character's stock art. The files ship with the platform (server/assets/avatars); the page falls back to a drawn medallion when one is missing.
+ * Each root wears its face in the cast (shared/archetypeRoots.ts, CAST_LOOK), so wherever the five are shown together they are three women and two men, one Black, two brown and two white (build list 10.6).
+ */
 export function characterArt(key: string): string {
-  return `/images/avatars/${encodeURIComponent(key)}-f-olive.webp`;
+  return castArt(key);
 }
 
 /** The four steps, in order. The words live on the page, where the catalog can reach them. */
