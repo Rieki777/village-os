@@ -744,8 +744,16 @@ export default function RoleDraft() {
             (--tabbar-h, index.css), so nobody scrolls back up for Next. From
             sm up the in-section buttons and the sticky trail carry it.
           */}
-          <div className="sticky bottom-[calc(var(--tabbar-h)+0.5rem)] z-30 mt-8 sm:hidden" data-hides-fab-phone="" data-select-thumb="">
-            {step < 3 ? (
+          <div className="sticky bottom-[calc(var(--tabbar-h)+0.5rem)] z-30 mt-8 overflow-x-clip py-3 sm:hidden" data-hides-fab-phone="" data-select-thumb="">
+            {/* Once a role is selected, proposing is the one next act; until then, the next step. The lights stay inside the screen's width. */}
+            {applyHref && pickCount > 0 ? (
+              <NextAct here block>
+                <Link href={applyHref} onClick={(e) => applyWithBurst(e, applyHref)} className={`relative w-full shadow-sm ${BTN_PRIMARY}`} data-select-thumb-apply="">
+                  {pickCount === 1 ? t`Propose with this role` : t`Propose with these ${pickCount} roles`}
+                  <ArrowRight className="size-4" aria-hidden="true" />
+                </Link>
+              </NextAct>
+            ) : step < 3 ? (
               <NextAct here block>
                 <button type="button" onClick={() => go(step + 1)} className={`${BTN_PRIMARY} w-full shadow-sm`}>
                   {step === 0
@@ -755,13 +763,6 @@ export default function RoleDraft() {
                       : t({ message: "Next: review my selection", context: "role draft next" })}
                   <ArrowRight className="size-4" aria-hidden="true" />
                 </button>
-              </NextAct>
-            ) : applyHref ? (
-              <NextAct here block>
-                <Link href={applyHref} onClick={(e) => applyWithBurst(e, applyHref)} className={`relative w-full shadow-sm ${BTN_PRIMARY}`}>
-                  {pickCount === 1 ? t`Propose with this role` : t`Propose with these ${pickCount} roles`}
-                  <ArrowRight className="size-4" aria-hidden="true" />
-                </Link>
               </NextAct>
             ) : (
               <button type="button" onClick={() => go(2)} className={`${BTN_PRIMARY} w-full shadow-sm`}>
