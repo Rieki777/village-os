@@ -328,6 +328,8 @@ function memberHolder(h: OrgAssignment, tier: SeatTier, ctx: SeatProjectionCtx):
     // is the agent's display name, a vendor's, so a reader must check this
     // before it prints the name as somebody's.
     isAgent: h.isAgent,
+    // 0374: the member who keeps an agent, by name, at the member tier only. Never on a person's row.
+    ...(h.isAgent && h.keeperUserId ? { keeper: ctx.nameOf(h.keeperUserId) } : {}),
     focus: h.focus,
     // Derived: their term ran out, or the season they were seated in has
     // turned. They are still holding it.

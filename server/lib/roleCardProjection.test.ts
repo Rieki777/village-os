@@ -52,6 +52,8 @@ const sorted = (o: object) => Object.keys(o).sort();
 const PUBLIC_CARD_KEYS = [
   "complete", "missing", "written", "of", "gated", "track", "villageGoals", "selectionCriteria", "conversations", "conversationMode", "firstConversation",
   "whereWorked", "languages", "reviewAfterDays", "publicPay", "alwaysChecked", "commitmentPct",
+  // 0374: who may hold it, public at every tier like the rest of the card.
+  "heldBy", "agentMayHold",
 ].sort();
 
 describe("the public pay range", () => {

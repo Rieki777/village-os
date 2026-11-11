@@ -403,6 +403,11 @@ export const ROLE_CARD_TEXT_KEYS: readonly string[] = [
   "whereWorked", "languages", "reviewAfterDays", "accessBundle", "bookingUrl",
 ];
 
+/**
+ * Who may hold a role (0374). Whether an agent may fill a role is a person's decision, so an agent never sets it
+ * through the connector, whatever the switch says.
+ */
+const PERSON_ONLY_ROLE_KEYS = ["heldBy"];
 /** Keys that carry money or power, refused in a draft's payload and the role editor's details. */
 const MONEY_OR_POWER_KEY = /value|cash|pay|budget|funded|capabilit|power|grantsAdmin|admin|badge|veto/i;
 /** The terms-on-offer groups that record money (MONEY_GROUPS in shared/seatSettings.ts). */
@@ -507,14 +512,14 @@ export function leadApprovedBodyProblem(
     case "role_edit": {
       const bad = keys.filter((k) => !["words", "parameters", "archetypes"].includes(k));
       const params = b.parameters && typeof b.parameters === "object" && !Array.isArray(b.parameters) ? Object.keys(b.parameters) : [];
-      bad.push(...params.filter((k) => MONEY_OR_POWER_KEY.test(k)).map((k) => `parameters.${k}`));
+      bad.push(...params.filter((k) => MONEY_OR_POWER_KEY.test(k) || PERSON_ONLY_ROLE_KEYS.includes(k)).map((k) => `parameters.${k}`));
       return bad.length ? `An agent writes a role's words and listing details. These stay a person's: ${bad.slice(0, 8).join(", ")}.` : null;
     }
     case "role_draft": {
       if (!path.endsWith("/changes")) return null;
       if (!DRAFT_OPS.includes(String(b.op ?? ""))) return LEAD_APPROVAL_WORDS.draftOp;
       const payload = b.payload && typeof b.payload === "object" && !Array.isArray(b.payload) ? (b.payload as Record<string, unknown>) : {};
-      const bad = Object.keys(payload).filter((k) => k !== "termsOffer" && MONEY_OR_POWER_KEY.test(k));
+      const bad = Object.keys(payload).filter((k) => (k !== "termsOffer" && MONEY_OR_POWER_KEY.test(k)) || PERSON_ONLY_ROLE_KEYS.includes(k));
       const terms = payload.termsOffer;
       if (terms && typeof terms === "object" && !Array.isArray(terms)) {
         bad.push(...Object.keys(terms).filter((g) => TERMS_MONEY_GROUPS.includes(g)).map((g) => `termsOffer.${g}`));

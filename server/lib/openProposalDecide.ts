@@ -101,6 +101,16 @@ export async function accountFor(members: Pick<AppDeps["members"], "byEmail">, e
 }
 
 /**
+ * WHOSE PROPOSAL IT IS, as an account here: the person behind the address, or,
+ * for an agent (0374), the member who keeps it and proposed it. That account is
+ * never asked about it and never adopts or declines it.
+ */
+export async function ownAccountOf(members: Pick<AppDeps["members"], "byEmail">, p: Pick<store.StoredOpenProposal, "email" | "body">): Promise<string | null> {
+  if (p.body.agent) return p.body.agent.keeperUserId;
+  return accountFor(members, p.email);
+}
+
+/**
  * WHO MAY ADOPT OR DECLINE AT THE DOOR TODAY (Rye, 2026-10-31, sheet 24a): the
  * raised-hand rule over `org.seat`, read the way the member door reads it. A
  * role holds it and somebody sits in it live: those holders. The village holds
@@ -156,7 +166,7 @@ export async function confirmAndAsk(
   return inTransaction(pool, async (conn) => {
     const proposal = await store.confirmOpenProposal(conn, confirmHash, notBefore, at);
     if (!proposal) return null;
-    const own = await accountFor(deps.members, proposal.email);
+    const own = await ownAccountOf(deps.members, proposal);
     const circles: string[] = [];
     for (const r of proposal.body.roles) {
       const c = circleOf.get(r.roleId);
@@ -574,7 +584,7 @@ export async function openProposalsWaitingOn(
   for (const p of waiting) {
     const ask = (asks.get(p.id) ?? []).find((a) => a.userId === viewerId) ?? null;
     const asking = !!ask && !ask.answer && ask.closesAt.getTime() > deps.now.getTime();
-    const own = !!mine && !!p.email && emailKeyOf(p.email) === mine;
+    const own = (!!mine && !!p.email && emailKeyOf(p.email) === mine) || p.body.agent?.keeperUserId === viewerId;
     if (!asking && (!mayDecide || own)) continue;
     const roles = p.body.roles.map((r) => named.get(r.roleId));
     const circles: string[] = [];

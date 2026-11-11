@@ -85,6 +85,7 @@ import { OPEN_INVITE_PREFIX, openInviteId, replyPromise } from "../../shared/ope
 import { inviteById } from "../repos/memberInvites";
 import { dbDocument } from "../repos/store-db";
 import { registerOpenProposalDecide, type DecideRouteDeps } from "./openProposalDecide";
+import { registerAgentProposals } from "./agentRoleProposals";
 import { registerApplicationReview } from "./applicationReview";
 import { clearReviewOf, refsDueForClearing } from "../repos/applicationReview";
 import { boolVar, numberVar } from "../lib/variables";
@@ -568,6 +569,8 @@ export function register(app: Express, deps: Deps): void {
   // ── The decision (part B) ─────────────────────────────────────────────────
 
   registerOpenProposalDecide(app, { ...deps, postEmail, now });
+  // An agent proposed by its keeper (0374): the member door's agent side, the same proposal and the same decision.
+  registerAgentProposals(app, deps, { target: async () => target((await settings()).term), offered, decide, now });
   /*
    * FIRST, THE MEMBERSHIP MADE AT APPLICATION (Rye's answer 8). An account made
    * through the invitation carries it, and queues the signing a steward accepts.

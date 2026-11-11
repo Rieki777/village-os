@@ -22,12 +22,14 @@
 import { CONVERSATION_MODES, INTERVIEW_MAX_MINUTES, INTERVIEW_MAX_STEPS, INTERVIEW_MIN_MINUTES, type ConversationMode } from "./interviewerRoles";
 import { looksLikePaymentDetails, PAY_KINDS, parseSeatSettings, type PaySettings } from "./seatSettings";
 import { TRACKS, TRACK_WORDS, readTrack, type Track } from "./roleTracks";
+import { HELD_BY, readHeldBy, type HeldBy } from "./agentHolders";
 
 /** Every parameter key, in the order the editor and the card text show them. */
 export const PARAMETER_KEYS = [
   "listed",
   "recruiting",
   "alwaysChecked",
+  "heldBy",
   "track",
   "whereWorked",
   "languages",
@@ -48,6 +50,7 @@ export const PARAMETER_COLUMNS: Record<ParameterKey, string> = {
   listed: "listed",
   recruiting: "recruiting",
   alwaysChecked: "always_checked",
+  heldBy: "held_by",
   track: "track",
   whereWorked: "where_worked",
   languages: "languages",
@@ -105,6 +108,8 @@ export type ParameterValues = {
   recruiting?: boolean;
   /** A background check happens for this role whatever the references say (0370). */
   alwaysChecked?: boolean;
+  /** Who may hold it: a person, an agent or either (0374, shared/agentHolders.ts). Null: the card has not said, which reads as either. */
+  heldBy?: HeldBy | null;
   track?: Track | null;
   whereWorked?: WhereWorked | null;
   languages?: string[];
@@ -130,6 +135,7 @@ export const PARAMETER_WORDS = {
   tooLong: (what: string, max: number) => `${what}: keep each line to ${max} characters.`,
   payment: "Keep bank, card and account numbers out of a role card.",
   track: `Track is one of: ${TRACKS.join(", ")}.`,
+  heldBy: `Who can hold it is one of: ${HELD_BY.join(", ")}.`,
   where: `Where it is worked is one of: ${WHERE_WORKED.join(", ")}.`,
   date: "Write the date as year-month-day, like 2027-01-15.",
   days: "Write whole days, like 90.",
@@ -199,6 +205,13 @@ export function readParameter(key: ParameterKey, raw: unknown, isRole: (id: stri
       if (raw === 0 || raw === 1) return ok(raw === 1);
       if (typeof raw === "string" && /^(true|false|yes|no|open|closed|listed|unlisted)$/i.test(raw.trim())) return ok(/^(true|yes|open|listed)$/i.test(raw.trim()));
       return no(key === "listed" ? "Listed is yes or no." : key === "alwaysChecked" ? "Always background-checked is yes or no." : "The door is open or closed.");
+    }
+    case "heldBy": {
+      if (raw === null || raw === undefined || raw === "") return ok(null);
+      // The card text writes the words ("A person or an agent"); the editor sends the key.
+      const said = String(raw).trim().toLowerCase().replace(/[.]$/, "");
+      const hit = readHeldBy(said) ?? (/^(a )?person or (an )?agent$/.test(said) ? "either" : /^an? (person|agent)$/.test(said) ? readHeldBy(said.replace(/^an? /, "")) : null);
+      return hit ? ok(hit) : no(PARAMETER_WORDS.heldBy);
     }
     case "track": {
       if (raw === null || raw === undefined || raw === "") return ok(null);
@@ -330,6 +343,7 @@ export interface ParameterCardSpec {
 export const PARAMETER_CARD_FIELDS: readonly ParameterCardSpec[] = [
   { key: "listed", heading: "Listed", list: false, oneLine: true, aliases: ["is it listed"], limit: "Yes or no: whether visitors and members find this role." },
   { key: "alwaysChecked", heading: "Always background-checked", list: false, oneLine: true, aliases: ["background check"], limit: "Yes or no: whether a check happens for this role whatever the references say." },
+  { key: "heldBy", heading: "Who can hold it", list: false, oneLine: true, aliases: ["held by"], limit: "Person, agent or either: whether a person, an agent or either may hold this role." },
   { key: "recruiting", heading: "Door", list: false, oneLine: true, aliases: ["door state"], limit: "Open or closed: whether the role is looking for someone." },
   { key: "track", heading: "Track", list: false, oneLine: true, aliases: [], limit: `One of: ${TRACKS.map((t) => TRACK_WORDS[t]).join(", ")}.` },
   { key: "whereWorked", heading: "Where it is worked", list: false, oneLine: true, aliases: ["where the work happens"], limit: "Land, remote or both." },

@@ -26,11 +26,11 @@ import EditRoleButton, { NewRoleFromCardButton } from "@/components/roleEdit/Edi
 import SeatVendorFacts from "@/components/power/SeatVendorFacts";
 import RoleHolderCards from "@/components/playerCard/RoleHolderCards";
 import RaiseTension from "@/components/roleTension/RaiseTension";
-import { proposeRoleHref } from "@/components/roleProposal/QuickPath";
+import { agentProposalHref, proposeRoleHref } from "@/components/roleProposal/QuickPath";
 import { useClassNames } from "@/components/power/useClassNames";
 import { useModule } from "@/modules/ModuleProvider";
 import { useAuth } from "@/contexts/AuthContext";
-import { useLingui } from "@lingui/react/macro";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { isSeatState, type SeatStateWord, type SheetContext } from "@shared/roleSheet";
 import { fromOrgSeat, orgHolderName, seasonForSheet, seatHistoryShown } from "@shared/roleSheetInputs";
 import { coordinatingCircle } from "@shared/coordinatingCircle";
@@ -267,6 +267,12 @@ function RoleCard({ role, expanded, onToggle, index, canTagNeeds, sheet, arrive 
                   {stateWords[role.status]}
                 </span>
                 <NotListedChip role={role.raw} />
+                {/* 0374: the card says an agent may hold it (a card that has not said shows nothing). */}
+                {(role.raw?.card?.heldBy === "agent" || role.raw?.card?.heldBy === "either") && (
+                  <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-muted text-foreground border border-border" data-testid="agent-may-hold">
+                    <Trans context="roles directory chip">Can be held by an agent</Trans>
+                  </span>
+                )}
               </div>
               <p className="text-xs text-muted-foreground">
                 {role.group}
@@ -320,6 +326,11 @@ function RoleCard({ role, expanded, onToggle, index, canTagNeeds, sheet, arrive 
               {!role.isExample && (
                 <Link href={proposeRoleHref(role.id)} className={`w-fit ${BTN_NOTICE}`}>
                   {t`Propose this role for next season`}
+                </Link>
+              )}
+              {!role.isExample && role.raw?.card?.agentMayHold === true && (
+                <Link href={agentProposalHref(role.id)} className={`w-fit ${BTN_SECONDARY}`}>
+                  <Trans context="roles directory: a member proposes an agent they keep">Propose an agent for this role</Trans>
                 </Link>
               )}
               {!role.isExample && <RaiseTension roleId={role.id} roleName={role.name} />}

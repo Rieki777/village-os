@@ -21,6 +21,7 @@ import { roleCardGate } from "../../shared/roleParams";
 import { payStatesRange, publicPayOf } from "../../shared/rolePublicPay";
 import { publicTermsOf, readTermsOffer } from "../../shared/seatTermsOffer";
 import type { OrgRole } from "./orgChart";
+import { mayHold, readHeldBy } from "../../shared/agentHolders";
 
 export interface RoleCardTier {
   terms: boolean;
@@ -99,6 +100,9 @@ export function roleCard(
     commitmentPct: publicTermsOf(role.termsOffer).commitmentPct,
     // Joining lane PR 2 (0370): a check happens for this role whatever the references say; the forms tell the applicant.
     alwaysChecked: role.alwaysChecked === true,
+    // 0374: who the card says may hold it (null: not said), and whether an agent may, the unsaid read as either.
+    heldBy: readHeldBy(role.heldBy),
+    agentMayHold: mayHold(role.heldBy, "agent"),
     firstConversation: opts.words?.firstConversationRole ?? null,
     ...(isPaid(role, pay?.kind, opts.words?.defaultTrack) && opts.words?.paidConsentCircle ? { consentCircle: opts.words.paidConsentCircle } : {}),
     ...(pay && open && isListed(role) ? { publicPay: pay } : {}),

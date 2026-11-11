@@ -84,7 +84,71 @@ export interface ServedOpenProposal {
     seatsFull: Array<{ name: string; seats: number; taken: number }>;
     seatsWords: string | null;
   } | null;
+  /** An agent proposed by its keeper (0374): what it is, who keeps it, its reach and how to switch it off. */
+  agent?: ServedAgent | null;
   you: { mayEditTerms?: boolean; holdsThePower: boolean; own: boolean; mayAdopt: boolean; mayDecline: boolean; mayReissue: boolean; formerMember?: boolean };
+}
+
+export interface ServedAgent {
+  name: string;
+  what: string;
+  keeper: string | null;
+  reach: Array<{ scope: string; words: string }>;
+  stillAnAgent: boolean;
+  switchOff: string;
+  switchOffPlatform: string;
+}
+
+/** The page's heading for an agent's proposal: the agent never proposes itself, its keeper does. */
+function AgentHeading({ name, roles }: { name: string; roles: string }) {
+  const { t } = useLingui();
+  return <>{t({ message: `${name}, an agent, proposed by its keeper for ${roles}`, context: "open proposal: an agent's proposal heading" })}</>;
+}
+
+/** The agent's own parts, in place of a person's About you (0374). Read from the proposal and the agent's live tokens. */
+function AgentView({ agent }: { agent: ServedAgent }) {
+  const { t } = useLingui();
+  return (
+    <section aria-labelledby="op-agent" className="rounded-xl border border-border bg-card p-4" data-testid="op-agent">
+      <h2 id="op-agent" className="text-lg font-bold text-foreground">
+        {t({ message: "The agent", context: "open proposal: an agent's proposal" })}
+      </h2>
+      <p className="mt-1 text-sm text-muted-foreground">
+        {t({ message: "Proposed by the member who keeps it. The circle decides by consent, as for a person.", context: "open proposal: an agent's proposal" })}
+      </p>
+      <dl className="mt-3 space-y-4">
+        <div>
+          <dt className="text-sm font-semibold text-muted-foreground">{t({ message: "What it is", context: "open proposal: an agent's proposal" })}</dt>
+          <dd className="mt-1 whitespace-pre-wrap break-words text-foreground">{agent.what}</dd>
+        </div>
+        <div>
+          <dt className="text-sm font-semibold text-muted-foreground">{t({ message: "Who keeps it", context: "open proposal: an agent's proposal" })}</dt>
+          <dd className="mt-1 text-foreground">{agent.keeper ?? t({ message: "A member", context: "open proposal: an agent's keeper with no name" })}</dd>
+        </div>
+        <div>
+          <dt className="text-sm font-semibold text-muted-foreground">{t({ message: "What it can reach", context: "open proposal: an agent's proposal" })}</dt>
+          <dd className="mt-1 text-foreground">
+            {!agent.stillAnAgent ? (
+              t({ message: "This account is no longer marked as an agent's, so it cannot be seated.", context: "open proposal: an agent's proposal" })
+            ) : agent.reach.length ? (
+              <ul className="list-disc space-y-0.5 pl-5">
+                {agent.reach.map((x) => (
+                  <li key={x.scope}>{x.words}</li>
+                ))}
+              </ul>
+            ) : (
+              t({ message: "It holds no live access token, so it reaches nothing through the village's connector today.", context: "open proposal: an agent's proposal" })
+            )}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-sm font-semibold text-muted-foreground">{t({ message: "How to switch it off", context: "open proposal: an agent's proposal" })}</dt>
+          <dd className="mt-1 whitespace-pre-wrap break-words text-foreground">{agent.switchOff}</dd>
+          <dd className="mt-1 text-sm text-muted-foreground">{agent.switchOffPlatform}</dd>
+        </div>
+      </dl>
+    </section>
+  );
 }
 
 type Answer<T> = { ok: true; data: T } | { ok: false; status: number; error: string };
@@ -229,10 +293,14 @@ export default function OpenProposal() {
             <header>
               <p className="text-sm font-semibold text-notice">{p.statusWords}</p>
               <h1 className="mt-1 font-display text-3xl font-bold text-foreground">
-                {DECIDE_WORDS.heading(p.proposer, p.roles.map((r) => r.name ?? DECIDE_WORDS.roleGone), !!p.term)}
+                {p.agent
+                  ? <AgentHeading name={p.agent.name} roles={p.roles.map((r) => r.name ?? DECIDE_WORDS.roleGone).join(", ")} />
+                  : DECIDE_WORDS.heading(p.proposer, p.roles.map((r) => r.name ?? DECIDE_WORDS.roleGone), !!p.term)}
               </h1>
               <p className="mt-2 leading-relaxed text-muted-foreground">
-                {p.term ? (
+                {p.agent ? (
+                  t({ message: "An agent, proposed by the member who keeps it. Adopted, it is seated on these roles at once, marked as an agent, with its keeper beside it.", context: "open proposal: an agent's proposal" })
+                ) : p.term ? (
                   DECIDE_WORDS.fromOutsideMoon(civilDayWords(p.term.startsOn), civilDayWords(p.term.endsOn))
                 ) : (
                   <>
@@ -242,6 +310,8 @@ export default function OpenProposal() {
                 )}
               </p>
             </header>
+
+            {p.agent && <AgentView agent={p.agent} />}
 
             <section aria-labelledby="op-roles">
               <h2 id="op-roles" className="text-lg font-bold text-foreground">
@@ -260,12 +330,12 @@ export default function OpenProposal() {
               </ul>
             </section>
             {/* The two cards side by side, gaps named (Rye, 9 Nov 2026; components/openProposal/RoleCardBridge.tsx). */}
-            <section aria-labelledby="op-cards" className="grid gap-3">
+            {!p.agent && <section aria-labelledby="op-cards" className="grid gap-3">
               <h2 id="op-cards" className="text-lg font-bold text-foreground">
                 {t({ message: "Their card beside the open card", context: "open proposal side by side" })}
               </h2>
               <CardSideBySide roles={p.roles} card={p.card ?? null} membershipAligned={!!p.membership?.aligned} />
-            </section>
+            </section>}
 
             {p.offer && <TermsWeOffer offer={p.offer} mayEdit={!!p.you.mayEditTerms} savePath={`${base(p.id)}/terms`} onSaved={() => void load()} />}
 
@@ -275,7 +345,7 @@ export default function OpenProposal() {
               </h2>
               <dl className="mt-3 space-y-4">
                 <div>
-                  <dt className="text-sm font-semibold text-foreground">{DECIDE_WORDS.why}</dt>
+                  <dt className="text-sm font-semibold text-foreground">{p.agent ? t({ message: "Why this agent, in its keeper's words", context: "open proposal: an agent's proposal" }) : DECIDE_WORDS.why}</dt>
                   <dd className="mt-1 whitespace-pre-wrap break-words text-foreground">{p.why}</dd>
                 </div>
                 {p.aim && (
@@ -384,7 +454,11 @@ export default function OpenProposal() {
                   </>
                 ) : (
                   <p className="mt-1 text-foreground" data-door={p.door.because}>
-                    {p.you.own ? DECIDE_WORDS.ownProposal : p.door.words}
+                    {p.you.own
+                      ? p.agent
+                        ? t({ message: "You keep this agent, so another holder of the power to place people in roles decides it.", context: "open proposal: the keeper reads their own agent's proposal" })
+                        : DECIDE_WORDS.ownProposal
+                      : p.door.words}
                   </p>
                 )}
               </section>

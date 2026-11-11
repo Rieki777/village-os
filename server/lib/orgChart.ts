@@ -20,6 +20,7 @@
  * expiry so it lapses back rather than outliving the moment somebody meant it.
  */
 import { isAgentAccount } from "../repos/agentAccounts";
+import { HELD_BY_REFUSAL, mayHold } from "../../shared/agentHolders";
 import { isMoonTerm } from "../../shared/moonRenewal";
 import { raiseRevokeForEnded } from "./roleAccess";
 import { liveAssignmentIdsOfUser } from "../repos/roleAccess";
@@ -265,6 +266,8 @@ export interface OrgAssignment {
   isAgent: boolean;
   /** 0257: the seat application whose terms this seating holds. Absent for every other door. */
   applicationId?: string;
+  /** 0374: the member who keeps this agent. Absent on every person's seating. */
+  keeperUserId?: string;
 }
 
 export const ROLE_COLS =
@@ -293,7 +296,9 @@ export const ROLE_COLS =
   // 0362: whether a steward has confirmed the role for discovery. NULL reads as listed.
   "listed, " +
   // 0362: the parameters of the full card (shared/roleParams.ts).
-  "village_goals, track, selection_criteria, conversations, conversation_mode, where_worked, languages, budget_line, funded_from, review_after_days, access_bundle, booking_url, always_checked";
+  "village_goals, track, selection_criteria, conversations, conversation_mode, where_worked, languages, budget_line, funded_from, review_after_days, access_bundle, booking_url, always_checked, " +
+  // 0374: who may hold the role, a person, an agent or either (shared/agentHolders.ts). NULL reads as either.
+  "held_by";
 
 export const ASSIGN_COLS =
   // `is_example` rides along so the flag travels through every SELECT. It was
@@ -307,7 +312,9 @@ export const ASSIGN_COLS =
   // that must not count an agent are exactly the ones furthest from here.
   "is_agent, " +
   // 0257: the seat application whose terms a seating holds, null for every other door.
-  "application_id";
+  "application_id, " +
+  // 0374: the member who keeps an agent seated here, null for every person and every agent seated before it.
+  "keeper_user_id";
 
 /** MySQL hands JSON back already parsed on some drivers and as text on others. */
 function asList(v: unknown): string[] {
@@ -392,6 +399,8 @@ export function rowToAssignment(r: any): OrgAssignment {
     isAgent: !!r.is_agent,
     // Only when set, so a reader that compares whole rows sees nothing new on every other seating.
     ...(r.application_id ? { applicationId: String(r.application_id) } : {}),
+    // 0374: only when set, for the same reason.
+    ...(r.keeper_user_id ? { keeperUserId: String(r.keeper_user_id) } : {}),
   };
 }
 
@@ -1158,6 +1167,8 @@ export async function seatHolder(
     agentSlug?: string | null;
     /** 0257: the seat application whose terms this seating holds. */
     applicationId?: string | null;
+    /** 0374: the member who keeps the agent. Only with `isAgent`; refused on a person's seating. */
+    keeperUserId?: string | null;
   },
   /**
    * `assignmentId` is returned so the caller can key a notification on THIS
@@ -1200,6 +1211,20 @@ export async function seatHolder(
      */
     return { ok: false, reason: "An agent account holds no role. Its access comes from its own scopes" };
   }
+  if (h.keeperUserId && !isAgent) return { ok: false, reason: "Only an agent has a keeper" };
+  /*
+   * WHO THE ROLE CARD SAYS MAY HOLD IT (0374, shared/agentHolders.ts). Here,
+   * at the one write every door seats through, so the admin seating, a
+   * published draft, an adopted proposal and the season turn all inherit it.
+   * A card that has not said reads as either, which is what every role
+   * allowed before, so nothing changes for a role nobody has marked.
+   */
+  {
+    const [cardRows]: any = await pool.query("SELECT held_by FROM org_roles WHERE id = ? LIMIT 1", [orgRoleId]);
+    const heldBy = cardRows?.[0]?.held_by ?? null;
+    const asKind = isAgent ? "agent" : "person";
+    if (!mayHold(heldBy, asKind)) return { ok: false, reason: HELD_BY_REFUSAL[asKind] };
+  }
   const kind = h.userId ? "member" : "documented";
   if (kind === "documented" && !String(h.displayName ?? "").trim()) {
     return { ok: false, reason: "A documented holder needs a name" };
@@ -1215,8 +1240,8 @@ export async function seatHolder(
   try {
     await pool.query(
       `INSERT INTO org_role_assignments
-         (id, org_role_id, holder_kind, user_id, display_name, holder_key, focus, note, season_id, term_ends_at, granted_by, is_agent, term_follows_season, application_id)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+         (id, org_role_id, holder_kind, user_id, display_name, holder_key, focus, note, season_id, term_ends_at, granted_by, is_agent, term_follows_season, application_id, keeper_user_id)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [
         assignmentId,
         orgRoleId,
@@ -1232,6 +1257,7 @@ export async function seatHolder(
         isAgent ? 1 : 0,
         h.termFollowsSeason ? 1 : 0,
         h.applicationId ?? null,
+        isAgent ? (h.keeperUserId ?? null) : null,
       ],
     );
     seatingsChanged();

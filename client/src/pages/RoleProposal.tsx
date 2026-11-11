@@ -29,6 +29,8 @@ import { fetchMine, fetchProposal, fetchShared, startFromCard, type ProposalOut,
 import { proposalHref } from "@shared/roleProposals";
 import { keepRoleOn } from "@/components/roleProposal/QuickPath";
 import { RP_WORDS } from "@/components/roleProposal/proposalWords";
+import AgentProposalForm from "@/components/roleProposal/AgentProposalForm";
+import { AGENT_PROPOSAL_WORDS } from "@shared/agentHolders";
 
 const GATE_LINE = "Each member's proposal for the roles they will hold next season, shared for feedback before it goes to the circle.";
 
@@ -66,8 +68,34 @@ function useGate(name: string): ReactNode | null {
   return null;
 }
 
-/** `/role-proposals/new`: a draft from the current card, then its steps. */
+/** `/role-proposals/new?agent=1&role=`: the member door's agent side (0374). */
+function agentAsked(): { roleId: string } | null {
+  if (typeof window === "undefined") return null;
+  const q = new URLSearchParams(window.location.search);
+  return q.get("agent") === "1" ? { roleId: q.get("role") ?? "" } : null;
+}
+
+function NewAgentProposal({ roleId }: { roleId: string }) {
+  const gate = useGate(AGENT_PROPOSAL_WORDS.title);
+  const { user, loading } = useAuth();
+  if (gate) return <>{gate}</>;
+  if (!user && !loading) return <Notice heading={AGENT_PROPOSAL_WORDS.signIn} next={`/role-proposals/new?agent=1&role=${encodeURIComponent(roleId)}`} />;
+  if (!user) return <Page><div className="flex justify-center py-16"><BreathingLoader label={RP_WORDS.starting} /></div></Page>;
+  return (
+    <Page>
+      <AgentProposalForm roleId={roleId} />
+    </Page>
+  );
+}
+
+/** `/role-proposals/new`: a draft from the current card, then its steps; with `?agent=1`, an agent proposed by its keeper. */
 export function NewRoleProposal() {
+  const [agent] = useState(agentAsked);
+  if (agent) return <NewAgentProposal roleId={agent.roleId} />;
+  return <NewOwnRoleProposal />;
+}
+
+function NewOwnRoleProposal() {
   const gate = useGate(RP_WORDS.title);
   const { user, loading } = useAuth();
   const [, setLocation] = useLocation();

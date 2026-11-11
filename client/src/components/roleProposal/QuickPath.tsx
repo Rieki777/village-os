@@ -179,3 +179,9 @@ export function YourWordsActions({ onBack, onNext }: { onBack: () => void; onNex
     </div>
   );
 }
+
+/** The member door's agent side for one role (0374): a member proposes an agent they keep. */
+export function agentProposalHref(roleId: string): string {
+  const q = new URLSearchParams({ agent: "1", role: roleId });
+  return `/role-proposals/new?${q.toString()}`;
+}

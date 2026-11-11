@@ -110,3 +110,6 @@ export const COMMITMENT_PHRASES: Record<CommitmentKey, string> = {
   nextHolder: "how the next holder is chosen",
   decides: "how its decisions pass",
 };
+
+/** Under an agent on the roster: the member who keeps it (0374, shared/agentHolders.ts). */
+export const keptByLine = (keeper: string): string => `Kept by ${keeper}`;
