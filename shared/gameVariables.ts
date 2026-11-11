@@ -2533,6 +2533,33 @@ export const VARIABLES: VariableDef[] = [
     unit: "days",
   },
   {
+    key: "org.review_before_conversations",
+    category: "The village's people",
+    label: "Review each application before the conversations",
+    description:
+      "On, an application waits for our review once its address confirms: a holder of the power to place people in roles invites the applicant to the conversations, in the order the role names them, or sends the not-invited letter, which thanks them and points to open ways to stay close. The first conversation opens only with the invitation, and the circle is asked to consent once the conversations are written up. Off, the first conversation opens as the address confirms. An application keeps the setting it confirmed under.",
+    type: "boolean",
+    default: "false",
+  },
+  {
+    key: "org.stay_close_name",
+    category: "The village's people",
+    label: "The way to stay close, named in the not-invited letter",
+    description:
+      "The name of the village's open way in for someone not invited to a role, such as its supporters' circle. The not-invited letter and the status page point to it first, then to quests and events. Leave it empty and they point to quests and events only.",
+    type: "text",
+    default: "",
+  },
+  {
+    key: "org.stay_close_link",
+    category: "The village's people",
+    label: "Where the way to stay close is",
+    description:
+      "A page of this site, such as /resident, or an https address. Used only when the way to stay close has a name.",
+    type: "text",
+    default: "",
+  },
+  {
     key: "org.sync_starts_unlisted",
     category: "The village's people",
     label: "Roles accepted from a sync start unlisted",
@@ -2585,6 +2612,101 @@ export const VARIABLES: VariableDef[] = [
       "Each heading on a circle card, and on each role in full on a player's card, is plain words, like \"What we look after\" or \"What I can decide on my own\". On, hovering or tapping a heading also shows the matching heading in the CCOS Circle Charter or Role Card, like \"CCOS: Domains\", for a village that writes its charters and roles with it. Off keeps the plain headings and shows no term.",
     type: "boolean",
     default: "true",
+  },
+  {
+    key: "org.founding_team",
+    category: "The village's people",
+    label: "Feature the founding team on the Roles page",
+    description:
+      "On, the top of the Roles and Circles page is a quiet \"Join the founding team\" section: the paid founding roles the village is hiring for, each with its full card and one Apply act. The roles are the ones written in \"The founding team's roles\". Off, the page opens on the roles and circles as before.",
+    type: "boolean",
+    default: "false",
+  },
+  {
+    key: "org.founding_team_roles",
+    category: "The village's people",
+    label: "The founding team's roles",
+    description:
+      "The roles the founding team section features, in the order they show: paste each role id from the org chart, separated by commas or new lines. A role that is unlisted, ended or held as an example is left out of the section. Empty, the section shows nothing.",
+    type: "text",
+    default: "",
+  },
+  {
+    key: "org.show_pay_ranges",
+    category: "The village's people",
+    label: "Show pay ranges on role cards",
+    description:
+      "Off, no role card shows a pay range or an amount to visitors or members, whatever a role's terms hold: a card shows how pay works (its shares) instead. On, an open listed role whose terms name a pay range shows that range on its card to everyone. People who hold the power to read terms still read the full terms either way.",
+    type: "boolean",
+    default: "false",
+  },
+  {
+    key: "org.pay_shape",
+    category: "The founding team",
+    label: "How pay works, on every role card",
+    description:
+      "The shape of the pay every role card shows under \"How pay works\", as shares of the whole, never an amount: write each share's name and percent, separated by commas, like Cash 40, Equity 55, Credits 5. The shares add up to 100 or less. A role whose card writes its own shares shows those instead. Empty, cards show no pay shape.",
+    type: "text",
+    default: "",
+  },
+  {
+    key: "org.pay_shape_at_risk",
+    category: "The founding team",
+    label: "The at-risk line under the pay shape",
+    description:
+      "One line under the shares on every role card, in the village's words, saying which part of the pay depends on what the village raises or earns. No amounts. Empty, no line.",
+    type: "text",
+    default: "",
+  },
+  {
+    key: "org.pay_shape_note",
+    category: "The founding team",
+    label: "The note under the pay shape",
+    description:
+      "The last line under the pay shape on every role card, like Indicative only. Terms are still being defined and are subject to legal review. No amounts. A role's card may write its own. Empty, no note.",
+    type: "text",
+    default: "",
+  },
+
+  // ── The founding team (Phase A, 11 Nov 2026) ─────────────────────────────
+  //
+  // The application for a listed role (/propose-a-role) reads its own village
+  // words from here (shared/foundingApplication.ts): the ways to get to know
+  // us and the first cycle. The pay shape it shows is the role cards' own
+  // setting (`org.pay_shape` and its two lines), so the two never disagree.
+  {
+    key: "org.founding_know_us",
+    category: "The founding team",
+    label: "Ways to get to know us before applying",
+    description:
+      "The first step of the application lists these, one per line, and the applicant ticks the ones they have done. The step never stops anyone applying. Up to eight lines.",
+    type: "longtext",
+    default: "Join a community call\nVisit the land\nShare a meal with us",
+  },
+  {
+    key: "org.founding_know_us_note",
+    category: "The founding team",
+    label: "The note while a way to get to know us is not ticked",
+    description: "Shown on the first step of the application whenever a way is not ticked yet. It encourages, and the applicant can always continue.",
+    type: "longtext",
+    default:
+      "We encourage you to do these, but if you haven't, you can still apply, especially if you've been invited to, or if you live far away and the next call is more than a week away, or if you feel you're an incredibly strong candidate.",
+  },
+  {
+    key: "org.founding_first_cycle",
+    category: "The founding team",
+    label: "What the first cycle looks like",
+    description: "Shown on the Your first day step of the application: how long the first cycle is, when it runs, and that either side may end it there.",
+    type: "longtext",
+    default: "Your first cycle is one month. At its end, either side may choose to stop there, with thanks.",
+  },
+  {
+    key: "org.founding_first_conversations",
+    category: "The founding team",
+    label: "The first conversations after joining",
+    description: "Shown on the Your first day step: the first conversations a new team member has once they are chosen, one per line. Leave it empty and none are listed.",
+    type: "longtext",
+    default: "",
   },
 
   // ── Events (0059; visible in Admin only while the module is non-off) ─────

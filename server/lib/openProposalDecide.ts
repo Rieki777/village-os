@@ -73,7 +73,7 @@ import * as store from "../repos/openProposals";
 import { asksFor, holdersInCircles, insertAsks } from "../repos/roleProposals";
 import { inApplicationTransaction, seatsForUpdate, seatsWithCircles } from "../repos/seatApplications";
 import { carryUpdatesToAccount } from "./applicantUpdates";
-import { announceReview, beginReview, type ReviewDeps, type ReviewStart } from "./applicationReview";
+import { announceReview, beginReview, reviewFirstOn, type ReviewDeps, type ReviewStart } from "./applicationReview";
 import { agentRoleNamesInCircles, stampStep } from "../repos/applicationReview";
 import * as review from "../repos/applicationReview";
 import { REVIEW_WORDS } from "../../shared/applicationReview";
@@ -155,7 +155,7 @@ export interface Confirmed {
  * from now. Null when the token confirms nothing: used, run out, or unknown.
  */
 export async function confirmAndAsk(
-  deps: Pick<DecideDeps, "getPool" | "members" | "calendar"> & Pick<ReviewDeps, "consentAfterInterviews">,
+  deps: Pick<DecideDeps, "getPool" | "members" | "calendar"> & Pick<ReviewDeps, "consentAfterInterviews" | "reviewFirst">,
   confirmHash: string,
   notBefore: Date,
   at: Date,
@@ -181,7 +181,9 @@ export async function confirmAndAsk(
       }
     }
     // The review begins in this same transaction, so a proposal is never confirmed with half a review.
-    const review = await beginReview(conn, deps, { ref: proposal.id, roleIds: proposal.body.roles.map((r) => r.roleId), applicantUserId: own, at });
+    // Our review comes first where the village asks for it (Phase A). An agent's proposal is its keeper's, and is decided as it always was.
+    const reviewFirst = !proposal.body.agent && reviewFirstOn(deps);
+    const review = await beginReview(conn, deps, { ref: proposal.id, roleIds: proposal.body.roles.map((r) => r.roleId), applicantUserId: own, at, reviewFirst });
     // Where the village asked for it, the circle is asked once the interviews are scored (shared/applicationReview.ts).
     if (!review.holdConsent) {
       await insertAsks(conn, asked.map((a) => ({ proposalId: proposal.id, userId: a.userId, circleId: a.circleId, askedAt: at, closesAt })));

@@ -65,7 +65,35 @@ export interface ApplicantMessages {
     adopted(village: string, roles: string, next: string): string;
     declinedTitle(village: string): string;
     declined(roles: string): string;
+    invitedTitle: string;
+    invited(roles: string): string;
+    notInvitedTitle(village: string): string;
+    notInvited(roles: string): string;
   };
+
+  /** THE INVITATION (our review said yes): the conversations in order, from the role's own list. */
+  invite: {
+    subject(village: string): string;
+    headline(roles: string): string;
+    conversationsIntro: string;
+    conversation(role: string, minutes: number): string;
+    total(minutes: number): string;
+    booking: string;
+    after: string;
+  };
+
+  /** THE NOT-INVITED LETTER (build list 6.6): warm, clear, never personal, with open ways to stay close. */
+  notInvited: {
+    subject(village: string): string;
+    thanks(roles: string, village: string): string;
+    matched: string;
+    stayClose: string;
+    program(name: string, url: string): string;
+    quest(url: string): string;
+    events(url: string): string;
+    closing: string;
+  };
+
 
   adopt: {
     subject(village: string): string;
@@ -82,6 +110,9 @@ export interface ApplicantMessages {
     nextAfterProfile: string;
     button: string;
     signFirst(): string;
+    /** A reviewed application's yes: the circle consented, said as a welcome. */
+    headlineReviewed(village: string, roles: string): string;
+    firstCycle: string;
   };
 
   declined: {
@@ -105,14 +136,19 @@ export interface ApplicantMessages {
   /** The status page itself (`/application-status/:ref`): every word the page draws, so it reads in one language. */
   status: {
     heading: string;
+    /** The heading for an application our review reads first. */
+    headingApplication: string;
     missing: string;
     nextLabel: string;
     by(day: string): string;
     /** The eyebrow over the card: the step the proposal is on. */
-    step: Record<"confirmed" | "first_reply" | "interview" | "scores_in" | "consent" | "decided" | "cleared", string>;
+    step: Record<"confirmed" | "first_reply" | "review" | "invited" | "not_invited" | "interview" | "scores_in" | "consent" | "decided" | "first_cycle" | "cleared", string>;
     /** The path, line by line. */
     received: string;
     firstReply: string;
+    review: string;
+    invitation: string;
+    firstCycle: string;
     conversationWith(role: string, minutes: number): string;
     consent: string;
     decision: string;
@@ -128,7 +164,11 @@ export interface ApplicantMessages {
       adopted: string;
       withdrawn: string;
       declined: string;
+      review: string;
+      decision: string;
+      notInvited: string;
     };
+    notInvited: { heading: string; line: string; program(name: string): string; quests: string; events: string };
     booking: {
       label: string;
       block(total: string, firstRole: string | null): string;
@@ -208,7 +248,33 @@ const en: ApplicantMessages = {
     adopted: (v, roles, next) => `${v} adopted your proposal to hold ${roles}. ${next}`,
     declinedTitle: (v) => `Your proposal to ${v}`,
     declined: (roles) => `Thank you for proposing to hold ${roles}. We can't say yes this time. You can take a quest, look at other open roles, or propose again next season.`,
+    invitedTitle: "We would love to talk with you",
+    invited: (roles) => `We read your application to hold ${roles} with care, and we would love to invite you to the conversations. The details are in your email.`,
+    notInvitedTitle: (v) => `Thank you for applying to ${v}`,
+    notInvited: (roles) => `Thank you for applying to hold ${roles}. We found someone more closely matched to this role, so we will not invite you to the conversations this time. It is not personal, and we would love to stay in touch.`,
   },
+
+  invite: {
+    subject: (v) => `An invitation to talk with ${v}`,
+    headline: (roles) => `Thank you for applying to hold ${roles}. We have read your application with care, and we would love to invite you to the conversations.`,
+    conversationsIntro: "The conversations, in order:",
+    conversation: (role, minutes) => `${role}, ${minutes} minutes`,
+    total: (minutes) => `About ${minutes} minutes in all.`,
+    booking: "We will write to you about times. If one long block does not suit you, ask on your status page for the conversations to be split over several days.",
+    after: "After the last conversation, the circle decides by consent, and we write to you with its answer.",
+  },
+
+  notInvited: {
+    subject: (v) => `Thank you for applying to ${v}`,
+    thanks: (roles, v) => `Thank you for applying to hold ${roles} in ${v}, and for the care you put into it.`,
+    matched: "We have found someone more closely matched to this role, so we will not invite you to the conversations this time. This is about the fit of one role, and it is not personal.",
+    stayClose: "We would love to stay in touch, and there are open ways to be part of the village:",
+    program: (name, url) => `${name}: ${url}`,
+    quest: (url) => `Take a quest: ${url}`,
+    events: (url) => `Come to an event: ${url}`,
+    closing: "We hope to meet you soon.",
+  },
+
 
   adopt: {
     subject: (v) => `${v} adopted your proposal`,
@@ -225,6 +291,8 @@ const en: ApplicantMessages = {
     nextAfterProfile: "Then check your profile. Your tasks appear there once your role starts, and it is where we run our sessions and track our work together.",
     button: "Create your profile",
     signFirst: () => "Before you are seated, align with the Love Letter, the village's membership agreement (aligning is the village's way of signing). Aligning with it is what makes you a member, with a voice in the village's decisions:",
+    headlineReviewed: (v, roles) => `The circle has consented: we would love you to hold ${roles} in ${v}. Welcome.`,
+    firstCycle: "We begin with a first cycle together, and at its end either side may choose to end it there.",
   },
 
   declined: {
@@ -247,20 +315,28 @@ const en: ApplicantMessages = {
 
   status: {
     heading: "Where your proposal is",
+    headingApplication: "Where your application is",
     missing: "That link does not match a proposal. Check the link in your email.",
     nextLabel: "What happens next",
     by: (day) => `By ${day}`,
     step: {
       confirmed: "Received",
       first_reply: "First reply",
+      review: "Our review",
+      invited: "Invitation",
+      not_invited: "Our answer",
       interview: "Conversation",
       scores_in: "Conversations done",
       consent: "The circle's consent",
       decided: "Decision",
+      first_cycle: "First cycle",
       cleared: "Cleared",
     },
     received: "Received",
     firstReply: "First reply",
+    review: "Our review",
+    invitation: "Invitation",
+    firstCycle: "First cycle",
     conversationWith: (role, minutes) => `Conversation with ${role} (${minutes} minutes)`,
     consent: "The circle's consent",
     decision: "Decision",
@@ -275,6 +351,16 @@ const en: ApplicantMessages = {
       adopted: "Your move: make your account. The link to make it is in your email.",
       withdrawn: "Nothing more is needed. You withdrew this proposal.",
       declined: "Nothing more is needed from you. We have answered.",
+      review: "Our move: we read your application with care, then invite you to the conversations or write to thank you.",
+      decision: "Our move: the circle weighs everything and decides by consent. We write to you with its answer.",
+      notInvited: "Nothing more is needed from you. We have written to you.",
+    },
+    notInvited: {
+      heading: "Thank you for applying",
+      line: "We will not invite you to the conversations for this role. It is not personal: we found someone more closely matched to it. We would love you to stay close:",
+      program: (name) => name,
+      quests: "Take a quest",
+      events: "Come to an event",
     },
     booking: {
       label: "How the conversations are booked",
@@ -337,7 +423,34 @@ const es: ApplicantMessages = {
     adopted: (v, roles, next) => `${v} adoptó tu propuesta para ocupar ${roles}. ${next}`,
     declinedTitle: (v) => `Tu propuesta a ${v}`,
     declined: (roles) => `Gracias por proponerte para ocupar ${roles}. Esta vez no podemos decir que sí. Puedes tomar una misión, ver otros roles abiertos o volver a proponer la próxima temporada.`, // check: "misión" for quest
+    invitedTitle: "Nos encantaría conversar contigo",
+    invited: (roles) => `Leímos con cuidado tu postulación para ocupar ${roles}, y nos encantaría invitarte a las conversaciones. Los detalles están en tu correo.`, // check: "postulación" for application
+    notInvitedTitle: (v) => `Gracias por postularte a ${v}`,
+    notInvited: (roles) => `Gracias por postularte para ocupar ${roles}. Encontramos a alguien que encaja más de cerca con este rol, así que esta vez no te invitaremos a las conversaciones. No es algo personal, y nos encantaría seguir en contacto.`,
   },
+
+  // needs-native-review: the invitation and the not-invited letter
+  invite: {
+    subject: (v) => `Una invitación a conversar con ${v}`,
+    headline: (roles) => `Gracias por postularte para ocupar ${roles}. Leímos tu postulación con cuidado, y nos encantaría invitarte a las conversaciones.`,
+    conversationsIntro: "Las conversaciones, en orden:",
+    conversation: (role, minutes) => `${role}, ${minutes} minutos`,
+    total: (minutes) => `Unos ${minutes} minutos en total.`,
+    booking: "Te escribiremos para acordar los horarios. Si un solo bloque largo no te queda bien, pide en la página del estado de tu postulación que las repartamos en varios días.",
+    after: "Después de la última conversación, el círculo decide por consentimiento, y te escribimos con su respuesta.",
+  },
+
+  notInvited: {
+    subject: (v) => `Gracias por postularte a ${v}`,
+    thanks: (roles, v) => `Gracias por postularte para ocupar ${roles} en ${v}, y por el cuidado que pusiste en ello.`,
+    matched: "Encontramos a alguien que encaja más de cerca con este rol, así que esta vez no te invitaremos a las conversaciones. Se trata del encaje de un rol, y no es algo personal.", // check: "encaje"
+    stayClose: "Nos encantaría seguir en contacto, y hay caminos abiertos para ser parte de la aldea:",
+    program: (name, url) => `${name}: ${url}`,
+    quest: (url) => `Toma una misión: ${url}`,
+    events: (url) => `Ven a un evento: ${url}`,
+    closing: "Esperamos conocerte pronto.",
+  },
+
 
   adopt: {
     subject: (v) => `${v} adoptó tu propuesta`,
@@ -354,6 +467,8 @@ const es: ApplicantMessages = {
     nextAfterProfile: "Después revisa tu perfil. Allí aparecen tus tareas cuando empiece tu rol, y es donde hacemos nuestras sesiones y seguimos nuestro trabajo juntos.",
     button: "Crea tu perfil",
     signFirst: () => "Antes de ocupar tu rol, alínea con la Carta de Amor, el acuerdo de membresía de la aldea (alinear es nuestra forma de firmar). Alinear con ella es lo que te hace miembro, con voz en las decisiones de la aldea:", // check: "Love Letter" name, "alinear", "membresía"
+    headlineReviewed: (v, roles) => `El círculo dio su consentimiento: nos encantaría que ocupes ${roles} en ${v}. Bienvenida, bienvenido.`, // check: the welcome, said to anyone
+    firstCycle: "Empezamos con un primer ciclo juntos, y al terminar, cualquiera de las dos partes puede decidir cerrarlo ahí.",
   },
 
   declined: {
@@ -377,20 +492,28 @@ const es: ApplicantMessages = {
   // needs-native-review: the whole status block below
   status: {
     heading: "Dónde está tu propuesta",
+    headingApplication: "Dónde está tu postulación",
     missing: "Ese enlace no corresponde a ninguna propuesta. Revisa el enlace de tu correo.",
     nextLabel: "Lo que sigue",
     by: (day) => `Para el ${day}`,
     step: {
       confirmed: "Recibida",
       first_reply: "Primera respuesta",
+      review: "Nuestra revisión",
+      invited: "Invitación",
+      not_invited: "Nuestra respuesta",
       interview: "Conversación",
       scores_in: "Conversaciones terminadas",
       consent: "El consentimiento del círculo",
       decided: "Decisión",
+      first_cycle: "Primer ciclo",
       cleared: "Resuelta",
     },
     received: "Recibida",
     firstReply: "Primera respuesta",
+    review: "Nuestra revisión",
+    invitation: "Invitación",
+    firstCycle: "Primer ciclo",
     conversationWith: (role, minutes) => `Conversación con ${role} (${minutes} minutos)`,
     consent: "El consentimiento del círculo",
     decision: "Decisión",
@@ -405,6 +528,16 @@ const es: ApplicantMessages = {
       adopted: "Te toca a ti: crear tu cuenta. El enlace para hacerlo está en tu correo.",
       withdrawn: "No hace falta nada más. Retiraste esta propuesta.",
       declined: "No hace falta nada más de tu parte. Ya respondimos.",
+      review: "Nos toca a nosotros: leemos tu postulación con cuidado, y luego te invitamos a las conversaciones o te escribimos para darte las gracias.",
+      decision: "Nos toca a nosotros: el círculo lo considera todo y decide por consentimiento. Te escribimos con su respuesta.",
+      notInvited: "No hace falta nada más de tu parte. Ya te escribimos.",
+    },
+    notInvited: {
+      heading: "Gracias por postularte",
+      line: "No te invitaremos a las conversaciones para este rol. No es algo personal: encontramos a alguien que encaja más de cerca con él. Nos encantaría que sigas cerca:",
+      program: (name) => name,
+      quests: "Toma una misión",
+      events: "Ven a un evento",
     },
     booking: {
       label: "Cómo se agendan las conversaciones",
@@ -427,6 +560,50 @@ const es: ApplicantMessages = {
     },
   },
 };
+
+// ── The applicant's steps: ONE list (Phase A, coordinator 11 Nov 2026) ──────
+
+/**
+ * THE APPLICANT'S STEPS, in order, the single source the form (lane A1), the
+ * confirmation, the status page's Seed of Life and the letters read. Each has
+ * its name and one line of what happens and roughly when, in every applicant
+ * language. Timing words that depend on the village (the reply days) take the
+ * number as an argument, so nothing here is one village's promise.
+ */
+export const APPLICANT_STEP_KEYS = ["received", "review", "invitation", "conversations", "decision", "first_cycle"] as const;
+export type ApplicantStepKey = (typeof APPLICANT_STEP_KEYS)[number];
+
+export interface ApplicantStepWords {
+  name: string;
+  /** What happens at this step and roughly when. `days` is the village's reply promise (`org.applicant_reply_days`). */
+  when(days: number): string;
+}
+
+export const APPLICANT_STEPS: Record<ApplicantLanguage, Record<ApplicantStepKey, ApplicantStepWords>> = {
+  en: {
+    received: { name: "Received", when: () => "Your application reaches us the moment you confirm your address." },
+    review: { name: "Our review", when: (days) => `Within ${days} ${days === 1 ? "day" : "days"}, we invite you to the conversations or write to thank you.` },
+    invitation: { name: "Invitation", when: () => "An invitation by email lists the conversations in order, with how long each one is." },
+    conversations: { name: "Conversations", when: () => "One after another with the roles you would work beside, usually within two weeks of the invitation." },
+    decision: { name: "Decision", when: () => "The circle decides by consent, usually within a week of the last conversation." },
+    first_cycle: { name: "First cycle", when: () => "We begin with a first cycle together, and at its end either side may choose to end it there." },
+  },
+  // needs-native-review
+  es: {
+    received: { name: "Recibida", when: () => "Tu postulación nos llega en cuanto confirmas tu correo." },
+    review: { name: "Nuestra revisión", when: (days) => `En un plazo de ${days} ${days === 1 ? "día" : "días"}, te invitamos a las conversaciones o te escribimos para darte las gracias.` },
+    invitation: { name: "Invitación", when: () => "Una invitación por correo enumera las conversaciones en orden, con la duración de cada una." },
+    conversations: { name: "Conversaciones", when: () => "Una tras otra con los roles con los que trabajarías, por lo general dentro de las dos semanas siguientes a la invitación." },
+    decision: { name: "Decisión", when: () => "El círculo decide por consentimiento, por lo general dentro de la semana siguiente a la última conversación." },
+    first_cycle: { name: "Primer ciclo", when: () => "Empezamos con un primer ciclo juntos, y al terminar, cualquiera de las dos partes puede decidir cerrarlo ahí." },
+  },
+};
+
+/** The steps in order, in one language, with the timing line filled in. */
+export function applicantSteps(lang: ApplicantLanguage | null | undefined, replyDays: number): Array<{ key: ApplicantStepKey; name: string; when: string }> {
+  const table = APPLICANT_STEPS[lang && isApplicantLanguage(lang) ? lang : DEFAULT_APPLICANT_LANGUAGE];
+  return APPLICANT_STEP_KEYS.map((key) => ({ key, name: table[key].name, when: table[key].when(replyDays) }));
+}
 
 /** The tables. `Record<ApplicantLanguage, ...>` makes a language without a table, or a table with a missing line, a compile error. */
 export const LANGUAGES: Record<ApplicantLanguage, ApplicantMessages> = { en, es };
@@ -462,9 +639,16 @@ export interface StatusServedForView {
   mode: "block" | "split";
   outcome?: "adopted" | "declined" | "withdrawn" | null;
   referencesGiven?: number | null;
+  /** Our review comes before the conversations on this application. */
+  reviewFirst?: boolean;
+  /** Our review ended it with the not-invited letter. */
+  notInvited?: boolean;
 }
 
 export interface StatusView {
+  heading: string;
+  /** The not-invited answer is shown, in place of the older declined one. */
+  notInvited: boolean;
   stepWords: string;
   move: string;
   path: Array<{ label: string; state: "done" | "now" | "later" }>;
@@ -498,6 +682,9 @@ export function statusView(lang: ApplicantLanguage | null | undefined, s: Status
     if (label === STEP_WORDS.first_reply) return w.firstReply;
     if (label === STEP_WORDS.consent) return w.consent;
     if (label === STEP_WORDS.decided) return w.decision;
+    if (label === STEP_WORDS.review) return w.review;
+    if (label === STEP_WORDS.invited) return w.invitation;
+    if (label === STEP_WORDS.first_cycle) return w.firstCycle;
     const m = CONVERSATION_LABEL.exec(label);
     if (m) return w.conversationWith(m[1], Number(m[2]));
     return label;
@@ -507,7 +694,8 @@ export function statusView(lang: ApplicantLanguage | null | undefined, s: Status
   const path: StatusView["path"] = [];
   for (const p of s.path) {
     if (closed && (p.label === STEP_WORDS.consent || p.state !== "done")) continue;
-    if (decided && p.state === "now") continue;
+    // An adopted application's first cycle is where they stand now, so it keeps its place.
+    if (decided && p.state === "now" && !(s.outcome === "adopted" && p.label === STEP_WORDS.first_cycle)) continue;
     let state = p.state;
     if (state === "now") {
       if (seenNow) state = "later";
@@ -516,12 +704,15 @@ export function statusView(lang: ApplicantLanguage | null | undefined, s: Status
     path.push({ label: say(p.label), state });
   }
 
+  const notInvited = !!s.notInvited && s.outcome === "declined";
   let move: string;
   if (s.outcome === "adopted") move = w.move.adopted;
   else if (s.outcome === "withdrawn") move = w.move.withdrawn;
+  else if (notInvited) move = w.move.notInvited;
   else if (s.outcome === "declined") move = w.move.declined;
   else if (s.step === "first_reply") move = w.move.firstReply;
-  else if (s.step === "consent") move = w.move.consent;
+  else if (s.step === "review") move = w.move.review;
+  else if (s.step === "consent") move = s.reviewFirst ? w.move.decision : w.move.consent;
   else {
     const m = INTERVIEW_MOVE.exec(s.actsNext);
     move = m ? w.move.interview(m[1], Number(m[2])) : w.move.interviewWaiting;
@@ -536,5 +727,14 @@ export function statusView(lang: ApplicantLanguage | null | undefined, s: Status
 
   const references = closed || typeof s.referencesGiven !== "number" ? null : s.referencesGiven === 0 ? w.references.none : w.references.some(s.referencesGiven);
 
-  return { stepWords: (w.step as Record<string, string>)[s.step] ?? s.step, move, path, booking, references };
+  const stepKey = s.reviewFirst && s.step === "consent" ? "decided" : notInvited ? "not_invited" : s.step;
+  return {
+    heading: s.reviewFirst ? w.headingApplication : w.heading,
+    notInvited,
+    stepWords: (w.step as Record<string, string>)[stepKey] ?? s.step,
+    move,
+    path,
+    booking,
+    references,
+  };
 }

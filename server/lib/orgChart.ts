@@ -19,6 +19,7 @@
  * village genuinely knows better than the derivation, and it carries an
  * expiry so it lapses back rather than outliving the moment somebody meant it.
  */
+import { MAX_ROOTS_ON_WORK } from "../../shared/archetypeRoots";
 import { isAgentAccount } from "../repos/agentAccounts";
 import { roleHeldBy } from "../repos/orgRoleColumns";
 import { HELD_BY_REFUSAL, mayHold } from "../../shared/agentHolders";
@@ -1880,5 +1881,8 @@ export function characterTagsFrom(v: unknown, cast: readonly string[]): { ok: tr
     if (!cast.includes(k)) return { ok: false, error: `"${k.slice(0, 40)}" is not one of this village's characters.` };
     if (!tags.includes(k)) tags.push(k);
   }
+  // A role grows from one to three roots (shared/archetypeRoots.ts). Four
+  // would say it grows from everything, which tags nothing.
+  if (tags.length > MAX_ROOTS_ON_WORK) return { ok: false, error: `Pick up to ${MAX_ROOTS_ON_WORK} roots for a role. This one names ${tags.length}.` };
   return { ok: true, tags };
 }

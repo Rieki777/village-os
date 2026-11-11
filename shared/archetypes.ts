@@ -36,54 +36,62 @@ export const ARCHETYPES: ArchetypeSeed[] = [
     key: "building",
     name: "The Builder",
     subtitle: "Building & Developing",
-    blurb: "Creating tools, systems, and infrastructure that serve the regenerative movement.",
+    blurb: "Makes things real and keeps them running, on the land and beyond.",
     examples: [
-      "Building out the village platform",
-      "Creating infrastructure for the land",
-      "Developing governance tools",
-      "Building dashboards and tracking systems",
+      "Building homes and infrastructure",
+      "Building tools, apps and systems",
+      "Operations and logistics",
+      "Maintenance and repair",
+      "Developing and permitting",
+      "Project management",
+      "Growing food",
+      "Cooking",
     ],
     sigil: "hammer",
   },
   {
     key: "researching",
     name: "The Architect",
-    subtitle: "Researching & Architecting",
-    blurb: "Designing frameworks, exploring possibilities, and mapping the path forward.",
+    subtitle: "Researching & Designing",
+    blurb: "Researches and designs the structure of things, physical and digital.",
     examples: [
-      "Designing tokenomics models",
-      "Researching regenerative land practices",
-      "Creating organizational frameworks",
-      "Mapping ecosystem relationships",
+      "Research",
+      "Designing buildings, landscapes, systems and software",
+      "Financial modeling and strategy",
+      "Governance and legal structure",
+      "Data and planning",
+      "Decoration",
     ],
     sigil: "lens",
   },
   {
     key: "facilitating",
-    name: "The Spaceholder",
-    subtitle: "Facilitating & Space Holding",
-    blurb: "Creating containers for collaboration, learning, and community growth.",
+    name: "The Space Holder",
+    subtitle: "Hosting & Space Holding",
+    blurb: "Holds people, relationships and the shared field so everyone can thrive.",
     examples: [
-      "Facilitating community sessions",
-      "Hosting season incubators",
-      "Running onboarding calls",
-      "Holding space for conflict resolution",
+      "Hosting and hospitality",
+      "Facilitating and ceremony",
+      "Care for children, elders and the sick",
+      "Health and well-being",
+      "Team and people support, onboarding",
+      "Mediation and evolving through conflict",
+      "Safeguarding",
     ],
     sigil: "circle",
   },
   {
     key: "catalyzing",
-    name: "The Catalyst",
-    subtitle: "Catalyzing & Connecting",
-    blurb: "Weaving relationships, building bridges, and sparking new possibilities.",
+    name: "The Connector + Catalyst",
+    subtitle: "Connecting & Catalyzing",
+    blurb: "Connects people, resources and opportunities, and sparks what doesn't exist yet.",
     examples: [
-      "Helping onboard new land projects",
-      "Making key introductions",
-      "Connecting people with projects",
-      "Building partnership networks",
-      "Raising investment for what the village builds",
-      "Running crowd pooling campaigns",
-      "Weaving new villages into the network",
+      "Bringing in investors and funding",
+      "Partnerships and networks",
+      "Sales and enrolling residents",
+      "Walking people through their journey",
+      "Starting new initiatives, businesses and circles",
+      "Founder, entrepreneur and visionary energy",
     ],
     sigil: "thread",
   },
@@ -91,16 +99,35 @@ export const ARCHETYPES: ArchetypeSeed[] = [
     key: "storytelling",
     name: "The Storyteller",
     subtitle: "Storytelling & Communicating",
-    blurb: "Sharing the vision, documenting the journey, and drawing others in.",
+    blurb: "Carries meaning between people, and from past to future.",
     examples: [
-      "Telling the story of the land",
-      "Creating content that carries the work",
-      "Documenting the journey",
-      "Keeping the outside world in the loop",
+      "Communications, marketing and social media",
+      "Writing, film and visual voice",
+      "Teaching and training",
+      "Documentation, memory and record-keeping",
+      "Translation",
+      "Reporting to the community and investors",
     ],
     sigil: "book",
   },
 ];
+
+/**
+ * NAMES THE PLATFORM ONCE SHIPPED, so a village still on them moves to the new
+ * one (the five archetypes as roots, 11 Nov 2026: "Catalyst" became
+ * "Connector + Catalyst", and "Spaceholder" became two words).
+ *
+ * A name belongs to the village, and the boot seed never restores one
+ * (`seedEconomy`, server/lib/economySeed.ts). This list is the one narrow
+ * exception: a row whose name is STILL exactly what the platform shipped, on a
+ * class nobody has made their own (`customized = 0`), was never a village's
+ * choice, so moving it to the new platform name takes nothing from anybody. A
+ * village that typed any other name keeps it.
+ */
+export const ARCHETYPE_NAMES_RETIRED: Readonly<Record<string, readonly string[]>> = {
+  facilitating: ["The Spaceholder"],
+  catalyzing: ["The Catalyst"],
+};
 
 /**
  * The stable identifiers, derived from the cast rather than written twice.

@@ -31,6 +31,32 @@ import { adoptedDocument, pageDocumentProblems, pageSectionKey, PAGE_SPECS } fro
 const NOT_HELD = ["page-governance", "page-circles"];
 const HELD = PAGE_SPECS.filter((spec) => !NOT_HELD.includes(pageSectionKey(spec)));
 
+/**
+ * Sections and fields added after the adoption, which the kept copy does not
+ * hold and which read their defaults until the village writes its own. Named
+ * here, so a new part of a kept page is a decision somebody sees. The steward
+ * page became one flow with two tracks on 2026-11-11 (lane A5); the first
+ * village's words for it are drafted in server/seeds/amora/journey-tracks-seed.json.
+ */
+const ADDED_SINCE: Readonly<Record<string, { sections: readonly string[]; fields: readonly string[] }>> = {
+  "page-journey-steward": { sections: ["tracks", "crossover", "foundingTeam", "extras"], fields: ["getToKnow.exceptions"] },
+  "page-journey-resident": { sections: ["entry"], fields: [] },
+};
+
+/** The adopted document without the parts added after the adoption. */
+function withoutAdded(section: string, doc: Record<string, Record<string, unknown>>): Record<string, unknown> {
+  const added = ADDED_SINCE[section];
+  if (!added) return doc;
+  const out: Record<string, Record<string, unknown>> = {};
+  for (const [id, value] of Object.entries(doc)) {
+    if (added.sections.includes(id)) continue;
+    const kept = { ...value };
+    for (const f of added.fields) if (f.startsWith(`${id}.`)) delete kept[f.slice(id.length + 1)];
+    out[id] = kept;
+  }
+  return out;
+}
+
 const RECORD_DIR = path.resolve(import.meta.dirname, "..", "..", "server", "seeds", "amora", "pages"); // brand-ok: the first village's own record, read to prove the defaults cannot reach it
 
 describe("the first village's kept copy of its pages", () => {
@@ -43,6 +69,6 @@ describe("the first village's kept copy of its pages", () => {
   it.each(HELD.map((spec) => [pageSectionKey(spec), spec] as const))("%s resolves to its own words, with no default filling a gap", (section, spec) => {
     const record = JSON.parse(fs.readFileSync(path.join(RECORD_DIR, `${section}.json`), "utf8"));
     expect(pageDocumentProblems(spec, record)).toEqual([]);
-    expect(adoptedDocument(spec, record)).toEqual(record);
+    expect(withoutAdded(section, adoptedDocument(spec, record) as Record<string, Record<string, unknown>>)).toEqual(record);
   });
 });
