@@ -103,11 +103,18 @@ export async function servePath(env: OnboardingEnv, viewerId: string, p: repo.Pa
   if (!readsCheckins) return null;
   const role = await repo.roleFacts(env.db, p.orgRoleId);
   const rows = visibleItems(await repo.itemsOfPath(env.db, p.id), env.consented(p.orgRoleId));
+  // A step's link lives in the village's document and is looked up by key here,
+  // so a path that opened before a link was added still shows it, and a mended
+  // address reaches paths already open. Everything else on a step stays as the
+  // path opened with it.
+  const links = new Map(
+    mergePath({ village: doc, circleId: role?.circleId ?? null, first90: role?.first90 ?? null }).flatMap((i) => (i.link ? [[i.key, i.link] as const] : [])),
+  );
   const items: ServedPath["items"] = [];
   for (const r of rows) {
     const holdsRole = r.owner === "holder" || r.owner === "buddy" ? false : await holdsOwner(env.db, viewerId, doc, r.owner);
     items.push({
-      key: r.key, kind: r.kind, title: r.title, owner: r.owner, dueDay: r.dueDay, doneWhen: r.doneWhen, source: r.source, phase: r.phase, phaseFrom: r.phaseFrom, phaseTo: r.phaseTo, doneAt: r.doneAt,
+      key: r.key, kind: r.kind, title: r.title, owner: r.owner, dueDay: r.dueDay, doneWhen: r.doneWhen, ...(links.has(r.key) ? { link: links.get(r.key) } : {}), source: r.source, phase: r.phase, phaseFrom: r.phaseFrom, phaseTo: r.phaseTo, doneAt: r.doneAt,
       mayTick: mayTick(viewerId, people, r.owner, holdsRole),
     });
   }

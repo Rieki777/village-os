@@ -24,7 +24,7 @@ import {
   LINK,
   TILE,
 } from "@/components/journey/look";
-import type { CheckinAnswers, PathItemState } from "@shared/onboardingPath";
+import { readLink, type CheckinAnswers, type PathItemState } from "@shared/onboardingPath";
 
 export const ONBOARDING_WORDS = {
   heading: (role: string) => role,
@@ -75,6 +75,9 @@ interface Served {
 }
 
 const FIELD = `${FIELD_LOOK} mt-1 min-h-11`;
+
+/** A step's link, read again here so only an https address ever becomes an href. */
+const linkOf = (it: PathItemState) => readLink(it.link);
 
 function CheckinForm({
   pathId,
@@ -249,6 +252,13 @@ function PathCard({
                     </span>
                   </span>
                 </span>
+                {linkOf(it) && (
+                  // Opens in a new tab and never hands the new page this one:
+                  // noopener drops window.opener, noreferrer drops the Referer.
+                  <a href={linkOf(it)!.href} target="_blank" rel="noopener noreferrer" className={BTN_SECONDARY}>
+                    {linkOf(it)!.label}
+                  </a>
+                )}
                 {!it.doneAt && it.mayTick && (
                   <button
                     type="button"

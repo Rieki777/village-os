@@ -19,7 +19,7 @@ import { docChangeCount } from "@/lib/unsavedChanges";
 const WORDS = {
   heading: "Onboarding path",
   intro:
-    "The onboarding path every new holder sees on their profile: a title, phases (a name, fromDay, toDay and steps), each circle's own steps, optional check-in days, and the role that holds each owner key. A step has a title, an owner (holder, buddy, onboarding, access, memory or appointer), a dueDay and a doneWhen. Paths already opened keep the steps they opened with.",
+    "The onboarding path every new holder sees on their profile: a title, phases (a name, fromDay, toDay and steps), each circle's own steps, optional check-in days, and the role that holds each owner key. A step has a title, an owner (holder, buddy, onboarding, access, memory or appointer), a dueDay, a doneWhen and, if you like, a link ({ "label": "Open the guide", "href": "https://..." }: https only, shown as a button on the step). Paths already opened keep the steps they opened with.",
   label: "Onboarding path document (JSON)",
   on: "Switched on: new holders get this path. Tick only once the circle has consented.",
   notSaved: "The onboarding path did not save.",
