@@ -17,7 +17,7 @@ describe("LookPanel", () => {
     const puts: unknown[] = [];
     vi.stubGlobal("fetch", vi.fn(async (_u: string, init?: RequestInit) => {
       if (init?.method === "PUT") { puts.push(JSON.parse(String(init.body))); return new Response("{}", { status: putStatus }); }
-      return new Response(JSON.stringify({ brand: { theme: { seed: "#157f7d", character: "", place: "", accent: "" } } }), { status: 200 });
+      return new Response(JSON.stringify({ brand: { theme: { seed: "#157f7d", character: "", place: "", accent: "" } } }), { status: 200 }); // theme-ok: a fetched brand fixture in a test, never rendered to a village
     }));
     return puts;
   };
