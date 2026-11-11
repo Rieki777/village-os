@@ -28,6 +28,7 @@
  * Phone first: the design's own breakpoints, one column at 375px, every
  * control at least 44px, long words wrap, nothing wider than the screen.
  */
+import CircleName from "@/components/circles/CircleName";
 import { useContext, useState, type ReactNode } from "react";
 import { Link } from "wouter";
 import { CARD_WORDS as W, type RoleOut, type Slot } from "@shared/playerCard";
@@ -173,7 +174,7 @@ export function RoleInFull({ role, health = null }: { role: RoleOut; health?: He
             <li>
               {/* The circle this role sits in, linked to that circle's card. */}
               <Link href={role.circle.href} className="pc-chip">
-                {role.circle.name}
+                <CircleName name={role.circle.name} anchor={role.circle.anchor} />
               </Link>
             </li>
           ) : null}

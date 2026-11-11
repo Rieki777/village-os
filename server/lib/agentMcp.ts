@@ -50,7 +50,7 @@
  * pay route, a legal name or an address, at any depth. It runs for every
  * holder, a `cash.pay` holder included.
  */
-import { adminRequestDecision, type AgentAdminPathsDoc } from "../../shared/agentAdmin";
+import { adminRequestDecision, leadApprovalSubject, leadApprovedBodyProblem, leadSeatTarget, readLeadApproval, withoutApproval, type AgentAdminPathsDoc, type LeadApprovalSubject, type LeadApprovedKind, type LeadSeatFacts } from "../../shared/agentAdmin";
 import { MOON_ROUTES, PACK_FORBIDDEN_KEY } from "../../shared/moonRecap";
 import { echoHash, type AgentScope } from "./agentTokens";
 import { INBOX_TOOLS, TIER_B_TOOLS } from "./agentMcpTierB";
@@ -118,6 +118,19 @@ export interface ToolContext {
   sera?: {
     run: (tool: "link_sera_person" | "suggest_task" | "set_board_access" | "draft_agenda_item" | "suggest_moon_item", args: Record<string, unknown>) => Promise<{ ok: true; result: Record<string, unknown> } | { ok: false; error: string }>;
     undo: (actionId: string) => Promise<{ ok: true } | { ok: false; error: string }>;
+  };
+  /**
+   * The village's lead-approved writes (shared/agentAdmin.ts, LEAD_APPROVED_WRITES): whether the opt-in is on,
+   * the facts of the seat a seating or unseating reaches, and the record and notice a seating or unseating leaves.
+   */
+  leadApproved?: {
+    on: () => Promise<boolean>;
+    seat: (target: { roleId: string } | { seatingId: string }) => Promise<LeadSeatFacts | null>;
+    /**
+     * The record every approved write leaves: one admin-only audit event and one record queued for the village's
+     * organisational memory, both keyed on `writeKey`. Called after the route answered; it never throws back here.
+     */
+    recorded: (a: { kind: LeadApprovedKind; roleId: string | null; path: string; method: string; subject: LeadApprovalSubject; approvedBy: string; approvalNote: string; writeKey: string }) => Promise<void>;
   };
   /** Writes one `agent_actions` row. Only the admin and Sera tools record through it. */
   recordAction?: (a: { scope: string; tool: string; method: string | null; path: string | null; echoHash: string; state: "done" | "refused" | "asked" }) => Promise<void>;
@@ -504,7 +517,7 @@ export const MCP_TOOLS: readonly ToolDef[] = [
     kind: "write",
     title: "Call an admin path",
     description:
-      "Calls one admin path the village has opened to agents, as the holder, with the holder's own admin checks. GET answers at once. A write answers first with what it would do and a confirmToken; call again with the same arguments and the token to make it. Some writes a person makes in the app, and the answer says so. Erasure, powers, money, secrets and the agent accounts are never reachable here.",
+      "Calls one admin path the village has opened to agents, as the holder, with the holder's own admin checks. GET answers at once. A write answers first with what it would do and a confirmToken; call again with the same arguments and the token to make it. Some writes a person makes in the app, and the answer says so. A role card, org draft, wording or seating write carries approvedBy and approvalNote in its body: who approved it and their approval in this chat, quoted; it is kept in the village's audit and its organisational memory. Erasure, powers, money, secrets and the agent accounts are never reachable here.",
     inputSchema: {
       type: "object",
       properties: {
@@ -530,10 +543,29 @@ export const MCP_TOOLS: readonly ToolDef[] = [
       const record = (state: "done" | "refused" | "asked") =>
         ctx.recordAction!({ scope: "admin", tool: "admin_request", method: method.slice(0, 8) || null, path: path.slice(0, 500) || null, echoHash: hash, state });
 
-      const decision = adminRequestDecision(method, path, await ctx.adminPaths(), ctx.holderId ?? null, { applicantDataOpen: ctx.applicantDataOpen ? await ctx.applicantDataOpen() : false });
+      const leadOn = ctx.leadApproved ? await ctx.leadApproved.on() : false;
+      const decision = adminRequestDecision(method, path, await ctx.adminPaths(), ctx.holderId ?? null, {
+        applicantDataOpen: ctx.applicantDataOpen ? await ctx.applicantDataOpen() : false,
+        leadApprovedWrites: leadOn,
+      });
       if (!decision.ok) {
         await record("refused");
         return { ok: false, error: decision.words, detail: { code: decision.code } };
+      }
+      // A lead-approved write (the lead's ruling, 10 and 11 Nov 2026): the body is checked at both calls, and a
+      // seat's facts are read fresh each time, so a seat that gained a veto between the two calls is refused.
+      const lead = decision.leadApproved ?? null;
+      let seatRoleId: string | null = null;
+      if (lead) {
+        const target = leadSeatTarget(lead, path);
+        const seat = target && ctx.leadApproved ? await ctx.leadApproved.seat(target) : null;
+        seatRoleId = seat?.roleId ?? (target && "roleId" in target ? target.roleId : null);
+        // Every write the switch made possible carries the approval; the role editor with the switch off is as before.
+        const problem = leadApprovedBodyProblem(lead, path, body, { holderId: ctx.holderId ?? null, seat, approvalRequired: leadOn || lead !== "role_edit" });
+        if (problem) {
+          await record("refused");
+          return { ok: false, error: problem, detail: { code: "lead_approved_refused" } };
+        }
       }
       if (!decision.write) {
         const a = await ctx.dispatch("GET", path);
@@ -567,9 +599,29 @@ export const MCP_TOOLS: readonly ToolDef[] = [
         await record("refused");
         return { ok: false, error: check.sentence, detail: { reason: check.reason } };
       }
-      const a = await ctx.dispatch(method as "POST" | "PUT" | "PATCH" | "DELETE", path, body ?? {});
+      // The approval is the connector's record, never the route's input: it is taken out before the route sees the body.
+      const a = await ctx.dispatch(method as "POST" | "PUT" | "PATCH" | "DELETE", path, lead ? withoutApproval(body) : body ?? {});
       await record(a.status < 300 ? "done" : "refused");
       if (a.status >= 300) return refusal("The admin path refused", a);
+      if (lead && ctx.leadApproved) {
+        const approval = readLeadApproval(body);
+        if (approval.ok) {
+          // Keyed on the spent confirm token: one write, one key, so a retried record is a no-op. The write has
+          // happened; a record that fails is logged and never turns the answer into a refusal.
+          await ctx.leadApproved
+            .recorded({
+              kind: lead,
+              roleId: seatRoleId,
+              path,
+              method,
+              subject: leadApprovalSubject(lead, path, body, seatRoleId),
+              approvedBy: approval.approvedBy,
+              approvalNote: approval.approvalNote,
+              writeKey: echoHash({ token: String(args.confirmToken) }).slice(0, 24),
+            })
+            .catch((err) => console.error("[agent-mcp] the approval record failed (the write stands)", err));
+        }
+      }
       return { ok: true, result: { written: true, echo, answer: a.body } };
     },
   },

@@ -1,4 +1,6 @@
 import ArchetypeStep from "@/components/roleDraft/ArchetypeStep";
+import CircleName from "@/components/circles/CircleName";
+import { anchorCircleId } from "@shared/circlePicker";
 import SeasonGoals from "@/components/roleDraft/SeasonGoals";
 import { BTN_NOTICE, BTN_PRIMARY, BTN_SECONDARY, CARD, H1, H2, LINK, RING, TILE, WORLD } from "@/components/journey/look";
 import NotListedChip from "@/components/NotListedChip";
@@ -465,6 +467,7 @@ export default function Roles() {
   // Held invisible until /api/org answers, so the sentence never grows a
   // clause in front of the reader.
   const coordinator = coordinatingCircle(circles);
+  const anchorId = anchorCircleId(circles);
   const orgPending = roles === null && !failed;
   // A link to one role (?seat=) names that role in the page heading, not the whole page.
   const linkedName = linked ? ((roles ?? []) as Array<{ id: string; name: string }>).find((r) => r.id === linked)?.name ?? null : null;
@@ -598,7 +601,7 @@ export default function Roles() {
             {groups.map(({ title, subtitle, circleId, roles: groupRoles }) => (
               <div className="mb-14" key={title}>
                 <div className="mb-6">
-                  <h2 className={`${H2} mb-1`}>{title}</h2>
+                  <h2 className={`${H2} mb-1`}>{circleId ? <CircleName name={title} anchor={circleId === anchorId} /> : title}</h2>
                   {subtitle && (
                     <p className="text-muted-foreground text-sm">{subtitle}</p>
                   )}

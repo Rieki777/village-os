@@ -18,6 +18,7 @@
  * button that makes one once it is stopped. The contract and every word are
  * shared/sessionCalendar.ts.
  */
+import CircleName from "@/components/circles/CircleName";
 import { useEffect, useRef, useState } from "react";
 import {
   CALENDAR_COPY,
@@ -227,7 +228,7 @@ export default function FollowCalendar() {
                 <label key={c.id} className="flex min-h-11 items-center gap-3 text-foreground">
                   <input type="checkbox" className="size-5 accent-current" checked={all || picked.has(c.id)} disabled={all} onChange={() => toggle(c.id)} />
                   <span className="min-w-0">
-                    {c.name}
+                    <CircleName name={c.name} anchor={c.anchor} />
                     <span className="block text-sm text-muted-foreground">{c.rhythm ?? CALENDAR_COPY.noRhythm}</span>
                   </span>
                 </label>

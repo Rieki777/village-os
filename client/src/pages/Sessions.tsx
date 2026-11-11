@@ -49,6 +49,7 @@
  * own panel (SessionList), and the title box the room's own growing box, so a
  * long title is seen whole while it is typed.
  */
+import type { PickerCircle } from "@shared/circlePicker";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { useLocation } from "wouter";
 import {
@@ -85,10 +86,7 @@ import { useModules } from "@/modules/ModuleProvider";
 /** How often the list asks whether a room opened or closed, while the tab is visible. */
 const LIST_POLL_MS = 30_000;
 
-interface CircleOption {
-  id: string;
-  name: string;
-}
+type CircleOption = PickerCircle & { anchor?: boolean };
 
 /**
  * What `GET /api/sessions` answers (the Doors list in shared/sessions.ts).

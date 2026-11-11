@@ -1513,6 +1513,8 @@ const circlesRepo = dbCollection(getPool(), {
     { js: "status", db: "status" },
     { js: "order", db: "sort_order", kind: "int" },
     { js: "isExample", db: "is_example", kind: "bool" },
+    // 0372: the anchor mark. In the spec so replaceAll does not reset it.
+    { js: "isAnchor", db: "is_anchor", kind: "bool" },
     // 0083: how this circle decides. In the spec for the same reason
     // grownFromOrgRoleId is: replaceAll re-INSERTs exactly these columns, so
     // leaving them out would reset every circle's declared method on the next
@@ -6884,7 +6886,7 @@ async function startServer() {
     });
 
     registerAgentMapRoutes(app, { resolveAgent, capabilityCtx, getPool, confirmSecret: AUTH_TOKEN_SECRET });
-    registerAgentMcpRoutes(app, { resolveAgent, getPool, confirmSecret: AUTH_TOKEN_SECRET, villageName: () => mergedConfig().project.name, port: () => parseInt(String(process.env.PORT || 3000), 10), listDefault: () => boolVar("memberTasks.listDefault"), today: () => villageDayKey(new Date(), getSeasonConfig().timezone), clientIp, isAdmin });
+    registerAgentMcpRoutes(app, { resolveAgent, getPool, confirmSecret: AUTH_TOKEN_SECRET, villageName: () => mergedConfig().project.name, port: () => parseInt(String(process.env.PORT || 3000), 10), listDefault: () => boolVar("memberTasks.listDefault"), today: () => villageDayKey(new Date(), getSeasonConfig().timezone), clientIp, isAdmin, notifyAdmins, powerGroups: () => rolesRepo.all() });
     registerAgentProposalsRoutes(app, { authedUser, getPool, isAdmin, overLimit, members, liveHoldersOf }); // role journey L13: what the connector proposes waits for a person (server/routes/agentProposals.ts)
     registerAgentAccountRoutes(app, { authedUser, getPool, isAdmin });
     registerAgentOAuthRoutes(app, {
@@ -13347,6 +13349,8 @@ Send an empty drafts array when you are still listening. A role payload is {name
       // listed, so an omitted field is NULL rather than a default. `isExample`
       // and `grownFromOrgRoleId` matter beyond this insert, because a later
       // replaceAll would otherwise launder them away.
+      // 0372: an anchor mark a person approved here moves the mark; there is at most one.
+      if (payload.isAnchor === true) await circlesRepo.replaceAll((circlesRepo.all() as any[]).map((c) => ({ ...c, isAnchor: false })));
       await circlesRepo.insert({
         id,
         name: String(payload.name).trim().slice(0, 120),
@@ -13358,6 +13362,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
         icon: null,
         color: null,
         status: payload.status ?? "forming",
+        isAnchor: payload.isAnchor === true,
         isExample: false,
         order: circlesRepo.all().length + 1,
       } as any);

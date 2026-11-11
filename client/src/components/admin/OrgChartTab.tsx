@@ -8,9 +8,10 @@
  * defect, and the remedy the gate's own message names is to move a coherent
  * piece out, not to raise the number.
  *
- * NOTHING ABOUT THE COMPONENT CHANGED. The body is byte-identical to what it
- * was in Admin.tsx; only its imports are restated here. It referenced no other
- * top-level name in that file, which is what made it the safe one to take.
+ * It has since been nested (2026-11-11): the circles first, a circle's roles
+ * when it is opened, the whole role when that is opened, with the address bar
+ * carrying the level (`orgChartPath.ts`) and one floating save bar
+ * (`components/SaveBar.tsx`) for every circle and role changed on the way.
  *
  * STATIC IMPORT, DELIBERATELY (docs/ARCHITECTURE.md 3.19 rule 1). That rule
  * makes ROUTES lazy, and `Admin` already is: this code was only ever fetched
@@ -20,17 +21,37 @@
  * on the ~50 KB/s links this platform is built for is a cost paid for nothing.
  * The dist budget is measured on this tree rather than assumed.
  */
+import CirclePicker from "@/components/circles/CirclePicker";
 import { useCallback, useEffect, useState } from "react";
-import { Circle, Save } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { toast } from "sonner";
+import { Trans, useLingui } from "@lingui/react/macro";
+import { msg, plural } from "@lingui/core/macro";
+import type { MessageDescriptor } from "@lingui/core";
+import CircleName from "@/components/circles/CircleName";
+import SaveBar, { saveEach, type SaveResult } from "@/components/SaveBar";
+import { circleStanding, withAnchor, type CircleStanding } from "@shared/circlePicker";
+import { NO_CIRCLE, orgPathSearch, useOrgPath, type OrgPath } from "./orgChartPath";
 import { CIRCLE_STATUSES } from "@shared/draftKinds";
 import { CIRCLE_LAYERS, parentChoicesFor, type CircleLayer } from "@shared/circleView";
+
+/** A circle's standing in a word, on the circles level. Keyed by the union. */
+const STANDING_WORDS: Record<CircleStanding, MessageDescriptor> = {
+  operating: msg({ message: "Operating", context: "circle standing" }),
+  forming: msg({ message: "Forming", context: "circle standing" }),
+  hidden: msg({ message: "Dormant", context: "circle standing" }),
+};
 
 /**
  * What each governance layer means, in the words the editor offers (0286).
  * Keyed by the union, so a layer added in shared/circleView.ts cannot draw an
  * empty option here.
  */
+const STATUS_WORDS: Record<(typeof CIRCLE_STATUSES)[number], string> = {
+  active: "Operating",
+  forming: "Forming (listed below the operating circles)",
+  dormant: "Dormant (hidden from pickers)",
+};
 const LAYER_WORDS: Record<CircleLayer, string> = {
   link: "Link: the circle that links the others",
   lead: "Lead: holds the middle of what it sits inside",
@@ -55,6 +76,8 @@ import { RoleListingPanel } from "@/components/admin/RoleListingPanel";
 import { SeatSomebody } from "@/components/power/SeatSomebody";
 
 export function OrgChartTab({ password }: { password: string }) {
+  const { t, i18n } = useLingui();
+  const [path, go] = useOrgPath();
   const [org, setOrg] = useState<any>(null);
   const [members, setMembers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -83,8 +106,9 @@ export function OrgChartTab({ password }: { password: string }) {
     } catch { setJournal((p) => ({ ...p, [id]: [] })); }
   };
 
+  // Only the first read shows the loading line. A reload after a save keeps
+  // the page, and the save bar's answer, where they are.
   const load = useCallback(async () => {
-    setLoading(true);
     try {
       const [o, m, e, asks] = await Promise.all([
         fetch(`${API_BASE}/org`, { headers: authHeaders(password) }).then((r) => r.json()),
@@ -128,13 +152,6 @@ export function OrgChartTab({ password }: { password: string }) {
 
   const circles: any[] = org.circles ?? [];
   const roles: any[] = org.roles ?? [];
-  const byCircle = new Map<string, any[]>();
-  for (const r of roles) {
-    const k = r.circleId ?? "";
-    byCircle.set(k, [...(byCircle.get(k) ?? []), r]);
-  }
-  // The seats drawn as cards below. UndrawnSeatAsks catches every ask for any other seat.
-  const drawnSeatIds = new Set(circles.flatMap((c) => (byCircle.get(c.id) ?? []).map((r) => String(r.id))));
 
   const STATE_LABEL: Record<string, string> = {
     filled: "Filled", partial: "Partially filled", open: "Open role", forming: "Forming",
@@ -143,19 +160,150 @@ export function OrgChartTab({ password }: { password: string }) {
     expired: "Term ended, awaiting reassignment",
   };
 
-  return (
-    <div>
-      <div className="mb-6">
-        <h2 className="text-xl font-bold text-gray-900">Org Chart</h2>
-        <div className="mt-2"><NewRoleFromCardButton onMade={() => void load()} /></div>
-        <p className="text-sm text-gray-500 mt-1">
-          Circles, the roles inside them, and who holds each role. This is what
-          /roles, /circles and /team show, and edits are live immediately.
-          Whether a role reads as filled or open is worked out from its holders,
-          so it can never say filled with nobody in it.
-        </p>
-      </div>
+  /*
+   * NESTED, AND ONE SAVE FOR ALL OF IT (the lead, 2026-11-11).
+   *
+   * Level 1 lists the circles, level 2 is one circle and its roles, level 3 is
+   * one role with every editor it had before. Edits are kept here, above all
+   * three levels, so a change to one circle and two roles waits together and
+   * the floating bar saves all of it at once. Each item still goes through its
+   * own route, so each keeps its own gate, and an item the server turned down
+   * stays changed on screen with the reason beside it.
+   */
+  const known = new Set(circles.map((c) => String(c.id)));
+  const unplaced = roles.filter((r) => !r.circleId || !known.has(String(r.circleId)));
+  const anchored = withAnchor(circles);
+  const STANDING_RANK: Record<CircleStanding, number> = { operating: 0, forming: 1, hidden: 2 };
+  const ordered = anchored
+    .map((c, i) => ({ c, i }))
+    .sort((a, b) =>
+      (a.c.isExample ? 1 : 0) - (b.c.isExample ? 1 : 0) ||
+      STANDING_RANK[circleStanding(a.c.status)] - STANDING_RANK[circleStanding(b.c.status)] ||
+      (b.c.anchor ? 1 : 0) - (a.c.anchor ? 1 : 0) ||
+      a.i - b.i)
+    .map((x) => x.c);
+  const rolesIn = (id: string): any[] => (id === NO_CIRCLE ? unplaced : roles.filter((r) => String(r.circleId ?? "") === id));
 
+  const circleDirty = (c: any): boolean => {
+    const cd = circleDraft[c.id];
+    if (!cd) return false;
+    return ["name", "status", "layer", "parentCircleId"].some((k) => (cd[k] ?? "") !== (c[k] ?? "")) || !!cd.isAnchor !== !!c.isAnchor;
+  };
+  /*
+   * accountabilities is an ARRAY, so it is compared by value. A `d[k] !== r[k]`
+   * over an array is a reference comparison that is true the moment the draft
+   * object is cloned and false for two different lists that happen to be the
+   * same object, which is the wrong answer in both directions.
+   */
+  const roleDirty = (r: any): boolean => {
+    const d = draft[r.id];
+    if (!d) return false;
+    return ["name", "circleId", "aim", "domain", "seats", "whyItMatters"].some((k) => (d[k] ?? "") !== (r[k] ?? "")) ||
+      JSON.stringify(d.accountabilities ?? []) !== JSON.stringify(r.accountabilities ?? []);
+  };
+  const dirtyCircles = circles.filter(circleDirty);
+  const dirtyRoles = roles.filter(roleDirty);
+  const changeCount = dirtyCircles.length + dirtyRoles.length;
+
+  /** One write, answered: null when it landed, the server's reason when it did not. */
+  const send = async (path: string, body: any): Promise<string | null> => {
+    const res = await fetch(`${API_BASE}${path}`, {
+      method: "PUT",
+      headers: authHeaders(password, { "Content-Type": "application/json" }),
+      body: JSON.stringify(body),
+    });
+    if (res.ok) return null;
+    const d = await res.json().catch(() => ({}));
+    return refusal(d, t`That did not save.`);
+  };
+
+  const saveAll = async (): Promise<SaveResult> => {
+    const { result, failedKeys } = await saveEach([
+      ...dirtyCircles.map((c) => {
+        const cd = circleDraft[c.id];
+        const name = String(cd.name || c.name);
+        return {
+          key: `c:${c.id}`,
+          label: t({ message: `Circle ${name}`, context: "save bar, which item failed" }),
+          run: () => send(`/admin/circles/${c.id}`, { name: cd.name, status: cd.status, isAnchor: !!cd.isAnchor, layer: cd.layer || null, parentCircleId: cd.parentCircleId || null }),
+        };
+      }),
+      ...dirtyRoles.map((r) => {
+        const d = draft[r.id];
+        const name = String(d.name || r.name);
+        return {
+          key: `r:${r.id}`,
+          label: t({ message: `Role ${name}`, context: "save bar, which item failed" }),
+          run: () => send(`/admin/org/roles/${r.id}`, {
+            name: d.name, circleId: d.circleId, aim: d.aim, domain: d.domain, seats: d.seats,
+            accountabilities: d.accountabilities ?? [], whyItMatters: d.whyItMatters ?? "",
+          }),
+        };
+      }),
+    ]);
+    // What landed lets go of its draft; what was turned down keeps it.
+    setCircleDraft((p) => Object.fromEntries(Object.entries(p).filter(([id, v]) => v && failedKeys.has(`c:${id}`))));
+    setDraft((p) => Object.fromEntries(Object.entries(p).filter(([id, v]) => v && failedKeys.has(`r:${id}`))));
+    await load();
+    return result;
+  };
+  const discardAll = () => { setCircleDraft({}); setDraft({}); };
+
+  /** A link to a level. A real address, so it can be opened in a new tab or copied. */
+  const LevelLink = ({ to, className, children, label }: { to: OrgPath; className?: string; children: React.ReactNode; label?: string }) => (
+    <a
+      href={`${window.location.pathname}${orgPathSearch(window.location.search, to)}`}
+      data-keeps-draft=""
+      aria-label={label}
+      className={className}
+      onClick={(e) => {
+        if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+        e.preventDefault();
+        go(to);
+      }}
+    >{children}</a>
+  );
+
+  const crumbs = (items: { label: React.ReactNode; to?: OrgPath }[]) => (
+    <nav aria-label={t({ message: "Breadcrumb", context: "navigation landmark" })} className="mb-4">
+      <ol className="flex flex-wrap items-center gap-1 text-sm">
+        {items.map((it, i) => (
+          <li key={i} className="inline-flex items-center gap-1">
+            {i > 0 && <ChevronRight aria-hidden="true" className="h-4 w-4 text-muted-foreground" />}
+            {it.to ? (
+              <LevelLink to={it.to} className="inline-flex min-h-[44px] items-center rounded-lg px-2 font-medium text-notice underline-offset-4 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                {it.label}
+              </LevelLink>
+            ) : (
+              <span aria-current="page" className="inline-flex min-h-[44px] items-center px-2 font-semibold text-foreground">{it.label}</span>
+            )}
+          </li>
+        ))}
+      </ol>
+    </nav>
+  );
+
+  const asksFor = (rs: any[]) => {
+    const ids = new Set(rs.map((r) => String(r.id)));
+    return seatAsks.filter((a) => ids.has(String(a.roleId))).length;
+  };
+  const ROW = "flex min-h-[44px] flex-col gap-1 rounded-xl border border-border bg-card p-4 shadow-sm hover:border-notice focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+  const META = "flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground";
+  const UNSAVED = <span className="font-medium text-notice"><Trans context="org chart, item has unsaved edits">Unsaved changes</Trans></span>;
+
+  const top: OrgPath = { circle: null, role: null };
+  const openCircle = path.circle ? (path.circle === NO_CIRCLE ? null : anchored.find((c) => String(c.id) === path.circle) ?? null) : null;
+  const openRole = path.role ? roles.find((r) => String(r.id) === path.role) ?? null : null;
+  const level = openRole ? 3 : path.circle ? 2 : 1;
+  const circleCrumbLabel = (id: string | null) => {
+    if (!id || id === NO_CIRCLE) return t({ message: "In no circle", context: "org chart breadcrumb" });
+    const c = anchored.find((x) => String(x.id) === id);
+    return c ? <CircleName name={c.name} anchor={c.anchor} /> : t({ message: "Circle", context: "org chart breadcrumb" });
+  };
+
+  // ── Level 1: the circles ────────────────────────────────────────────────
+  const circlesLevel = (
+    <>
       {/*
         The mandates that have run out, at the top where they get seen.
 
@@ -193,368 +341,86 @@ export function OrgChartTab({ password }: { password: string }) {
         </div>
       )}
 
-      <RoleListingPanel roles={roles} circles={circles} call={call} onDone={() => void load()} />
+      <section aria-labelledby="org-circles-h" className="mb-8">
+        <h3 id="org-circles-h" className="text-lg font-semibold text-foreground"><Trans context="org chart heading">Circles</Trans></h3>
+        <p className="mt-1 text-sm text-muted-foreground">
+          <Trans>Open a circle to see its roles. Open a role to edit all of it.</Trans>
+        </p>
+        {ordered.length === 0 && (
+          <p className="mt-3 text-sm text-muted-foreground"><Trans>No circles yet. Add a role from a card above and it can start one.</Trans></p>
+        )}
+        <ul className="mt-3 grid gap-3 sm:grid-cols-2">
+          {ordered.map((c) => {
+            const inside = rolesIn(String(c.id));
+            const openSeats = inside.filter((r) => r.state === "open" || r.state === "partial").length;
+            const asks = asksFor(inside);
+            const unsaved = circleDirty(c) || inside.some(roleDirty);
+            const standing = circleStanding(c.status);
+            return (
+              <li key={c.id}>
+                <LevelLink to={{ circle: String(c.id), role: null }} className={ROW}>
+                  <span className="flex items-center justify-between gap-2">
+                    <CircleName name={c.name} anchor={c.anchor} className="font-semibold text-foreground" />
+                    <ChevronRight aria-hidden="true" className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  </span>
+                  <span className={META}>
+                    <span className="rounded-full border border-border px-2 py-0.5">{i18n._(STANDING_WORDS[standing])}</span>
+                    <span>{plural(inside.length, { one: "# role", other: "# roles" })}</span>
+                    {openSeats > 0 && <span>{plural(openSeats, { one: "# open", other: "# open" })}</span>}
+                    {asks > 0 && <span className="text-notice">{plural(asks, { one: "# ask waiting", other: "# asks waiting" })}</span>}
+                    {c.isExample && <span><Trans context="org chart, a sample circle or role">Standing example</Trans></span>}
+                    {unsaved && UNSAVED}
+                  </span>
+                </LevelLink>
+              </li>
+            );
+          })}
+          {unplaced.length > 0 && (
+            <li>
+              <LevelLink to={{ circle: NO_CIRCLE, role: null }} className={ROW}>
+                <span className="flex items-center justify-between gap-2">
+                  <span className="font-semibold text-foreground"><Trans>Roles in no circle</Trans></span>
+                  <ChevronRight aria-hidden="true" className="h-4 w-4 shrink-0 text-muted-foreground" />
+                </span>
+                <span className={META}>
+                  <span>{plural(unplaced.length, { one: "# role", other: "# roles" })}</span>
+                  {asksFor(unplaced) > 0 && <span className="text-notice">{plural(asksFor(unplaced), { one: "# ask waiting", other: "# asks waiting" })}</span>}
+                  {unplaced.some(roleDirty) && UNSAVED}
+                </span>
+              </LevelLink>
+            </li>
+          )}
+        </ul>
+      </section>
 
+      {/*
+        EVERY OPEN ASK, ONCE, ON THE FIRST LEVEL. The nested chart draws a
+        seat's own asks only when that role is open, so the circles level is
+        where all of them wait; a steward never has to open roles one by one
+        to find out somebody is asking.
+      */}
       <UndrawnSeatAsks
         asks={seatAsks}
-        drawnSeatIds={drawnSeatIds}
+        drawnSeatIds={new Set<string>()}
         roles={roles}
         circles={circles}
         call={call}
+        heading={t`Asks waiting for an answer`}
+        intro={t`Members asking to be confirmed in a role the village recorded under their name. Answer here, or open the role.`}
         onDone={(said) => { toast.success(said); void load(); }}
       />
 
+      <RoleListingPanel roles={roles} circles={circles} call={call} onDone={() => void load()} />
+
       <div className="space-y-6">
-        {circles.map((c) => {
-          const seats = byCircle.get(c.id) ?? [];
-          return (
-            <div key={c.id} className="bg-white border border-gray-100 rounded-xl p-5">
-              {/*
-                A CIRCLE'S NAME, PURPOSE AND STATUS ARE EDITABLE HERE.
-
-                All three are printed by /circles, /roles and /team, all three
-                of which are always-on core pages. The only editor used to be
-                the Circles and Map tab, which disappears with the map module,
-                so turning the map off took away the ability to rename a circle
-                while the public pages kept printing the old name. This tab has
-                no module gate, and `/api/admin/circles` no longer has one
-                either.
-              */}
-              {(() => {
-                const cd = circleDraft[c.id] ?? c;
-                // The purpose is not edited here: it changes by consent, on the circle's card.
-                const cDirty = ["name", "status", "layer", "parentCircleId"].some((k) => (cd[k] ?? "") !== (c[k] ?? ""));
-                const setCircle = (patch: any) => setCircleDraft({ ...circleDraft, [c.id]: { ...cd, ...patch } });
-                return (
-                  <div className="mb-4">
-                    <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2 items-end">
-                      <label className="text-xs text-gray-500">Circle name
-                        <input value={cd.name ?? ""} className={`${inputCls} w-full mt-1 min-h-[44px]`} disabled={!!c.isExample}
-                          onChange={(e) => setCircle({ name: e.target.value })} />
-                      </label>
-                      <label className="text-xs text-gray-500">Status
-                        <select value={cd.status ?? "active"} className={`${inputCls} w-full mt-1 min-h-[44px]`} disabled={!!c.isExample}
-                          onChange={(e) => setCircle({ status: e.target.value })}>
-                          {CIRCLE_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-                        </select>
-                      </label>
-                      {/* THE GOVERNANCE LAYER (0286). The circles map puts a link or
-                          lead circle in the middle of the circle it sits inside, and
-                          rings the rest by layer, then by the village's own order. */}
-                      <label className="text-xs text-gray-500">Governance layer
-                        <select value={cd.layer ?? ""} className={`${inputCls} w-full mt-1 min-h-[44px]`} disabled={!!c.isExample}
-                          onChange={(e) => setCircle({ layer: e.target.value || null })}>
-                          <option value="">None set, drawn as operating</option>
-                          {CIRCLE_LAYERS.map((l) => <option key={l} value={l}>{LAYER_WORDS[l]}</option>)}
-                        </select>
-                      </label>
-                      {/* WHERE THIS CIRCLE SITS. Offered from `parentChoicesFor`,
-                          the rules the server refuses with, so nothing on this
-                          list is a choice the save turns down: not the circle
-                          itself, nothing already inside it, and no standing
-                          example. Empty is the top of the village. */}
-                      <label className="text-xs text-gray-500">Sits inside
-                        <select value={cd.parentCircleId ?? ""} className={`${inputCls} w-full mt-1 min-h-[44px]`} disabled={!!c.isExample}
-                          onChange={(e) => setCircle({ parentCircleId: e.target.value || null })}>
-                          <option value="">The village, at the top</option>
-                          {parentChoicesFor(circles, c.id).map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                        </select>
-                      </label>
-                    </div>
-                    <div className="text-xs text-gray-400 pt-1">
-                      {c.grownFromOrgRoleId && <span>Grew from a role. </span>}
-                      {c.isExample && <span className="text-amber-700">Standing example, publish your own to replace it.</span>}
-                    </div>
-                    {/* A CIRCLE'S PURPOSE CHANGES BY CONSENT (Rye, 2026-10-22): shown here, and
-                        proposed on the circle's card, where it goes to the village as an org draft. */}
-                    <div className="text-xs text-gray-500 mt-2">
-                      <p>Purpose</p>
-                      <p className="text-sm text-gray-700 mt-1">{c.purpose || "No purpose written yet"}</p>
-                      <p className="text-[11px] text-gray-500 mt-0.5">
-                        Changes by consent.{" "}
-                        <a href={`/circles/${encodeURIComponent(String(c.id))}`} className="inline-flex min-h-[44px] items-center underline">
-                          Propose new words on the circle's card
-                        </a>
-                      </p>
-                    </div>
-                    <button
-                      disabled={!cDirty || !!c.isExample}
-                      className="mt-2 text-sm border border-gray-200 rounded-lg px-3 py-2 min-h-[44px] disabled:opacity-40 focus:outline-none focus:ring-2 focus:ring-teal-deep"
-                      onClick={async () => {
-                        const ok = await call(`/admin/circles/${c.id}`, { name: cd.name, status: cd.status, layer: cd.layer || null, parentCircleId: cd.parentCircleId || null }, "PUT");
-                        if (ok) { toast.success("Circle saved"); setCircleDraft({ ...circleDraft, [c.id]: undefined }); void load(); }
-                      }}
-                    >Save circle</button>
-                  </div>
-                );
-              })()}
-
-              <div className="space-y-3">
-                {seats.map((r) => {
-                  const d = draft[r.id] ?? r;
-                  /*
-                   * accountabilities is an ARRAY, so it is compared by value.
-                   * A `d[k] !== r[k]` over an array is a reference comparison
-                   * that is true the moment the draft object is cloned and
-                   * false for two different lists that happen to be the same
-                   * object, which is the wrong answer in both directions.
-                   */
-                  const dirty =
-                    ["name", "circleId", "aim", "domain", "seats", "whyItMatters"].some((k) => (d[k] ?? "") !== (r[k] ?? "")) ||
-                    JSON.stringify(d.accountabilities ?? []) !== JSON.stringify(r.accountabilities ?? []);
-                  return (
-                    <div key={r.id} className="border border-gray-100 rounded-lg p-3">
-                      <div className="grid sm:grid-cols-4 gap-2 items-end">
-                        <label className="text-xs text-gray-500">Role
-                          <input value={d.name ?? ""} className={`${inputCls} w-full mt-1`}
-                            onChange={(e) => setDraft({ ...draft, [r.id]: { ...d, name: e.target.value } })} />
-                        </label>
-                        <label className="text-xs text-gray-500">Circle
-                          <select value={d.circleId ?? ""} className={`${inputCls} w-full mt-1`}
-                            onChange={(e) => setDraft({ ...draft, [r.id]: { ...d, circleId: e.target.value } })}>
-                            <option value="">Unplaced</option>
-                            {circles.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
-                          </select>
-                        </label>
-                        <label className="text-xs text-gray-500">Holds up to
-                          <input type="number" min={1} value={d.seats ?? 1} className={`${inputCls} w-full mt-1`}
-                            onChange={(e) => setDraft({ ...draft, [r.id]: { ...d, seats: Number(e.target.value) } })} />
-                        </label>
-                        <p className="text-xs text-gray-500">
-                          State<br />
-                          <span className="font-medium text-gray-800">{STATE_LABEL[r.state] ?? r.state}</span>
-                          <span className="text-gray-400"> · {r.holderCount} of {r.seats}</span>
-                        </p>
-                      </div>
-                      <div className="grid sm:grid-cols-2 gap-2 mt-2">
-                        <label className="text-xs text-gray-500">Aim
-                          <textarea rows={2} value={d.aim ?? ""} className={`${inputCls} w-full mt-1`}
-                            onChange={(e) => setDraft({ ...draft, [r.id]: { ...d, aim: e.target.value } })} />
-                        </label>
-                        <label className="text-xs text-gray-500">Domain (what it looks after)
-                          <textarea rows={2} value={d.domain ?? ""} className={`${inputCls} w-full mt-1`}
-                            onChange={(e) => setDraft({ ...draft, [r.id]: { ...d, domain: e.target.value } })} />
-                        </label>
-                      </div>
-                      {/*
-                        Both of these are rendered on /roles inside the seat's
-                        expanded panel, and `updateOrgRole` has accepted both
-                        since the org chart shipped. The form never sent them,
-                        so every village's accountabilities and reason-this-
-                        matters were frozen at whatever the backfill wrote,
-                        while the banner on the old cards editor sent founders
-                        here promising the site updates immediately.
-                      */}
-                      <div className="grid sm:grid-cols-2 gap-2 mt-2">
-                        {/* Both fields carry an explicit aria-label: a wrapping
-                            <label> would otherwise name each control with its
-                            field name AND the hint under it, run together. */}
-                        <label className="text-xs text-gray-500">Key accountabilities, one per line
-                          <textarea rows={4} value={(d.accountabilities ?? []).join("\n")} className={`${inputCls} w-full mt-1`}
-                            aria-label="Key accountabilities, one per line"
-                            aria-describedby={`${r.id}-accountabilities-hint`}
-                            onChange={(e) => setDraft({
-                              ...draft,
-                              [r.id]: { ...d, accountabilities: e.target.value.split("\n").map((s) => s.trim()).filter(Boolean) },
-                            })} />
-                          <span id={`${r.id}-accountabilities-hint`} className="block text-[11px] text-gray-400 mt-0.5">
-                            The ongoing work the circle counts on this role to keep doing. Listed on /roles.
-                          </span>
-                        </label>
-                        <label className="text-xs text-gray-500">Why this role matters
-                          <textarea rows={4} value={d.whyItMatters ?? ""} className={`${inputCls} w-full mt-1`}
-                            aria-label="Why this role matters"
-                            aria-describedby={`${r.id}-why-hint`}
-                            onChange={(e) => setDraft({ ...draft, [r.id]: { ...d, whyItMatters: e.target.value } })} />
-                          <span id={`${r.id}-why-hint`} className="block text-[11px] text-gray-400 mt-0.5">
-                            Shown on /roles under Why This Role Matters.
-                          </span>
-                        </label>
-                      </div>
-
-                      {/*
-                        SEATING SOMEBODY WAS A ONE-WAY DOOR.
-
-                        `DELETE /api/admin/org/seatings/:id` and its `/forget`
-                        sibling shipped with their own test suite and no caller
-                        anywhere in the client, so a village could seat a person
-                        and never unseat them, and the right-to-be-forgotten
-                        path was reachable only by curl. `/api/org` now carries
-                        the seating id for admins, which is what these two need.
-
-                        Two doors on purpose. Ending a holding is ordinary and
-                        reversible: the person stays in the record and can be
-                        seated again. Forgetting is destructive and only exists
-                        for a documented holder, a real person with no account
-                        who asked to be erased: it scrubs their name and note
-                        from every row, live and historical, and nothing brings
-                        it back. It is labelled as such and it types their name.
-                      */}
-                      <div className="mt-2 flex flex-wrap items-center gap-2">
-                        {(r.holders ?? []).map((h: any) => (
-                          <span key={h.assignmentId ?? h.userId ?? h.name} className={`text-xs rounded-full pl-3 pr-1 py-1 inline-flex items-center gap-1 ${h.lapsed ? "bg-amber-50 border border-amber-200" : "bg-gray-100"}`}>
-                            {h.name}
-                            {h.focus && <span className="text-gray-500"> · {h.focus}</span>}
-                            {h.kind === "documented" && <span className="text-amber-700"> · no account yet</span>}
-                            {h.lapsed && (
-                              <span className="text-amber-700">
-                                {" "}· {h.lapsedReason === "term" ? "term ended" : "seated last season"}
-                              </span>
-                            )}
-                            {h.assignmentId && (
-                              <button
-                                type="button"
-                                aria-label={`End ${h.name}'s holding of ${r.name}`}
-                                className="ml-1 min-h-[44px] min-w-[44px] px-2 rounded-full text-gray-600 hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-teal-deep"
-                                onClick={async () => {
-                                  const reason = window.prompt(`End ${h.name}'s holding of "${r.name}"? They stay in the record and can be seated again. Reason for the journal (optional):`);
-                                  if (reason === null) return;
-                                  const ok = await call(`/admin/org/seatings/${h.assignmentId}`, { reason }, "DELETE");
-                                  if (ok) { toast.success("Holding ended"); void load(); }
-                                }}
-                              >Unseat</button>
-                            )}
-                            {h.assignmentId && h.kind === "documented" && (
-                              <button
-                                type="button"
-                                aria-label={`Forget ${h.name} permanently`}
-                                className="min-h-[44px] min-w-[44px] px-2 rounded-full text-red-700 hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-600"
-                                onClick={async () => {
-                                  const typed = window.prompt(
-                                    `FORGET ${h.name}. This ends every holding in their name and erases their name and notes from this role's history, past entries included. It cannot be undone.\n\nType their name exactly to confirm:`,
-                                  );
-                                  if (typed === null) return;
-                                  if (typed.trim() !== String(h.name).trim()) { toast.error("That name did not match. Nothing was changed."); return; }
-                                  const ok = await call(`/admin/org/seatings/${h.assignmentId}/forget`, { reason: "forgotten at their request" });
-                                  if (ok) { toast.success(`Forgotten. ${ok.seatings} holding(s) ended.`); void load(); }
-                                }}
-                              >Forget</button>
-                            )}
-                          </span>
-                        ))}
-                        {(r.holders ?? []).length === 0 && <span className="text-xs text-gray-400">Nobody holds this yet.</span>}
-                      </div>
-
-                      {/*
-                        The asks waiting on this seat, on the seat itself. A
-                        claim files a row and never moves a seating, because a
-                        name on an account is typed by whoever holds it; this
-                        is where a person decides. Nothing draws when the seat
-                        has no ask, which is every seat most days.
-                      */}
-                      <SeatClaimAsks
-                        asks={seatAsks.filter((a) => a.roleId === r.id)}
-                        call={call}
-                        onDone={(said) => { toast.success(said); void load(); }}
-                      />
-
-                      <div className="mt-2 flex flex-wrap gap-2 items-end">
-                        <SeatSomebody
-                          roleId={r.id}
-                          members={members}
-                          call={call}
-                          onSeated={(what) => { toast.success(what); void load(); }}
-                          onFailed={(why) => toast.error(why)}
-                        />
-                        <button
-                          onClick={() => void openJournal(r.id)}
-                          className="text-sm text-gray-500 hover:text-gray-800 px-2 py-2"
-                        >{journal[r.id] ? "Hide history" : "History"}</button>
-                        <button
-                          disabled={!dirty}
-                          className="text-sm border border-gray-200 rounded-lg px-3 py-2 disabled:opacity-40"
-                          onClick={async () => {
-                            const ok = await call(`/admin/org/roles/${r.id}`, {
-                              name: d.name, circleId: d.circleId, aim: d.aim, domain: d.domain, seats: d.seats,
-                              accountabilities: d.accountabilities ?? [], whyItMatters: d.whyItMatters ?? "",
-                            }, "PUT");
-                            if (ok) { toast.success("Saved"); setDraft({ ...draft, [r.id]: undefined }); void load(); }
-                          }}
-                        >Save role</button>
-                      </div>
-
-                      {/* What the seat offers whoever holds it, through a draft (PR3). */}
-                      {!r.isExample && <SeatTermsOfferEditor seat={r} call={call} onSaved={() => void load()} />}
-                      {/* What the role is worth and pays each seat every cycle (0265). */}
-                      {!r.isExample && <RoleValueEditor role={r} call={call} onSaved={() => void load()} />}
-                      {/* The Power groups whoever holds this role holds (0322). */}
-                      {!r.isExample && <RolePowerGroupsEditor role={r} call={call} />}
-                      {/* Bring me, not mine to hold and the runbook, through a draft (0268). */}
-                      {!r.isExample && <RoleHandoverEditor role={r} call={call} onSaved={() => void load()} />}
-                      {/* When it exists, what it decides alone, its regular work, holding it well and its time, through a draft (0274). */}
-                      {!r.isExample && <RoleCcosEditor role={r} call={call} onSaved={() => void load()} />}
-                      {/* Which characters the role suits, the village's word over the boot-time guess (role draft board, 9 Nov). */}
-                      {!r.isExample && <RoleCharacterTags role={r} call={call} onSaved={() => void load()} />}
-                      {/* The one editor for the whole card, for a holder of the power to decide the structure or an admin (role journey, PR-B). */}
-                      {!r.isExample && <EditRoleButton roleId={r.id} className="mt-2" onSaved={() => void load()} />}
-
-                      {journal[r.id] === "loading" && (
-                        <p className="text-xs text-gray-400 mt-2">Reading the history…</p>
-                      )}
-                      {Array.isArray(journal[r.id]) && (
-                        <div className="mt-2 border-t border-gray-100 pt-2 space-y-1">
-                          {(journal[r.id] as any[]).length === 0 && (
-                            <p className="text-xs text-gray-400">
-                              Nothing recorded against this role yet. Changes from here on will show up.
-                            </p>
-                          )}
-                          {(journal[r.id] as any[]).map((e) => (
-                            <p key={e.id} className="text-xs text-gray-600">
-                              <span className="text-gray-400">{new Date(e.at).toLocaleDateString()}</span>{" "}
-                              {e.text}
-                              {e.by && <span className="text-gray-400"> · {e.by}</span>}
-                            </p>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-                {seats.length === 0 && <p className="text-xs text-gray-400">No roles in this circle yet.</p>}
-                {/*
-                  Creating a seat. `POST /api/admin/org/roles` has existed since
-                  the org chart shipped and nothing in the browser called it, so
-                  a village could rename and re-seat the seats it was given and
-                  never add one of its own.
-                */}
-                <div className="flex flex-wrap gap-2 items-end pt-2 border-t border-gray-50">
-                  <label className="text-xs text-gray-500">Add a role to this circle
-                    <input value={newSeat[c.id] ?? ""} placeholder="Welcome Host"
-                      className={`${inputCls} mt-1 min-h-[44px]`}
-                      onChange={(e) => setNewSeat({ ...newSeat, [c.id]: e.target.value })} />
-                  </label>
-                  <button
-                    className="text-sm border border-gray-200 rounded-lg px-3 py-2 min-h-[44px] disabled:opacity-40 focus:outline-none focus:ring-2 focus:ring-teal-deep"
-                    disabled={!String(newSeat[c.id] ?? "").trim()}
-                    onClick={async () => {
-                      const ok = await call("/admin/org/roles", { name: String(newSeat[c.id]).trim(), circleId: c.id, seats: 1 });
-                      if (ok) { toast.success("Role added"); setNewSeat({ ...newSeat, [c.id]: "" }); void load(); }
-                    }}
-                  >Add role</button>
-                </div>
-              </div>
-            </div>
-          );
-        })}
-
-        {(byCircle.get("") ?? []).length > 0 && (
-          <div className="bg-amber-50 border border-amber-200 rounded-xl p-5">
-            <h3 className="font-semibold text-amber-900 mb-2">Roles with no circle</h3>
-            <p className="text-xs text-amber-800">
-              {(byCircle.get("") ?? []).map((r) => r.name).join(", ")}
-            </p>
-          </div>
-        )}
-
         {/*
-          THE LINKS BETWEEN THE NODES ABOVE, and the second door this lane owed.
+          THE LINKS BETWEEN THE NODES, and the second door this lane owed.
 
           `POST /api/admin/org/relations` and its DELETE sibling had no caller
           anywhere in the browser while `RelationLines.tsx` drew the rows on
           the Power Map, so a live renderer could only ever draw nothing. It
-          sits here because the circles and seats it joins are the ones a
-          person has just been editing, and it reads them from the same `/api/org`
-          payload this tab already holds instead of fetching them twice.
+          reads the circles and seats from the same `/api/org` payload this
+          tab already holds instead of fetching them twice.
         */}
         <RelationsEditor password={password} circles={circles} roles={roles} />
 
@@ -564,6 +430,377 @@ export function OrgChartTab({ password }: { password: string }) {
         {/* The village's own steps for "Your first moons in <role>". */}
         <OnboardingPathEditor password={password} />
       </div>
+    </>
+  );
+
+  // ── Level 2: one circle and its roles ───────────────────────────────────
+  const circleLevel = (() => {
+    const id = path.circle ?? "";
+    const c = openCircle;
+    if (id !== NO_CIRCLE && !c) {
+      return (
+        <>
+          {crumbs([{ label: t({ message: "Org chart", context: "admin section name" }), to: top }, { label: t({ message: "Circle", context: "org chart breadcrumb" }) }])}
+          <p className="text-sm text-muted-foreground"><Trans>That circle is not on the chart any more.</Trans></p>
+        </>
+      );
+    }
+    const seats = rolesIn(id);
+    return (
+      <>
+        {crumbs([{ label: t({ message: "Org chart", context: "admin section name" }), to: top }, { label: circleCrumbLabel(id) }])}
+        {c && (() => {
+          /*
+            A CIRCLE'S NAME, STATUS, ANCHOR, LAYER AND PLACE ARE EDITABLE HERE.
+
+            All of them are printed by /circles, /roles and /team, all three
+            of which are always-on core pages. The only editor used to be the
+            Circles and Map tab, which disappears with the map module, so
+            turning the map off took away the ability to rename a circle while
+            the public pages kept printing the old name. This tab has no module
+            gate, and `/api/admin/circles` no longer has one either.
+          */
+          const cd = circleDraft[c.id] ?? c;
+          const setCircle = (patch: any) => setCircleDraft({ ...circleDraft, [c.id]: { ...cd, ...patch } });
+          return (
+            <section aria-label={t({ message: "This circle", context: "org chart section label" })} className="mb-6 rounded-xl border border-border bg-card p-5 shadow-sm">
+              <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2 items-end">
+                <label className="text-xs text-gray-500">Circle name
+                  <input value={cd.name ?? ""} className={`${inputCls} w-full mt-1 min-h-[44px]`} disabled={!!c.isExample}
+                    onChange={(e) => setCircle({ name: e.target.value })} />
+                </label>
+                <label className="text-xs text-gray-500">Status
+                  <select value={cd.status ?? "active"} className={`${inputCls} w-full mt-1 min-h-[44px]`} disabled={!!c.isExample}
+                    onChange={(e) => setCircle({ status: e.target.value })}>
+                    {CIRCLE_STATUSES.map((s) => <option key={s} value={s}>{STATUS_WORDS[s]}</option>)}
+                  </select>
+                </label>
+                <label className="text-xs text-gray-500 flex items-center gap-2 min-h-[44px] sm:self-end">
+                  <input type="checkbox" checked={!!cd.isAnchor} disabled={!!c.isExample} onChange={(e) => setCircle({ isAnchor: e.target.checked })} />
+                  <span>Anchor circle (shown with an anchor before its name)</span>
+                </label>
+                {/* THE GOVERNANCE LAYER (0286). The circles map puts a link or
+                    lead circle in the middle of the circle it sits inside, and
+                    rings the rest by layer, then by the village's own order. */}
+                <label className="text-xs text-gray-500">Governance layer
+                  <select value={cd.layer ?? ""} className={`${inputCls} w-full mt-1 min-h-[44px]`} disabled={!!c.isExample}
+                    onChange={(e) => setCircle({ layer: e.target.value || null })}>
+                    <option value="">None set, drawn as operating</option>
+                    {CIRCLE_LAYERS.map((l) => <option key={l} value={l}>{LAYER_WORDS[l]}</option>)}
+                  </select>
+                </label>
+                {/* WHERE THIS CIRCLE SITS. Offered from `parentChoicesFor`,
+                    the rules the server refuses with, so nothing on this
+                    list is a choice the save turns down: not the circle
+                    itself, nothing already inside it, and no standing
+                    example. Empty is the top of the village. */}
+                <label className="text-xs text-gray-500">Sits inside
+                  <select value={cd.parentCircleId ?? ""} className={`${inputCls} w-full mt-1 min-h-[44px]`} disabled={!!c.isExample}
+                    onChange={(e) => setCircle({ parentCircleId: e.target.value || null })}>
+                    <option value="">The village, at the top</option>
+                    {parentChoicesFor(circles, c.id).map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select>
+                </label>
+              </div>
+              <div className="text-xs text-gray-400 pt-1">
+                {c.grownFromOrgRoleId && <span>Grew from a role. </span>}
+                {c.isExample && <span className="text-amber-700">Standing example, publish your own to replace it.</span>}
+              </div>
+              {/* A CIRCLE'S PURPOSE CHANGES BY CONSENT (Rye, 2026-10-22): shown here, and
+                  proposed on the circle's card, where it goes to the village as an org draft. */}
+              <div className="text-xs text-gray-500 mt-2">
+                <p>Purpose</p>
+                <p className="text-sm text-gray-700 mt-1">{c.purpose || "No purpose written yet"}</p>
+                <p className="text-[11px] text-gray-500 mt-0.5">
+                  Changes by consent.{" "}
+                  <a href={`/circles/${encodeURIComponent(String(c.id))}`} className="inline-flex min-h-[44px] items-center underline">
+                    Propose new words on the circle's card
+                  </a>
+                </p>
+              </div>
+            </section>
+          );
+        })()}
+
+        <section aria-labelledby="org-roles-h">
+          <h3 id="org-roles-h" className="text-lg font-semibold text-foreground"><Trans context="org chart heading">Roles</Trans></h3>
+          {seats.length === 0 && <p className="mt-2 text-sm text-muted-foreground"><Trans>No roles in this circle yet.</Trans></p>}
+          <ul className="mt-3 space-y-2">
+            {seats.map((r) => {
+              const asks = asksFor([r]);
+              return (
+                <li key={r.id}>
+                  <LevelLink to={{ circle: id, role: String(r.id) }} className={ROW}>
+                    <span className="flex items-center justify-between gap-2">
+                      <span className="font-semibold text-foreground">{draft[r.id]?.name || r.name}</span>
+                      <ChevronRight aria-hidden="true" className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    </span>
+                    <span className={META}>
+                      <span>{STATE_LABEL[r.state] ?? r.state}</span>
+                      <span>{t({ message: `${r.holderCount ?? 0} of ${r.seats ?? 1} held`, context: "org chart, how many hold the role" })}</span>
+                      {asks > 0 && <span className="text-notice">{plural(asks, { one: "# ask waiting", other: "# asks waiting" })}</span>}
+                      {r.isExample && <span><Trans context="org chart, a sample circle or role">Standing example</Trans></span>}
+                      {roleDirty(r) && UNSAVED}
+                    </span>
+                  </LevelLink>
+                </li>
+              );
+            })}
+          </ul>
+          {c && (
+            <>
+              {/*
+                Creating a seat. `POST /api/admin/org/roles` has existed since
+                the org chart shipped and nothing in the browser called it, so
+                a village could rename and re-seat the seats it was given and
+                never add one of its own.
+              */}
+              <div className="flex flex-wrap gap-2 items-end pt-2 border-t border-gray-50">
+                <label className="text-xs text-gray-500">Add a role to this circle
+                  <input value={newSeat[c.id] ?? ""} placeholder="Welcome Host"
+                    className={`${inputCls} mt-1 min-h-[44px]`}
+                    onChange={(e) => setNewSeat({ ...newSeat, [c.id]: e.target.value })} />
+                </label>
+                <button
+                  className="text-sm border border-gray-200 rounded-lg px-3 py-2 min-h-[44px] disabled:opacity-40 focus:outline-none focus:ring-2 focus:ring-teal-deep"
+                  disabled={!String(newSeat[c.id] ?? "").trim()}
+                  onClick={async () => {
+                    const ok = await call("/admin/org/roles", { name: String(newSeat[c.id]).trim(), circleId: c.id, seats: 1 });
+                    if (ok) { toast.success("Role added"); setNewSeat({ ...newSeat, [c.id]: "" }); void load(); }
+                  }}
+                >Add role</button>
+              </div>
+            </>
+          )}
+        </section>
+      </>
+    );
+  })();
+
+  // ── Level 3: one role, every editor it had ──────────────────────────────
+  const roleLevel = (() => {
+    const r = openRole;
+    if (!r) return null;
+    const circleId = path.circle ?? (r.circleId && known.has(String(r.circleId)) ? String(r.circleId) : NO_CIRCLE);
+    const d = draft[r.id] ?? r;
+    return (
+      <>
+        {crumbs([
+          { label: t({ message: "Org chart", context: "admin section name" }), to: top },
+          { label: circleCrumbLabel(circleId), to: { circle: circleId, role: null } },
+          { label: d.name || r.name },
+        ])}
+        <section aria-label={t({ message: "This role", context: "org chart section label" })} className="rounded-xl border border-border bg-card p-5 shadow-sm">
+          <div className="grid sm:grid-cols-4 gap-2 items-end">
+            <label className="text-xs text-gray-500">Role
+              <input value={d.name ?? ""} className={`${inputCls} w-full mt-1`}
+                onChange={(e) => setDraft({ ...draft, [r.id]: { ...d, name: e.target.value } })} />
+            </label>
+            <label className="text-xs text-gray-500">Circle
+              <CirclePicker value={d.circleId ?? ""} className={`${inputCls} w-full mt-1`} circles={circles} onChange={(id) => setDraft({ ...draft, [r.id]: { ...d, circleId: id } })} leading={<option value="">Unplaced</option>} />
+            </label>
+            <label className="text-xs text-gray-500">Holds up to
+              <input type="number" min={1} value={d.seats ?? 1} className={`${inputCls} w-full mt-1`}
+                onChange={(e) => setDraft({ ...draft, [r.id]: { ...d, seats: Number(e.target.value) } })} />
+            </label>
+            <p className="text-xs text-gray-500">
+              State<br />
+              <span className="font-medium text-gray-800">{STATE_LABEL[r.state] ?? r.state}</span>
+              <span className="text-gray-400"> · {r.holderCount} of {r.seats}</span>
+            </p>
+          </div>
+          <div className="grid sm:grid-cols-2 gap-2 mt-2">
+            <label className="text-xs text-gray-500">Aim
+              <textarea rows={2} value={d.aim ?? ""} className={`${inputCls} w-full mt-1`}
+                onChange={(e) => setDraft({ ...draft, [r.id]: { ...d, aim: e.target.value } })} />
+            </label>
+            <label className="text-xs text-gray-500">Domain (what it looks after)
+              <textarea rows={2} value={d.domain ?? ""} className={`${inputCls} w-full mt-1`}
+                onChange={(e) => setDraft({ ...draft, [r.id]: { ...d, domain: e.target.value } })} />
+            </label>
+          </div>
+          {/*
+            Both of these are rendered on /roles inside the seat's
+            expanded panel, and `updateOrgRole` has accepted both
+            since the org chart shipped. The form never sent them,
+            so every village's accountabilities and reason-this-
+            matters were frozen at whatever the backfill wrote,
+            while the banner on the old cards editor sent founders
+            here promising the site updates immediately.
+          */}
+          <div className="grid sm:grid-cols-2 gap-2 mt-2">
+            {/* Both fields carry an explicit aria-label: a wrapping
+                <label> would otherwise name each control with its
+                field name AND the hint under it, run together. */}
+            <label className="text-xs text-gray-500">Key accountabilities, one per line
+              <textarea rows={4} value={(d.accountabilities ?? []).join("\n")} className={`${inputCls} w-full mt-1`}
+                aria-label="Key accountabilities, one per line"
+                aria-describedby={`${r.id}-accountabilities-hint`}
+                onChange={(e) => setDraft({
+                  ...draft,
+                  [r.id]: { ...d, accountabilities: e.target.value.split("\n").map((s) => s.trim()).filter(Boolean) },
+                })} />
+              <span id={`${r.id}-accountabilities-hint`} className="block text-[11px] text-gray-400 mt-0.5">
+                The ongoing work the circle counts on this role to keep doing. Listed on /roles.
+              </span>
+            </label>
+            <label className="text-xs text-gray-500">Why this role matters
+              <textarea rows={4} value={d.whyItMatters ?? ""} className={`${inputCls} w-full mt-1`}
+                aria-label="Why this role matters"
+                aria-describedby={`${r.id}-why-hint`}
+                onChange={(e) => setDraft({ ...draft, [r.id]: { ...d, whyItMatters: e.target.value } })} />
+              <span id={`${r.id}-why-hint`} className="block text-[11px] text-gray-400 mt-0.5">
+                Shown on /roles under Why This Role Matters.
+              </span>
+            </label>
+          </div>
+
+          {/*
+            SEATING SOMEBODY WAS A ONE-WAY DOOR.
+
+            `DELETE /api/admin/org/seatings/:id` and its `/forget`
+            sibling shipped with their own test suite and no caller
+            anywhere in the client, so a village could seat a person
+            and never unseat them, and the right-to-be-forgotten
+            path was reachable only by curl. `/api/org` now carries
+            the seating id for admins, which is what these two need.
+
+            Two doors on purpose. Ending a holding is ordinary and
+            reversible: the person stays in the record and can be
+            seated again. Forgetting is destructive and only exists
+            for a documented holder, a real person with no account
+            who asked to be erased: it scrubs their name and note
+            from every row, live and historical, and nothing brings
+            it back. It is labelled as such and it types their name.
+          */}
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            {(r.holders ?? []).map((h: any) => (
+              <span key={h.assignmentId ?? h.userId ?? h.name} className={`text-xs rounded-full pl-3 pr-1 py-1 inline-flex items-center gap-1 ${h.lapsed ? "bg-amber-50 border border-amber-200" : "bg-gray-100"}`}>
+                {h.name}
+                {h.focus && <span className="text-gray-500"> · {h.focus}</span>}
+                {h.kind === "documented" && <span className="text-amber-700"> · no account yet</span>}
+                {h.lapsed && (
+                  <span className="text-amber-700">
+                    {" "}· {h.lapsedReason === "term" ? "term ended" : "seated last season"}
+                  </span>
+                )}
+                {h.assignmentId && (
+                  <button
+                    type="button"
+                    aria-label={`End ${h.name}'s holding of ${r.name}`}
+                    className="ml-1 min-h-[44px] min-w-[44px] px-2 rounded-full text-gray-600 hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-teal-deep"
+                    onClick={async () => {
+                      const reason = window.prompt(`End ${h.name}'s holding of "${r.name}"? They stay in the record and can be seated again. Reason for the journal (optional):`);
+                      if (reason === null) return;
+                      const ok = await call(`/admin/org/seatings/${h.assignmentId}`, { reason }, "DELETE");
+                      if (ok) { toast.success("Holding ended"); void load(); }
+                    }}
+                  >Unseat</button>
+                )}
+                {h.assignmentId && h.kind === "documented" && (
+                  <button
+                    type="button"
+                    aria-label={`Forget ${h.name} permanently`}
+                    className="min-h-[44px] min-w-[44px] px-2 rounded-full text-red-700 hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-600"
+                    onClick={async () => {
+                      const typed = window.prompt(
+                        `FORGET ${h.name}. This ends every holding in their name and erases their name and notes from this role's history, past entries included. It cannot be undone.\n\nType their name exactly to confirm:`,
+                      );
+                      if (typed === null) return;
+                      if (typed.trim() !== String(h.name).trim()) { toast.error("That name did not match. Nothing was changed."); return; }
+                      const ok = await call(`/admin/org/seatings/${h.assignmentId}/forget`, { reason: "forgotten at their request" });
+                      if (ok) { toast.success(`Forgotten. ${ok.seatings} holding(s) ended.`); void load(); }
+                    }}
+                  >Forget</button>
+                )}
+              </span>
+            ))}
+            {(r.holders ?? []).length === 0 && <span className="text-xs text-gray-400">Nobody holds this yet.</span>}
+          </div>
+
+          {/*
+            The asks waiting on this seat, on the seat itself. A
+            claim files a row and never moves a seating, because a
+            name on an account is typed by whoever holds it; this
+            is where a person decides. Nothing draws when the seat
+            has no ask, which is every seat most days.
+          */}
+          <SeatClaimAsks
+            asks={seatAsks.filter((a) => a.roleId === r.id)}
+            call={call}
+            onDone={(said) => { toast.success(said); void load(); }}
+          />
+
+          <div className="mt-2 flex flex-wrap gap-2 items-end">
+            <SeatSomebody
+              roleId={r.id}
+              members={members}
+              call={call}
+              onSeated={(what) => { toast.success(what); void load(); }}
+              onFailed={(why) => toast.error(why)}
+            />
+            <button
+              onClick={() => void openJournal(r.id)}
+              className="text-sm text-gray-500 hover:text-gray-800 px-2 py-2"
+            >{journal[r.id] ? "Hide history" : "History"}</button>
+          </div>
+          {/* What the seat offers whoever holds it, through a draft (PR3). */}
+          {!r.isExample && <SeatTermsOfferEditor seat={r} call={call} onSaved={() => void load()} />}
+          {/* What the role is worth and pays each seat every cycle (0265). */}
+          {!r.isExample && <RoleValueEditor role={r} call={call} onSaved={() => void load()} />}
+          {/* The Power groups whoever holds this role holds (0322). */}
+          {!r.isExample && <RolePowerGroupsEditor role={r} call={call} />}
+          {/* Bring me, not mine to hold and the runbook, through a draft (0268). */}
+          {!r.isExample && <RoleHandoverEditor role={r} call={call} onSaved={() => void load()} />}
+          {/* When it exists, what it decides alone, its regular work, holding it well and its time, through a draft (0274). */}
+          {!r.isExample && <RoleCcosEditor role={r} call={call} onSaved={() => void load()} />}
+          {/* Which characters the role suits, the village's word over the boot-time guess (role draft board, 9 Nov). */}
+          {!r.isExample && <RoleCharacterTags role={r} call={call} onSaved={() => void load()} />}
+          {/* The one editor for the whole card, for a holder of the power to decide the structure or an admin (role journey, PR-B). */}
+          {!r.isExample && <EditRoleButton roleId={r.id} className="mt-2" onSaved={() => void load()} />}
+
+          {journal[r.id] === "loading" && (
+            <p className="text-xs text-gray-400 mt-2">Reading the history…</p>
+          )}
+          {Array.isArray(journal[r.id]) && (
+            <div className="mt-2 border-t border-gray-100 pt-2 space-y-1">
+              {(journal[r.id] as any[]).length === 0 && (
+                <p className="text-xs text-gray-400">
+                  Nothing recorded against this role yet. Changes from here on will show up.
+                </p>
+              )}
+              {(journal[r.id] as any[]).map((e) => (
+                <p key={e.id} className="text-xs text-gray-600">
+                  <span className="text-gray-400">{new Date(e.at).toLocaleDateString()}</span>{" "}
+                  {e.text}
+                  {e.by && <span className="text-gray-400"> · {e.by}</span>}
+                </p>
+              ))}
+            </div>
+          )}
+        </section>
+      </>
+    );
+  })();
+
+  return (
+    <div>
+      <div className="mb-6">
+        <h2 className="text-xl font-bold text-gray-900">Org Chart</h2>
+        {level === 1 && <div className="mt-2"><NewRoleFromCardButton onMade={() => void load()} /></div>}
+        <p className="text-sm text-gray-500 mt-1">
+          Circles, the roles inside them, and who holds each role. This is what
+          /roles, /circles and /team show. Changes wait in the save bar at the bottom until you save them.
+          Whether a role reads as filled or open is worked out from its holders,
+          so it can never say filled with nobody in it.
+        </p>
+      </div>
+
+      {level === 1 && circlesLevel}
+      {level === 2 && circleLevel}
+      {level === 3 && roleLevel}
+
+      <SaveBar count={changeCount} onSave={saveAll} onDiscard={discardAll} what={t({ message: "Org chart", context: "admin section name" })} />
     </div>
   );
 }

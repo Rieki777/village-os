@@ -135,7 +135,7 @@ const renderPage = () =>
     </Router>,
   );
 const openCircle = async (name: string) =>
-  fireEvent.click((await screen.findByRole("heading", { level: 3, name })).closest("button")!);
+  fireEvent.click((await screen.findByRole("heading", { level: 3, name: new RegExp(`${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`) })).closest("button")!);
 /** A field's default, read off the spec, so a reworded default moves its test with it. */
 const said = (sectionId: string, key = "heading") =>
   CIRCLES_PAGE.sections.find((s) => s.id === sectionId)!.fields.find((f) => f.key === key)!.default;
@@ -212,7 +212,7 @@ describe("every field in the Circles spec reaches the page", () => {
     expect(screen.queryByText(said("card", "label"))).toBeNull();
     expect(screen.queryByRole("link", { name: new RegExp(said("closing", "label")) })).toBeNull();
     for (const name of ["Hearth Council", "Land & Water", "Kitchen Circle"]) {
-      expect(screen.getByRole("heading", { level: 3, name })).toBeInTheDocument();
+      expect(screen.getByRole("heading", { level: 3, name: new RegExp(`${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`) })).toBeInTheDocument();
     }
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(said("hero", "headline"));
   });

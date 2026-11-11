@@ -1,4 +1,6 @@
 import Layout from "@/components/Layout";
+import CircleName from "@/components/circles/CircleName";
+import { anchorCircleId } from "@shared/circlePicker";
 import { Link } from "wouter";
 import { m, AnimatePresence } from "framer-motion";
 import { Users, ArrowRight, ChevronDown } from "lucide-react";
@@ -76,6 +78,7 @@ interface CardWords {
 
 interface CircleEntry {
   id: string;
+  anchor?: boolean;
   name: string;
   subtitle?: string;
   stage: "today" | "future";
@@ -154,7 +157,7 @@ function CircleCard({ circle, expanded, onToggle, index, onOpenSeat, coordinator
             </div>
             <div>
               <h3 className="font-display text-xl font-bold text-foreground">
-                {circle.name}
+                <CircleName name={circle.name} anchor={circle.anchor} />
               </h3>
               {circle.subtitle && (
                 <p className="text-sm text-muted-foreground mt-1">
@@ -289,6 +292,7 @@ export default function Circles() {
           seatsByCircle.set(r.circleId, list);
         }
         setPeople(data.people ?? null);
+        const anchorOf = anchorCircleId(data.circles);
         setRaw({ circles: data.circles ?? [], seats: data.roles ?? [], village: data.village });
         setSeatCounts({
           seats: (data.roles ?? []).reduce((n: number, r: any) => n + Number(r.seats ?? 0), 0),
@@ -333,6 +337,7 @@ export default function Circles() {
             return {
               id: String(c.id ?? c.name ?? `circle-${i}`),
               name: String(c.name ?? "Untitled circle"),
+              anchor: String(c.id) === anchorOf,
               subtitle: c.purpose ?? "",
               description: c.purpose ?? "",
               // A forming or dormant circle is one the village has named and

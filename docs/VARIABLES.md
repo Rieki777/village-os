@@ -22,21 +22,21 @@ There is no timestamp and no author line, on purpose. Both would change on every
 
 ## Who may change what
 
-Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 216 open and 50 founder:
+Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 217 open and 50 founder:
 
 - **open**, the whole village. Community-governable. These are the dials the village decides together, through the proposal loop. A founder can close one of these to their community; the platform ceiling says it may be open.
 - **founder**, the founder or an admin. Founder-held. Legal posture, infrastructure, privacy windows and abuse guards. They stay visible to everybody and they are never proposable. Nothing can open one of these to the village.
 
 The BOUNDS are constitutional in every case. Governance moves a value between the min and the max printed below; nothing here moves the min or the max. That is what keeps a vote from turning a dial into a different mechanism.
 
-Each dial also says WHEN a change lands. 239 of them as soon as it is saved, and 27 of them at the next cycle close.
+Each dial also says WHEN a change lands. 240 of them as soon as it is saved, and 27 of them at the next cycle close.
 
 - **instant**, as soon as it is saved. The new value is live immediately.
 - **cycle-close**, at the next cycle close. Changing one of these mid-cycle would move the basis a settlement is already being measured against, so the new value waits for the cycle to close. That gap is deliberate: it gives the village the window between a decision passing and the decision biting.
 
 ## At a glance
 
-266 dials in 37 categories. 149 carry a minimum and a maximum. By type: 112 integer, 19 decimal, 19 percentage, 37 boolean, 34 choice, 44 text, 1 longtext.
+267 dials in 38 categories. 149 carry a minimum and a maximum. By type: 112 integer, 19 decimal, 19 percentage, 38 boolean, 34 choice, 44 text, 1 longtext.
 
 | Category | Dials | the whole village | the founder or an admin |
 | --- | --- | --- | --- |
@@ -75,6 +75,7 @@ Each dial also says WHEN a change lands. 239 of them as soon as it is saved, and
 | Exit | 10 | 10 | 0 |
 | Needs | 5 | 5 | 0 |
 | Journal | 2 | 2 | 0 |
+| Connector | 1 | 1 | 0 |
 | Live Sessions | 2 | 2 | 0 |
 | Language | 1 | 1 | 0 |
 
@@ -347,6 +348,7 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | Whether naming the village's needs target is asked before launch | `needs.launch_requirement` | Needs | choice | `recommended` | the whole village |
 | Members who must answer before a pulse average shows | `journal.pulse_floor` | Journal | integer | `1` | the whole village |
 | Every member has a task board unless a steward turns one off | `memberTasks.listDefault` | Journal | boolean | `true` | the whole village |
+| Our agent may make the changes we approve in the chat | `agents.lead_approved_writes` | Connector | boolean | `false` | the whole village |
 | The place line read at drop in | `sessions.place_line` | Live Sessions | text | blank | the whole village |
 | How long a live session runs unless its opener says otherwise | `sessions.default_minutes` | Live Sessions | integer | `60` | the whole village |
 | Default language | `village.default_locale` | Language | choice | `en` | the whole village |
@@ -4676,6 +4678,24 @@ When on, every member has a task board on their profile unless a steward turns t
 | Key | `memberTasks.listDefault` |
 | Type | boolean, on or off |
 | Default | `true` |
+| Range | on or off |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+## Connector
+
+1 dial. 1 for the whole village.
+
+### Our agent may make the changes we approve in the chat
+
+When on, the village connector, acting for the person who connected it, may write a role's words, draft the wording of its terms, seat and unseat a person, and change the village's own wording, each time a person has approved it in the chat. Every seating names who approved it and quotes the approval, and every admin and founder is told. Pay, money, erasure, secrets, agent accounts and powers stay a person's act. Off, the connector does only what it did before.
+
+| Fact | Value |
+| --- | --- |
+| Key | `agents.lead_approved_writes` |
+| Type | boolean, on or off |
+| Default | `false` |
 | Range | on or off |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
