@@ -98,9 +98,9 @@ async function ask<T>(path: string, method: "GET" | "POST" = "GET", body?: unkno
 }
 
 const PRIMARY =
-  "inline-flex min-h-[44px] items-center gap-2 rounded-lg bg-teal-deep px-5 text-sm font-semibold text-white hover:bg-teal-deep-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep focus-visible:ring-offset-2 disabled:opacity-50";
+  "inline-flex min-h-[44px] items-center gap-2 rounded-lg bg-teal-deep px-5 text-sm font-semibold text-white hover:bg-teal-deep-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50";
 const SECONDARY =
-  "inline-flex min-h-[44px] items-center gap-2 rounded-lg border border-stone-400 px-5 text-sm font-semibold text-stone-800 hover:bg-stone-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep disabled:opacity-50";
+  "inline-flex min-h-[44px] items-center gap-2 rounded-lg border border-border px-5 text-sm font-semibold text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50";
 
 /** What a decision answered: its sentence, and the invitation's link when there is one to hand on. */
 interface Said {
@@ -173,7 +173,7 @@ export default function OpenProposal() {
   const back = (
     <Link
       href="/profile"
-      className="inline-flex min-h-[44px] items-center gap-1.5 text-sm font-medium text-stone-600 hover:text-teal-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
+      className="inline-flex min-h-[44px] items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-notice focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
       <ArrowLeft className="w-4 h-4" aria-hidden="true" />
       Your profile
@@ -185,9 +185,9 @@ export default function OpenProposal() {
       <Layout><div className={WORLD}>
         <div className="container max-w-3xl px-4 py-8">
           {back}
-          <div className="mt-6 rounded-xl border border-stone-200 bg-white p-8 text-center">
-            <h1 className="font-display text-2xl font-bold text-stone-900">{DECIDE_WORDS.membersOnly}</h1>
-            <p className="mx-auto mt-2 max-w-md leading-relaxed text-stone-600">{DECIDE_WORDS.membersOnlyLine}</p>
+          <div className="mt-6 rounded-xl border border-border bg-card p-8 text-center">
+            <h1 className="font-display text-2xl font-bold text-foreground">{DECIDE_WORDS.membersOnly}</h1>
+            <p className="mx-auto mt-2 max-w-md leading-relaxed text-muted-foreground">{DECIDE_WORDS.membersOnlyLine}</p>
             {!user && (
               <div className="mt-5">
                 <SignInDoors next={`/open-proposals/${encodeURIComponent(id)}`} />
@@ -210,20 +210,20 @@ export default function OpenProposal() {
             <BreathingLoader label={DECIDE_WORDS.loading} />
           </div>
         )}
-        {state === "missing" && <p className="mt-6 text-stone-700">{DECIDE_WORDS.missing}</p>}
+        {state === "missing" && <p className="mt-6 text-foreground">{DECIDE_WORDS.missing}</p>}
         {state === "error" && (
-          <p role="alert" className="mt-6 text-coral">
+          <p role="alert" className="mt-6 text-destructive">
             {error || DECIDE_WORDS.loadFailed}
           </p>
         )}
         {state === "ready" && p && (
           <article className="mt-3 space-y-8" data-open-proposal={p.status}>
             <header>
-              <p className="text-sm font-semibold text-teal-deep">{p.statusWords}</p>
-              <h1 className="mt-1 font-display text-3xl font-bold text-stone-900">
+              <p className="text-sm font-semibold text-notice">{p.statusWords}</p>
+              <h1 className="mt-1 font-display text-3xl font-bold text-foreground">
                 {DECIDE_WORDS.heading(p.proposer, p.roles.map((r) => r.name ?? DECIDE_WORDS.roleGone), !!p.term)}
               </h1>
-              <p className="mt-2 leading-relaxed text-stone-600">
+              <p className="mt-2 leading-relaxed text-muted-foreground">
                 {p.term ? (
                   DECIDE_WORDS.fromOutsideMoon(civilDayWords(p.term.startsOn), civilDayWords(p.term.endsOn))
                 ) : (
@@ -236,17 +236,17 @@ export default function OpenProposal() {
             </header>
 
             <section aria-labelledby="op-roles">
-              <h2 id="op-roles" className="text-lg font-bold text-stone-900">
+              <h2 id="op-roles" className="text-lg font-bold text-foreground">
                 {DECIDE_WORDS.rolesHeading}
               </h2>
               <ul className="mt-3 space-y-3">
                 {p.roles.map((r) => (
-                  <li key={r.id} className="rounded-xl border border-stone-200 bg-white p-4">
-                    <p className="font-semibold text-stone-900">
+                  <li key={r.id} className="rounded-xl border border-border bg-card p-4">
+                    <p className="font-semibold text-foreground">
                       {r.name ?? DECIDE_WORDS.roleGone}
-                      {r.circle && <span className="font-normal text-stone-600"> · {r.circle}</span>}
+                      {r.circle && <span className="font-normal text-muted-foreground"> · {r.circle}</span>}
                     </p>
-                    {r.note && <p className="mt-1 whitespace-pre-wrap break-words text-stone-800">{r.note}</p>}
+                    {r.note && <p className="mt-1 whitespace-pre-wrap break-words text-foreground">{r.note}</p>}
                   </li>
                 ))}
               </ul>
@@ -262,18 +262,18 @@ export default function OpenProposal() {
             {p.offer && <TermsWeOffer offer={p.offer} mayEdit={!!p.you.mayEditTerms} savePath={`${base(p.id)}/terms`} onSaved={() => void load()} />}
 
             <section aria-labelledby="op-words">
-              <h2 id="op-words" className="text-lg font-bold text-stone-900">
+              <h2 id="op-words" className="text-lg font-bold text-foreground">
                 {DECIDE_WORDS.wordsHeading}
               </h2>
               <dl className="mt-3 space-y-4">
                 <div>
-                  <dt className="text-sm font-semibold text-stone-700">{DECIDE_WORDS.why}</dt>
-                  <dd className="mt-1 whitespace-pre-wrap break-words text-stone-900">{p.why}</dd>
+                  <dt className="text-sm font-semibold text-foreground">{DECIDE_WORDS.why}</dt>
+                  <dd className="mt-1 whitespace-pre-wrap break-words text-foreground">{p.why}</dd>
                 </div>
                 {p.aim && (
                   <div>
-                    <dt className="text-sm font-semibold text-stone-700">{DECIDE_WORDS.aim}</dt>
-                    <dd className="mt-1 whitespace-pre-wrap break-words text-stone-900">{p.aim}</dd>
+                    <dt className="text-sm font-semibold text-foreground">{DECIDE_WORDS.aim}</dt>
+                    <dd className="mt-1 whitespace-pre-wrap break-words text-foreground">{p.aim}</dd>
                   </div>
                 )}
               </dl>
@@ -305,13 +305,13 @@ export default function OpenProposal() {
             )}
 
             {p.status === "confirmed" && (
-              <section aria-labelledby="op-decide" className="rounded-xl border-2 border-teal-deep/40 bg-white p-5" data-decider-card="">
-                <h2 id="op-decide" className="text-lg font-bold text-stone-900">
+              <section aria-labelledby="op-decide" className="rounded-xl border-2 border-notice/40 bg-card p-5" data-decider-card="">
+                <h2 id="op-decide" className="text-lg font-bold text-foreground">
                   {DECIDE_WORDS.deciderHeading}
                 </h2>
                 {p.you.mayAdopt || p.you.mayDecline ? (
                   <>
-                    <p className="mt-1 text-stone-700">{p.you.formerMember ? DECIDE_WORDS.formerMember : record ? CONSENT_WORDS.recordLine : DECIDE_WORDS.deciderLine}</p>
+                    <p className="mt-1 text-foreground">{p.you.formerMember ? DECIDE_WORDS.formerMember : record ? CONSENT_WORDS.recordLine : DECIDE_WORDS.deciderLine}</p>
                     <div className="mt-4" data-applicant-note-field="">
                       <label htmlFor="op-note" className="mb-2 block text-sm font-semibold text-card-foreground">
                         {t`A note for the applicant (they will see this)`}
@@ -346,8 +346,8 @@ export default function OpenProposal() {
                         )}
                       </div>
                     ) : (
-                      <div role="group" aria-label={DECIDE_WORDS.decline} className="mt-4 rounded-xl border border-stone-300 bg-white p-4">
-                        <p className="text-stone-800">{DECIDE_WORDS.declineAsk}</p>
+                      <div role="group" aria-label={DECIDE_WORDS.decline} className="mt-4 rounded-xl border border-border bg-card p-4">
+                        <p className="text-foreground">{DECIDE_WORDS.declineAsk}</p>
                         <div className="mt-3 flex flex-wrap gap-2">
                           <button
                             type="button"
@@ -356,7 +356,7 @@ export default function OpenProposal() {
                               setDeclining(false);
                               void act(`${base(p.id)}/decline`, undefined, true);
                             }}
-                            className="inline-flex min-h-[44px] items-center rounded-lg bg-coral px-4 text-sm font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep disabled:opacity-50"
+                            className="inline-flex min-h-[44px] items-center rounded-lg bg-destructive px-4 text-sm font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
                           >
                             {DECIDE_WORDS.declineYes}
                           </button>
@@ -368,7 +368,7 @@ export default function OpenProposal() {
                     )}
                   </>
                 ) : (
-                  <p className="mt-1 text-stone-700" data-door={p.door.because}>
+                  <p className="mt-1 text-foreground" data-door={p.door.because}>
                     {p.you.own ? DECIDE_WORDS.ownProposal : p.door.words}
                   </p>
                 )}
@@ -376,12 +376,12 @@ export default function OpenProposal() {
             )}
 
             {p.status === "adopted" && p.invitation && (
-              <section aria-labelledby="op-invitation" className="rounded-xl border border-stone-200 bg-white p-5" data-invitation={p.invitation.state}>
-                <h2 id="op-invitation" className="text-lg font-bold text-stone-900">
+              <section aria-labelledby="op-invitation" className="rounded-xl border border-border bg-card p-5" data-invitation={p.invitation.state}>
+                <h2 id="op-invitation" className="text-lg font-bold text-foreground">
                   {DECIDE_WORDS.deciderHeading}
                 </h2>
                 {p.invitation.state === "used" ? (
-                  <p className="mt-1 text-stone-700">{DECIDE_WORDS.invitationUsed}</p>
+                  <p className="mt-1 text-foreground">{DECIDE_WORDS.invitationUsed}</p>
                 ) : (
                   <>
                     {p.invitation.sentAt && (
@@ -389,7 +389,7 @@ export default function OpenProposal() {
                         {DECIDE_WORDS.invitationSent(new Date(p.invitation.sentAt).toLocaleString(), p.invitation.emailed !== false)}
                       </p>
                     )}
-                    <p className="mt-1 text-stone-700">{DECIDE_WORDS.reissueLine}</p>
+                    <p className="mt-1 text-foreground">{DECIDE_WORDS.reissueLine}</p>
                     {p.you.mayReissue && (
                       <button type="button" disabled={busy} onClick={() => void act(`${base(p.id)}/invitation`)} className={`${SECONDARY} mt-3`}>
                         <Mail className="h-4 w-4" aria-hidden="true" />
@@ -403,10 +403,10 @@ export default function OpenProposal() {
 
             {said && (
               <div role={said.ok ? "status" : "alert"} className="space-y-2" data-decision-said="">
-                <p className={`text-sm font-medium ${said.ok ? "text-sage" : "text-coral"}`}>{said.text}</p>
+                <p className={`text-sm font-medium ${said.ok ? "text-open" : "text-destructive"}`}>{said.text}</p>
                 {said.link && (
                   <div className="flex flex-wrap items-center gap-2">
-                    <code className="min-w-0 break-all rounded bg-stone-50 px-2 py-1 text-sm text-stone-800">{said.link}</code>
+                    <code className="min-w-0 break-all rounded bg-muted px-2 py-1 text-sm text-foreground">{said.link}</code>
                     <button
                       type="button"
                       className={SECONDARY}

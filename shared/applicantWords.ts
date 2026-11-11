@@ -150,7 +150,7 @@ const en: ApplicantMessages = {
     confirmed: (roles, promise) => `Your proposal to hold ${roles} is with us. ${promise}`,
     firstReplyTitle: "We have taken up your proposal",
     firstReply: (roles) => `The role that welcomes people has taken up your proposal to hold ${roles} and is writing to you about a time to talk.`,
-    conversationTitle: "We would like to talk with you",
+    conversationTitle: "A conversation is asked for",
     conversation: (roles, withRole, minutes) => `The next step on your proposal to hold ${roles} is a conversation${withRole ? ` with ${withRole}` : ""}${minutes ? `, about ${minutes} minutes` : ""}. We will write to you about a time.`,
     consentTitle: "The circle is weighing your proposal",
     consent: (roles) => `The conversations are written up, and the circle is now asked to consent to your proposal to hold ${roles}. We will tell you what it decides.`,
