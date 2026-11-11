@@ -80,7 +80,7 @@ describe("the Roles page's tension section", () => {
 
     expect(await screen.findByText(VILLAGE_STEPS[0])).toBeTruthy();
     expect(screen.getByText(VILLAGE_STEPS[1])).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "When a Tension Is Between People" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "How we evolve through conflict" })).toBeTruthy();
     expect(fetchMock).toHaveBeenCalledWith("/api/exit-policy");
     expect(screen.queryByText(/Leadership Circle/)).toBeNull();
     expect(screen.queryByText(/tries the change for an agreed period/)).toBeNull();

@@ -50,18 +50,38 @@ export function kindOfRef(ref: unknown): ApplicationKind | null {
 
 // ── The steps ───────────────────────────────────────────────────────────────
 
-export const STEP_KINDS = ["confirmed", "first_reply", "interview", "scores_in", "consent", "decided", "cleared"] as const;
+/**
+ * THE REVIEW (Phase A, 11 Nov 2026): when the village reviews before the
+ * conversations (`org.review_before_conversations`, recorded on the confirmed
+ * step as `reviewFirst` so a later change never moves an application in
+ * flight), the first conversation opens only when a decider invites.
+ *
+ * Our answer is ONE `review` step whose detail says `invited` or `not_invited`.
+ * One kind with one empty subject means the table's unique key admits exactly
+ * one answer, so an invitation and a not-invited letter pressed at once cannot
+ * both win. `invited`, `not_invited` and `first_cycle` are words on the status
+ * page and are never stamped. Every kind fits the column's 16 characters, so
+ * no migration.
+ */
+export const STEP_KINDS = ["confirmed", "first_reply", "review", "invited", "not_invited", "interview", "scores_in", "consent", "decided", "first_cycle", "cleared"] as const;
 export type StepKind = (typeof STEP_KINDS)[number];
 
 export const STEP_WORDS: Record<StepKind, string> = {
   confirmed: "Received",
   first_reply: "First reply",
+  review: "Our review",
+  invited: "Invitation",
+  not_invited: "Not invited",
   interview: "Conversation",
   scores_in: "Conversations done",
   consent: "The circle's consent",
   decided: "Decision",
+  first_cycle: "First cycle",
   cleared: "Cleared",
 };
+
+/** The setting that puts our review before the conversations. Read at confirm and kept on the application. */
+export const REVIEW_FIRST_VARIABLE = "org.review_before_conversations";
 
 // ── How the conversations are booked (D30) ──────────────────────────────────
 
@@ -296,6 +316,12 @@ export function isStale(lastMovedAt: Date, now: Date): boolean {
 
 export interface StatusInput {
   decided: "adopted" | "declined" | "withdrawn" | null;
+  /** Our review comes before the conversations (kept on the confirmed step). Absent reads as the older path. */
+  reviewFirst?: boolean;
+  /** When a decider invited them to the conversations. */
+  invitedAt?: Date | null;
+  /** A decider sent the not-invited letter: the review ended the application. */
+  notInvited?: boolean;
   firstReplyAt: Date | null;
   confirmedAt: Date;
   interviews: Array<{ position: number; state: InterviewState; roleName: string; minutes: number; final: boolean; dueAt: Date | null }>;
@@ -316,6 +342,7 @@ export interface Status {
 
 /** What the applicant reads: the step, who acts next and by when. Never a score, never a name. */
 export function statusFor(i: StatusInput): Status {
+  if (i.reviewFirst) return reviewedStatusFor(i);
   const path: Status["path"] = [{ label: STEP_WORDS.confirmed, state: "done" }];
   path.push({ label: STEP_WORDS.first_reply, state: i.firstReplyAt ? "done" : "later" });
   for (const iv of i.interviews) path.push({ label: `Conversation with ${iv.roleName} (${iv.minutes} minutes)`, state: iv.state === "scored" || iv.state === "skipped" ? "done" : iv.state === "open" ? "now" : "later" });
@@ -347,6 +374,52 @@ export function statusFor(i: StatusInput): Status {
   return { step: "consent", stepWords: STEP_WORDS.consent, actsNext: "The circle weighs it and consents, or says what is missing.", by: i.consentOpen ? i.consentClosesAt : null, path };
 }
 
+/**
+ * THE REVIEWED PATH (Phase A): Received, Our review, Invitation, each
+ * conversation in order, Decision, First cycle. The circle's consent is how the
+ * decision is made, so it is the Decision step here, never a step of its own.
+ * Not invited: the walked steps only, Received and Our review.
+ */
+export function reviewedStatusFor(i: StatusInput): Status {
+  const invited = !!i.invitedAt;
+  const ivDone = (v: { state: InterviewState }) => v.state === "scored" || v.state === "skipped";
+  const talksDone = i.interviews.every(ivDone);
+  const path: Status["path"] = [{ label: STEP_WORDS.confirmed, state: "done" }];
+  path.push({ label: STEP_WORDS.review, state: invited || i.notInvited || i.decided ? "done" : "now" });
+  if (i.notInvited) return { step: "decided", stepWords: STEP_WORDS.decided, actsNext: "Nobody. The village has answered.", by: null, path };
+  path.push({ label: STEP_WORDS.invited, state: invited ? "done" : "later" });
+  for (const iv of i.interviews) path.push({ label: `Conversation with ${iv.roleName} (${iv.minutes} minutes)`, state: ivDone(iv) ? "done" : iv.state === "open" ? "now" : "later" });
+  path.push({ label: STEP_WORDS.decided, state: i.decided ? "done" : invited && talksDone ? "now" : "later" });
+  path.push({ label: STEP_WORDS.first_cycle, state: i.decided === "adopted" ? "now" : "later" });
+
+  if (i.decided) {
+    const walked = path.filter((p) => p.state !== "later");
+    const move =
+      i.decided === "adopted"
+        ? "Yours: make your account. The link to make it is in your email."
+        : i.decided === "withdrawn"
+          ? "Nobody. You withdrew this proposal."
+          : "Nobody. The village has answered.";
+    return { step: "decided", stepWords: STEP_WORDS.decided, actsNext: move, by: null, path };
+  }
+  if (!invited) return { step: "review", stepWords: STEP_WORDS.review, actsNext: "We read your application and invite you to the conversations, or write to thank you.", by: firstReplyDueAt(i.confirmedAt, i.timeZone), path };
+  const cur = i.interviews.find((v) => v.state === "open");
+  if (cur) return { step: "interview", stepWords: STEP_WORDS.interview, actsNext: `${cur.roleName} talks with you for ${cur.minutes} minutes, then adds a note.`, by: cur.dueAt, path };
+  if (!talksDone) return { step: "interview", stepWords: STEP_WORDS.interview, actsNext: "The next conversation is arranged once the last one is written up.", by: null, path };
+  return { step: "consent", stepWords: STEP_WORDS.decided, actsNext: "The circle weighs it and consents, or says what is missing.", by: i.consentOpen ? i.consentClosesAt : null, path };
+}
+
+/** Where a reviewed application stands for the people who decide it. Null for an application with no review step. */
+export type ReviewStage = "review" | "invited" | "not_invited";
+
+export function reviewStageOf(steps: ReadonlyArray<{ kind: string; detail?: unknown }>): ReviewStage | null {
+  const confirmed = steps.find((s) => s.kind === "confirmed");
+  const d = confirmed?.detail as { reviewFirst?: unknown } | null | undefined;
+  if (!d || d.reviewFirst !== true) return null;
+  const answer = (steps.find((s) => s.kind === "review")?.detail as { answer?: unknown } | null | undefined)?.answer;
+  return answer === "not_invited" ? "not_invited" : answer === "invited" ? "invited" : "review";
+}
+
 // ── Words (no dashes, role not seat) ────────────────────────────────────────
 
 export const REVIEW_WORDS = {
@@ -372,6 +445,8 @@ export const REVIEW_WORDS = {
   interviewsNotDone: "The conversations are not all written up yet.",
   recusalRecorded: "Recorded. You will not be asked again for this proposal.",
   alignWords: "Aligning is the village's way of signing.",
+  reviewDue: (roleNames: readonly string[]) => `An application for ${roleNames.join(", ")} waits for our review: invite them to the conversations, or send the not-invited letter`,
+  reviewReminder: (roleNames: readonly string[]) => `Our review is due tomorrow for an application for ${roleNames.join(", ")}`,
 } as const;
 
 /** Sera, the guide and every companion are refused these reads. Tested, not trusted. */

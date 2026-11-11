@@ -159,9 +159,11 @@ describe("the counts come from the listed roles the board offers (Rye, 9 Nov: 46
 
 describe("art", () => {
   it("a character's art is the stock file, a role's falls back to its first character, an upload stays on this host", () => {
-    expect(characterArt("building")).toBe("/images/avatars/building-f-olive.webp");
+    expect(characterArt("building")).toBe("/images/avatars/building-f-deep.webp");
     const [lfs] = openRolesFrom(ORG);
     expect(roleArtFor(lfs)).toBe("/images/avatars/researching-f-olive.webp");
+    // A village's own sixth root has no cast look and wears the default.
+    expect(characterArt("gardening")).toBe("/images/avatars/gardening-f-olive.webp");
     expect(roleArtFor({ archetypes: [], raw: { imageUrl: "/uploads/x.webp" } })).toBe("/uploads/x.webp");
     expect(roleArtFor({ archetypes: [], raw: { imageUrl: "https://elsewhere.example/x.png" } })).toBeNull();
   });

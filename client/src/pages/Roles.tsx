@@ -34,6 +34,11 @@ import { Trans, useLingui } from "@lingui/react/macro";
 import { isSeatState, type SeatStateWord, type SheetContext } from "@shared/roleSheet";
 import { fromOrgSeat, orgHolderName, seasonForSheet, seatHistoryShown } from "@shared/roleSheetInputs";
 import { coordinatingCircle } from "@shared/coordinatingCircle";
+import FoundingTeam, { type FoundingRole } from "@/components/roleCard/FoundingTeam";
+import FullRoleCard from "@/components/roleCard/FullRoleCard";
+import { readFoundingTeam, type FoundingTeamAnswer } from "@/components/roleCard/roleCardApi";
+import RootsFilterToggle from "@/components/roots/RootsFilterToggle";
+import { useRootsFilter } from "@/components/roots/useRootsFilter";
 
 interface RoleEntry {
   id: string;
@@ -227,6 +232,7 @@ function RoleCard({ role, expanded, onToggle, index, canTagNeeds, sheet, arrive 
   // on it. See client/src/lib/swatch.ts.
   const swatch = swatchFor(role.color);
   const holders = (role.holders ?? []).filter(Boolean);
+  const [fullOpen, setFullOpen] = useState(false);
   // Arriving by a link to this seat: its header is scrolled to and takes
   // focus, so a keyboard or screen-reader reader starts at the seat they were
   // sent to. `instant` under reduced motion, because `html` scrolls smoothly
@@ -315,6 +321,19 @@ function RoleCard({ role, expanded, onToggle, index, canTagNeeds, sheet, arrive 
                 action={guardedAction(role.raw, <SeatAction circleId={role.circleId ?? null} applyHref={applyHrefFor(role.raw)} />)}
                 settings={termsSlotFor(role.raw)}
               />
+              {/* The full card: everything the role editor holds, read-only (build list 4.4). */}
+              {!role.isExample && (
+                <details className="group rounded-xl border border-border bg-card" data-full-card-details={role.id} onToggle={(e) => setFullOpen((e.currentTarget as HTMLDetailsElement).open)}>
+                  <summary className="flex min-h-11 cursor-pointer items-center gap-2 px-4 py-2 text-sm font-semibold text-foreground focus-visible:outline-2 focus-visible:outline-ring">
+                    <ChevronDown className="size-4 transition-transform group-open:rotate-180" aria-hidden="true" />
+                    {t({ message: "Read the full card", context: "roles page, opens a role's full card" })}
+                  </summary>
+                  <div className="p-2 sm:p-3">
+                    {/* Mounted once opened, so a closed row reads nothing more. */}
+                    {fullOpen && <FullRoleCard seat={role.raw} circleName={role.group} showTitle={false} labelledBy={headerId} />}
+                  </div>
+                </details>
+              )}
               {/* The seat as a link, for sending to whoever might hold it.
                   Outside the night card, in this page's own light inks. Not
                   on a demonstration seat: nobody is recruited for one, so a
@@ -393,11 +412,27 @@ export default function Roles() {
   const [village, setVillage] = useState<unknown>(undefined);
   const [historyShown, setHistoryShown] = useState(false);
   const [seatCounts, setSeatCounts] = useState({ seats: 0, held: 0 });
+  // The founding team section (org.founding_team). Null until read; a failed read is the section off.
+  const [founding, setFounding] = useState<FoundingTeamAnswer | null>(null);
+  // VERIFY 2.2: the server sends an unlisted role to a steward or an admin, with its chip. The
+  // page used to list them all by default, so a founder checking "List only these" still saw
+  // every role and read the update as not taken. Now the page shows what a visitor sees, and
+  // the admin view is one switch away.
+  const [showUnlisted, setShowUnlisted] = useState(false);
+  useEffect(() => {
+    let live = true;
+    void readFoundingTeam().then((a) => live && setFounding(a));
+    return () => {
+      live = false;
+    };
+  }, []);
   // Who may say what a seat is held for. The server refuses everybody else by
   // itself; this only decides whether the control is drawn.
   const { user } = useAuth();
   const { t } = useLingui();
   const canTagNeeds = !!user && (user.role === "admin" || user.role === "founder");
+  // "Show only what matches my roots": the same filter and rule the quests board runs.
+  const roots = useRootsFilter(user?.id ?? null);
   // The card's clock and the village's class names: one cached read each for
   // the whole page, however many rows are opened.
   const season = useSeason();
@@ -495,8 +530,24 @@ export default function Roles() {
   // Grouped by circle, in the order the village sorted its circles, with a
   // dormant circle's seats still listed under it.
   const circleOrder = new Map(circles.map((c, i) => [c.name, i]));
+  const featured: FoundingRole[] = founding?.on
+    ? founding.roleIds
+        .map((id) => (roles ?? []).find((r) => r.id === id))
+        .filter((r): r is RoleEntry => !!r && r.raw?.listed !== false)
+        .map((r) => ({ seat: r.raw, circleName: r.group, sections: founding.sections[r.id] ?? null }))
+    : [];
+  const featuredShown = new Set(featured.map((f) => String(f.seat.id)));
+  const unlistedCount = (roles ?? []).filter((r) => r.raw?.listed === false).length;
+  // Each role appears once: a featured role lives in the founding section. A linked seat is a
+  // question about that seat, so it shows wherever it is.
+  const listedDirectory = (roles ?? []).filter((r) => r.id === linked || ((showUnlisted || r.raw?.listed !== false) && !featuredShown.has(r.id)));
+  // The roots filter hides only roles tagged with none of the reader's roots; a linked seat always shows.
+  const byRoots = roots.apply(listedDirectory, (r) => (Array.isArray(r.raw?.archetypes) ? r.raw.archetypes : []));
+  const rootKept = new Set(byRoots.shown.map((r) => r.id));
+  const directory = listedDirectory.filter((r) => r.id === linked || rootKept.has(r.id));
+  const rootsOffered = roots.available && byRoots.tagged;
   const groups: { title: string; subtitle: string; circleId: string | null; roles: RoleEntry[] }[] = [];
-  for (const role of roles ?? []) {
+  for (const role of directory) {
     const g = groups.find((x) => x.title === role.group);
     if (g) g.roles.push(role);
     else {
@@ -545,15 +596,41 @@ export default function Roles() {
                 </Link>
               </p>
             )}
-            {/* The draft board: pick characters, scout, shortlist, apply (pages/RoleDraft.tsx). */}
-            <Link
-              href="/roles/select"
-              className={`mt-6 ${BTN_PRIMARY}`}
-            >
-              {t({ message: "Select your roles", context: "roles page button" })}
-              <ArrowRight className="h-4 w-4" aria-hidden="true" />
-            </Link>
+            {/* The draft board: pick characters, scout, shortlist, apply (pages/RoleDraft.tsx). While the
+                founding team is featured, its one act per card is the page's primary act, so this stays off. */}
+            {featured.length === 0 && (
+              <Link
+                href="/roles/select"
+                className={`mt-6 ${BTN_PRIMARY}`}
+              >
+                {t({ message: "Browse the open roles", context: "roles page button" })}
+                <ArrowRight className="h-4 w-4" aria-hidden="true" />
+              </Link>
+            )}
           </m.div>
+
+          {featured.length > 0 && <FoundingTeam roles={featured} villagePay={founding?.villagePay ?? null} />}
+
+          {/* OTHER WAYS TO JOIN: clearly secondary to the founding team, and open from the start. */}
+          <section aria-labelledby="other-ways" className="mx-auto mb-14 max-w-4xl" data-other-ways="">
+            <h2 id="other-ways" className={`${H2} mb-2`}>{t({ message: "Other ways to join", context: "roles page, other ways to join" })}</h2>
+            <p className="mb-4 text-sm text-muted-foreground">{t({ message: "Not every way in is a founding role. Each of these is open now.", context: "roles page, other ways to join" })}</p>
+            <ul className="grid gap-3 sm:grid-cols-2">
+              <li className={TILE}>
+                <Link href="/role-proposals/new" className={`inline-flex min-h-11 items-center gap-2 ${LINK}`} data-propose-new-role="">
+                  {t({ message: "Propose a new role", context: "roles page, other ways to join" })}
+                  <ArrowRight className="size-4" aria-hidden="true" />
+                </Link>
+                <p className="mt-1 text-xs text-muted-foreground">{t({ message: "Propose is for a role we do not list. Tell us the role you see, and the village decides.", context: "roles page, other ways to join" })}</p>
+              </li>
+              <li className={TILE}>
+                <Link href="/quests" className={`inline-flex min-h-11 items-center gap-2 ${LINK}`}>
+                  {t({ message: "Take a quest, alone or with others", context: "roles page, other ways to join" })}
+                  <ArrowRight className="size-4" aria-hidden="true" />
+                </Link>
+              </li>
+            </ul>
+          </section>
 
           <SeasonGoals />
           <ArchetypeStep allShown={showAll} onSeeAll={() => setShowAll(true)} />
@@ -595,6 +672,24 @@ export default function Roles() {
               <div className="mb-12">
                 <PeopleLockNote people={people} seats={seatCounts.seats} held={seatCounts.held} />
               </div>
+            )}
+            {/* "Show only what matches my roots", offered only when some role carries roots. */}
+            {rootsOffered && (
+              <div className="mb-8">
+                <RootsFilterToggle filter={roots} total={listedDirectory.length} shown={directory.length} noun="roles" />
+              </div>
+            )}
+            {/* The admin view: only a reader the server sent unlisted roles to has anything to switch on. */}
+            {unlistedCount > 0 && (
+              <label className="mb-8 flex min-h-11 items-center gap-3 rounded-xl border border-border bg-card px-4 py-2 text-sm text-foreground" data-show-unlisted="">
+                <input type="checkbox" className="size-5 accent-notice" checked={showUnlisted} onChange={(e) => setShowUnlisted(e.target.checked)} />
+                <span>
+                  {t({ message: `Show the ${unlistedCount} roles visitors do not see (admin view)`, context: "roles page, steward switch for unlisted roles" })}
+                </span>
+              </label>
+            )}
+            {roles !== null && featured.length > 0 && groups.length === 0 && (
+              <p className="mb-8 text-sm text-muted-foreground">{t({ message: "The roles open now are the founding roles above.", context: "roles page, empty directory" })}</p>
             )}
             {/* Same always-present polite region as Circles.tsx: the node is
                 in the DOM from first paint, so the change from the loading
@@ -665,7 +760,7 @@ export default function Roles() {
               className={`mt-4 ${CARD}`}
             >
               <h2 className={`${H2} mb-4`}>
-                {t`When a Tension Is Between People`}
+                {t({ message: "How we evolve through conflict", context: "roles page, conflict steps heading" })}
               </h2>
               <VillageConflictSteps />
             </m.div>

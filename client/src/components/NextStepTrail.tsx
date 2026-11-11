@@ -20,7 +20,8 @@ import { Suspense, lazy } from "react";
 const RootLine = lazy(() => import("./path/RootLine"));
 
 const QUIET_EXACT = new Set(["/profile", "/path", "/login", "/register", "/forgot-password", "/set-password", "/verify-email"]);
-const QUIET_PREFIX = ["/admin", "/project-history", "/journey-to-launch", "/claim", "/application-status", "/sessions/"];
+// The founding-team application draws its own "Step N of 6" and keeps the founding register: the game's strip never blends into it (Phase A brief).
+const QUIET_PREFIX = ["/admin", "/project-history", "/journey-to-launch", "/claim", "/application-status", "/sessions/", "/propose-a-role"];
 
 export function isQuietPath(path: string, stepHref?: string | null): boolean {
   const bare = path.split(/[?#]/)[0] || "/";
