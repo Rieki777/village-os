@@ -537,7 +537,7 @@ export function OrgChartTab({ password }: { password: string }) {
                     </span>
                     <span className={META}>
                       <span>{STATE_LABEL[r.state] ?? r.state}</span>
-                      <span>{t({ message: `${r.holderCount ?? 0} of ${r.seats ?? 1} held`, context: "org chart, seats held" })}</span>
+                      <span>{t({ message: `${r.holderCount ?? 0} of ${r.seats ?? 1} held`, context: "org chart, how many hold the role" })}</span>
                       {asks > 0 && <span className="text-notice">{plural(asks, { one: "# ask waiting", other: "# asks waiting" })}</span>}
                       {r.isExample && <span><Trans context="org chart, a sample circle or role">Standing example</Trans></span>}
                       {roleDirty(r) && UNSAVED}
