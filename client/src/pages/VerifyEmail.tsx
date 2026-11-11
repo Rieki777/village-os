@@ -1,4 +1,5 @@
 import Layout from "@/components/Layout";
+import { BTN_PRIMARY, CARD, FIELD, H2, RING, WORLD } from "@/components/journey/look";
 import { useEffect, useState } from "react";
 import { m } from "framer-motion";
 import { CheckCircle2, MailCheck } from "lucide-react";
@@ -77,30 +78,32 @@ export default function VerifyEmail() {
 
   return (
     <Layout>
-      <section className="py-24 bg-gradient-to-b from-teal/10 to-background min-h-[70vh]">
+      <section className={`${WORLD} py-24`}>
         <div className="container">
           <m.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="max-w-md mx-auto bg-card border border-border rounded-2xl shadow-sm p-8"
+            className={`${CARD} mx-auto max-w-md`}
           >
             {stage.kind === "done" || stage.kind === "already" ? (
               <div className="text-center">
-                <CheckCircle2 className="w-12 h-12 text-teal-deep mx-auto mb-4" />
-                <h1 className="font-display text-2xl font-bold text-foreground mb-2">Address confirmed</h1>
+                <div className={`${RING} mx-auto mb-4 size-14`}>
+                  <CheckCircle2 className="size-7" aria-hidden="true" />
+                </div>
+                <h1 className={`${H2} mb-2`}>Address confirmed</h1>
                 <p className="text-muted-foreground mb-6">
                   {stage.kind === "done" ? "Thank you. This address is now confirmed as yours." : "This address was already confirmed. There is nothing more to do."}
                 </p>
-                <a href="/profile" className="inline-block py-3 px-6 bg-primary text-primary-foreground rounded-xl font-semibold hover:bg-teal-deep-dark transition">
+                <a href="/profile" className={BTN_PRIMARY}>
                   Go to your profile
                 </a>
               </div>
             ) : (
               <>
-                <div className="w-12 h-12 rounded-full bg-teal/10 flex items-center justify-center mx-auto mb-6">
-                  <MailCheck className="w-6 h-6 text-teal-deep" />
+                <div className={`${RING} mx-auto mb-6`}>
+                  <MailCheck className="size-5" aria-hidden="true" />
                 </div>
-                <h1 className="font-display text-2xl font-bold text-foreground text-center mb-2">Confirm your address</h1>
+                <h1 className={`${H2} mb-2 text-center`}>Confirm your address</h1>
                 {stage.kind === "working" && <p className="text-sm text-muted-foreground text-center">Confirming…</p>}
                 {stage.kind === "ask_password" && (
                   <form
@@ -123,7 +126,7 @@ export default function VerifyEmail() {
                         onChange={(e) => setPw(e.target.value)}
                         placeholder="Password"
                         autoFocus
-                        className="w-full pl-4 pr-12 py-3 rounded-xl border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                        className={`${FIELD} min-h-11 py-3 pl-4 pr-12`}
                       />
                       <ShowPasswordButton shown={showPassword} onToggle={() => setShowPassword((v) => !v)} />
                     </div>
@@ -131,7 +134,7 @@ export default function VerifyEmail() {
                     <button
                       type="submit"
                       disabled={busy || !pw}
-                      className="w-full py-3 bg-primary text-primary-foreground rounded-xl font-semibold hover:bg-teal-deep-dark disabled:opacity-50 transition"
+                      className={`${BTN_PRIMARY} w-full`}
                     >
                       {busy ? "Confirming…" : "Confirm my address"}
                     </button>
@@ -145,7 +148,7 @@ export default function VerifyEmail() {
                         type="button"
                         onClick={() => void resend()}
                         disabled={busy}
-                        className="py-3 px-6 bg-primary text-primary-foreground rounded-xl font-semibold hover:bg-teal-deep-dark disabled:opacity-50 transition"
+                        className={BTN_PRIMARY}
                       >
                         Send me a new link
                       </button>

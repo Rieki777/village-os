@@ -1,4 +1,5 @@
 import Layout from "@/components/Layout";
+import { BTN_PRIMARY, CARD, FIELD, H2, RING, WORLD } from "@/components/journey/look";
 import { useState } from "react";
 import { ShowPasswordButton } from "@/components/auth/ShowPasswordButton";
 import { m } from "framer-motion";
@@ -65,27 +66,29 @@ export default function SetPassword() {
 
   return (
     <Layout>
-      <section className="py-24 bg-gradient-to-b from-teal/10 to-background min-h-[70vh]">
+      <section className={`${WORLD} py-24`}>
         <div className="container">
           <m.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="max-w-md mx-auto bg-card border border-border rounded-2xl shadow-sm p-8"
+            className={`${CARD} mx-auto max-w-md`}
           >
             {done ? (
               <div className="text-center">
-                <CheckCircle2 className="w-12 h-12 text-teal-deep mx-auto mb-4" />
-                <h1 className="font-display text-2xl font-bold text-foreground mb-2">
+                <div className={`${RING} mx-auto mb-4 size-14`}>
+                  <CheckCircle2 className="size-7" aria-hidden="true" />
+                </div>
+                <h1 className={`${H2} mb-2`}>
                   You're in
                 </h1>
                 <p className="text-muted-foreground">Password set. Taking you to your dashboard…</p>
               </div>
             ) : (
               <>
-                <div className="w-12 h-12 rounded-full bg-teal/10 flex items-center justify-center mx-auto mb-6">
-                  <KeyRound className="w-6 h-6 text-teal-deep" />
+                <div className={`${RING} mx-auto mb-6`}>
+                  <KeyRound className="size-5" aria-hidden="true" />
                 </div>
-                <h1 className="font-display text-2xl font-bold text-foreground text-center mb-2">
+                <h1 className={`${H2} mb-2 text-center`}>
                   Set your password
                 </h1>
                 <p className="text-sm text-muted-foreground text-center mb-8">
@@ -113,7 +116,7 @@ export default function SetPassword() {
                     onChange={(e) => setPw(e.target.value)}
                     placeholder="New password (8+ characters)"
                     autoFocus
-                    className="w-full pl-4 pr-12 py-3 rounded-xl border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                    className={`${FIELD} min-h-11 py-3 pl-4 pr-12`}
                   />
                   <ShowPasswordButton shown={showPassword} onToggle={() => setShowPassword((v) => !v)} />
                   </div>
@@ -126,7 +129,7 @@ export default function SetPassword() {
                     value={pw2}
                     onChange={(e) => setPw2(e.target.value)}
                     placeholder="Repeat it"
-                    className="w-full pl-4 pr-12 py-3 rounded-xl border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                    className={`${FIELD} min-h-11 py-3 pl-4 pr-12`}
                   />
                   <ShowPasswordButton shown={showPassword} onToggle={() => setShowPassword((v) => !v)} />
                   </div>
@@ -137,7 +140,7 @@ export default function SetPassword() {
                   <button
                     type="submit"
                     disabled={busy || !token}
-                    className="w-full py-3 bg-primary text-primary-foreground rounded-xl font-semibold hover:bg-teal-deep-dark disabled:opacity-50 transition"
+                    className={`${BTN_PRIMARY} w-full`}
                   >
                     {busy ? "Saving…" : "Set password"}
                   </button>

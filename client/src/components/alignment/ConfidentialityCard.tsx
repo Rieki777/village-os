@@ -12,6 +12,7 @@ import { FileText, ShieldCheck } from "lucide-react";
 import { ALIGN_WORDS } from "@shared/alignments";
 import { CONFIDENTIALITY_WORDS } from "@shared/confidentiality";
 import AlignButton from "./AlignButton";
+import { BTN_SECONDARY, CARD, H2, HINT } from "@/components/journey/look";
 import { alignConfidentiality, fetchConfidentiality, openAgreementDocument } from "./alignmentsApi";
 
 type Agreement = { title: string; body: string; intent: string; version: string; document: { title: string; size: number; href: string } | null };
@@ -37,12 +38,12 @@ export default function ConfidentialityCard({ onAligned }: { onAligned?: () => v
 
   if (!agreement) return null;
   return (
-    <section id="confidentiality" aria-labelledby="confidentiality-h" data-confidentiality="" className="mb-8 rounded-xl border border-border bg-card p-6 text-card-foreground">
-      <h2 id="confidentiality-h" className="flex items-center gap-2 font-display text-xl font-bold text-foreground">
+    <section id="confidentiality" aria-labelledby="confidentiality-h" data-confidentiality="" className={`${CARD} mb-8`}>
+      <h2 id="confidentiality-h" className={`${H2} flex items-center gap-2`}>
         <ShieldCheck className="size-5 shrink-0 text-notice" aria-hidden="true" />
         {CONFIDENTIALITY_WORDS.heading(agreement.title)}
       </h2>
-      <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+      <p className={`${HINT} mt-2 max-w-2xl leading-relaxed`}>
         {CONFIDENTIALITY_WORDS.lede} {ALIGN_WORDS.waysOfSigning}
       </p>
       {agreement.document && (
@@ -50,15 +51,15 @@ export default function ConfidentialityCard({ onAligned }: { onAligned?: () => v
           <button
             type="button"
             onClick={() => void openAgreementDocument(agreement.document!.href).then((ok) => !ok && setNotice(CONFIDENTIALITY_WORDS.unreadable))}
-            className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border px-4 text-sm font-semibold text-foreground hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring"
+            className={BTN_SECONDARY}
           >
             <FileText className="size-4" aria-hidden="true" />
             {CONFIDENTIALITY_WORDS.readDocument(agreement.document.title)}
           </button>
-          <p className="mt-1 text-xs text-muted-foreground">{CONFIDENTIALITY_WORDS.documentNote}</p>
+          <p className={`${HINT} mt-1`}>{CONFIDENTIALITY_WORDS.documentNote}</p>
         </div>
       )}
-      <details className="mt-3 rounded-lg border border-border bg-background p-3 text-sm text-foreground">
+      <details className="mt-3 rounded-xl border border-border bg-muted p-4 text-sm text-foreground">
         <summary className="min-h-11 cursor-pointer py-2 font-semibold">{agreement.title}</summary>
         <div className="mt-2 whitespace-pre-line break-words">{agreement.body}</div>
       </details>
@@ -69,7 +70,7 @@ export default function ConfidentialityCard({ onAligned }: { onAligned?: () => v
           </p>
         ) : (
           <>
-            <p className="mb-2 text-sm text-muted-foreground">{CONFIDENTIALITY_WORDS.asYou}</p>
+            <p className={`${HINT} mb-2`}>{CONFIDENTIALITY_WORDS.asYou}</p>
             <AlignButton
               sentence={agreement.intent}
               alignedAt={alignedAt}

@@ -24,11 +24,11 @@ export function AlignedStamp({ sealed }: { sealed: boolean }) {
   return (
     <span
       data-aligned-stamp=""
-      className="inline-flex -rotate-3 items-center gap-1.5 rounded-md border-2 border-notice px-2.5 py-1 text-xs font-bold uppercase tracking-[0.2em] text-notice"
+      className="inline-flex -rotate-3 items-center gap-1.5 rounded-lg border-2 border-notice px-2.5 py-1 text-xs font-bold uppercase tracking-widest text-notice"
     >
       <BadgeCheck className="size-4" aria-hidden="true" />
       {ALIGN_WORDS.aligned}
-      {!sealed && <span className="ml-1 text-[10px] font-semibold normal-case tracking-normal text-muted-foreground">{ALIGN_WORDS.unsealed}</span>}
+      {!sealed && <span className="ml-1 text-xs font-semibold normal-case tracking-normal text-muted-foreground">{ALIGN_WORDS.unsealed}</span>}
     </span>
   );
 }
