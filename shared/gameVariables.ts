@@ -2642,7 +2642,7 @@ export const VARIABLES: VariableDef[] = [
   },
   {
     key: "org.pay_shape",
-    category: "The village's people",
+    category: "The founding team",
     label: "How pay works, on every role card",
     description:
       "The shape of the pay every role card shows under \"How pay works\", as shares of the whole, never an amount: write each share's name and percent, separated by commas, like Cash 40, Equity 55, Credits 5. The shares add up to 100 or less. A role whose card writes its own shares shows those instead. Empty, cards show no pay shape.",
@@ -2651,7 +2651,7 @@ export const VARIABLES: VariableDef[] = [
   },
   {
     key: "org.pay_shape_at_risk",
-    category: "The village's people",
+    category: "The founding team",
     label: "The at-risk line under the pay shape",
     description:
       "One line under the shares on every role card, in the village's words, saying which part of the pay depends on what the village raises or earns. No amounts. Empty, no line.",
@@ -2660,7 +2660,7 @@ export const VARIABLES: VariableDef[] = [
   },
   {
     key: "org.pay_shape_note",
-    category: "The village's people",
+    category: "The founding team",
     label: "The note under the pay shape",
     description:
       "The last line under the pay shape on every role card, like Indicative only. Terms are still being defined and are subject to legal review. No amounts. A role's card may write its own. Empty, no note.",

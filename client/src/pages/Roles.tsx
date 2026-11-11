@@ -37,6 +37,8 @@ import { coordinatingCircle } from "@shared/coordinatingCircle";
 import FoundingTeam, { type FoundingRole } from "@/components/roleCard/FoundingTeam";
 import FullRoleCard from "@/components/roleCard/FullRoleCard";
 import { readFoundingTeam, type FoundingTeamAnswer } from "@/components/roleCard/roleCardApi";
+import RootsFilterToggle from "@/components/roots/RootsFilterToggle";
+import { useRootsFilter } from "@/components/roots/useRootsFilter";
 
 interface RoleEntry {
   id: string;
@@ -429,6 +431,8 @@ export default function Roles() {
   const { user } = useAuth();
   const { t } = useLingui();
   const canTagNeeds = !!user && (user.role === "admin" || user.role === "founder");
+  // "Show only what matches my roots": the same filter and rule the quests board runs.
+  const roots = useRootsFilter(user?.id ?? null);
   // The card's clock and the village's class names: one cached read each for
   // the whole page, however many rows are opened.
   const season = useSeason();
@@ -536,7 +540,12 @@ export default function Roles() {
   const unlistedCount = (roles ?? []).filter((r) => r.raw?.listed === false).length;
   // Each role appears once: a featured role lives in the founding section. A linked seat is a
   // question about that seat, so it shows wherever it is.
-  const directory = (roles ?? []).filter((r) => r.id === linked || ((showUnlisted || r.raw?.listed !== false) && !featuredShown.has(r.id)));
+  const listedDirectory = (roles ?? []).filter((r) => r.id === linked || ((showUnlisted || r.raw?.listed !== false) && !featuredShown.has(r.id)));
+  // The roots filter hides only roles tagged with none of the reader's roots; a linked seat always shows.
+  const byRoots = roots.apply(listedDirectory, (r) => (Array.isArray(r.raw?.archetypes) ? r.raw.archetypes : []));
+  const rootKept = new Set(byRoots.shown.map((r) => r.id));
+  const directory = listedDirectory.filter((r) => r.id === linked || rootKept.has(r.id));
+  const rootsOffered = roots.available && byRoots.tagged;
   const groups: { title: string; subtitle: string; circleId: string | null; roles: RoleEntry[] }[] = [];
   for (const role of directory) {
     const g = groups.find((x) => x.title === role.group);
@@ -664,9 +673,12 @@ export default function Roles() {
                 <PeopleLockNote people={people} seats={seatCounts.seats} held={seatCounts.held} />
               </div>
             )}
-            {/* SLOT FOR LANE A4 (PR 1193, wt/a4-roots): <RootsFilterToggle noun="roles" /> renders here, and
-                `directory` above is filtered by useRootsFilter(user?.id).apply(directory, (r) => r.raw?.archetypes ?? []).
-                Left for the integrator: those imports are not on this branch's base. */}
+            {/* "Show only what matches my roots", offered only when some role carries roots. */}
+            {rootsOffered && (
+              <div className="mb-8">
+                <RootsFilterToggle filter={roots} total={listedDirectory.length} shown={directory.length} noun="roles" />
+              </div>
+            )}
             {/* The admin view: only a reader the server sent unlisted roles to has anything to switch on. */}
             {unlistedCount > 0 && (
               <label className="mb-8 flex min-h-11 items-center gap-3 rounded-xl border border-border bg-card px-4 py-2 text-sm text-foreground" data-show-unlisted="">

@@ -299,7 +299,9 @@ export function CardSideBySide({
     const mine = card.roles.find((x) => x.roleId === r.id);
     const asks = r.accountabilities ?? [];
     const roleName = r.name ?? r.id;
-    if (asks.length && !(mine?.moves ?? []).some((m) => asks.includes(m.text))) gaps.push(t`No goal of ${roleName} picked`);
+    // A founding application sends its value items and no picked goals (`moves` empty): that is not a gap.
+    const valueOnly = !(mine?.moves ?? []).length && (mine?.firstMoon ?? []).length > 0;
+    if (asks.length && !valueOnly && !(mine?.moves ?? []).some((m) => asks.includes(m.text))) gaps.push(t`No goal of ${roleName} picked`);
     if (!(mine?.firstMoon ?? []).length) gaps.push(t({ message: `No goal for ${roleName}`, context: "open proposal side by side" }));
   }
   if (card.terms?.choice === "talk") gaps.push(t`They want to talk about the terms`);

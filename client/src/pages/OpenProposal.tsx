@@ -77,6 +77,8 @@ export interface ServedOpenProposal {
   attached?: ServedAttachments | null;
   /** About you: references, facts and the check, for the deciders only. */
   aboutYou?: ServedAboutYou | null;
+  /** The founding application's own answers, for the deciders only: the ways they got to know us, and a ramp-up asked for. */
+  founding?: { knowUs: string[]; rampUp: boolean } | null;
   /** The terms we offer, with the history: deciders only. */
   offer?: ServedDeciderOffer | null;
   /** What is left before Adopt, for a decider (audit M10, B3): conversations not written up, roles with every seat taken. */
@@ -363,6 +365,26 @@ export default function OpenProposal() {
                   <div>
                     <dt className="text-sm font-semibold text-foreground">{DECIDE_WORDS.aim}</dt>
                     <dd className="mt-1 whitespace-pre-wrap break-words text-foreground">{p.aim}</dd>
+                  </div>
+                )}
+                {p.founding && (
+                  <div data-founding-know-us="">
+                    <dt className="text-sm font-semibold text-foreground">{t({ message: "How they got to know us", context: "open proposal, founding application" })}</dt>
+                    <dd className="mt-1 break-words text-foreground">
+                      {p.founding.knowUs.length
+                        ? p.founding.knowUs.join(", ")
+                        : t({ message: "None ticked yet.", context: "open proposal, founding application" })}
+                    </dd>
+                  </div>
+                )}
+                {p.founding && (
+                  <div data-founding-ramp-up="">
+                    <dt className="text-sm font-semibold text-foreground">{t({ message: "Ramp-up", context: "open proposal, founding application" })}</dt>
+                    <dd className="mt-1 text-foreground">
+                      {p.founding.rampUp
+                        ? t({ message: "Asked for a ramp-up: partial pay while they build to their full commitment.", context: "open proposal, founding application" })
+                        : t({ message: "No ramp-up asked for.", context: "open proposal, founding application" })}
+                    </dd>
                   </div>
                 )}
               </dl>

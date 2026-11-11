@@ -19,7 +19,7 @@
  */
 
 /** The village's public link. */
-import { cleanNote, isApplicantLanguage, wordsIn, type ApplicantLanguage } from "./applicantWords";
+import { applicantSteps, cleanNote, isApplicantLanguage, wordsIn, type ApplicantLanguage } from "./applicantWords";
 import { termOf, type OpenProposalTerm } from "./openProposalTerm";
 import { cardOf, parseCard, type OpenProposalCard } from "./openProposalCard";
 import { counterOfferOf, type CounterOffer } from "./counterOffer";
@@ -40,10 +40,10 @@ export function openProposalHref(roleId?: string | null): string {
 export const OPEN_PROPOSAL_MAX_ROLES = 3;
 /**
  * ONE ROLE PER APPLICATION (the lead, 11 Nov 2026): a person applies from a
- * role's card, for that role, and the form never sends more than this. The
- * server still takes up to OPEN_PROPOSAL_MAX_ROLES, so another door (and the
- * decision suites that send two) keep working while the vocabulary settles;
- * holding the server to one is a one-line change in `parseOpenProposal`.
+ * role's card, for that role. The form never sends more than this, and
+ * `parseOpenProposal` refuses a send that names more. A stored proposal from
+ * before the ruling may still name up to OPEN_PROPOSAL_MAX_ROLES, and is read
+ * whole (`openBodyOf`).
  */
 export const OPEN_APPLY_ROLES = 1;
 /** "Get to know us": how many ways the village may list, and how long each may be. */
@@ -259,7 +259,7 @@ export function parseOpenProposal(
   if (!email) return { ok: false, field: "email", error: OPEN_WORDS.needEmail };
   const picked = Array.isArray(o.roles) ? o.roles : [];
   if (picked.length === 0) return { ok: false, field: "roles", error: OPEN_WORDS.needRole };
-  if (picked.length > OPEN_PROPOSAL_MAX_ROLES) return { ok: false, field: "roles", error: OPEN_WORDS.tooManyRoles };
+  if (picked.length > OPEN_APPLY_ROLES) return { ok: false, field: "roles", error: OPEN_WORDS.tooManyRoles };
   const roles: OpenProposalBody["roles"] = [];
   for (const r of picked as any[]) {
     const roleId = String(r?.roleId ?? "").trim();
@@ -373,21 +373,17 @@ export interface StepAfterSubmit {
 }
 
 /**
- * INTEGRATOR SLOT (Phase A): the applicant's steps after submit, in one
- * language. The one list is lane A2's `APPLICANT_STEPS` (received, review,
- * invitation, conversations, decision, first_cycle) in shared/applicantWords.ts,
- * read with `applicantSteps(lang, replyDays)` (PR 1197). It is not on main
- * yet, so this answers none and every reader falls back to its own short
- * lines. Once both land, the body is one line:
+ * The applicant's steps after submit, in one language: the one list in
+ * shared/applicantWords.ts (`APPLICANT_STEPS`: received, review, invitation,
+ * conversations, decision, first_cycle), so the confirmed page, the status
+ * email and the status page never drift apart.
  *
- *   return applicantSteps(lang, replyDays);
- *
- * Its readers: the status email below (server/routes/openProposals.ts) and
- * the confirmed page (`steps` on the confirm route's answer, drawn by
+ * Its readers: the status email (server/routes/openProposals.ts) and the
+ * confirmed page (`steps` on the confirm route's answer, drawn by
  * components/fireflyPath/Thresholds.tsx).
  */
-export function stepsAfterSubmit(_lang: ApplicantLanguage | null | undefined, _replyDays: number): StepAfterSubmit[] {
-  return [];
+export function stepsAfterSubmit(lang: ApplicantLanguage | null | undefined, replyDays: number): StepAfterSubmit[] {
+  return applicantSteps(lang, replyDays);
 }
 
 /** The steps as lines of an email: "Name: when". */
@@ -448,7 +444,7 @@ export const OPEN_WORDS = {
   needName: "Add your name.",
   needEmail: "Add an email address we can reach you at.",
   needRole: "Choose the role you are applying for.",
-  tooManyRoles: `Pick up to ${OPEN_PROPOSAL_MAX_ROLES} roles.`,
+  tooManyRoles: "One application is for one role. Choose the role you are applying for, and apply for another one separately.",
   unknownRole: "One of those roles isn't open any more. Reload the page and pick again.",
   sameRoleTwice: "You picked the same role twice.",
   needWhy: "Say why you, and why now.",

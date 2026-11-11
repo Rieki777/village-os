@@ -86,4 +86,10 @@ describe("the application's own fields", () => {
     expect(openBodyOf({ roles: [{ roleId: "r1" }], why: "w", aim: "a", knowUs: ["x", 1], rampUp: true, selfKnowledge: "y" })).toMatchObject({ knowUs: ["x"], rampUp: true, selfKnowledge: "y" });
     expect(OPEN_APPLY_ROLES).toBe(1);
   });
+
+  it("the server refuses an application naming more than one role, and takes one", () => {
+    const two = { ...ctx, roleIds: new Set(["r1", "r2"]) };
+    expect(parseOpenProposal({ ...base, roles: [{ roleId: "r1" }, { roleId: "r2" }] }, two)).toMatchObject({ ok: false, field: "roles" });
+    expect(parseOpenProposal({ ...base, roles: [{ roleId: "r2" }] }, two)).toMatchObject({ ok: true });
+  });
 });

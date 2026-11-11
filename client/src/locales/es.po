@@ -7989,6 +7989,10 @@ msgstr ""
 msgid "Ask {name} for a first draft"
 msgstr "Pedirle a {name} un primer borrador"
 
+#: client/src/components/proposalDrafts/AskSera.tsx
+msgid "Get help drafting from {name}, our regeneratively trained digital assistant"
+msgstr "Pide ayuda para redactar a {name}, nuestra asistente digital formada en lo regenerativo"
+
 #: client/src/components/voice/TalkItOut.tsx
 msgctxt "talk it out: waiting"
 msgid "{answering} is thinking"

@@ -83,7 +83,7 @@ function whenWords(d: Date, withTime: boolean): string {
  * Lane A2 owns the applicant's list of steps after submit (received, our
  * review, invitation, conversations, decision, first cycle). The confirmed
  * page draws that list whenever the confirm route carries it (`steps`, from
- * the INTEGRATOR SLOT `stepsAfterSubmit` in shared/openProposals.ts); these
+ * `stepsAfterSubmit` in shared/openProposals.ts, A2's one list); these
  * two short lines are the fallback, and the sent page's own two.
  */
 export function useWhatComesNext(): (at: { confirmBy?: string; replyBy?: string }) => string[] {

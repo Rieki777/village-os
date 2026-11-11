@@ -27,7 +27,7 @@ import { openEditor, saveEditor, type EditorOpen, type EditorState, type SaveBod
 import BringInCard from "./BringInCard";
 import SeraPanel from "./SeraPanel";
 import HistoryPanel from "./HistoryPanel";
-import CharacterTags from "./CharacterTags";
+import RootPicker from "@/components/roots/RootPicker";
 import SectionsFields, { sectionsFormOf, sectionsOf, type SectionsForm } from "./SectionsFields";
 
 const text = (v: WordValue | undefined): string => (Array.isArray(v) ? v.join("\n") : (v ?? ""));
@@ -419,8 +419,10 @@ export default function RoleEditor({ roleId, onClose, onSaved }: { roleId: strin
 
         {base.sections && <SectionsFields value={form.sections} start={start.sections} onChange={(v) => set("sections", v)} />}
 
-        {/* SLOT FOR LANE A4 (PR 1193): RootPicker (1 to 3 roots) replaces CharacterTags here; same value and onChange. */}
-        <CharacterTags value={form.tags} onChange={(v) => set("tags", v)} changed={!same([...form.tags].sort(), [...start.tags].sort())} />
+        {/* The roots it grows from: one to three, saved with the rest by the person's save. */}
+        <section className={`${PANEL} ${!same([...form.tags].sort(), [...start.tags].sort()) ? "border-dash-gold" : ""}`.trim()} data-changed={same([...form.tags].sort(), [...start.tags].sort()) ? "false" : "true"}>
+          <RootPicker value={form.tags} onChange={(v) => set("tags", v)} />
+        </section>
 
         {error && <p role="alert" className="text-sm font-semibold text-coral">{error}</p>}
         <div className="sticky bottom-0 flex flex-wrap gap-2 bg-card py-2">

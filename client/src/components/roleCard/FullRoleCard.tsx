@@ -11,7 +11,7 @@
  *   - the listing details (track, goals, where, languages, how it is filled,
  *     selection criteria), through the same view model every card host reads
  *     (RoleCardParams, shared/roleCardView.ts);
- *   - the roots it grows from (RootsSlot, lane A4's RootTags once it lands);
+ *   - the roots it grows from (RootsSlot, drawn by the roots kit's RootTags);
  *   - who last edited it and on what day;
  *   - one act, "Apply for this role", to /propose-a-role?role=<id>, lit by the
  *     one firefly cluster on the screen.
@@ -216,7 +216,7 @@ export default function FullRoleCard({ seat, circleName = null, register = "game
           </p>
         )}
         {showTitle && <h3 className={founding ? "font-display text-3xl leading-tight text-card-foreground sm:text-4xl" : "font-display text-2xl text-card-foreground"}>{String(seat?.name ?? "")}</h3>}
-        {/* The roots it grows from: lane A4's RootTags renders here (RootsSlot.tsx). */}
+        {/* The roots it grows from, drawn by RootTags (RootsSlot.tsx). */}
         <RootsSlot roots={roots} />
         {sections?.paid && (
           <p className="font-semibold text-notice" data-testid="paid-role-line">{SECTION_WORDS.paid}</p>

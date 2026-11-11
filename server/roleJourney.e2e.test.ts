@@ -312,6 +312,29 @@ describe.skipIf(!DB_CONFIGURED)("the role journey: one stranger takes one role t
     expect(form.goals.map((g: any) => g.text)).toEqual(["Roots in the ground"]);
   });
 
+  it("/api/circles keeps the listed-circle rule /api/org keeps: a circle holding only unlisted roles is hidden from a visitor, shown to an admin", async () => {
+    const F = state.founder;
+    expect((await call("PUT", "/api/admin/modules/map/lifecycle", { lifecycle: "public" }, F)).status).toBe(200);
+    expect((await call("POST", "/api/admin/circles", { id: "back-office", name: "Back Office Circle" }, F)).status).toBe(200);
+    const hidden = await call("POST", "/api/admin/org/roles", { name: "Filing Clerk", circleId: "back-office", seats: 1 }, F);
+    const hiddenId = String(hidden.json?.id ?? "");
+    expect(hiddenId).toBeTruthy();
+    const unlisted = await call("PUT", `/api/admin/org/roles/${hiddenId}`, { name: "Filing Clerk", circleId: "back-office", seats: 1, listed: false }, F);
+    expect(unlisted.status, JSON.stringify(unlisted.json)).toBe(200);
+
+    const visitor = await call("GET", "/api/circles");
+    expect(visitor.status).toBe(200);
+    const seen = (visitor.json as any[]).map((c) => c.id);
+    expect(seen).toContain("anchor");
+    expect(seen).not.toContain("back-office");
+    // The same answer /api/org gives the same visitor.
+    const org = await call("GET", "/api/org");
+    expect([...seen].sort()).toEqual(((org.json?.circles ?? []) as any[]).map((c) => c.id).sort());
+    // CONTROL: an admin sees the hidden circle, so its absence above is the rule and not a missing row.
+    const asAdmin = await call("GET", "/api/circles", undefined, F);
+    expect((asAdmin.json as any[]).map((c) => c.id)).toEqual(expect.arrayContaining(["anchor", "back-office"]));
+  });
+
   // ── The brief's 6.5 steps other lanes own. Each becomes a test, with a control, when its PR lands. ──
   it.todo("PR-A: an unlisted role is absent from the form and the board, and the listed one is offered");
   it.todo("PR-C: the public card carries the parameters and the pay range, and no other terms key");

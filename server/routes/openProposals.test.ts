@@ -460,10 +460,12 @@ describe.skipIf(!configured)("open role proposals, the intake, on a real schema"
       ["no address", { email: "" }, "email", OPEN_WORDS.needEmail],
       ["two addresses", { email: "a@example.test, b@example.test" }, "email", OPEN_WORDS.needEmail],
       ["no role", { roles: [] }, "roles", OPEN_WORDS.needRole],
+      // One role per application (the lead, 11 Nov 2026): two listed roles, each open, are still refused.
+      ["two roles", { roles: [{ roleId: "op-role-gate" }, { roleId: "op-role-well" }] }, "roles", OPEN_WORDS.tooManyRoles],
       ["four roles", { roles: [1, 2, 3, 4].map(() => ({ roleId: "x" })) }, "roles", OPEN_WORDS.tooManyRoles],
       ["an example role", { roles: [{ roleId: "op-role-example" }] }, "roles", OPEN_WORDS.unknownRole],
       ["a role in a dormant circle", { roles: [{ roleId: "op-role-dormant" }] }, "roles", OPEN_WORDS.unknownRole],
-      ["the same role twice", { roles: [{ roleId: "op-role-gate" }, { roleId: "op-role-gate" }] }, "roles", OPEN_WORDS.sameRoleTwice],
+      ["the same role twice", { roles: [{ roleId: "op-role-gate" }, { roleId: "op-role-gate" }] }, "roles", OPEN_WORDS.tooManyRoles],
       ["no why", { why: "" }, "why", OPEN_WORDS.needWhy],
       ["a why too long", { why: "x".repeat(1201) }, "why", OPEN_WORDS.tooLong("Why you", 1200)],
     ])("refuses %s, naming the field", async (_label, over, field, error) => {

@@ -334,6 +334,11 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
     const aboutYou = decidesIt(may, asks, viewerId)
       ? { references: p.body.references ?? [], about: p.body.about ?? {}, backgroundCheck: p.body.backgroundCheck ?? null }
       : null;
+    // The founding application's own answers (Phase A): the ways they got to know us and whether they asked for a ramp-up.
+    // Deciders only. Human Design or Gene Keys (`selfKnowledge`) is the applicant's own and never reaches a decider.
+    const founding = decidesIt(may, asks, viewerId) && !p.body.agent
+      ? { knowUs: p.body.knowUs ?? [], rampUp: p.body.rampUp === true }
+      : null;
     // The terms we offer, with the history: for the deciders only (joining lane PR 4). The applicant reads the current offer at their status page, never the log.
     // An agent is never offered a person's pay, allowance or commitment (audit B8a), so its page carries no terms.
     const subject = !p.body.agent && decidesIt(may, asks, viewerId) ? await loadSubject(pool, p.id) : null;
@@ -396,6 +401,7 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
         invitation,
         attached,
         aboutYou: agent ? null : aboutYou,
+        founding,
         offer,
         beforeAdopt,
         review,
