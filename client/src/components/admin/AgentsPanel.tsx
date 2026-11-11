@@ -16,14 +16,22 @@ import { API_BASE, authHeaders, refusal } from "./adminApi";
 import type { Player } from "./PlayerCard";
 import AiAgentsApprovalPanel from "./AiAgentsApprovalPanel";
 import LetterDraftsPanel from "./LetterDraftsPanel";
-import { Trans } from "@lingui/react/macro";
+import { Trans, useLingui } from "@lingui/react/macro";
+import { mergePastedAgentPaths, type PastedPathsPlan } from "@shared/agentAdmin";
 
 /** The inbox is its own chunk: the tab's first page carries none of it. */
 const ApprovalInbox = lazy(() => import("@/components/approvals/ApprovalInbox"));
 
 type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 interface PathEntry { method: Method; path: string; confirm: "agent" | "person"; label: string }
-interface PathsAnswer { document: { paths: PathEntry[] }; shipped: { paths: PathEntry[] }; edited: boolean; alwaysAPerson: Array<{ key: string; words: string }> }
+interface PathsAnswer {
+  document: { paths: PathEntry[] };
+  shipped: { paths: PathEntry[] };
+  edited: boolean;
+  alwaysAPerson: Array<{ key: string; words: string }>;
+  /** The village's opt-in for lead-approved writes (shared/agentAdmin.ts); the save parser reads it. */
+  leadApprovedWrites?: { on: boolean };
+}
 
 const METHODS: readonly Method[] = ["GET", "POST", "PUT", "PATCH", "DELETE"];
 const field = "w-full rounded-md border border-border bg-white px-2 py-1 text-sm text-foreground";
@@ -31,11 +39,17 @@ const button = "min-h-9 rounded-md border border-border bg-white px-3 py-1.5 tex
 const primary = "min-h-9 rounded-md bg-teal-deep px-3 py-1.5 text-sm font-medium text-white disabled:opacity-60";
 
 export default function AgentsPanel({ password, players }: { password: string; players: Player[] }) {
+  const { t } = useLingui();
   const [agents, setAgents] = useState<string[] | null>(null);
   const [paths, setPaths] = useState<PathsAnswer | null>(null);
   const [draft, setDraft] = useState<PathEntry[]>([]);
   const [pick, setPick] = useState("");
   const [saving, setSaving] = useState(false);
+  // "Paste a list": the pasted text, and what it would do to the list on screen once read.
+  const [pasteOpen, setPasteOpen] = useState(false);
+  const [pasted, setPasted] = useState("");
+  const [plan, setPlan] = useState<PastedPathsPlan | null>(null);
+  const [pasteError, setPasteError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -96,6 +110,24 @@ export default function AgentsPanel({ password, players }: { password: string; p
     }
   };
 
+  const readPasted = () => {
+    const r = mergePastedAgentPaths(draft, pasted, { leadApprovedWrites: paths.leadApprovedWrites?.on === true });
+    setPlan(r.ok ? r.plan : null);
+    setPasteError(r.ok ? null : r.error);
+  };
+
+  const usePasted = () => {
+    if (!plan) return;
+    setDraft(plan.merged.map((e) => ({ ...e })) as PathEntry[]);
+    setPlan(null);
+    setPasted("");
+    setPasteOpen(false);
+  };
+
+  const addedCount = plan?.added.length ?? 0;
+  const changedCount = plan?.changed.length ?? 0;
+  const sameCount = plan?.unchanged ?? 0;
+
   const set = (i: number, patch: Partial<PathEntry>) => setDraft((all) => all.map((e, k) => (k === i ? { ...e, ...patch } : e)));
   const people = players.filter((p) => !agents.includes(p.id));
 
@@ -151,9 +183,47 @@ export default function AgentsPanel({ password, players }: { password: string; p
         ))}
         <div className="flex flex-wrap gap-2">
           <button type="button" className={button} onClick={() => setDraft((all) => [...all, { method: "GET", path: "/api/admin/", confirm: "person", label: "" }])}>Add a path</button>
+          <button type="button" className={button} aria-expanded={pasteOpen} onClick={() => setPasteOpen((o) => !o)}><Trans context="agent paths">Paste a list</Trans></button>
           <button type="button" className={button} onClick={() => setDraft(paths.shipped.paths.map((e) => ({ ...e })))}>Back to the shipped list</button>
           <button type="button" className={primary} disabled={saving} onClick={() => void save()}>{saving ? "Saving" : "Save"}</button>
         </div>
+        {pasteOpen && (
+          <div className="space-y-2 rounded-lg border border-border p-3">
+            <label className="block text-sm text-foreground">
+              <Trans>Paste the paths as JSON, in the shape the list saves: a paths list of method, path, confirm and label. Paths already on the list stay; a pasted one that is there already takes the pasted confirm and words.</Trans>
+              <textarea
+                aria-label={t({ message: "Pasted paths", context: "agent paths, the box a list is pasted into" })}
+                className={`${field} mt-1 min-h-32 font-mono`}
+                value={pasted}
+                onChange={(x) => {
+                  setPasted(x.target.value);
+                  setPlan(null);
+                  setPasteError(null);
+                }}
+              />
+            </label>
+            <button type="button" className={button} disabled={!pasted.trim()} onClick={readPasted}><Trans>Read the pasted list</Trans></button>
+            {pasteError && <p role="alert" className="text-sm text-destructive">{pasteError}</p>}
+            {plan && (
+              <div className="space-y-2 text-sm text-foreground" aria-label={t`What the pasted list does`}>
+                <p>
+                  <Trans>Adds {addedCount}, changes {changedCount}, already there {sameCount}. Nothing is removed. Nothing is saved until you press Save.</Trans>
+                </p>
+                {plan.added.length > 0 && (
+                  <ul className="list-disc pl-5">
+                    {plan.added.map((e) => <li key={`a ${e.method} ${e.path}`}><Trans context="agent paths, a pasted path that is new">Adds</Trans> {e.method} {e.path} ({e.confirm === "agent" ? <Trans context="agent paths">the agent confirms</Trans> : <Trans context="agent paths">a person confirms</Trans>})</li>)}
+                  </ul>
+                )}
+                {plan.changed.length > 0 && (
+                  <ul className="list-disc pl-5">
+                    {plan.changed.map((c) => <li key={`c ${c.after.method} ${c.after.path}`}><Trans context="agent paths, a pasted path that changes one already listed">Changes</Trans> {c.after.method} {c.after.path}: {c.before.confirm} {"->"} {c.after.confirm}, {c.after.label}</li>)}
+                  </ul>
+                )}
+                <button type="button" className={button} onClick={usePasted}><Trans>Put these on the list</Trans></button>
+              </div>
+            )}
+          </div>
+        )}
         <div>
           <p className="text-sm font-medium text-foreground">Always a person, whatever this list says</p>
           <ul className="mt-1 list-disc pl-5 text-sm text-muted-foreground">

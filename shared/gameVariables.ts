@@ -3739,7 +3739,7 @@ export const VARIABLES: VariableDef[] = [
     category: "Connector",
     label: "Our agent may make the changes we approve in the chat",
     description:
-      "When on, an agent account using the village connector may write a role's words, draft the wording of its terms, seat and unseat a person, and change the village's own wording, each time a person has approved it in the chat. Every seating names who approved it and quotes the approval, and every admin and founder is told. Pay, money, erasure, secrets, agent accounts and powers stay a person's act. Off, the connector does only what it did before.",
+      "When on, the village connector, acting for the person who connected it, may write a role's words, draft the wording of its terms, seat and unseat a person, and change the village's own wording, each time a person has approved it in the chat. Every seating names who approved it and quotes the approval, and every admin and founder is told. Pay, money, erasure, secrets, agent accounts and powers stay a person's act. Off, the connector does only what it did before.",
     type: "boolean",
     default: "false",
   },

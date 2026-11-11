@@ -382,7 +382,7 @@
       "method": "GET",
       "path": "/api/org",
       "confirm": "agent",
-      "label": "The org chart: circles, roles, seats"
+      "label": "The org chart: circles, roles and who holds them"
     },
     {
       "method": "GET",

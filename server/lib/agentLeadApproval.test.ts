@@ -15,7 +15,7 @@ import { readLeadSeatFacts, recordLeadApproval } from "./agentLeadApproval";
 import { leadApprovedBodyProblem, type AgentAdminPathsDoc, type LeadSeatFacts } from "../../shared/agentAdmin";
 import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "../db/testDb";
 
-const SECRET = "lead-approved-test-secret";
+const SIGNER = "lead-approved-unit-test-signing-input";
 const info = { name: "Example Village", version: "1.2.0" };
 const call = (args: Record<string, unknown>) => ({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "admin_request", arguments: args } });
 const ask = (message: unknown, ctx: ToolContext) => handleMcpMessage(message, { scopes: ["admin"], info, ctx }) as Promise<any>;
@@ -36,9 +36,9 @@ function agent(opts: { on: boolean; seat?: Partial<LeadSeatFacts> }) {
       routes.push({ method, path, body });
       return { status: 200, body: { success: true } } as RouteAnswer;
     },
-    mintConfirm: (tool, echo) => mintConfirmToken(SECRET, { action: `mcp:${tool}`, userId: "agent-1", echo }),
+    mintConfirm: (tool, echo) => mintConfirmToken(SIGNER, { action: `mcp:${tool}`, userId: "agent-1", echo }),
     verifyConfirm: (tool, token, echo) => {
-      const c = verifyConfirmToken(SECRET, token, { action: `mcp:${tool}`, userId: "agent-1", echo });
+      const c = verifyConfirmToken(SIGNER, token, { action: `mcp:${tool}`, userId: "agent-1", echo });
       return c.ok ? { ok: true } : { ok: false, reason: c.reason, sentence: CONFIRM_REASON_SENTENCE[c.reason] };
     },
     adminPaths: async () => LIST,

@@ -301,12 +301,17 @@ export function effectiveAgentAdminPaths(stored: unknown): AgentAdminPathsDoc {
  * routes, `/api/admin/roles/:id/holders` on the power-group plane), publishing
  * a draft, settings and brand, and the moon review's approvals.
  *
- * THE ROUTE GATES STILL RUN AS THE AGENT'S HOLDER. Lifting a rule here only
- * lets the call reach the route; the one capability gate decides there. A
- * village grants its agent account `story.tell` (content, FAQs, story pages)
- * and `org.seat` (seating, unseating, the onboarding path) the way it grants
- * any power, through a seat or a badge, and `dial.set` where the village holds
- * it. Nothing in code grants them.
+ * THE ROUTE GATES STILL RUN AS THE TOKEN'S HOLDER. The connector acts as the
+ * account that minted its `vat_` token or connected it through OAuth
+ * (`resolveAgent`, server/index.ts, signs the holder's own session), and the
+ * `admin` scope is only ever given to an admin. When the lead connects from
+ * their own profile, the holder IS the lead: `story.tell` (content, FAQs, story
+ * pages), `org.seat` (seating, unseating, the onboarding path) and `dial.set`
+ * (variables) are asked of the lead's own account. On a key the village has
+ * not taken up, an admin passes; on a key the village holds, the lead needs a
+ * live seat carrying it, as in the app. Lifting a rule here only lets the call
+ * reach the route; the one capability gate decides there. Nothing in code
+ * grants a power. A seating never seats the holder (`self` below).
  */
 export const LEAD_APPROVED_WRITES_VARIABLE = "agents.lead_approved_writes";
 
@@ -413,7 +418,7 @@ export const LEAD_APPROVAL_WORDS = {
   missingSeat: "There is no such role or live seating to change.",
   example: "A standing example is never changed through the connector.",
   ungrantable:
-    "This seat carries a power a badge may never carry (the steward's veto and the break-glass among them), or it opens the admin panel. The village fills it by its own vote, and a person does it.",
+    "This role carries a power a badge may never carry (the steward's veto and the break-glass among them), or it opens the admin panel. The village fills it by its own vote, and a person does it.",
   variable: "That game variable is not one an agent may set. A person sets it in Admin, Variables.",
   draftOp: "An agent may draft a role's creation or its words. Other draft changes are a person's to make.",
 } as const;
@@ -497,4 +502,65 @@ export function leadApprovedBodyProblem(
       return AGENT_WORDING_VARIABLES.includes(segs[segs.length - 1] ?? "") ? null : LEAD_APPROVAL_WORDS.variable;
     }
   }
+}
+
+// ── PASTING A LIST IN THE PANEL ──────────────────────────────────────────────
+
+export interface PastedPathsPlan {
+  /** The whole list as it would be saved: every path already there, then the new ones. */
+  merged: AllowedAdminPath[];
+  added: AllowedAdminPath[];
+  changed: Array<{ before: AllowedAdminPath; after: AllowedAdminPath }>;
+  unchanged: number;
+}
+
+/**
+ * A pasted list merged into the list on screen, by method and path, for Admin, Agents, "Paste a list".
+ *
+ * Nothing already on the list is ever dropped: a pasted path that is there already replaces its confirm and label,
+ * and a new one is added at the end. The pasted list is read by the save parser itself, so a path the save would
+ * refuse is refused here with the same reason, and the merged list is read again, which catches the hundred-path
+ * limit. Pure; the person still presses Save, and the server reads it a third time.
+ */
+export function mergePastedAgentPaths(
+  current: readonly AllowedAdminPath[],
+  pasted: unknown,
+  opts: { leadApprovedWrites?: boolean } = {},
+): { ok: true; plan: PastedPathsPlan } | { ok: false; error: string } {
+  let raw = pasted;
+  if (typeof raw === "string") {
+    try {
+      raw = JSON.parse(raw);
+    } catch {
+      return { ok: false, error: "That is not JSON. Paste a list shaped like {\"paths\": [...]}." };
+    }
+  }
+  if (Array.isArray(raw)) raw = { paths: raw };
+  const read = parseAgentAdminPaths(raw, opts);
+  if (!read.ok) return { ok: false, error: `In the pasted list: ${read.error}` };
+  const key = (e: { method: string; path: string }) => `${e.method} ${e.path}`;
+  const merged = current.map((e) => ({ ...e }));
+  const added: AllowedAdminPath[] = [];
+  const changed: PastedPathsPlan["changed"] = [];
+  let unchanged = 0;
+  for (const e of read.value.paths) {
+    const at = merged.findIndex((x) => key(x) === key(e));
+    if (at < 0) {
+      if (!added.some((x) => key(x) === key(e))) {
+        merged.push(e);
+        added.push(e);
+      }
+      continue;
+    }
+    const before = merged[at];
+    if (before.confirm === e.confirm && before.label === e.label) {
+      unchanged++;
+      continue;
+    }
+    merged[at] = e;
+    changed.push({ before, after: e });
+  }
+  const whole = parseAgentAdminPaths({ paths: merged }, opts);
+  if (!whole.ok) return { ok: false, error: `With the pasted paths added: ${whole.error}` };
+  return { ok: true, plan: { merged, added, changed, unchanged } };
 }

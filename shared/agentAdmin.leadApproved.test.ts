@@ -20,6 +20,7 @@ import {
   LEAD_APPROVED_WRITES,
   leadApprovedBodyProblem,
   LIFTABLE_RULES,
+  mergePastedAgentPaths,
   parseAgentAdminPaths,
   type AgentAdminPathsDoc,
   type LeadSeatFacts,
@@ -185,5 +186,44 @@ describe("the body half", () => {
     expect(leadApprovedBodyProblem("unseat", "/api/admin/org/seatings/s-1", approval, { holderId: "agent-1", seat: { ...plainSeat, seatingIsAgent: true } })).toContain("agent");
     expect(leadApprovedBodyProblem("seat", seatPath, { userId: "u-ana", ...approval }, { holderId: "agent-1", seat: { ...plainSeat, isExample: true } })).toContain("example");
     expect(leadApprovedBodyProblem("seat", seatPath, { userId: "u-ana", ...approval }, { holderId: "agent-1", seat: null })).toContain("no such");
+  });
+});
+
+describe("pasting a list in the panel", () => {
+  const current = [
+    { method: "GET" as const, path: "/api/admin/member-tasks/access", confirm: "agent" as const, label: "Who has a task board" },
+    { method: "PUT" as const, path: "/api/admin/faqs/:pathway", confirm: "person" as const, label: "FAQs" },
+  ];
+
+  it("adds new paths, changes a matching one, and never drops one already there", () => {
+    const r = mergePastedAgentPaths(current, JSON.stringify({ paths: [
+      { method: "PUT", path: "/api/admin/faqs/:pathway", confirm: "agent", label: "Replace a pathway's FAQs" },
+      { method: "GET", path: "/api/admin/events", confirm: "agent", label: "Events" },
+      { method: "GET", path: "/api/admin/events", confirm: "agent", label: "Events" },
+    ] }));
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.plan.merged.map((e) => `${e.method} ${e.path} ${e.confirm}`)).toEqual([
+      "GET /api/admin/member-tasks/access agent",
+      "PUT /api/admin/faqs/:pathway agent",
+      "GET /api/admin/events agent",
+    ]);
+    expect(r.plan.added).toHaveLength(1);
+    expect(r.plan.changed).toHaveLength(1);
+    expect(r.plan.changed[0].before.confirm).toBe("person");
+  });
+
+  it("refuses with the save parser's own reason, and refuses what is not JSON", () => {
+    const bad = mergePastedAgentPaths(current, [{ method: "PUT", path: "/api/admin/integrations/:id", confirm: "agent", label: "x" }]);
+    expect(bad).toMatchObject({ ok: false });
+    if (!bad.ok) expect(bad.error).toContain("Secrets and integration keys are always a person's act.");
+    expect(mergePastedAgentPaths(current, "{paths:")).toMatchObject({ ok: false });
+  });
+
+  it("follows the opt-in: the seed merges with it on and is refused with it off", () => {
+    expect(mergePastedAgentPaths(current, seed).ok).toBe(false);
+    const on = mergePastedAgentPaths(current, seed, ON);
+    expect(on.ok).toBe(true);
+    if (on.ok) expect(on.plan.merged).toHaveLength(88); // both paths on screen are on the seed list already
   });
 });
