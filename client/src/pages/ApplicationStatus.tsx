@@ -14,7 +14,10 @@ import { Check } from "lucide-react";
 import { BreathingLoader, useReducedMotion } from "@/components/natural";
 import { gameFetch } from "@/lib/gameApi";
 import { PANEL_WORDS } from "@shared/applicationReview";
-import { DECLINED_PAGE_WORDS, replyPromise } from "@shared/openProposalDecide";
+import { DECLINED_PAGE_WORDS } from "@shared/openProposalDecide";
+import { chooseApplicantLanguage } from "@shared/applicantLanguage";
+import { wordsIn } from "@shared/applicantWords";
+import { useLingui } from "@lingui/react/macro";
 import { civilDayWords } from "@shared/seasonPlans";
 
 interface Served {
@@ -30,9 +33,13 @@ interface Served {
   replyDays?: number;
   /** A count only: how many references the applicant gave (shared/proposalAbout.ts). */
   referencesGiven?: number | null;
+  /** The applicant's language, and a decider's note for them (server/lib/applicationReview.ts statusOf). */
+  locale?: string;
+  note?: string | null;
 }
 
 export default function ApplicationStatus() {
+  const { i18n } = useLingui();
   const params = useParams<{ ref: string }>();
   const ref = String(params.ref ?? "");
   const [s, setS] = useState<Served | null>(null);
@@ -70,6 +77,8 @@ export default function ApplicationStatus() {
   }, [ref]);
 
   const still = useReducedMotion();
+  // The words this page owns follow the language the person is reading the site in, else the one kept on their proposal.
+  const w = wordsIn(chooseApplicantLanguage({ chosenOnSite: i18n.locale, profile: s?.locale ?? null }).language);
   const byDay = s?.by ? civilDayWords(new Date(s.by).toISOString().slice(0, 10)) : null;
 
   return (
@@ -95,16 +104,22 @@ export default function ApplicationStatus() {
                 {s.actsNext}
               </p>
               {byDay && <p className="mt-1 text-foreground">{PANEL_WORDS.statusBy(byDay)}</p>}
-              {s.outcome == null && typeof s.replyDays === "number" && <p className="mt-1 text-foreground" data-reply-promise="">{replyPromise(s.replyDays)}</p>}
+              {s.outcome == null && typeof s.replyDays === "number" && <p className="mt-1 text-foreground" data-reply-promise="">{w.replyPromise(s.replyDays)}</p>}
             </section>
+            {s.note && (
+              <section aria-label={w.page.noteHeading} className="rounded-xl border border-border bg-card p-4" data-applicant-note="">
+                <h2 className="font-display text-xl font-bold text-foreground">{w.page.noteHeading}</h2>
+                <p className="mt-1 whitespace-pre-line text-foreground">{s.note}</p>
+              </section>
+            )}
             {s.outcome === "declined" && (
-              <section aria-label={DECLINED_PAGE_WORDS.heading} className="rounded-xl border border-border bg-card p-4" data-declined="">
-                <h2 className="font-display text-xl font-bold text-foreground">{DECLINED_PAGE_WORDS.heading}</h2>
-                <p className="mt-1 text-foreground">{DECLINED_PAGE_WORDS.line}</p>
+              <section aria-label={w.page.declinedHeading} className="rounded-xl border border-border bg-card p-4" data-declined="">
+                <h2 className="font-display text-xl font-bold text-foreground">{w.page.declinedHeading}</h2>
+                <p className="mt-1 text-foreground">{w.page.declinedLine}</p>
                 <ul className="mt-2 list-disc space-y-1 pl-5 text-foreground">
-                  <li><a className="font-semibold underline" href={DECLINED_PAGE_WORDS.quests.href}>{DECLINED_PAGE_WORDS.quests.label}</a></li>
-                  <li><a className="font-semibold underline" href={DECLINED_PAGE_WORDS.roles.href}>{DECLINED_PAGE_WORDS.roles.label}</a></li>
-                  <li>{DECLINED_PAGE_WORDS.again}</li>
+                  <li><a className="font-semibold underline" href={DECLINED_PAGE_WORDS.quests.href}>{w.page.quests}</a></li>
+                  <li><a className="font-semibold underline" href={DECLINED_PAGE_WORDS.roles.href}>{w.page.roles}</a></li>
+                  <li>{w.page.again}</li>
                 </ul>
               </section>
             )}

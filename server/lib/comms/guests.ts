@@ -185,7 +185,7 @@ const refusedAt = (refusal: GuestRefusal) => ({
  */
 export async function requestGuestSeat(
   deps: GuestDeps,
-  input: { eventId: string; occurrenceKey: string; name: unknown; email: unknown; timezone?: unknown },
+  input: { eventId: string; occurrenceKey: string; name: unknown; email: unknown; timezone?: unknown; locale?: unknown },
 ): Promise<GuestRequestOutcome> {
   const nameProblem = guestNameProblem(input.name);
   if (nameProblem) return { ok: false, status: 400, error: nameProblem };
@@ -197,7 +197,7 @@ export async function requestGuestSeat(
   if (refusal || !evening) return refusedAt(refusal ?? "not_found");
 
   const pool = deps.getPool();
-  const contact = await ensureContact(deps, { email, name, source: "guest", timezone: typeof input.timezone === "string" ? input.timezone : null });
+  const contact = await ensureContact(deps, { email, name, source: "guest", timezone: typeof input.timezone === "string" ? input.timezone : null, locale: typeof input.locale === "string" ? input.locale : null });
   if (!contact) return { ok: false, status: 400, error: "Check your email address. It doesn't look right." };
   const row = await contactById(pool, contact.id);
 

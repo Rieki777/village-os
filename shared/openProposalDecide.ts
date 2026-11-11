@@ -30,6 +30,7 @@
  * In the 2026-10-02 voice: say what happens next, never how.
  */
 import { andList } from "./openProposals";
+import { LANGUAGES, wordsIn, type ApplicantLanguage } from "./applicantWords";
 
 /** The member page, and the shape of a proposal's id (server/routes/openProposals.ts mints `op-` and 20 hex). */
 export const OPEN_PROPOSAL_ID = /^op-[0-9a-f]{20}$/;
@@ -186,35 +187,40 @@ export interface AdoptLetterIn {
   moon?: { from: string; to: string } | null;
   /** Where the membership agreement is signed (/love-letter), when the village serves it. */
   loveLetter?: string | null;
+  lang?: ApplicantLanguage;
+  /** A decider's note for the applicant. */
+  note?: string | null;
 }
 
-/** Signing comes before seating and before any vote (Rye's ruling; the role card's Agreements). */
-const signFirst = (i: AdoptLetterIn): string[] =>
-  i.loveLetter
-    ? ["", "Before you are seated, align with the Love Letter, the village's membership agreement (aligning is the village's way of signing). Aligning with it is what makes you a member, with a voice in the village's decisions:", i.loveLetter]
-    : [];
+const noteLines = (lang: ApplicantLanguage | undefined, note: string | null | undefined): string[] => (note ? ["", wordsIn(lang).noteIntro, note] : []);
 
-const hello = (firstName: string | null) => (firstName ? `Hi ${firstName},` : "Hi,");
-const whenRolesStart = (i: AdoptLetterIn) =>
-  i.moon ? `Your roles run from ${i.moon.from} to the next new moon, ${i.moon.to}.` : `Your roles start when ${i.season || "next season"} begins, on ${i.startsOn}.`;
-const forWhen = (i: AdoptLetterIn) => (i.moon ? "this moon" : "next season");
+/** Signing comes before seating and before any vote (Rye's ruling; the role card's Agreements). */
+const signFirst = (i: AdoptLetterIn): string[] => (i.loveLetter ? ["", wordsIn(i.lang).adopt.signFirst(), i.loveLetter] : []);
+
+const whenRolesStart = (i: AdoptLetterIn) => {
+  const a = wordsIn(i.lang).adopt;
+  return i.moon ? a.moonRuns(i.moon.from, i.moon.to) : a.seasonStarts(i.season, i.startsOn);
+};
+const forWhen = (i: AdoptLetterIn) => (i.moon ? wordsIn(i.lang).adopt.forThisMoon : wordsIn(i.lang).adopt.forNextSeason);
 
 /** The yes, with the invitation, for an address with no account here. The email shows `button` as a button and keeps the link in the text. */
 export function adoptedInviteLetter(i: AdoptLetterIn & { link: string; days: number }): { subject: string; text: string; button: { label: string; url: string } } {
+  const w = wordsIn(i.lang);
   return {
-    subject: `${i.village} adopted your proposal`,
-    button: { label: INVITE_BUTTON, url: i.link },
+    subject: w.adopt.subject(i.village),
+    button: { label: w.adopt.button, url: i.link },
     text: [
-      hello(i.firstName),
+      w.hello(i.firstName),
       "",
-      `${i.village} adopted your proposal to hold ${andList(i.roleNames) || "a role"} ${forWhen(i)}.`,
+      w.adopt.headline(i.village, w.list(i.roleNames) || w.aRole, forWhen(i)),
+      ...noteLines(i.lang, i.note),
       "",
-      `Here is your invitation. Use the button to create your profile, or open this link:`,
+      w.adopt.inviteIntro,
       i.link,
       "",
-      `It works once and lasts ${i.days} days. ${whenRolesStart(i)}`,
+      w.adopt.inviteWorks(i.days, whenRolesStart(i)),
       "",
-      NEXT_AFTER_PROFILE,
+      w.adopt.nextAfterProfile,
       ...signFirst(i),
       "",
     ].join("\n"),
@@ -222,19 +228,21 @@ export function adoptedInviteLetter(i: AdoptLetterIn & { link: string; days: num
 }
 
 /** The button's label, and what we tell a person to do once their profile exists. */
-export const INVITE_BUTTON = "Create your profile";
-export const NEXT_AFTER_PROFILE = "Then check your profile. Your tasks for the moon appear there, and it is where we run our sessions and track our work together.";
+export const INVITE_BUTTON = LANGUAGES.en.adopt.button;
+export const NEXT_AFTER_PROFILE = LANGUAGES.en.adopt.nextAfterProfile;
 
 /** The yes, for an address that already has an account here. */
 export function adoptedAccountLetter(i: AdoptLetterIn & { signIn: string }): { subject: string; text: string } {
+  const w = wordsIn(i.lang);
   return {
-    subject: `${i.village} adopted your proposal`,
+    subject: w.adopt.subject(i.village),
     text: [
-      hello(i.firstName),
+      w.hello(i.firstName),
       "",
-      `${i.village} adopted your proposal to hold ${andList(i.roleNames) || "a role"} ${forWhen(i)}.`,
+      w.adopt.headline(i.village, w.list(i.roleNames) || w.aRole, forWhen(i)),
+      ...noteLines(i.lang, i.note),
       "",
-      `Sign in with this address to see your roles. ${whenRolesStart(i)}`,
+      w.adopt.signIn(whenRolesStart(i)),
       i.signIn,
       ...signFirst(i),
       "",
@@ -243,21 +251,24 @@ export function adoptedAccountLetter(i: AdoptLetterIn & { signIn: string }): { s
 }
 
 /**
- * The kind no. It thanks, gives no reasons of its own, and points to three
- * ways to stay close: a quest, the other open roles, the next season.
+ * The kind no. It thanks, gives no reasons of its own (a decider's note is the
+ * only reason, and only when they write one), and points to three ways to stay
+ * close: a quest, the other open roles, the next season.
  */
-export function declinedLetter(i: { firstName: string | null; village: string; roleNames: readonly string[]; site: string }): { subject: string; text: string } {
+export function declinedLetter(i: { firstName: string | null; village: string; roleNames: readonly string[]; site: string; lang?: ApplicantLanguage; note?: string | null }): { subject: string; text: string } {
+  const w = wordsIn(i.lang);
   return {
-    subject: `Your proposal to ${i.village}`,
+    subject: w.declined.subject(i.village),
     text: [
-      hello(i.firstName),
+      w.hello(i.firstName),
       "",
-      `Thank you for proposing to hold ${andList(i.roleNames) || "a role"} in ${i.village}. We can't say yes this time.`,
+      w.declined.thanks(w.list(i.roleNames) || w.aRole, i.village),
+      ...noteLines(i.lang, i.note),
       "",
-      "We're glad you found us. If you'd like to stay close, here are three ways in:",
-      `Take a quest: ${i.site}/quests`,
-      `Look at other open roles: ${i.site}/roles`,
-      "Or propose again next season. We would be glad to read it.",
+      w.declined.stayClose,
+      w.declined.quest(`${i.site}/quests`),
+      w.declined.roles(`${i.site}/roles`),
+      w.declined.again,
       "",
     ].join("\n"),
   };
@@ -273,7 +284,7 @@ export const DECLINED_PAGE_WORDS = {
 } as const;
 
 /** The reply promise on the status page: one sentence, the number from the village's setting. */
-export const replyPromise = (days: number): string => `We reply within ${days} ${days === 1 ? "day" : "days"}.`;
+export const replyPromise = (days: number, lang?: ApplicantLanguage): string => wordsIn(lang).replyPromise(days);
 
 // ── Updates about a proposal, to the person who made it ─────────────────────
 
@@ -290,32 +301,31 @@ export const UPDATE_EMAILS: Record<ApplicantUpdateKind, boolean> = {
   declined: false,
 };
 
-/** One update's title (the email's subject and the profile's headline) and its text. */
+/** One update's title (the email's subject and the profile's headline) and its text. A decider's note rides under the text. */
 export function applicantUpdate(
   kind: ApplicantUpdateKind,
-  i: { firstName: string | null; village: string; roleNames: readonly string[]; replyDays: number; withRole?: string | null; minutes?: number | null },
+  i: { firstName: string | null; village: string; roleNames: readonly string[]; replyDays: number; withRole?: string | null; minutes?: number | null; lang?: ApplicantLanguage; note?: string | null },
 ): { title: string; text: string } {
-  const roles = andList(i.roleNames) || "a role";
-  const keep = "Your status page link is in the first email we sent you, so you can follow it any time.";
-  const body = (lines: string[]) => [hello(i.firstName), "", ...lines, "", keep, ""].join("\n");
+  const w = wordsIn(i.lang);
+  const u = w.update;
+  const roles = w.list(i.roleNames) || w.aRole;
+  const body = (lines: string[]) => [w.hello(i.firstName), "", ...lines, ...noteLines(i.lang, i.note), "", w.keepStatusLink, ""].join("\n");
+  const withNote = (text: string) => [text, ...noteLines(i.lang, i.note)].join("\n");
   switch (kind) {
     case "confirmed":
-      return { title: `Your proposal is with ${i.village}`, text: `Your proposal to hold ${roles} is with us. ${replyPromise(i.replyDays)}` };
+      return { title: u.confirmedTitle(i.village), text: u.confirmed(roles, w.replyPromise(i.replyDays)) };
     case "first_reply":
-      return { title: `We have taken up your proposal`, text: body([`The role that welcomes people has taken up your proposal to hold ${roles} and is writing to you about a time to talk.`, replyPromise(i.replyDays)]) };
+      return { title: u.firstReplyTitle, text: body([u.firstReply(roles), w.replyPromise(i.replyDays)]) };
     case "conversation":
-      return {
-        title: `A conversation is asked for`,
-        text: body([`The next step on your proposal to hold ${roles} is a conversation${i.withRole ? ` with ${i.withRole}` : ""}${i.minutes ? `, about ${i.minutes} minutes` : ""}. We will write to you about a time.`]),
-      };
+      return { title: u.conversationTitle, text: body([u.conversation(roles, i.withRole ?? null, i.minutes ?? null)]) };
     case "consent":
-      return { title: `The circle is weighing your proposal`, text: body([`The conversations are written up, and the circle is now asked to consent to your proposal to hold ${roles}. We will tell you what it decides.`]) };
+      return { title: u.consentTitle, text: body([u.consent(roles)]) };
     case "terms":
-      return { title: `The terms for your proposal changed`, text: body([`We changed the terms we suggest for your proposal to hold ${roles}. Open your status page to read them, and tell us what you think.`]) };
+      return { title: u.termsTitle, text: body([u.terms(roles)]) };
     case "adopted":
-      return { title: `${i.village} adopted your proposal`, text: `${i.village} adopted your proposal to hold ${roles}. ${NEXT_AFTER_PROFILE}` };
+      return { title: u.adoptedTitle(i.village), text: withNote(u.adopted(i.village, roles, w.adopt.nextAfterProfile)) };
     case "declined":
-      return { title: `Your proposal to ${i.village}`, text: `Thank you for proposing to hold ${roles}. We can't say yes this time. You can take a quest, look at other open roles, or propose again next season.` };
+      return { title: u.declinedTitle(i.village), text: withNote(u.declined(roles)) };
   }
 }
 

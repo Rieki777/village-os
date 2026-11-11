@@ -28,6 +28,7 @@ import { AboutYouFacts, ReferencesBlock, EMPTY_ABOUT_YOU, aboutYouBody, aboutYou
 import { termOf, type OpenProposalTerm } from "@shared/openProposalTerm";
 import { civilDayWords } from "@shared/seasonPlans";
 import { useLingui } from "@lingui/react/macro";
+import { i18n } from "@/i18n/i18n";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "wouter";
 import { ArrowLeft, ArrowRight, MailCheck } from "lucide-react";
@@ -253,6 +254,8 @@ export default function ProposeARole() {
           // The NDA promise only: the membership letter is aligned with below, never ticked.
           agreed,
         },
+        // The site language they are reading this in: their emails and status page follow it (shared/applicantLanguage.ts).
+        locale: i18n.locale,
         // The letter version the applicant aligned with here; recorded once the address confirms.
         ...(membership.kind === "aligned" ? { membership: { letterVersion: membership.letterVersion } } : {}),
         // Links only when there are some: a proposal without them sends what it always sent.

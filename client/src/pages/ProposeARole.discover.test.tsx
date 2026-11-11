@@ -75,7 +75,7 @@ describe("the open form after the discover step", () => {
     expect(posted).toHaveLength(1);
     const keys = Object.keys(posted[0].body).sort();
     // `membership` is PR-E's letter version (Rye's answer 8): an `lv-` fingerprint, never a discover value.
-    expect(keys).toEqual(["about", "aim", "card", "checkConsent", "email", "hp", "link", "membership", "name", "references", "roles", "why"].filter((k) => keys.includes(k)));
+    expect(keys).toEqual(["about", "aim", "card", "checkConsent", "email", "hp", "link", "locale", "membership", "name", "references", "roles", "why"].filter((k) => keys.includes(k)));
     expect(posted[0].body.membership).toEqual({ letterVersion: LETTER.version });
     expect(posted[0].body.why).toContain("growing food");
     expect(posted[0].raw).not.toMatch(/Projector|humanDesign|geneKeys|ikigai/i);

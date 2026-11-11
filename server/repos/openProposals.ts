@@ -137,12 +137,14 @@ export async function decideOpenProposal(
   to: "adopted" | "declined",
   decision: OpenDecision,
   now: Date,
+  note: string | null = null,
 ): Promise<boolean> {
+  // A decider's note for the applicant rides in the same write, so it is there the moment the status is.
   const [result] = await db.query<ResultSetHeader>(
     "UPDATE open_role_proposals SET status = ?, decided_at = ?, " +
-      "body_json = JSON_SET(COALESCE(body_json, JSON_OBJECT()), '$.decidedWords', ?, '$.decidedAuthority', ?) " +
+      "body_json = JSON_SET(COALESCE(body_json, JSON_OBJECT()), '$.decidedWords', ?, '$.decidedAuthority', ?" + (note ? ", '$.note', ?" : "") + ") " +
       "WHERE id = ? AND status = 'confirmed'",
-    [to, now, decision.words ?? "", decision.authority ?? "", id],
+    note ? [to, now, decision.words ?? "", decision.authority ?? "", note, id] : [to, now, decision.words ?? "", decision.authority ?? "", id],
   );
   return Number(result.affectedRows ?? 0) === 1;
 }
@@ -188,7 +190,7 @@ export async function confirmOpenProposal(db: Db, confirmHash: string, notBefore
 export async function undoAdoption(db: Db, id: string): Promise<boolean> {
   const [result] = await db.query<ResultSetHeader>(
     "UPDATE open_role_proposals SET status = 'confirmed', decided_at = NULL, " +
-      "body_json = JSON_REMOVE(COALESCE(body_json, JSON_OBJECT()), '$.decidedWords', '$.decidedAuthority') WHERE id = ? AND status = 'adopted'",
+      "body_json = JSON_REMOVE(COALESCE(body_json, JSON_OBJECT()), '$.decidedWords', '$.decidedAuthority', '$.note') WHERE id = ? AND status = 'adopted'",
     [id],
   );
   return Number(result.affectedRows ?? 0) === 1;
@@ -225,7 +227,7 @@ export async function adoptedDecidedBefore(db: Db, before: Date): Promise<Stored
 /** Take the name and address off one proposal, once. True when this call did. */
 export async function anonymiseOpenProposal(db: Db, id: string, now: Date): Promise<boolean> {
   const [result] = await db.query<ResultSetHeader>(
-    "UPDATE open_role_proposals SET body_json = JSON_REMOVE(COALESCE(body_json, JSON_OBJECT()), '$.card.timeZone', '$.card.windows', '$.card.earliestStart', '$.links', '$.files', '$.references', '$.backgroundCheck', '$.about'), name = NULL, email = NULL, email_key = NULL, anonymised_at = ? WHERE id = ? AND anonymised_at IS NULL",
+    "UPDATE open_role_proposals SET body_json = JSON_REMOVE(COALESCE(body_json, JSON_OBJECT()), '$.card.timeZone', '$.card.windows', '$.card.earliestStart', '$.links', '$.files', '$.references', '$.backgroundCheck', '$.about', '$.note'), name = NULL, email = NULL, email_key = NULL, anonymised_at = ? WHERE id = ? AND anonymised_at IS NULL",
     [now, id],
   );
   return Number(result.affectedRows ?? 0) === 1;
@@ -245,7 +247,7 @@ export async function deleteUnconfirmedBefore(db: Db, before: Date): Promise<num
 /** Take the name and address off every declined or withdrawn proposal decided before `before`. How many. */
 export async function anonymiseDecidedBefore(db: Db, before: Date, now: Date): Promise<number> {
   const [result] = await db.query<ResultSetHeader>(
-    "UPDATE open_role_proposals SET body_json = JSON_REMOVE(COALESCE(body_json, JSON_OBJECT()), '$.card.timeZone', '$.card.windows', '$.card.earliestStart', '$.links', '$.files', '$.references', '$.backgroundCheck', '$.about'), name = NULL, email = NULL, email_key = NULL, anonymised_at = ? " +
+    "UPDATE open_role_proposals SET body_json = JSON_REMOVE(COALESCE(body_json, JSON_OBJECT()), '$.card.timeZone', '$.card.windows', '$.card.earliestStart', '$.links', '$.files', '$.references', '$.backgroundCheck', '$.about', '$.note'), name = NULL, email = NULL, email_key = NULL, anonymised_at = ? " +
       "WHERE status IN ('declined', 'withdrawn') AND decided_at < ? AND anonymised_at IS NULL",
     [now, before],
   );
@@ -260,7 +262,7 @@ export async function anonymiseDecidedBefore(db: Db, before: Date, now: Date): P
  */
 export async function expireUndecidedBefore(db: Db, before: Date, now: Date): Promise<number> {
   const [result] = await db.query<ResultSetHeader>(
-    "UPDATE open_role_proposals SET body_json = JSON_REMOVE(COALESCE(body_json, JSON_OBJECT()), '$.card.timeZone', '$.card.windows', '$.card.earliestStart', '$.links', '$.files', '$.references', '$.backgroundCheck', '$.about'), status = 'withdrawn', decided_at = ?, name = NULL, email = NULL, email_key = NULL, anonymised_at = ? " +
+    "UPDATE open_role_proposals SET body_json = JSON_REMOVE(COALESCE(body_json, JSON_OBJECT()), '$.card.timeZone', '$.card.windows', '$.card.earliestStart', '$.links', '$.files', '$.references', '$.backgroundCheck', '$.about', '$.note'), status = 'withdrawn', decided_at = ?, name = NULL, email = NULL, email_key = NULL, anonymised_at = ? " +
       "WHERE status = 'confirmed' AND confirmed_at < ? AND anonymised_at IS NULL",
     [now, now, before],
   );
