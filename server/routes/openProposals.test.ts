@@ -20,6 +20,7 @@
  *   - The desk: the gate on `intake.moderate`; the switch; a link shown once
  *     and switched off.
  */
+import { applicantSteps } from "../../shared/applicantWords";
 import http from "node:http";
 import express from "express";
 import type mysql from "mysql2/promise";
@@ -313,7 +314,9 @@ describe.skipIf(!configured)("open role proposals, the intake, on a real schema"
       const ok = await call("POST", "/api/open-proposals/confirm", { token });
       // The applicant also gets the link to their own status page (role journey L5); only its hash is kept.
       // The firefly path's confirmed page: it speaks the language proposed in, and dates the first reply.
-      expect(ok.body).toEqual({ confirmed: true, message: OPEN_WORDS.confirmed, statusPath: expect.stringContaining(`/application-status/${id}?token=`), locale: "en", replyDays: expect.any(Number) });
+      expect(ok.body).toEqual({ confirmed: true, message: OPEN_WORDS.confirmed, statusPath: expect.stringContaining(`/application-status/${id}?token=`), locale: "en", replyDays: expect.any(Number), steps: applicantSteps("en", ok.body.replyDays) });
+      // The confirmed page draws the one step list the status page uses (shared/applicantWords.ts), in order.
+      expect(ok.body.steps.map((s: { key: string }) => s.key)).toEqual(["received", "review", "invitation", "conversations", "decision", "first_cycle"]);
       expect((await readOpenProposal(pool, id))?.status).toBe("confirmed");
       const again = await call("POST", "/api/open-proposals/confirm", { token });
       expect(again.status).toBe(410);
