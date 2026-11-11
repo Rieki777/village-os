@@ -23,6 +23,7 @@ import BreathingLoader from "@/components/natural/BreathingLoader";
 import { SeatSomebody } from "@/components/power/SeatSomebody";
 import { OrgChartTab } from "@/components/admin/OrgChartTab";
 import { confirmLeave } from "@/lib/unsavedChanges";
+import SaveBar, { type SaveResult } from "@/components/SaveBar";
 import SeasonPlanWindowFields, { type PlanWindowValue } from "@/components/admin/SeasonPlanWindowFields";
 import { AppointToRole } from "@/components/admin/AppointToRole";
 import PlayersTab from "@/components/admin/PlayersTab";
@@ -1961,50 +1962,45 @@ const FAQ_PATHWAYS: { id: "investor" | "steward" | "resident" | "prosperity"; la
 
 function FaqAdminTab({ password }: { password: string }) {
   const [pathway, setPathway] = useState<"investor" | "steward" | "resident" | "prosperity">("investor");
+  // `items` is the list as edited on screen; `saved` is what the server holds.
+  // Edits, moves and deletions wait in the floating save bar (SaveBar.tsx).
   const [items, setItems] = useState<FaqItem[]>([]);
+  const [saved, setSaved] = useState<FaqItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [newQ, setNewQ] = useState("");
   const [newA, setNewA] = useState("");
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editDraft, setEditDraft] = useState<{ question: string; answer: string }>({ question: "", answer: "" });
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const res = await fetch(`${API_BASE}/faqs/${pathway}`);
       const data = await res.json();
-      setItems(Array.isArray(data) ? data : []);
-    } catch { setItems([]); }
+      setItems(Array.isArray(data) ? data : []); setSaved(Array.isArray(data) ? data : []);
+    } catch { setItems([]); setSaved([]); }
     setLoading(false);
   }, [pathway]);
 
   useEffect(() => { load(); }, [load]);
 
   /*
-   * The list moved first and the answer was thrown away, so a refused save
-   * left the screen holding a version of the FAQ the server never took. The
-   * old `catch` only ran on a dead network; a 403 or a 500 resolved normally
-   * and changed nothing on screen.
+   * One PUT of the whole list, answered. A refusal keeps the edits on screen
+   * and says so on the bar; nothing reads as saved that the server did not take.
    */
-  const persist = async (next: FaqItem[]) => {
-    const before = items;
-    setItems(next);
+  const persist = async (): Promise<SaveResult> => {
     try {
       const res = await fetch(`${API_BASE}/admin/faqs/${pathway}`, {
         method: "PUT",
         headers: authHeaders(password, { "Content-Type": "application/json" }),
-        body: JSON.stringify(next),
+        body: JSON.stringify(items),
       });
-      if (!res.ok) {
-        const body = await res.json().catch(() => null);
-        setItems(before);
-        toast.error(refusal(body, `The server refused that (${res.status}). The list is back to what it holds.`));
-      }
+      if (res.ok) { setSaved(items); return { ok: true }; }
+      const body = await res.json().catch(() => null);
+      return { ok: false, reason: refusal(body, `The server refused that (${res.status}). Your edits are still here.`) };
     } catch {
-      setItems(before);
-      toast.error("That did not reach the server. The list is back to what it holds.");
+      return { ok: false, reason: "That did not reach the server. Your edits are still here." };
     }
   };
+  const faqChanges = Math.abs(items.length - saved.length) + items.filter((it, i) => JSON.stringify(it) !== JSON.stringify(saved[i])).length;
 
   const add = async () => {
     if (!newQ.trim()) { toast.error("Question required"); return; }
@@ -2017,37 +2013,21 @@ function FaqAdminTab({ password }: { password: string }) {
       if (!res.ok) throw new Error();
       setNewQ(""); setNewA("");
       toast.success("Added");
-      load();
+      // Keep any edits waiting in the bar: take the fresh list as saved and add only what is new.
+      const fresh: FaqItem[] = await fetch(`${API_BASE}/faqs/${pathway}`).then((r) => (r.ok ? r.json() : [])).catch(() => []);
+      setSaved(fresh); setItems((cur) => [...cur, ...fresh.filter((f) => !cur.some((c) => c.id === f.id))]);
     } catch { toast.error("Add failed"); }
   };
 
-  const remove = async (id: string) => {
-    if (!confirm("Delete this question?")) return;
-    try {
-      const res = await fetch(`${API_BASE}/admin/faqs/${pathway}/${id}`, { method: "DELETE", headers: authHeaders(password) });
-      if (!res.ok) {
-        const body = await res.json().catch(() => null);
-        toast.error(refusal(body, `The server refused that (${res.status}). The question is still here.`));
-        return;
-      }
-      toast.success("Deleted");
-      load();
-    } catch { toast.error("That did not reach the server. The question is still here."); }
-  };
+  const remove = (id: string) => setItems((cur) => cur.filter((it) => it.id !== id));
+  const edit = (id: string, patch: Partial<FaqItem>) => setItems((cur) => cur.map((it) => (it.id === id ? { ...it, ...patch } : it)));
 
   const move = (idx: number, dir: -1 | 1) => {
     const next = [...items];
     const target = idx + dir;
     if (target < 0 || target >= next.length) return;
     [next[idx], next[target]] = [next[target], next[idx]];
-    persist(next);
-  };
-
-  const saveEdit = () => {
-    if (!editingId) return;
-    const next = items.map((it) => it.id === editingId ? { ...it, question: editDraft.question, answer: editDraft.answer } : it);
-    persist(next);
-    setEditingId(null);
+    setItems(next);
   };
 
   return (
@@ -2061,7 +2041,7 @@ function FaqAdminTab({ password }: { password: string }) {
         {FAQ_PATHWAYS.map((p) => (
           <button
             key={p.id}
-            onClick={() => setPathway(p.id)}
+            onClick={() => { if (p.id !== pathway && confirmLeave()) setPathway(p.id); }}
             className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
               pathway === p.id
                 ? "border-teal-deep text-teal-deep"
@@ -2104,26 +2084,7 @@ function FaqAdminTab({ password }: { password: string }) {
         <div className="space-y-2">
           {items.map((item, idx) => (
             <div key={item.id} className="border border-gray-200 rounded-xl px-5 py-4">
-              {editingId === item.id ? (
-                <div className="space-y-3">
-                  <input
-                    type="text"
-                    value={editDraft.question}
-                    onChange={(e) => setEditDraft({ ...editDraft, question: e.target.value })}
-                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-deep/40"
-                  />
-                  <textarea
-                    value={editDraft.answer}
-                    onChange={(e) => setEditDraft({ ...editDraft, answer: e.target.value })}
-                    rows={3}
-                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-deep/40 resize-y"
-                  />
-                  <div className="flex gap-2">
-                    <button onClick={saveEdit} className="px-3 py-1.5 text-sm bg-teal-deep text-white rounded-lg">Save</button>
-                    <button onClick={() => setEditingId(null)} className="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Cancel</button>
-                  </div>
-                </div>
-              ) : (
+              {(
                 <div className="flex items-start gap-3">
                   <div className="flex flex-col gap-0.5 mt-1">
                     <button onClick={() => move(idx, -1)} className="text-gray-300 hover:text-gray-600 disabled:opacity-30 pointer-coarse:min-h-11 pointer-coarse:min-w-11 pointer-coarse:inline-flex pointer-coarse:items-center pointer-coarse:justify-center" disabled={idx === 0}>
@@ -2133,18 +2094,14 @@ function FaqAdminTab({ password }: { password: string }) {
                       <ArrowDown className="w-3.5 h-3.5" />
                     </button>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="font-medium text-gray-900 mb-1">{item.question}</div>
-                    <div className="text-sm text-gray-600 leading-relaxed">{item.answer}</div>
+                  <div className="flex-1 min-w-0 space-y-2">
+                    <input type="text" aria-label="Question" value={item.question} onChange={(e) => edit(item.id, { question: e.target.value })}
+                      className="w-full px-3 py-2 text-sm font-medium border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-deep/40" />
+                    <textarea aria-label="Answer" value={item.answer} rows={2} onChange={(e) => edit(item.id, { answer: e.target.value })}
+                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-deep/40 resize-y" />
                   </div>
                   <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => { setEditingId(item.id); setEditDraft({ question: item.question, answer: item.answer }); }}
-                      className="px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-100 rounded-lg"
-                    >
-                      Edit
-                    </button>
-                    <button onClick={() => remove(item.id)} className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg">
+                    <button onClick={() => remove(item.id)} aria-label="Remove this question" className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg">
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
@@ -2154,6 +2111,7 @@ function FaqAdminTab({ password }: { password: string }) {
           ))}
         </div>
       )}
+      <SaveBar count={faqChanges} onSave={persist} onDiscard={() => setItems(saved)} what={FAQ_PATHWAYS.find((p) => p.id === pathway)?.label} />
     </div>
   );
 }

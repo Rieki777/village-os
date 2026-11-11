@@ -35,7 +35,7 @@ function stub() {
       const path = String(url);
       if (init?.method === "PUT") {
         puts.push({ path, body: JSON.parse(init.body) });
-        const no = [...refuse].some((p) => path.endsWith(p));
+        const no = Array.from(refuse).some((p) => path.endsWith(p));
         return { ok: !no, status: no ? 403 : 200, json: async () => (no ? { error: "forbidden", message: "Not yours to change." } : { ok: true }) };
       }
       const body =

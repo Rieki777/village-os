@@ -106,6 +106,6 @@ describe("SaveBar", () => {
       { key: "c", label: "C", run: async () => { throw new Error("offline"); } },
     ]);
     expect(result.ok).toBe(false);
-    expect([...failedKeys]).toEqual(["b", "c"]);
+    expect(Array.from(failedKeys)).toEqual(["b", "c"]);
   });
 });
