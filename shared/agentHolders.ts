@@ -154,6 +154,8 @@ export const AGENT_PROPOSAL_WORDS = {
   needAgent: "Pick the agent you are proposing.",
   notAnAgent: "That account is not an agent's.",
   needKeeper: "Only the member who keeps the agent proposes it. Say that you keep it.",
+  keptByAnother: "Another member keeps this agent, so only they can propose it. Pick an agent you keep.",
+  alreadyAsked: (roles: string) => `This agent is already proposed for, or holds, ${roles}. The circle weighs one proposal at a time.`,
   needWhat: "Say what the agent is.",
   needSwitchOff: "Say how to switch it off.",
   needRole: "Pick a role for the agent.",

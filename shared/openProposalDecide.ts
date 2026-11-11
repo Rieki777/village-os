@@ -162,6 +162,7 @@ export const DECIDE_WORDS = {
   pending: "That address already has an application waiting for one of these roles. Decide that one on its page first.",
   decided: "This proposal has been decided, so there is nothing left to decide.",
   raced: "Somebody else decided this proposal a moment ago. Read it again.",
+  noTermsForAnAgent: "An agent holds a role with no pay, allowance or commitment, so there are no terms to change.",
   noInvitation: "There is no invitation to replace: they already made their account, or this proposal was not adopted.",
   notAPlace: "This proposal was adopted, and its roles could not be set up. Nothing was changed. Read the roles on the chart, then try again.",
   failed: "That did not reach the server. Try again.",
@@ -283,6 +284,8 @@ export const ADOPT_MORE: Record<ApplicantLanguage, {
   stepAgreements: string;
   stepFirstDays: string;
   seatOpens(roles: string): string;
+  /** The headline's "for when", when every place is taken: never "this moon" or "next season", which would promise a day. */
+  forAPlace: string;
 }> = {
   en: {
     nextHeading: "What comes next:",
@@ -291,6 +294,7 @@ export const ADOPT_MORE: Record<ApplicantLanguage, {
     stepAgreements: "2. Your profile lists any agreements we ask you to align with before your role starts, such as our confidentiality agreement and your role's terms. Each one has its own door there.",
     stepFirstDays: "3. Once your role starts, your profile shows your first days with us, step by step.",
     seatOpens: (roles) => `Every place in ${roles} is filled right now, so your role starts when a place opens. We will tell you the day it does.`,
+    forAPlace: "for when a place opens",
   },
   es: {
     nextHeading: "Lo que sigue:",
@@ -299,6 +303,7 @@ export const ADOPT_MORE: Record<ApplicantLanguage, {
     stepAgreements: "2. Tu perfil muestra los acuerdos con los que te pedimos alinear antes de que empiece tu rol, como nuestro acuerdo de confidencialidad y los términos de tu rol. Cada uno tiene allí su propia puerta.", // check: "alinear", "puerta"
     stepFirstDays: "3. Cuando empiece tu rol, tu perfil muestra tus primeros días con nosotros, paso a paso.",
     seatOpens: (roles) => `Todos los lugares de ${roles} están ocupados ahora, así que tu rol empieza cuando se abra un lugar. Te avisaremos el día que eso pase.`, // check: "lugar" for a place in a role
+    forAPlace: "para cuando se abra un lugar",
   },
 };
 
@@ -318,7 +323,17 @@ const whenRolesStart = (i: AdoptLetterIn) => {
   if (i.waitsForSeat) return (ADOPT_MORE[i.lang ?? "en"] ?? ADOPT_MORE.en).seatOpens(w.list(i.roleNames) || w.aRole);
   return i.moon ? w.adopt.moonRuns(i.moon.from, i.moon.to) : w.adopt.seasonStarts(i.season, i.startsOn);
 };
-const forWhen = (i: AdoptLetterIn) => (i.moon ? wordsIn(i.lang).adopt.forThisMoon : wordsIn(i.lang).adopt.forNextSeason);
+const forWhen = (i: AdoptLetterIn) =>
+  i.waitsForSeat ? (ADOPT_MORE[i.lang ?? "en"] ?? ADOPT_MORE.en).forAPlace : i.moon ? wordsIn(i.lang).adopt.forThisMoon : wordsIn(i.lang).adopt.forNextSeason;
+
+/**
+ * THE DAY A MOON ROLE STARTS, as the letter says it: the day it is adopted, and
+ * never before the moon's first day. Both are civil dates (YYYY-MM-DD), so the
+ * later one is the larger string.
+ */
+export function roleStartsOn(moonStartsOn: string, adoptedOn: string): string {
+  return adoptedOn > moonStartsOn ? adoptedOn : moonStartsOn;
+}
 
 /** The yes, with the invitation, for an address with no account here. The email shows `button` as a button and keeps the link in the text. */
 export function adoptedInviteLetter(i: AdoptLetterIn & { link: string; days: number }): { subject: string; text: string; button: { label: string; url: string } } {
