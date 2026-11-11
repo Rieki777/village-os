@@ -71,6 +71,7 @@ export const PAGE_TITLES: Readonly<Record<string, string>> = {
   "/tokens": "The Exchange",
   "/wallet": "The Exchange",
   "/profile": "My profile",
+  "/path": "Your path",
   "/login": "Sign in",
   "/set-password": "Choose a password",
   "/verify-email": "Confirm your address",
