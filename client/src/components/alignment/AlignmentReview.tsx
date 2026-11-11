@@ -88,12 +88,12 @@ export default function AlignmentReview({ body, onState }: { body: Record<string
       )}
       {words && (
         <>
-          <pre
+          <div
             data-alignment-words=""
-            className="mt-3 max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-xl border border-border/60 bg-background/40 p-4 font-sans text-sm leading-relaxed text-foreground"
+            className="mt-3 max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-xl border border-border/60 bg-background/40 p-4 text-sm leading-relaxed text-foreground"
           >
             {words.body}
-          </pre>
+          </div>
           <p className="mt-3 text-sm font-medium text-foreground">{words.intent}</p>
           {words.money && fresh === false && <ReconfirmPanel onConfirmed={() => setFresh(true)} />}
           {words.money && fresh === true && <p className="mt-2 text-xs text-muted-foreground">{ALIGN_WORDS.reconfirmed}</p>}
