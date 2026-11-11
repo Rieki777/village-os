@@ -280,6 +280,18 @@ describe.skipIf(!DB_CONFIGURED)("the Operations agent (B6)", () => {
     expect(rows.map((r: any) => r.state).sort()).toEqual(["asked", "done", "done", "refused"]);
   });
 
+  it("takes the summary from body.summary, for a client that connected before the summary argument", async () => {
+    const args = { method: "PUT", path: `/api/admin/member-tasks/access/${ben.id}`, body: { on: true, summary: "Turn member tasks back on for Ben." } };
+    const asked = await tool(agentVat, "admin_request", args);
+    expect(asked.json.result.isError, asked.text).toBe(false);
+    expect(asked.json.result.structuredContent.summary).toBe("Turn member tasks back on for Ben.");
+    expect(asked.json.result.structuredContent.echo.body).toEqual({ on: true });
+    const done = await tool(agentVat, "admin_request", { ...args, confirmToken: asked.json.result.structuredContent.confirmToken });
+    expect(done.json.result.isError, done.text).toBe(false);
+    const on = await call("GET", "/api/member-tasks/me", undefined, ben.token);
+    expect(on.status, on.text).toBe(200);
+  });
+
   it("refuses what is always a person's, for the agent and through the agent's own session (check 53)", async () => {
     const erase = await tool(agentVat, "admin_request", { method: "DELETE", path: `/api/admin/players/${ana.id}` });
     expect(erase.json.result.structuredContent.detail.code).toBe("always_a_person");

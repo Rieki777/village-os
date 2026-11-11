@@ -189,6 +189,69 @@ describe("the plain summary on admin_request (the lead, 11 Nov 2026)", () => {
   });
 });
 
+// A client that connected before batch 153 caches a schema with no summary and additionalProperties false, so it
+// cannot send the argument at all. It sends the sentence in body.summary instead (production, 11 Nov 2026).
+describe("the plain summary in body.summary, for a client whose cached schema has no summary", () => {
+  const raw = (args: Record<string, unknown>) => ({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "admin_request", arguments: args } });
+  const SENTENCE = "End Ana's seat on the Gardener role. She keeps her other roles.";
+  const approval = { approvedBy: "The lead", approvalNote: "Yes, end that seating." };
+  const args = { method: "DELETE", path: "/api/admin/org/seatings/s-1", body: { ...approval, summary: SENTENCE } };
+
+  it("is accepted, previewed, taken out of the route's body and recorded beside the approval like the top-level one", async () => {
+    const a = agent({ on: true });
+    const first = await ask(raw(args), a.ctx);
+    expect(first.result.isError, JSON.stringify(first.result)).toBe(false);
+    const out = first.result.structuredContent;
+    expect(out.summary).toBe(SENTENCE);
+    expect(out.message.startsWith(SENTENCE)).toBe(true);
+    expect(out.echo.body).toEqual(approval);
+    const done = await ask(raw({ ...args, confirmToken: out.confirmToken }), a.ctx);
+    expect(done.result.isError, JSON.stringify(done.result)).toBe(false);
+    expect(a.routes).toEqual([{ method: "DELETE", path: args.path, body: {} }]);
+    expect(JSON.stringify(a.routes)).not.toContain("Gardener");
+    expect(a.recorded).toHaveLength(1);
+    expect(a.recorded[0]).toMatchObject({ approvedBy: "The lead", approvalNote: "Yes, end that seating.", summary: SENTENCE });
+  });
+
+  it("matches at the confirm whichever of the two places carried it, and a changed one is refused", async () => {
+    const a = agent({ on: true });
+    const first = await ask(raw(args), a.ctx);
+    const token = first.result.structuredContent.confirmToken;
+    const changed = await ask(raw({ ...args, body: { ...approval, summary: "Something else entirely here." }, confirmToken: token }), a.ctx);
+    expect(changed.result.isError).toBe(true);
+    expect(a.routes).toEqual([]);
+    const moved = await ask(raw({ ...args, body: approval, summary: SENTENCE, confirmToken: token }), a.ctx);
+    expect(moved.result.isError, JSON.stringify(moved.result)).toBe(false);
+    expect(a.routes).toHaveLength(1);
+  });
+
+  it("loses to the top-level summary when both are there, and never reaches the route either way", async () => {
+    const a = agent({ on: true });
+    const top = "Remove Rick's duplicate record on the Living Memory role. He keeps the role.";
+    const first = await ask(raw({ ...args, summary: top }), a.ctx);
+    expect(first.result.structuredContent.summary).toBe(top);
+    await ask(raw({ ...args, summary: top, confirmToken: first.result.structuredContent.confirmToken }), a.ctx);
+    expect(a.routes).toEqual([{ method: "DELETE", path: args.path, body: {} }]);
+    expect(a.recorded[0]).toMatchObject({ summary: top });
+  });
+
+  it("still refuses a write with neither, or with too short a sentence in the body, and names both places", async () => {
+    const a = agent({ on: true });
+    for (const body of [approval, { ...approval, summary: "ok" }, { ...approval, summary: 42 }]) {
+      const r = await ask(raw({ ...args, body }), a.ctx);
+      expect(r.result.isError).toBe(true);
+      expect(r.result.structuredContent.detail.code).toBe("summary_required");
+      expect(r.result.structuredContent.error).toContain("body.summary");
+    }
+    expect(a.routes).toEqual([]);
+    expect(a.recorded).toEqual([]);
+  });
+
+  it("is named in the tool's description for clients that connected before the argument", () => {
+    expect(MCP_TOOLS.find((t) => t.name === "admin_request")!.description).toContain("body.summary");
+  });
+});
+
 describe("every lead-approved write through the tool carries the approval (the lead, 11 Nov 2026)", () => {
   const approval = { approvedBy: "The lead", approvalNote: "Yes, go ahead with that wording." };
   const writes: Array<{ method: string; path: string; pattern: string; body: Record<string, unknown>; what: string }> = [

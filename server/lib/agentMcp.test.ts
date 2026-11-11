@@ -264,6 +264,22 @@ describe("admin_request (check 52)", () => {
     expect(a.routeCalls).toEqual([{ method: "PUT", path: args.path, body: { on: true } }]);
   });
 
+  it("takes the summary from body.summary for a client whose cached schema has no summary, and never forwards it", async () => {
+    // Built by hand: callTool would add a top-level summary.
+    const raw = (args: Record<string, unknown>) => rpc("tools/call", { name: "admin_request", arguments: args });
+    const a = admin();
+    const args = { method: "PUT", path: "/api/admin/member-tasks/access/u-2", body: { on: true, summary: "Give Ana a task board." } };
+    const first = await ask(raw(args), ["admin"], a.ctx);
+    expect(first.result.isError).toBe(false);
+    expect(first.result.structuredContent.summary).toBe("Give Ana a task board.");
+    const done = await ask(raw({ ...args, confirmToken: first.result.structuredContent.confirmToken }), ["admin"], a.ctx);
+    expect(done.result.isError).toBe(false);
+    expect(a.routeCalls).toEqual([{ method: "PUT", path: args.path, body: { on: true } }]);
+    const neither = await ask(raw({ ...args, body: { on: true } }), ["admin"], a.ctx);
+    expect(neither.result.structuredContent.detail.code).toBe("summary_required");
+    expect(a.routeCalls).toHaveLength(1);
+  });
+
   it("refuses a path a person must take, and one not on the list, calling no route", async () => {
     const a = admin();
     const erase = await ask(callTool("admin_request", { method: "DELETE", path: "/api/admin/players/u-9" }), ["admin"], a.ctx);
