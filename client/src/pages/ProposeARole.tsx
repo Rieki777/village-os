@@ -40,7 +40,9 @@ import { readStoredJson } from "@/lib/safeStorage";
 import { IKIGAI_KEY, ikigaiFromStored, whyFromIkigai } from "@shared/roleDiscover";
 import { OPEN_AIM_MAX, OPEN_NOTE_MAX, OPEN_PROPOSAL_MAX_ROLES, OPEN_WHY_MAX, OPEN_WORDS } from "@shared/openProposals";
 // Form v2's pieces, on their own line so the membership lane's edit to the line above them merges clean.
-import { HoursField, NextForRoles, Practicalities, browserTimeZone, type Practical } from "@/components/openProposal/RoleCardBridge";
+import TermsEight, { EMPTY_TERMS_STEP, type TermsStepValue } from "@/components/governance/TermsEight";
+import { judgeTermsStep, writtenKeys, type TermsWords } from "@shared/termsWords";
+import { NextForRoles, Practicalities, browserTimeZone, type Practical } from "@/components/openProposal/RoleCardBridge";
 /** The goals are asked on each role card now (guide v2); the global pick is left empty. */
 const NO_GLOBAL_SERVES: Record<string, string> = {};
 
@@ -56,6 +58,8 @@ interface FormRole {
   /** The open card's own sections, to answer with the applicant's card (shared/openProposalCard.ts). */
   accountabilities?: string[];
   timeCommitment?: string | null;
+  /** The role's suggested wording for the eight settings and the commitment it asks (joining lane PR 3). */
+  terms?: { words?: TermsWords; commitmentPct?: number | null };
   /** Filled by the role-conversations lane and PR-A; nothing shows until they are. */
   conversations?: Array<{ role: string; minutes: number; finalApproval?: boolean }>;
   bookingUrl?: string | null;
@@ -151,8 +155,9 @@ export default function ProposeARole() {
   const [sent, setSent] = useState<string | null>(null);
   /** The applicant's own card (components/openProposal/RoleCardBridge.tsx). */
   const [cards, setCards] = useState<Record<string, RoleCardState>>({});
-  const [practical, setPractical] = useState<Practical>(() => ({ timeZone: browserTimeZone(), windows: [], earliestStart: "", terms: { choice: "", note: "" } }));
-  const [hours, setHours] = useState("");
+  const [practical, setPractical] = useState<Practical>(() => ({ timeZone: browserTimeZone(), windows: [], earliestStart: "" }));
+  /** The eight settings answered and the commitment chosen (components/governance/TermsEight.tsx). */
+  const [termsStep, setTermsStep] = useState<TermsStepValue>(EMPTY_TERMS_STEP);
   const [agreed, setAgreed] = useState({ nda: false });
   /** Links to their work and files, for the deciders only (Rye, 10 Nov 2026). */
   const [links, setLinks] = useState<ProposalLink[]>([]);
@@ -223,6 +228,14 @@ export default function ProposeARole() {
       setError({ field: "checkConsent", message: aboutProblem });
       return;
     }
+    // Every written setting answered and the commitment chosen, in the shared rules' words; the server judges it again.
+    if (form.kind === "open") {
+      const judged = judgeTermsStep({ answers: termsStep.answers, commitmentPct: termsStep.commitmentPct }, writtenKeys(form.roles.filter((r) => r.id in picked).map((r) => ({ words: r.terms?.words, commitmentPct: r.terms?.commitmentPct ?? null }))));
+      if (!judged.ok) {
+        setError({ field: "terms", message: judged.error });
+        return;
+      }
+    }
     setSending(true);
     setError(null);
     try {
@@ -247,10 +260,11 @@ export default function ProposeARole() {
           timeZone: practical.timeZone.trim(),
           windows: practical.windows,
           earliestStart: practical.earliestStart,
-          terms: practical.terms.choice ? { choice: practical.terms.choice, note: practical.terms.note.trim() } : undefined,
+          // The eight settings, each answered, and the commitment chosen: the server judges both again.
+          terms: { answers: termsStep.answers },
+          commitmentPct: termsStep.commitmentPct ?? undefined,
           // Guide v2: each role card names the season goals its work serves.
           serves: Object.keys(picked).flatMap((roleId) => Object.entries(cards[roleId]?.serves ?? {}).map(([goalId, how]) => ({ goalId, how, roleId }))),
-          hours,
           // The NDA promise only: the membership letter is aligned with below, never ticked.
           agreed,
         },
@@ -432,7 +446,7 @@ export default function ProposeARole() {
                           roleId={r.id}
                           roleName={r.name}
                           aim={r.aim}
-                          timeCommitment={r.timeCommitment ?? null}
+                          commitmentPct={r.terms?.commitmentPct ?? null}
                           accountabilities={r.accountabilities ?? []}
                           goals={form.goals}
                           value={cards[r.id] ?? EMPTY_ROLE_CARD}
@@ -446,8 +460,7 @@ export default function ProposeARole() {
             ))}
           </fieldset>
 
-          {/* The practicalities (the time first), then the agreements, then who you are (guide v2; role audit, 10 Nov 2026). */}
-          <HoursField hours={hours} onHours={setHours} />
+          {/* The practicalities, then the agreements, then who you are (guide v2; role audit, 10 Nov 2026). */}
           {/* About you: after the goals, before the terms. The links and files moved here from below. */}
           <section aria-labelledby="propose-about-h" className="grid gap-5 border-t border-border pt-6" data-about-you-section="">
             <h2 id="propose-about-h" className="font-display text-2xl font-bold text-card-foreground">
@@ -465,7 +478,20 @@ export default function ProposeARole() {
             <ReferencesBlock value={about} onChange={setAbout} idPrefix="propose-about" alwaysChecked={form.roles.some((r) => r.id in picked && r.alwaysChecked === true)} invalid={error?.field === "checkConsent" || error?.field === "references"} />
           </section>
           <Practicalities value={practical} onChange={setPractical} part="rest" />
-          <SeasonServes goals={form.goals} serves={NO_GLOBAL_SERVES} onServes={() => {}} showGoals={false} showHours={false} hours={hours} onHours={setHours} agreed={agreed}
+          {/* The terms: all eight settings with each role's suggestion, then the commitment (joining lane PR 3). */}
+          <section aria-labelledby="propose-terms-h" className="grid gap-4 border-t border-border pt-6" data-terms-section="">
+            <h2 id="propose-terms-h" className="font-display text-2xl font-bold text-card-foreground">
+              {t({ message: "The terms", context: "open proposal section" })}
+            </h2>
+            <TermsEight
+              roles={form.roles.filter((r) => r.id in picked).map((r) => ({ id: r.id, name: r.name, words: r.terms?.words, commitmentPct: r.terms?.commitmentPct ?? null }))}
+              value={termsStep}
+              onChange={setTermsStep}
+              problem={error?.field === "terms" ? error.message : null}
+              idPrefix="propose-terms"
+            />
+          </section>
+          <SeasonServes goals={form.goals} serves={NO_GLOBAL_SERVES} onServes={() => {}} showGoals={false} agreed={agreed}
             onAgreed={setAgreed}
             membership={<MembershipAtApplication signedIn={!!me} choice={membership} onChoice={setMembership} refreshKey={letterRead} />}
           />

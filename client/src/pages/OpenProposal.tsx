@@ -57,7 +57,7 @@ export interface ServedOpenProposal {
   season: { id: string; name: string | null; startsOn: string } | null;
   /** Set when the proposal is for a moon (shared/openProposalTerm.ts). */
   term?: { kind: "moon"; startsOn: string; endsOn: string } | null;
-  roles: Array<{ id: string; name: string | null; circle: string | null; note: string; accountabilities?: string[]; timeCommitment?: string | null }>;
+  roles: Array<{ id: string; name: string | null; circle: string | null; note: string; accountabilities?: string[]; commitmentPct?: number | null }>;
   /** The applicant's own role card (shared/openProposalCard.ts); null on a proposal sent before cards. */
   card?: Parameters<typeof CardSideBySide>[0]["card"];
   /** The membership letter, aligned with at application or from their account (Rye's answer 8). */

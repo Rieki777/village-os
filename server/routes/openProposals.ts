@@ -96,6 +96,8 @@ import { activeClock } from "../lib/gratitude-cycles";
 import { isTermMode, moonTermFor, type OpenProposalTerm, type OpenProposalTermMode } from "../../shared/openProposalTerm";
 import { isListed } from "../../shared/roleListing";
 import { gateOf } from "../lib/roleCardProjection";
+import { publicTermsOf } from "../../shared/seatTermsOffer";
+import { writtenKeys } from "../../shared/termsWords";
 import { ATTACHMENT_WORDS, PROPOSAL_FILES_MAX, PROPOSAL_FILE_MAX_BYTES } from "../../shared/proposalAttachments";
 import { checkProposalFiles, removeProposalFiles, sweepProposalFiles, writeProposalFiles, type UploadedFile } from "../lib/proposalFiles";
 
@@ -233,6 +235,8 @@ export function register(app: Express, deps: Deps): void {
         accountabilities: Array.isArray(r.accountabilities) ? r.accountabilities.map((a: unknown) => String(a ?? "").trim()).filter(Boolean) : [],
         whyItMatters: r.whyItMatters ?? null,
         timeCommitment: (r as any).timeCommitment ?? null,
+        // The role's suggested wording for the eight settings and the commitment it asks (joining lane PR 3). Words only: no other term leaves here.
+        terms: publicTermsOf(r.termsOffer),
         // A role always background-checked (0370): the form says a check happens whatever the references say.
         alwaysChecked: r.alwaysChecked === true,
         // The conversations in the role's order, as its public card shows them (role journey L5), so the
@@ -324,7 +328,9 @@ export function register(app: Express, deps: Deps): void {
     const roles = await offered();
     const outcomes = new Map(roles.map((r) => [r.id, r.accountabilities]));
     const alwaysChecked = new Set(roles.filter((r) => r.alwaysChecked).map((r) => r.id));
+    const termsOf = new Map(roles.map((r) => [r.id, r.terms]));
     const parsed = parseOpenProposal(body, {
+      writtenTerms: (ids) => writtenKeys(ids.map((id) => termsOf.get(id))),
       roleIds: new Set(roles.map((r) => r.id)),
       address: singlePublicAddress,
       accountabilitiesOf: (id) => outcomes.get(id) ?? [],

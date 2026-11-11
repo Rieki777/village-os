@@ -22,10 +22,10 @@ const card = {
 };
 
 describe("roleCardView", () => {
-  it("draws every parameter from one seat, in card order, with hours as Roughly", () => {
-    const v = roleCardView({ timeCommitment: "40 hours a week", card });
-    expect(v.rows.map((r) => r.id)).toEqual(["hours", "track", "goals", "where", "languages", "review", "interviews", "criteria"]);
-    expect(v.rows[0].lines).toEqual(["Roughly 40 hours a week"]);
+  it("draws every parameter from one seat, in card order, with commitment where the hours were", () => {
+    const v = roleCardView({ timeCommitment: "40 hours a week", card: { ...card, commitmentPct: 100 } });
+    expect(v.rows.map((r) => r.id)).toEqual(["commitment", "track", "goals", "where", "languages", "review", "interviews", "criteria"]);
+    expect(v.rows[0].lines).toEqual(["100%"]);
     const interviews = v.rows.find((r) => r.id === "interviews")!;
     expect(interviews.lines).toEqual([
       "First conversation: Human Operations & Onboarding Lead Steward",

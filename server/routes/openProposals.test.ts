@@ -30,6 +30,7 @@ import { provisionTestDb, testDbConfigured, type TestDb, testPool } from "../db/
 import { escapeHtml } from "../lib/comms/mailer";
 import { createOrgRole } from "../lib/orgChart";
 import { readOpenProposal } from "../repos/openProposals";
+import { rewriteTermsOffer } from "../repos/seatApplications";
 import { usersRepo } from "../repos/users";
 import { register, tidyOpenProposals } from "./openProposals";
 
@@ -211,7 +212,7 @@ describe.skipIf(!configured)("open role proposals, the intake, on a real schema"
       const r = await call("GET", "/api/open-proposals/form");
       expect(r.body).toMatchObject({ open: true, village: "Test Village", season: { id: "s-next", name: "Season of Roots", startsOn: "2099-01-01" } });
       expect(r.body.roles.map((x: any) => x.id).sort()).toEqual([gate, well].sort());
-      expect(r.body.roles.find((x: any) => x.id === gate)).toEqual({ id: gate, name: "Gate Keeper", circle: "Land Circle", aim: "Open the gate at dawn.", accountabilities: [], whyItMatters: null, timeCommitment: null, conversations: [], alwaysChecked: false });
+      expect(r.body.roles.find((x: any) => x.id === gate)).toEqual({ id: gate, name: "Gate Keeper", circle: "Land Circle", aim: "Open the gate at dawn.", accountabilities: [], whyItMatters: null, timeCommitment: null, terms: { words: {}, commitmentPct: null }, conversations: [], alwaysChecked: false });
       expect(JSON.stringify(r.body)).not.toContain(example);
       expect(JSON.stringify(r.body)).not.toContain(dormant);
     });
@@ -448,13 +449,13 @@ describe.skipIf(!configured)("open role proposals, the intake, on a real schema"
       const card = {
         roles: [{ roleId: gate, moves: [], firstMoon: [{ quest: "Oil the hinges", doneWhen: "the gate opens without a sound" }] }],
         serves: [{ goalId: "g-roots", how: "A gate that opens lets people in." }],
-        hours: "About 10 a week",
+        commitmentPct: 50,
         agreed: { loveLetter: true, nda: true },
-        terms: { choice: "accept", note: "" },
+        terms: { answers: {} },
       };
       const { id } = await send({ card, email: "carded@example.test" });
       const row = await readOpenProposal(pool, id);
-      expect(row?.body.card).toEqual({ ...card, serves: [{ goalId: "g-roots", how: "A gate that opens lets people in.", goal: "Roots in the ground" }] });
+      expect(row?.body.card).toEqual({ ...card, hours: "", terms: { choice: "accept", note: "" }, serves: [{ goalId: "g-roots", how: "A gate that opens lets people in.", goal: "Roots in the ground" }] });
 
       const badGoal = await call("POST", "/api/open-proposals", proposal({ email: "badgoal@example.test", card: { ...card, serves: [{ goalId: "g-done", how: "x" }] } }));
       expect(badGoal.status).toBe(400);
@@ -466,9 +467,9 @@ describe.skipIf(!configured)("open role proposals, the intake, on a real schema"
       const base = (firstMoon: unknown) => ({
         roles: [{ roleId: gate, moves: [], firstMoon }],
         serves: [{ goalId: "g-roots", how: "" }],
-        hours: "",
+        commitmentPct: 50,
         agreed: { loveLetter: true, nda: true },
-        terms: { choice: "accept", note: "" },
+        terms: { answers: {} },
       });
       const post = (firstMoon: unknown, email: string) => call("POST", "/api/open-proposals", proposal({ email, card: base(firstMoon) }));
       const g = { quest: "Oil the hinges", doneWhen: "the gate opens" };
@@ -484,13 +485,42 @@ describe.skipIf(!configured)("open role proposals, the intake, on a real schema"
       expect(ok.status).toBe(200);
     });
 
+    it("the eight settings: a role's written settings reach the form, each needs an answer, and the commitment is required", async () => {
+      const offer = ({ v: 1, clocks: { commitmentPct: 100 }, words: { term: "We renew together each moon.", ending: "One moon's notice." } });
+      await rewriteTermsOffer(pool, gate, offer);
+      try {
+        const form = await call("GET", "/api/open-proposals/form");
+        expect(form.body.roles.find((x: any) => x.id === gate).terms).toEqual({ words: { term: "We renew together each moon.", ending: "One moon's notice." }, commitmentPct: 100 });
+        const card = (terms: unknown, commitmentPct?: number) => ({
+          roles: [{ roleId: gate, moves: [], firstMoon: [{ quest: "Oil the hinges", doneWhen: "the gate opens" }] }],
+          serves: [{ goalId: "g-roots", how: "" }],
+          ...(commitmentPct === undefined ? {} : { commitmentPct }),
+          agreed: { loveLetter: true, nda: true },
+          terms,
+        });
+        const a = (c: unknown, email: string) => call("POST", "/api/open-proposals", proposal({ email, card: c }));
+        // Written settings left unanswered, and no commitment, are each refused.
+        expect(await a(card({ answers: { term: { choice: "accept" } } }, 50), "one@example.test")).toMatchObject({ status: 400, body: { field: "terms" } });
+        const all = { term: { choice: "accept" }, clocks: { choice: "talk", note: "Four days overlap" }, ending: { choice: "accept" } };
+        expect(await a(card({ answers: all }), "two@example.test")).toMatchObject({ status: 400, body: { field: "terms" } });
+        expect(await a(card({ answers: all }, 55), "three@example.test")).toMatchObject({ status: 400, body: { field: "terms" } });
+        // Answered, with a commitment of 0 (a choice, not an absence): taken and kept with each answer.
+        const { id } = await send({ card: card({ answers: all }, 0), email: "four@example.test" });
+        const stored = (await readOpenProposal(pool, id))?.body.card;
+        expect(stored).toMatchObject({ commitmentPct: 0, hours: "", terms: { choice: "talk", note: "Clocks: Four days overlap" } });
+        expect(stored?.terms?.answers).toMatchObject({ clocks: { choice: "talk", note: "Four days overlap" } });
+      } finally {
+        await rewriteTermsOffer(pool, gate, null);
+      }
+    });
+
     it("form v2: a card needs an aim; the 90-day tidy clears the time zone, usual times and earliest start", async () => {
       const card = {
         roles: [{ roleId: gate, moves: [], firstMoon: [{ quest: "Oil the hinges", doneWhen: "the gate opens" }] }],
         serves: [{ goalId: "g-roots", how: "" }],
-        hours: "",
+        commitmentPct: 50,
         agreed: { loveLetter: true, nda: true },
-        terms: { choice: "accept", note: "" },
+        terms: { answers: {} },
         timeZone: "America/Costa_Rica",
         windows: ["weekday-mornings"],
         earliestStart: "2026-11-16",

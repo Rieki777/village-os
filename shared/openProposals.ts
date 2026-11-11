@@ -24,6 +24,7 @@ import { termOf, type OpenProposalTerm } from "./openProposalTerm";
 import { cardOf, parseCard, type OpenProposalCard } from "./openProposalCard";
 import { aboutOf, backgroundCheckOf, parseAboutYou, referencesOf, type BackgroundCheck, type ProposalAbout, type ProposalReference } from "./proposalAbout";
 import { filesOf, linksOf, parseProposalLinks, type ProposalFile, type ProposalLink } from "./proposalAttachments";
+import type { TermKey } from "./termsWords";
 
 export const OPEN_PROPOSAL_PATH = "/propose-a-role";
 
@@ -185,7 +186,7 @@ export function openBodyOf(raw: unknown): OpenProposalBody {
  */
 export function parseOpenProposal(
   raw: unknown,
-  ctx: { roleIds: ReadonlySet<string>; address: (s: string) => string | null; accountabilitiesOf?: (roleId: string) => readonly string[]; goalIds?: ReadonlySet<string>; today?: string; alwaysChecked?: (roleId: string) => boolean; now?: Date },
+  ctx: { roleIds: ReadonlySet<string>; address: (s: string) => string | null; accountabilitiesOf?: (roleId: string) => readonly string[]; goalIds?: ReadonlySet<string>; today?: string; alwaysChecked?: (roleId: string) => boolean; writtenTerms?: (roleIds: readonly string[]) => readonly TermKey[]; now?: Date },
 ): Parsed<OpenProposalInput> {
   const o = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
   const name = text(o.name, OPEN_NAME_MAX);
@@ -237,6 +238,7 @@ export function parseOpenProposal(
       accountabilitiesOf: ctx.accountabilitiesOf ?? (() => []),
       goalIds: ctx.goalIds ?? new Set(),
       today: ctx.today,
+      writtenTerms: ctx.writtenTerms?.(roles.map((r) => r.roleId)),
     });
     if (!card.ok) return { ok: false, field: card.field, error: card.error };
     return { ok: true, value: { name, email, body: { roles, why, aim, card: card.card, ...links, ...aboutYou } } };

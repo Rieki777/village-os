@@ -88,7 +88,7 @@ describe("the form", () => {
     fireEvent.change(within(gate).getByLabelText(/What you bring to this role/), { target: { value: "I open gates for a living." } });
     fireEvent.change(screen.getByLabelText(OPEN_WORDS.whyLabel), { target: { value: "The gate is always shut." } });
     fireEvent.change(screen.getByLabelText(OPEN_WORDS.aimLabel), { target: { value: "The gate opens at dawn." } });
-    fireEvent.click(screen.getByLabelText("I accept the terms on offer."));
+    fireEvent.change(screen.getByLabelText("Your commitment"), { target: { value: "50" } });
     fireEvent.change(screen.getByLabelText(OPEN_WORDS.nameLabel), { target: { value: "Rowan Field" } });
     fireEvent.change(screen.getByLabelText(OPEN_WORDS.emailLabel), { target: { value: "rowan@example.test" } });
     // The two agreements are required (Rye, 9 Nov). The membership letter is aligned with HERE, by
@@ -103,7 +103,9 @@ describe("the form", () => {
     expect(screen.getByText(OPEN_WORDS.sent("rowan@example.test"))).toBeTruthy();
     expect(posted).toHaveLength(1);
     expect(posted[0].url).toBe("/api/open-proposals");
-    expect(posted[0].body.card.terms).toEqual({ choice: "accept", note: "" });
+    expect(posted[0].body.card.terms).toEqual({ answers: {} });
+    expect(posted[0].body.card.commitmentPct).toBe(50);
+    expect(posted[0].body.card).not.toHaveProperty("hours");
     expect(posted[0].body).toMatchObject({
       name: "Rowan Field",
       email: "rowan@example.test",
@@ -113,7 +115,7 @@ describe("the form", () => {
         { roleId: "r-gate", note: "I open gates for a living." },
         { roleId: "r-host", note: "" },
       ],
-      card: { roles: [{ roleId: "r-gate", moves: [], firstMoon: [] }, { roleId: "r-host", moves: [], firstMoon: [] }], serves: [], hours: "", agreed: { nda: true } },
+      card: { roles: [{ roleId: "r-gate", moves: [], firstMoon: [] }, { roleId: "r-host", moves: [], firstMoon: [] }], serves: [], commitmentPct: 50, agreed: { nda: true } },
       membership: { letterVersion: LETTER.version },
     });
     // No payment anywhere on the path: nothing posted names money.
@@ -168,6 +170,7 @@ describe("the form", () => {
     const pdf = new File(["%PDF-1.7"], "portfolio.pdf", { type: "application/pdf" });
     fireEvent.change(document.querySelector('[data-attachments] input[type="file"]') as HTMLInputElement, { target: { files: [pdf] } });
     expect(document.querySelector('[data-file-row="0"]')?.textContent).toContain("portfolio.pdf");
+    fireEvent.change(screen.getByLabelText("Your commitment"), { target: { value: "50" } });
     fireEvent.click(screen.getByLabelText(/agree to the background check/i));
     fireEvent.submit(document.querySelector("[data-open-proposal]") as HTMLFormElement);
     await waitFor(() => expect(posted).toHaveLength(1));
@@ -181,6 +184,7 @@ describe("the form", () => {
     serve(FORM);
     render(<ProposeARole />);
     fireEvent.click(within((await screen.findByText("Gate Keeper")).closest("[data-role]") as HTMLElement).getByRole("checkbox"));
+    fireEvent.change(screen.getByLabelText("Your commitment"), { target: { value: "50" } });
     fireEvent.click(screen.getByLabelText(/agree to the background check/i));
     fireEvent.submit(document.querySelector("[data-open-proposal]") as HTMLFormElement);
     await waitFor(() => expect(posted).toHaveLength(1));
@@ -193,6 +197,7 @@ describe("the form", () => {
     render(<ProposeARole />);
     fireEvent.click(within((await screen.findByText("Gate Keeper")).closest("[data-role]") as HTMLElement).getByRole("checkbox"));
     fireEvent.change(screen.getByLabelText(OPEN_WORDS.nameLabel), { target: { value: "Rowan" } });
+    fireEvent.change(screen.getByLabelText("Your commitment"), { target: { value: "50" } });
     fireEvent.click(screen.getByLabelText(/agree to the background check/i));
     fireEvent.submit(document.querySelector("[data-open-proposal]") as HTMLFormElement);
     expect((await screen.findByRole("alert")).textContent).toBe(OPEN_WORDS.needWhy);
@@ -343,11 +348,12 @@ describe("the applicant's own card beside the open one (Rye, 9 Nov 2026)", () =>
     serve({
       ...FORM,
       goals: [{ id: "g-investor", text: "Investor ready" }],
-      roles: [{ id: "r-lfs", name: "Lead Financial Steward", circle: "Anchor Circle", aim: "Money kept true.", timeCommitment: "30 hours a week", accountabilities: ["One living model", "A cash view every Monday"] }],
+      roles: [{ id: "r-lfs", name: "Lead Financial Steward", circle: "Anchor Circle", aim: "Money kept true.", terms: { words: { term: "We renew together each moon." }, commitmentPct: 100 }, accountabilities: ["One living model", "A cash view every Monday"] }],
     });
     render(<ProposeARole />);
     await screen.findByText("What this role asks");
-    expect(screen.getByText("Time: roughly 30 hours a week")).toBeTruthy();
+    expect(screen.getAllByText("Commitment: 100%").length).toBeGreaterThan(0);
+    expect(screen.getByText("We renew together each moon.")).toBeTruthy();
     expect(document.querySelector("[data-no-season-goals]")).toBeNull();
     fireEvent.click(screen.getByLabelText("A cash view every Monday"));
     fireEvent.change(screen.getByLabelText("Your target for: A cash view every Monday"), { target: { value: "13 of 13 Mondays" } });
@@ -357,7 +363,9 @@ describe("the applicant's own card beside the open one (Rye, 9 Nov 2026)", () =>
     fireEvent.change(screen.getByLabelText("How your work in Lead Financial Steward serves: Investor ready"), { target: { value: "One set of numbers" } });
     fireEvent.change(screen.getByLabelText(OPEN_WORDS.whyLabel), { target: { value: "I keep books." } });
     fireEvent.change(screen.getByLabelText(OPEN_WORDS.aimLabel), { target: { value: "The gate opens at dawn." } });
-    fireEvent.click(screen.getByLabelText("I accept the terms on offer."));
+    fireEvent.change(screen.getByLabelText("Your commitment"), { target: { value: "50" } });
+    // Each setting the role has written is answered: Term and Clocks (it asks a commitment).
+    for (const box of screen.getAllByLabelText("I accept")) fireEvent.click(box);
     fireEvent.change(screen.getByLabelText(OPEN_WORDS.nameLabel), { target: { value: "Juno Reed" } });
     fireEvent.change(screen.getByLabelText(OPEN_WORDS.emailLabel), { target: { value: "juno@example.test" } });
     fireEvent.click(await screen.findByLabelText(LETTER.intent));
@@ -369,9 +377,9 @@ describe("the applicant's own card beside the open one (Rye, 9 Nov 2026)", () =>
     expect(posted[0].body.card).toMatchObject({
       roles: [{ roleId: "r-lfs", moves: [{ text: "A cash view every Monday", target: "13 of 13 Mondays" }], firstMoon: [{ quest: "Publish the first cash view", doneWhen: "every circle lead has it" }] }],
       serves: [{ goalId: "g-investor", how: "One set of numbers", roleId: "r-lfs" }],
-      hours: "",
+      commitmentPct: 50,
       agreed: { nda: true },
-      terms: { choice: "accept", note: "" },
+      terms: { answers: { term: { choice: "accept", note: "" }, clocks: { choice: "accept", note: "" } } },
     });
   });
 });
@@ -387,6 +395,7 @@ describe("form v2 (role journey brief v2, 5.4)", () => {
           name: "Lead Financial Steward",
           circle: "Anchor Circle",
           aim: null,
+          terms: { words: { term: "We renew together each moon." } },
           conversations: [
             { role: "Visionary Channel", minutes: 60 },
             { role: "Technical Operations Steward", minutes: 20 },
@@ -400,8 +409,9 @@ describe("form v2 (role journey brief v2, 5.4)", () => {
     expect(tz.value).toBe(Intl.DateTimeFormat().resolvedOptions().timeZone);
     // Brief v3: a season with no goals yet says so, and the application still goes (below).
     expect(document.querySelector("[data-no-season-goals]")?.textContent).toMatch(/not set its goals for this season yet/);
-    fireEvent.click(screen.getByLabelText("I'd like to talk about the terms."));
-    fireEvent.change(screen.getByLabelText("What you would like to talk about in the terms"), { target: { value: "The hours" } });
+    fireEvent.click(screen.getByLabelText("Let's talk"));
+    fireEvent.change(screen.getByLabelText("What you would like to talk about: Term"), { target: { value: "A shorter trial" } });
+    fireEvent.change(screen.getByLabelText("Your commitment"), { target: { value: "80" } });
     fireEvent.change(screen.getByLabelText(OPEN_WORDS.whyLabel), { target: { value: "I keep books." } });
     fireEvent.change(screen.getByLabelText(OPEN_WORDS.aimLabel), { target: { value: "Money kept true." } });
     fireEvent.change(screen.getByLabelText(OPEN_WORDS.nameLabel), { target: { value: "Juno Reed" } });
@@ -412,7 +422,8 @@ describe("form v2 (role journey brief v2, 5.4)", () => {
     fireEvent.click(screen.getByLabelText(/agree to the background check/i));
     fireEvent.click(screen.getByRole("button", { name: OPEN_WORDS.send }));
     await screen.findByRole("heading", { name: "Check your email" });
-    expect(posted[0].body.card.terms).toEqual({ choice: "talk", note: "The hours" });
+    expect(posted[0].body.card.terms).toEqual({ answers: { term: { choice: "talk", note: "A shorter trial" } } });
+    expect(posted[0].body.card.commitmentPct).toBe(80);
     const steps = document.querySelector("[data-next-for-roles]") as HTMLElement;
     const items = Array.from(steps.querySelectorAll("li")).map((li) => li.textContent);
     expect(items).toEqual(["60 minutes with Visionary Channel", "20 minutes with Technical Operations Steward", "20 minutes with Anchor Circle Steward, the final approval"]);

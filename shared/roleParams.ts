@@ -306,7 +306,7 @@ export const CARD_PART_WORDS: Record<CardPart, string> = {
   aim: "its aim",
   decides: "what it decides on",
   answers: "what it answers for",
-  hours: "rough hours",
+  hours: "its commitment",
   track: "its track",
   reward: "its reward type",
   term: "its term",
@@ -321,6 +321,8 @@ export interface CardGateInput {
   domain: string | null | undefined;
   accountabilities: readonly string[] | null | undefined;
   timeCommitment: string | null | undefined;
+  /** The commitment the role asks in its terms on offer (0 to 100); it satisfies the part the time text used to. */
+  commitmentPct?: number | null;
   track: RoleTrack | null | undefined;
   /** The pay group's kind in the terms on offer, or null when none is written. */
   payKind: string | null;
@@ -345,7 +347,7 @@ const has = (s: string | null | undefined) => !!s && s.trim() !== "";
 
 /**
  * "Apply" shows only when the aim, what it decides on, what it answers for,
- * rough hours, track, reward type, term, a village goal, selection criteria
+ * commitment, track, reward type, term, a village goal, selection criteria
  * and the interviewing roles are written, and, when paid, a range is on offer.
  */
 export function roleCardGate(i: CardGateInput): CardGate {
@@ -354,7 +356,7 @@ export function roleCardGate(i: CardGateInput): CardGate {
     aim: has(i.aim),
     decides: has(i.domain),
     answers: (i.accountabilities ?? []).some((a) => has(a)),
-    hours: has(i.timeCommitment),
+    hours: has(i.timeCommitment) || (typeof i.commitmentPct === "number"),
     track: !!i.track,
     reward: i.payKind !== null || i.track === "volunteer" || i.track === "ai",
     term: i.hasTerm,

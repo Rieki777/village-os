@@ -38,6 +38,7 @@ import { pickedSeats } from "./SeatPicksField";
 import { fetchApplication } from "./seatApplicationsApi";
 import { OPEN_AIM_MAX } from "@shared/openProposals";
 import { isDoor } from "./wizardDoor";
+import { TERM_KEYS, commitmentWords, isCommitment, judgeTermsStep, notesAsText, overallChoice, type TermAnswers, type TermKey } from "@shared/termsWords";
 import { goalsAsText, parseGoals, type ProposalGoal } from "@shared/proposalGoals";
 
 /** The goals the member listed, as the list holds them (GoalsField), or none. */
@@ -51,26 +52,45 @@ export const goalsProblem = (v: unknown): string | null => {
   return judged.ok ? null : judged.error;
 };
 
-/** The door's terms answer: accepted or a wish to talk, and the terms on offer it showed (TermsOnOfferField). */
+/**
+ * The door's terms answer (joining lane PR 3): an answer to each setting the roles have written, the
+ * candidate's commitment, and the terms on offer it showed (TermsOnOfferField). `choice` and `note` are
+ * the whole answer in the older words: "talk" when any setting is, with each note on a line.
+ */
 export interface TermsChoice {
   choice: "accept" | "talk";
   note: string;
   settings: unknown;
+  answers: TermAnswers;
+  /** Null until chosen: there is no default. */
+  commitmentPct: number | null;
+  /** The settings the picked roles have written: each needs an answer. */
+  written: TermKey[];
 }
 
 export function termsChoiceOf(v: unknown): TermsChoice | null {
   if (!v || typeof v !== "object") return null;
   const o = v as Record<string, unknown>;
-  if (o.choice !== "accept" && o.choice !== "talk") return null;
-  return { choice: o.choice, note: typeof o.note === "string" ? o.note : "", settings: o.settings ?? null };
+  const judged = judgeTermsStep({ answers: o.answers, commitmentPct: 0 }, []);
+  const answers = judged.ok ? judged.value.answers : {};
+  const written = Array.isArray(o.written) ? TERM_KEYS.filter((k) => (o.written as unknown[]).includes(k)) : [];
+  return {
+    choice: overallChoice(answers),
+    note: notesAsText(answers),
+    settings: o.settings ?? null,
+    answers,
+    commitmentPct: isCommitment(o.commitmentPct) ? o.commitmentPct : null,
+    written,
+  };
 }
 
-/** The door's terms verdict: a choice, a note when talking, and terms the route will read. */
+/** The door's terms verdict: each written setting answered, the commitment chosen, and terms the route will read. */
 export const termsChoiceProblem = (v: unknown, a: Record<string, unknown>): string | null => {
   if (!isDoor(a)) return null;
   const t = termsChoiceOf(v);
-  if (!t) return "Say whether you accept the terms on offer, or would like to talk about them.";
-  if (t.choice === "talk" && !t.note.trim()) return "Say what you would like to talk about in the terms.";
+  if (!t) return "Say whether you accept each setting, or would like to talk about it, and choose your commitment.";
+  const judged = judgeTermsStep({ answers: t.answers, commitmentPct: t.commitmentPct }, t.written);
+  if (!judged.ok) return judged.error;
   return settingsProblem(t.settings);
 };
 
@@ -81,7 +101,7 @@ export function doorAnswers(a: Record<string, unknown>): Record<string, unknown>
   return {
     aim: String(a.aim ?? "").trim() || null,
     servesGoal: goal && goal !== NO_SEASON_GOALS ? goal : null,
-    terms: t ? { choice: t.choice, note: t.note.trim() } : null,
+    terms: t ? { choice: t.choice, note: t.note.trim(), answers: t.answers, commitmentPct: t.commitmentPct } : null,
     goals: goalsForRoute(a),
     // About you (PR 2): judged again by the route, which knows which roles are always checked.
     ...aboutYouBody(aboutYouOf(a.aboutYou)),
@@ -115,6 +135,7 @@ export function doorDeliverables(a: Record<string, unknown>): unknown {
   const t = termsChoiceOf(a.termsChoice);
   if (t?.choice === "accept") lines.push("Accepts the terms on offer.");
   if (t?.choice === "talk") lines.push(`Wants to talk about the terms: ${t.note.trim()}`);
+  if (t && t.commitmentPct !== null) lines.push(commitmentWords(t.commitmentPct));
   const own = goalsForRoute(a).length ? goalsAsText(goalsForRoute(a)) : String(a.deliverables ?? "").trim();
   return [lines.join("\n"), own].filter(Boolean).join("\n\n");
 }
@@ -253,7 +274,7 @@ export const ROLE_APPLICATION_TYPE: WizardTypeConfig = {
     },
     terms: {
       doorLabel: "The terms",
-      doorIntro: "The terms each role offers. Accept them, or say what you would like to talk about: the people deciding see it. You don't write terms here.",
+      doorIntro: "Each role's suggestion for the eight settings. Accept each one, or mark it let's talk: the people deciding see your answers. You don't write terms here.",
       label: "Your terms",
       intro: "The terms you would hold these roles on. Start from a preset, or from the role's own terms on offer, and change what does not fit.",
       fields: [

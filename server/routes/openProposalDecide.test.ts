@@ -332,7 +332,7 @@ describe.skipIf(!configured)("open role proposals, the decision, on a real schem
       expect(r.status).toBe(200);
       const p = r.body.proposal;
       expect(p).toMatchObject({ id, status: "confirmed", proposer: "Rowan", why: "I live up the road and the gate is always shut.", aim: "The gate opens at dawn every day." });
-      expect(p.roles).toEqual([{ id: gate, name: "Gate Keeper", circle: "Land Circle", note: "I open gates for a living.", accountabilities: [], timeCommitment: null }]);
+      expect(p.roles).toEqual([{ id: gate, name: "Gate Keeper", circle: "Land Circle", note: "I open gates for a living.", accountabilities: [], commitmentPct: null }]);
       expect(p.season).toMatchObject({ id: "s-next", name: "Season of Roots", startsOn: "2037-01-01" });
       // Ana, Ben and u-has hold roles in the Land Circle; u-has is asked here, since this address is not its own.
       expect(p.consent).toMatchObject({ state: "open", asked: 3, consented: 0, objected: 0 });
@@ -808,7 +808,7 @@ describe.skipIf(!configured)("open role proposals, the decision, on a real schem
         roles: [{ roleId: well, note: "" }],
         why: "I know wells.",
         aim: "Clean water all season.",
-        card: { roles: [{ roleId: well, moves: [], firstMoon: [{ quest: "Test the water", doneWhen: "the lab says it is clean" }] }], serves: [], hours: "10 a week", agreed: { loveLetter: true, nda: true }, terms: { choice: "talk", note: "Could the rate be per moon?" } },
+        card: { roles: [{ roleId: well, moves: [], firstMoon: [{ quest: "Test the water", doneWhen: "the lab says it is clean" }] }], serves: [], commitmentPct: 70, agreed: { loveLetter: true, nda: true }, terms: { answers: { term: { choice: "talk", note: "Could the rate be per moon?" } } } },
       }, null);
       expect(r.status, JSON.stringify(r.body)).toBe(200);
       const mail = state.sent[before];
@@ -822,8 +822,8 @@ describe.skipIf(!configured)("open role proposals, the decision, on a real schem
       const apps = await q("SELECT deliverables FROM seat_applications WHERE candidate_user_id = ?", [CARDED.id]);
       expect(String(apps[0].deliverables)).toContain("Clean water all season.");
       expect(String(apps[0].deliverables)).toContain("Goal: Test the water: done when the lab says it is clean");
-      expect(String(apps[0].deliverables)).toContain("Time I can give: 10 a week");
-      expect(String(apps[0].deliverables)).toContain("Wants to talk about the terms: Could the rate be per moon?");
+      expect(String(apps[0].deliverables)).toContain("Commitment: 70%");
+      expect(String(apps[0].deliverables)).toContain("Wants to talk about the terms: Term: Could the rate be per moon?");
     });
   });
 
