@@ -1,15 +1,18 @@
 // @vitest-environment jsdom
 /**
- * /steward is the front door to the eleven-step way into a role: it points at
- * /roles, lists the steps with whose move each is, and no longer carries the
- * old nine-step journey, the ladder of levels or its own intake form.
+ * /steward is ONE flow (build list section 8, 11 Nov 2026): the first steps
+ * everyone takes, the fork into two tracks, the role path ending in the
+ * optional step onto the resident track (the lead's final ruling), and the
+ * founding team's invitation as the page's one gold act. It carries no doors,
+ * no second journey, no ladder of levels and no intake form.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import fs from "node:fs";
 import path from "node:path";
 import { Router } from "wouter";
 import { STEWARD_JOURNEY, RESIDENT_JOURNEY } from "@shared/pageContent/journeys";
+import { pageContentProblem } from "@shared/pageContent";
 import { memoryLocation } from "wouter/memory-location";
 import type { ReactNode } from "react";
 
@@ -24,7 +27,10 @@ vi.mock("@/lib/gameApi", () => ({
   altOr: (a: string | undefined, b: string) => a || b,
   useGameConfig: () => ({ project: { name: "Hollow Oak", adminPath: "/admin" } }),
 }));
-vi.mock("@/hooks/useVillageContent", () => ({ readVillageSection: () => Promise.resolve(null) }));
+const stored = vi.hoisted(() => ({ doc: null as unknown }));
+vi.mock("@/hooks/useVillageContent", () => ({
+  readVillageSection: (section: string) => Promise.resolve(section === "page-journey-steward" ? stored.doc : null),
+}));
 vi.mock("@/hooks/useVillageName", () => ({ useVillageName: () => "Hollow Oak" }));
 vi.mock("@/hooks/useTokenNames", () => ({ useTokenName: (fallback: string) => fallback }));
 
@@ -39,6 +45,7 @@ const show = () =>
 
 beforeEach(() => {
   auth.admin = false;
+  stored.doc = null;
   vi.stubGlobal("IntersectionObserver", class { observe() {} unobserve() {} disconnect() {} takeRecords() { return []; } });
   vi.stubGlobal("fetch", vi.fn());
 });
@@ -50,55 +57,129 @@ const FOUNDING = "https://amora.cr/founding-seeder/"; // brand-ok: the first vil
 const hrefOf = (name: RegExp) => screen.getAllByRole("link", { name }).map((a) => a.getAttribute("href"));
 
 describe("/steward", () => {
-  it("shows the eleven steps in order, each with whose move it is", async () => {
+  it("is one flow: first steps, the fork, the role path, then the founding team", async () => {
     show();
-    const list = (await screen.findByText("Start at the roles")).closest("ol")!;
+    await screen.findByText("Get to know us");
+    const text = document.body.textContent ?? "";
+    const order = ["Get to know us", "Two paths from here", "From your application to the role, in seven steps", "Join the resident path too", "The team that builds Hollow Oak", "Optional, whenever you like"].map((t) => text.indexOf(t));
+    expect(order.every((at) => at >= 0)).toBe(true);
+    expect([...order].sort((x, y) => x - y)).toEqual(order);
+    // The duplicates are gone: no doors, no second journey, no moon band.
+    expect(screen.queryByText("Which door is yours?")).toBeNull();
+    expect(screen.queryByText("One moon")).toBeNull();
+    expect(screen.getAllByRole("heading", { name: "Get to know us" })).toHaveLength(1);
+  });
+
+  it("lists the three first steps in order, each tickable, with the exceptions line beside them", async () => {
+    show();
+    await screen.findByText("Get to know us");
+    const list = document.querySelector("#first-steps ol") as HTMLElement;
+    expect(within(list).getAllByRole("checkbox")).toHaveLength(3);
+    expect(list).toHaveTextContent(/Come to an open call.*Walk the land with us.*Share a meal with the village/);
+    expect(screen.getAllByText(/you can still apply, especially if we invited you/).length).toBeGreaterThan(0);
+  });
+
+  it("opens a first step to its button, and an external link opens safely", async () => {
+    const { default: userEvent } = await import("@testing-library/user-event");
+    show();
+    await userEvent.setup().click(await screen.findByRole("button", { name: /Walk the land with us/ }));
+    const link = within(document.getElementById("first-steps")!).getByRole("link", { name: /See upcoming events/ });
+    expect(link).toHaveAttribute("href", "https://example.org/events");
+    expect(link).toHaveAttribute("rel", expect.stringContaining("noopener"));
+  });
+
+  it("forks into two tracks, marks the role path as here and links across to /resident", async () => {
+    show();
+    await screen.findByText("Two paths from here");
+    const steward = document.querySelector('[data-track="steward"]') as HTMLElement;
+    const resident = document.querySelector('[data-track="resident"]') as HTMLElement;
+    expect(within(steward).getByText("You are here")).toBeInTheDocument();
+    expect(within(resident).queryByText("You are here")).toBeNull();
+    expect(within(resident).getByRole("link", { name: /Live here/ })).toHaveAttribute("href", "/resident");
+  });
+
+  it("walks the role path in order, each step with whose move it is", async () => {
+    show();
+    const list = (await screen.findByText("Find the role that is yours")).closest("ol")!;
     const items = within(list).getAllByRole("listitem");
-    expect(items).toHaveLength(11);
-    expect(items[0]).toHaveTextContent(/Start at the roles/);
-    expect(items[2]).toHaveTextContent(/Propose yourself/);
-    expect(items[10]).toHaveTextContent(/Join the moon rhythm/);
-    expect(within(items[6]).getByText("The circle's move")).toBeInTheDocument();
+    // Seven steps, then the optional step onto the resident path.
+    expect(items).toHaveLength(8);
     expect(within(items[0]).getByText("Your move")).toBeInTheDocument();
+    expect(within(items[2]).getByText("The circle's move")).toBeInTheDocument();
+    expect(items[7]).toHaveTextContent(/Join the resident path too/);
+    expect(within(items[7]).getByText("Optional")).toBeInTheDocument();
+    expect(within(items[7]).getByRole("link", { name: /See the resident path/ })).toHaveAttribute("href", "/resident");
+    expect(hrefOf(/^See the open roles/)).toEqual(["/roles"]);
   });
 
-  it("says step 3 asks for references, or a background check, and when they are contacted", async () => {
+  it("ends the role path on the crossover alone: no early supporters step of its own (the lead's ruling)", async () => {
     show();
-    const step = (await screen.findByText("Propose yourself")).closest("li")!;
-    expect(step).toHaveTextContent(/three references, or a background check in their place/);
-    expect(step).toHaveTextContent(/only after our first conversation/);
+    const list = (await screen.findByText("Find the role that is yours")).closest("ol")!;
+    expect(list.querySelectorAll("[data-track-tile]")).toHaveLength(1);
+    expect(STEWARD_JOURNEY.sections.map((s) => s.id)).not.toContain("seeders");
   });
 
-  it("links each step to its page", async () => {
+  it("leads into the founding team as the page's one gold act, with fireflies on it", async () => {
     show();
-    await screen.findByText("Propose yourself");
-    expect(hrefOf(/^See the roles/)).toContain("/roles");
-    expect(hrefOf(/^Pick your roles/)).toEqual(["/roles/select"]);
-    expect(hrefOf(/^Propose a role/)).toContain("/propose-a-role");
+    await screen.findByText("The team that builds Hollow Oak");
+    const band = document.getElementById("founding-team")!;
+    const act = within(band).getByRole("link", { name: /^Join the founding team/ });
+    expect(act).toHaveAttribute("href", "/roles");
+    expect(band.querySelector('[data-testid="fireflies"]')).not.toBeNull();
+    expect(document.querySelectorAll('[data-testid="fireflies"]')).toHaveLength(1);
   });
 
-  it("opens three doors for a visitor, to the right places", async () => {
+  it("pins the same act in thumb reach while the band is ahead, and lets it go once the band is reached", async () => {
+    const { act: flush } = await import("@testing-library/react");
+    let report: (top: number, visible: boolean) => void = () => {};
+    vi.stubGlobal(
+      "IntersectionObserver",
+      class {
+        constructor(cb: (entries: unknown[]) => void) {
+          report = (top, visible) => cb([{ isIntersecting: visible, boundingClientRect: { top } }]);
+        }
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+        takeRecords() {
+          return [];
+        }
+      },
+    );
     show();
-    await screen.findByText("Which door is yours?");
-    expect(hrefOf(/^Find your role/)).toContain("/roles");
-    expect(hrefOf(/^Propose a role/)).toContain("/role-proposals/new");
-    expect(hrefOf(/^See the quests/)).toEqual(["/quests"]);
-    expect(hrefOf(/^Explore the map/)).toEqual(["/map"]);
+    await screen.findByText("The team that builds Hollow Oak");
+    flush(() => report(3000, false));
+    expect(within(await screen.findByTestId("thumb-act")).getByRole("link")).toHaveAttribute("href", "/roles");
+    flush(() => report(200, true));
+    expect(screen.queryByTestId("thumb-act")).toBeNull();
+    flush(() => report(-900, false));
+    expect(screen.queryByTestId("thumb-act")).toBeNull();
+  });
+
+  it("speaks in the founding register: no game words anywhere on the page", async () => {
+    show();
+    await screen.findByText("The team that builds Hollow Oak");
+    expect(document.body.textContent).not.toMatch(/\bquests?\b|\bmoons?\b|\bXP\b|level up/i);
+  });
+
+  it("hides the crossover and the founding band when the village hides them", async () => {
+    stored.doc = { crossover: { hidden: true }, foundingTeam: { hidden: true } };
+    show();
+    await screen.findByText("Find the role that is yours");
+    expect(screen.queryByText("Join the resident path too")).toBeNull();
+    expect(screen.queryByRole("link", { name: /^Join the founding team/ })).toBeNull();
+  });
+
+  it("opens the admin door only for an admin", async () => {
+    show();
+    await screen.findByText("Get to know us");
     expect(screen.queryByText("Stewarding the roles")).toBeNull();
-  });
-
-  it("opens the fourth door only for an admin", async () => {
+    cleanup();
     auth.admin = true;
     show();
     expect(await screen.findByText("Stewarding the roles")).toBeInTheDocument();
     expect(hrefOf(/^Open the approval inbox/)).toEqual(["/approvals"]);
     expect(hrefOf(/^Open admin/)).toEqual(["/admin"]);
-  });
-
-  it("says the optional ones are not required, and gives one moon in brief", async () => {
-    show();
-    expect(await screen.findByText(/Nobody has to do the optional ones/)).toBeInTheDocument();
-    expect(screen.getByText(/never for hours/)).toBeInTheDocument();
   });
 
   it("keeps the rights link without claiming ownership, and links the exit policy", async () => {
@@ -108,31 +189,55 @@ describe("/steward", () => {
     expect(document.body.textContent).not.toMatch(/co-owner|real ownership/i);
   });
 
-  it("has no ladder of levels, no season festival copy and no intake form", async () => {
+  it("has no ladder of levels, no festival copy and no intake form", async () => {
     show();
-    await screen.findByText("Which door is yours?");
+    await screen.findByText("Get to know us");
     const text = document.body.textContent ?? "";
     expect(text).not.toMatch(/Role Holder|\bSage\b|\bGuide\b|highest voice|Path of Growth|every 3 months|Begin My Stewardship/i);
     expect(document.querySelector("form")).toBeNull();
     expect(screen.getByRole("link", { name: /Ask us a question/ })).toHaveAttribute("href", expect.stringMatching(/^mailto:/));
   });
+});
 
-  it("shows four cards under Getting to know us, with Optional on the second and third only", async () => {
+describe("expand only: a village that saved the old page keeps it", () => {
+  it("still reads the old sections, and the old record still validates", async () => {
+    const old = seed("steward");
+    expect(pageContentProblem("page-journey-steward", old)).toBeNull();
+    stored.doc = old;
     show();
-    await screen.findByText("Getting to know us");
-    const cards = ["Come to an Event", "Take Part in Events", "Village Immersion", "Community Training"].map((t) => screen.getByText(t).closest("li") as HTMLElement);
-    expect(cards.map((c) => !!within(c).queryByText("Optional"))).toEqual([false, true, true, false]);
-    expect(screen.queryByText(/steps completed/)).toBeNull();
+    // The old four cards are its first steps, the old eleven steps its role path.
+    await screen.findByText(old.steps.items[0].title);
+    expect(within(document.querySelector("#first-steps ol") as HTMLElement).getByText(old.getToKnow.items[0].title)).toBeInTheDocument();
+    const list = screen.getByText(old.steps.items[0].title).closest("ol")!;
+    expect(list.querySelectorAll(":scope > li:not([data-track-tile])")).toHaveLength(old.steps.items.length);
+  });
+});
+
+describe("the village's draft for the one flow (server/seeds/amora/journey-tracks-seed.json)", () => { // brand-ok: the first village's own draft, read to prove the pages accept it
+  const draft = JSON.parse(fs.readFileSync(path.resolve(process.cwd(), "server/seeds/amora/journey-tracks-seed.json"), "utf8")); // brand-ok: the first village's own draft, read to prove the pages accept it
+
+  it("is a document each page accepts", () => {
+    expect(pageContentProblem("page-journey-steward", draft["page-journey-steward"])).toBeNull();
+    expect(pageContentProblem("page-journey-resident", draft["page-journey-resident"])).toBeNull();
   });
 
-  it("opens a card to its button, and an external link opens safely", async () => {
-    const { default: userEvent } = await import("@testing-library/user-event");
-    show();
-    await screen.findByText("Getting to know us");
-    await userEvent.setup().click(screen.getByText("Take Part in Events"));
-    const link = screen.getByRole("link", { name: /View Events/ });
-    expect(link).toHaveAttribute("href", "https://example.org/events");
-    expect(link).toHaveAttribute("rel", expect.stringContaining("noopener"));
+  it("carries the lead's words for the optional step, and no early supporters step on the steward track", () => {
+    const s = draft["page-journey-steward"];
+    expect(`${s.crossover.title}: ${s.crossover.body}`).toBe("Join the resident track too: We prefer to work with people who also want to live here at least part time.");
+    expect(s.crossover.mark).toBe("Optional");
+    expect(s.crossover.ctaTarget).toBe("/resident");
+    expect(JSON.stringify(s.steps)).not.toMatch(/Founding Seeder/);
+  });
+
+  it("asks for the webinar or community call, the land tour and the potluck, in that order, with the exceptions line", () => {
+    const s = draft["page-journey-steward"];
+    expect(s.getToKnow.items.map((r: Record<string, string>) => r.title)).toEqual(["Attend the webinar or community call", "Come on a land tour", "Join the potluck"]);
+    expect(s.getToKnow.exceptions).toMatch(/more than a week away/);
+  });
+
+  it("names the resident track's stages from the journey doc, with Founding Seeders inside it", () => {
+    const stages = draft["page-journey-resident"].steps.items.map((r: Record<string, string>) => r.stage);
+    expect(stages.slice(0, 8)).toEqual(["Guest", "Founding Seeder", "Potential Steward", "Connection Ceremony", "Steward of {village}", "Wisdom Council", "Connection Ceremony", "Invitation"]);
   });
 });
 

@@ -86,7 +86,7 @@ const PAGE_WORDS: Record<string, readonly string[]> = {
   "how-we-create": [],
   "co-creators-guide": ["good-neighbor"],
   "journey-investor": [],
-  "journey-steward": [],
+  "journey-steward": ["count"],
   "journey-resident": ["range", "deposit-summary", "background-note", "transfer-note"],
   "journey-prosperity": ["count", "guide", "acronym", "framework"],
 };
