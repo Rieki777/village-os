@@ -322,12 +322,12 @@ export function register(app: Express, deps: Deps): void {
      * publish here: a circle that cannot be made, or a circle somebody's seat
      * still sits in, blocks its line and the whole publish with it.
      */
-    const ops = ["create_seat", "update_seat", "rest_seat", "seat_holder", "end_holding", "move_circle", "create_circle", "rest_circle", "update_circle"];
+    const ops = ["create_seat", "update_seat", "rest_seat", "seat_holder", "end_holding", "move_circle", "create_circle", "rest_circle", "update_circle", "set_circle_standing"];
     const op = String(req.body?.op ?? "");
     if (!ops.includes(op)) return res.status(400).json({ error: `op must be one of: ${ops.join(", ")}` });
     // A circle change names its CIRCLE in the seat column, as circle:<id>, so an
     // older release reading the row finds no seat to apply it to (0208).
-    if (op === "move_circle" || op === "create_circle" || op === "rest_circle" || op === "update_circle") {
+    if (op === "move_circle" || op === "create_circle" || op === "rest_circle" || op === "update_circle" || op === "set_circle_standing") {
       const target = String(req.body?.orgRoleId ?? "");
       const parent = req.body?.payload?.parentCircleId;
       if (!target.startsWith("circle:") || target.length <= "circle:".length) {

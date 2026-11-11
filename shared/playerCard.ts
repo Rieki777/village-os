@@ -146,7 +146,7 @@ export interface PlayerRoleIn {
   accountabilities: string[];
   /** `org_roles.criticality`. */
   criticality: Read<"normal" | "high">;
-  circle: Read<{ id: string; name: string } | null>;
+  circle: Read<{ id: string; name: string; anchor?: boolean } | null>;
   /** This holding's `term_ends_at`. */
   termEndsAt: Read<string | null>;
   /** `org_roles.archetypes`. */
@@ -432,7 +432,7 @@ export interface RoleOut {
   /** "Key role", the circle, "Held until ...", and "Review week of ..." or "No review date set". */
   chips: string[];
   /** The role's circle, linked to that circle's card (`/circles/:id`); null when it sits in none. */
-  circle: { name: string; href: string } | null;
+  circle: { name: string; href: string; anchor?: boolean } | null;
   /** The time chip (0274), drawn after the chips when it is written. */
   time: TextSectionOut;
   plays: { label: string; chips: { key: string; name: string }[] } | null;
@@ -749,7 +749,7 @@ function roleOut(role: PlayerRoleIn, input: PlayerCardInput): RoleOut {
   const chips: string[] = [];
   if (role.criticality === "high") chips.push(W.keyRole);
   // The circle is drawn as a link to its card, beside these chips.
-  const circle = role.circle ? { name: role.circle.name, href: `/circles/${encodeURIComponent(role.circle.id)}` } : null;
+  const circle = role.circle ? { name: role.circle.name, href: `/circles/${encodeURIComponent(role.circle.id)}`, anchor: role.circle.anchor === true } : null;
   const held = formatDay(role.termEndsAt ?? null, true, input.timeZone);
   if (held) chips.push(W.heldUntil(held));
   // 0274: the CCOS sections, and the review chip from the role's own terms.
