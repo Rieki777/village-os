@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { CheckCircle2, Download, ExternalLink, TriangleAlert } from "lucide-react";
+import ConnectorSetupPanel from "@/components/agent/ConnectorSetupPanel";
+import { useIsAdmin } from "@/contexts/AuthContext";
 import {
   GO_LIVE_ENV,
   GO_LIVE_PREREQS,
@@ -130,6 +132,7 @@ export default function GoLivePackagePanel({
   villageName?: string;
 }) {
   const [saved, setSaved] = useState(false);
+  const isAdmin = useIsAdmin();
 
   /* One click, one file, built from the same lists the page above renders.
      The blob is revoked straight after the click, which is what every other
@@ -174,6 +177,9 @@ export default function GoLivePackagePanel({
           </p>
         ) : null}
       </div>
+
+      {/* The package is for the village's own AI assistant (the lead, 2026-11-11): bring the person to the connector. */}
+      {saved ? <ConnectorSetupPanel moment="download" person="admin" isAdmin={isAdmin} /> : null}
 
       <div>
         <h4 className="text-sm font-semibold text-foreground">

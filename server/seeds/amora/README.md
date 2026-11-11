@@ -8,7 +8,8 @@ reads this folder, so a new village never receives them.
 |---|---|
 | `brochure-legal-seed.json` | Amora's legal section: Costa Rica, its 508(c)(1)(a) entity, tax notes. |
 | `pages-covenant-seed.json` | The two Love Letter paragraphs Amora wrote. |
-| `money-claims-seed.json` | Amora's own land and money figures. |
+| `money-claims-seed.json` | Amora's own land and money figures. Its `valueConversion` line says what the value token is in plain words (it tracks unpaid contributions, has no financial value yet, and what it will represent is still being decided together). Applied by Admin, Content, Money & Value Claims. |
+| `token-descriptions-seed.json` | Amora's member-facing description of Earned Equity, for the wallet. Applied by hand, Admin, Tokens (11 Nov 2026). |
 | `investor-parcels-seed.json` | Amora's six parcels on the investor path, one already sold (Rye, 2026-11-09). Applied through the investor path's invitation routes once they land (slice S2b); the sold one is recorded with no buyer, so it earns nobody the Neighbour badge. |
 | `agent-paths-seed.json` | Amora's agent paths list for the connector: the 72 paths prepared for rapid design plus the lead-approved writes (role card words, drafts with terms wording, seating and unseating with the approval quoted, six wording variables), 88 in all. Applied by a person, Admin, Agents (or `PUT /api/admin/agent-admin-paths`), and only after `agents.lead_approved_writes` is on, or the list refuses the lead-approved entries. |
 | `faqs-steward-seed.json` | The three steward questions as they should read after the joining flow (no hours, no old journey). Applied by hand, Admin, FAQs. |

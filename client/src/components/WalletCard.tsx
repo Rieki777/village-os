@@ -36,6 +36,7 @@ import { formatTokenAmount } from "@/lib/tokenAmount";
 import { scrollBehavior } from "@/components/natural/scrollBehavior";
 import { tokenModule } from "@/components/admin/tokenCatalog";
 import { formatMoney } from "@shared/money";
+import { equityTokenNote } from "@shared/tokenNote";
 
 const headers = (): Record<string, string> => {
   const t = authToken();
@@ -225,7 +226,10 @@ export default function WalletCard() {
           {visible.map((row) => (
             <li key={row.token} className="rounded-xl border border-border p-4">
               <h4 className="font-semibold text-card-foreground">{row.name}</h4>
-              {row.description && <p className="mt-1 text-sm text-muted-foreground whitespace-pre-line">{row.description}</p>}
+              {/* The village's own words win; an equity-kind token with none gets the plain note (the lead, 2026-11-11). */}
+              {(row.description || row.kind === "equity") && (
+                <p className="mt-1 text-sm text-muted-foreground whitespace-pre-line">{row.description || equityTokenNote(row.name)}</p>
+              )}
 
               <dl className="mt-3 space-y-2 text-sm">
                 {row.role === "gratitude" ? (

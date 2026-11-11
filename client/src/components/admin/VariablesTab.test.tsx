@@ -32,7 +32,7 @@ import { cleanup, render, screen, fireEvent, waitFor, act } from "@testing-libra
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
-import VariablesTab from "./VariablesTab";
+import VariablesTab, { orderCategories } from "./VariablesTab";
 
 /**
  * Two dials, one of them a governance threshold so the warning has something
@@ -122,6 +122,22 @@ describe("VariablesTab", () => {
     expect(screen.getByText("Gratitude cap")).toBeInTheDocument();
     expect(screen.getByText("Governance")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Game Mechanics" })).toBeInTheDocument();
+  });
+
+  it("lists the Connector category first, whatever order the server sent", async () => {
+    expect(orderCategories([["Governance", 1], ["Gratitude", 2], ["Connector", 3], ["Forum", 4]]).map(([c]) => c)).toEqual(["Connector", "Governance", "Gratitude", "Forum"]);
+    const withConnector = {
+      ...VARIABLES,
+      categories: [
+        ...VARIABLES.categories,
+        { name: "Connector", variables: [{ key: "agents.lead_approved_writes", label: "Our agent may make the changes we approve in the chat", description: "d", category: "Connector", type: "boolean", value: "true", default: "true", isDefault: true }] },
+      ],
+    };
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => (String(url).includes("/admin/variables") ? { status: 200, ok: true, json: async () => withConnector } : answer(String(url)))));
+    render(<VariablesTab password="secret" />);
+    await screen.findByText("Agreement needed");
+    const heads = screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent);
+    expect(heads[0]).toBe("Connector");
   });
 
   it("asks the variables route for them, carrying the admin token", async () => {
