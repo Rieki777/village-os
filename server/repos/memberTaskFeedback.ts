@@ -104,7 +104,8 @@ export async function undoFeedback(db: Queryable, userId: string, feedbackId: st
 
 // ── The outbox ────────────────────────────────────────────────────────────
 
-export type OutboxKind = "feedback" | "suppress" | "note" | "undo" | "forget_person";
+/** `decision_record`: a lead-approved connector write, recorded in the memory (shared/agentApprovalRecord.ts). */
+export type OutboxKind = "feedback" | "suppress" | "note" | "undo" | "forget_person" | "decision_record";
 
 export async function enqueue(
   db: Queryable, userId: string | null, feedbackId: string | null, kind: OutboxKind, payload: Record<string, unknown>, held = false,

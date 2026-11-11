@@ -26,6 +26,7 @@ import { readConfigDocument, writeConfigDocument } from "../repos/appConfigDocs"
 import { undoSeraAction } from "../lib/seraAgent";
 import { AGENT_ADMIN_PATHS_DOC, ALWAYS_A_PERSON, DEFAULT_AGENT_ADMIN_PATHS, effectiveAgentAdminPaths, LEAD_APPROVED_WRITES, LEAD_APPROVED_WRITES_VARIABLE, parseAgentAdminPaths } from "../../shared/agentAdmin";
 import { boolVar } from "../lib/variables";
+import { recentApprovedWrites } from "../lib/agentLeadApproval";
 
 type Deps = Pick<AppDeps, "authedUser" | "getPool" | "isAdmin">;
 
@@ -77,6 +78,14 @@ export function register(app: Express, deps: Deps): void {
       audience: "admin",
     });
     res.json({ userId, isAgent: on });
+  });
+
+  // The connector's approved writes, newest first: when, what, who approved it, their note, and whether the
+  // organisational memory holds the record yet (server/lib/agentLeadApproval.ts). A person reads it, never an agent.
+  app.get("/api/admin/agent-approvals", async (req, res) => {
+    const actor = await person(req, res);
+    if (!actor) return;
+    res.json({ writes: await recentApprovedWrites(getPool(), 50) });
   });
 
   app.get("/api/admin/agent-admin-paths", async (req, res) => {
