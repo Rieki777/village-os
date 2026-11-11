@@ -43,9 +43,12 @@ export interface UndrawnSeatAsksProps {
   circles: ReadonlyArray<{ id: string | number }>;
   call: SeatClaimAsksProps["call"];
   onDone: SeatClaimAsksProps["onDone"];
+  /** Words for the panel when it holds every ask, as the org chart's first level does. */
+  heading?: string;
+  intro?: string;
 }
 
-export function UndrawnSeatAsks({ asks, drawnSeatIds, roles, circles, call, onDone }: UndrawnSeatAsksProps) {
+export function UndrawnSeatAsks({ asks, drawnSeatIds, roles, circles, call, onDone, heading, intro }: UndrawnSeatAsksProps) {
   const bySeat = new Map<string, SeatClaimAsk[]>();
   for (const a of asks) {
     const seat = String(a.roleId);
@@ -65,9 +68,9 @@ export function UndrawnSeatAsks({ asks, drawnSeatIds, roles, circles, call, onDo
 
   return (
     <section aria-labelledby="undrawn-asks-h" className="bg-white border border-amber-300 rounded-xl p-4 mb-6">
-      <h3 id="undrawn-asks-h" className="font-semibold text-gray-900 text-sm">Asks for roles not drawn below</h3>
+      <h3 id="undrawn-asks-h" className="font-semibold text-gray-900 text-sm">{heading ?? "Asks for roles not drawn below"}</h3>
       <p className="text-xs text-gray-600 mt-0.5">
-        These roles sit outside every circle on this page, so their asks have no card to appear on. Answer them here.
+        {intro ?? "These roles sit outside every circle on this page, so their asks have no card to appear on. Answer them here."}
       </p>
       <div className="mt-3 space-y-4">
         {Array.from(bySeat, ([seat, seatAsks]) => (

@@ -13,23 +13,26 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { API_BASE, authHeaders, refusal } from "./adminApi";
+import SaveBar, { type SaveResult } from "@/components/SaveBar";
+import { docChangeCount } from "@/lib/unsavedChanges";
 
 const WORDS = {
   heading: "Onboarding path",
   intro:
     "The onboarding path every new holder sees on their profile: a title, phases (a name, fromDay, toDay and steps), each circle's own steps, optional check-in days, and the role that holds each owner key. A step has a title, an owner (holder, buddy, onboarding, access, memory or appointer), a dueDay and a doneWhen. Paths already opened keep the steps they opened with.",
   label: "Onboarding path document (JSON)",
-  save: "Save onboarding path",
   on: "Switched on: new holders get this path. Tick only once the circle has consented.",
-  saved: "Onboarding path saved",
+  notSaved: "The onboarding path did not save.",
   badJson: "That is not valid JSON.",
   failed: "The onboarding path did not load.",
 } as const;
 
 export default function OnboardingPathEditor({ password }: { password: string }) {
   const [text, setText] = useState("");
+  // What the server holds, so the floating save bar knows when this differs.
+  const [savedText, setSavedText] = useState("");
   const [loaded, setLoaded] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const [, setBusy] = useState(false);
   const parsed = (() => {
     try {
       const d = JSON.parse(text);
@@ -47,6 +50,7 @@ export default function OnboardingPathEditor({ password }: { password: string })
         if (!live) return;
         if (res.ok) {
           setText(JSON.stringify(out.doc ?? {}, null, 2));
+          setSavedText(JSON.stringify(out.doc ?? {}, null, 2));
           setLoaded(true);
         } else toast.error(refusal(out, WORDS.failed));
       })
@@ -56,13 +60,12 @@ export default function OnboardingPathEditor({ password }: { password: string })
     };
   }, [password]);
 
-  async function save() {
+  async function save(): Promise<SaveResult> {
     let doc: unknown;
     try {
       doc = JSON.parse(text);
     } catch {
-      toast.error(WORDS.badJson);
-      return;
+      return { ok: false, reason: WORDS.badJson };
     }
     setBusy(true);
     const res = await fetch(`${API_BASE}/admin/onboarding-path`, {
@@ -73,9 +76,12 @@ export default function OnboardingPathEditor({ password }: { password: string })
     const out = await res.json().catch(() => ({}));
     setBusy(false);
     if (res.ok) {
-      setText(JSON.stringify(out.doc ?? doc, null, 2));
-      toast.success(WORDS.saved);
-    } else toast.error(refusal(out, WORDS.failed));
+      const now = JSON.stringify(out.doc ?? doc, null, 2);
+      setText(now);
+      setSavedText(now);
+      return { ok: true };
+    }
+    return { ok: false, reason: refusal(out, WORDS.notSaved) };
   }
 
   return (
@@ -103,14 +109,7 @@ export default function OnboardingPathEditor({ password }: { password: string })
           className="mt-1 w-full rounded-lg border border-border bg-background p-3 font-mono text-xs text-foreground"
         />
       </label>
-      <button
-        type="button"
-        onClick={() => void save()}
-        disabled={!loaded || busy}
-        className="mt-3 inline-flex min-h-11 items-center rounded-lg border border-border px-4 text-sm font-semibold text-card-foreground hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring"
-      >
-        {WORDS.save}
-      </button>
+      <SaveBar count={loaded ? docChangeCount(savedText, text) : 0} onSave={save} onDiscard={() => setText(savedText)} what={WORDS.heading} />
     </section>
   );
 }

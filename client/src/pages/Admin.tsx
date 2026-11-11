@@ -22,6 +22,8 @@ import { ALL_CAPABILITIES, isDeniable } from "@shared/capabilities";
 import BreathingLoader from "@/components/natural/BreathingLoader";
 import { SeatSomebody } from "@/components/power/SeatSomebody";
 import { OrgChartTab } from "@/components/admin/OrgChartTab";
+import { changedKeys, confirmLeave } from "@/lib/unsavedChanges";
+import SaveBar, { saveEach, type SaveResult } from "@/components/SaveBar";
 import SeasonPlanWindowFields, { type PlanWindowValue } from "@/components/admin/SeasonPlanWindowFields";
 import { AppointToRole } from "@/components/admin/AppointToRole";
 import PlayersTab from "@/components/admin/PlayersTab";
@@ -1960,50 +1962,45 @@ const FAQ_PATHWAYS: { id: "investor" | "steward" | "resident" | "prosperity"; la
 
 function FaqAdminTab({ password }: { password: string }) {
   const [pathway, setPathway] = useState<"investor" | "steward" | "resident" | "prosperity">("investor");
+  // `items` is the list as edited on screen; `saved` is what the server holds.
+  // Edits, moves and deletions wait in the floating save bar (SaveBar.tsx).
   const [items, setItems] = useState<FaqItem[]>([]);
+  const [saved, setSaved] = useState<FaqItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [newQ, setNewQ] = useState("");
   const [newA, setNewA] = useState("");
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editDraft, setEditDraft] = useState<{ question: string; answer: string }>({ question: "", answer: "" });
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const res = await fetch(`${API_BASE}/faqs/${pathway}`);
       const data = await res.json();
-      setItems(Array.isArray(data) ? data : []);
-    } catch { setItems([]); }
+      setItems(Array.isArray(data) ? data : []); setSaved(Array.isArray(data) ? data : []);
+    } catch { setItems([]); setSaved([]); }
     setLoading(false);
   }, [pathway]);
 
   useEffect(() => { load(); }, [load]);
 
   /*
-   * The list moved first and the answer was thrown away, so a refused save
-   * left the screen holding a version of the FAQ the server never took. The
-   * old `catch` only ran on a dead network; a 403 or a 500 resolved normally
-   * and changed nothing on screen.
+   * One PUT of the whole list, answered. A refusal keeps the edits on screen
+   * and says so on the bar; nothing reads as saved that the server did not take.
    */
-  const persist = async (next: FaqItem[]) => {
-    const before = items;
-    setItems(next);
+  const persist = async (): Promise<SaveResult> => {
     try {
       const res = await fetch(`${API_BASE}/admin/faqs/${pathway}`, {
         method: "PUT",
         headers: authHeaders(password, { "Content-Type": "application/json" }),
-        body: JSON.stringify(next),
+        body: JSON.stringify(items),
       });
-      if (!res.ok) {
-        const body = await res.json().catch(() => null);
-        setItems(before);
-        toast.error(refusal(body, `The server refused that (${res.status}). The list is back to what it holds.`));
-      }
+      if (res.ok) { setSaved(items); return { ok: true }; }
+      const body = await res.json().catch(() => null);
+      return { ok: false, reason: refusal(body, `The server refused that (${res.status}). Your edits are still here.`) };
     } catch {
-      setItems(before);
-      toast.error("That did not reach the server. The list is back to what it holds.");
+      return { ok: false, reason: "That did not reach the server. Your edits are still here." };
     }
   };
+  const faqChanges = Math.abs(items.length - saved.length) + items.filter((it, i) => JSON.stringify(it) !== JSON.stringify(saved[i])).length;
 
   const add = async () => {
     if (!newQ.trim()) { toast.error("Question required"); return; }
@@ -2016,37 +2013,29 @@ function FaqAdminTab({ password }: { password: string }) {
       if (!res.ok) throw new Error();
       setNewQ(""); setNewA("");
       toast.success("Added");
-      load();
+      // Keep any edits waiting in the bar: take the fresh list as saved and add only what is new.
+      const fresh: FaqItem[] = await fetch(`${API_BASE}/faqs/${pathway}`).then((r) => (r.ok ? r.json() : [])).catch(() => []);
+      setSaved(fresh); setItems((cur) => [...cur, ...fresh.filter((f) => !cur.some((c) => c.id === f.id))]);
     } catch { toast.error("Add failed"); }
   };
 
+  // Deleting is its own act on its own route, answered, and leaves other edits waiting.
   const remove = async (id: string) => {
+    if (!saved.some((it) => it.id === id)) { setItems((cur) => cur.filter((it) => it.id !== id)); return; }
     if (!confirm("Delete this question?")) return;
-    try {
-      const res = await fetch(`${API_BASE}/admin/faqs/${pathway}/${id}`, { method: "DELETE", headers: authHeaders(password) });
-      if (!res.ok) {
-        const body = await res.json().catch(() => null);
-        toast.error(refusal(body, `The server refused that (${res.status}). The question is still here.`));
-        return;
-      }
-      toast.success("Deleted");
-      load();
-    } catch { toast.error("That did not reach the server. The question is still here."); }
+    const res = await fetch(`${API_BASE}/admin/faqs/${pathway}/${id}`, { method: "DELETE", headers: authHeaders(password) }).catch(() => null);
+    if (!res?.ok) { toast.error(refusal(await res?.json().catch(() => null), "The question is still here.")); return; }
+    toast.success("Deleted");
+    setSaved((cur) => cur.filter((it) => it.id !== id)); setItems((cur) => cur.filter((it) => it.id !== id));
   };
+  const edit = (id: string, patch: Partial<FaqItem>) => setItems((cur) => cur.map((it) => (it.id === id ? { ...it, ...patch } : it)));
 
   const move = (idx: number, dir: -1 | 1) => {
     const next = [...items];
     const target = idx + dir;
     if (target < 0 || target >= next.length) return;
     [next[idx], next[target]] = [next[target], next[idx]];
-    persist(next);
-  };
-
-  const saveEdit = () => {
-    if (!editingId) return;
-    const next = items.map((it) => it.id === editingId ? { ...it, question: editDraft.question, answer: editDraft.answer } : it);
-    persist(next);
-    setEditingId(null);
+    setItems(next);
   };
 
   return (
@@ -2060,7 +2049,7 @@ function FaqAdminTab({ password }: { password: string }) {
         {FAQ_PATHWAYS.map((p) => (
           <button
             key={p.id}
-            onClick={() => setPathway(p.id)}
+            onClick={() => { if (p.id !== pathway && confirmLeave()) setPathway(p.id); }}
             className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
               pathway === p.id
                 ? "border-teal-deep text-teal-deep"
@@ -2103,26 +2092,7 @@ function FaqAdminTab({ password }: { password: string }) {
         <div className="space-y-2">
           {items.map((item, idx) => (
             <div key={item.id} className="border border-gray-200 rounded-xl px-5 py-4">
-              {editingId === item.id ? (
-                <div className="space-y-3">
-                  <input
-                    type="text"
-                    value={editDraft.question}
-                    onChange={(e) => setEditDraft({ ...editDraft, question: e.target.value })}
-                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-deep/40"
-                  />
-                  <textarea
-                    value={editDraft.answer}
-                    onChange={(e) => setEditDraft({ ...editDraft, answer: e.target.value })}
-                    rows={3}
-                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-deep/40 resize-y"
-                  />
-                  <div className="flex gap-2">
-                    <button onClick={saveEdit} className="px-3 py-1.5 text-sm bg-teal-deep text-white rounded-lg">Save</button>
-                    <button onClick={() => setEditingId(null)} className="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Cancel</button>
-                  </div>
-                </div>
-              ) : (
+              {(
                 <div className="flex items-start gap-3">
                   <div className="flex flex-col gap-0.5 mt-1">
                     <button onClick={() => move(idx, -1)} className="text-gray-300 hover:text-gray-600 disabled:opacity-30 pointer-coarse:min-h-11 pointer-coarse:min-w-11 pointer-coarse:inline-flex pointer-coarse:items-center pointer-coarse:justify-center" disabled={idx === 0}>
@@ -2132,18 +2102,14 @@ function FaqAdminTab({ password }: { password: string }) {
                       <ArrowDown className="w-3.5 h-3.5" />
                     </button>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="font-medium text-gray-900 mb-1">{item.question}</div>
-                    <div className="text-sm text-gray-600 leading-relaxed">{item.answer}</div>
+                  <div className="flex-1 min-w-0 space-y-2">
+                    <input type="text" aria-label="Question" value={item.question} onChange={(e) => edit(item.id, { question: e.target.value })}
+                      className="w-full px-3 py-2 text-sm font-medium border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-deep/40" />
+                    <textarea aria-label="Answer" value={item.answer} rows={2} onChange={(e) => edit(item.id, { answer: e.target.value })}
+                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-deep/40 resize-y" />
                   </div>
                   <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => { setEditingId(item.id); setEditDraft({ question: item.question, answer: item.answer }); }}
-                      className="px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-100 rounded-lg"
-                    >
-                      Edit
-                    </button>
-                    <button onClick={() => remove(item.id)} className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg">
+                    <button onClick={() => remove(item.id)} aria-label="Remove this question" className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg">
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
@@ -2153,6 +2119,7 @@ function FaqAdminTab({ password }: { password: string }) {
           ))}
         </div>
       )}
+      <SaveBar count={faqChanges} onSave={persist} onDiscard={() => setItems(saved)} what={FAQ_PATHWAYS.find((p) => p.id === pathway)?.label} />
     </div>
   );
 }
@@ -6763,18 +6730,21 @@ const CADENCES = [
 
 export function SeasonTab({ password }: { password: string }) {
   const [cfg, setCfg] = useState<any>(null);
+  // What the server holds; the floating save bar counts what differs from it.
+  const [base, setBase] = useState<any>(null);
   const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
     try {
       const res = await fetch(`${API_BASE}/admin/seasons`, { headers: authHeaders(password) });
-      setCfg(await res.json());
+      const d = await res.json();
+      setCfg(d); setBase(d);
     } catch { /* silent */ }
   }, [password]);
 
   useEffect(() => { load(); }, [load]);
 
-  const save = async (extra: Record<string, unknown> = {}) => {
+  const save = async (extra: Record<string, unknown> = {}): Promise<SaveResult> => {
     setSaving(true);
     try {
       const res = await fetch(`${API_BASE}/admin/seasons`, {
@@ -6782,14 +6752,16 @@ export function SeasonTab({ password }: { password: string }) {
         headers: authHeaders(password, { "Content-Type": "application/json" }),
         body: JSON.stringify({ seasons: cfg.seasons, cadence: cfg.cadence, timezone: cfg.timezone, ...extra }),
       });
-      if (!res.ok) throw new Error();
-      toast.success("Seasons saved");
+      setSaving(false);
+      if (!res.ok) return { ok: false, reason: refusal(await res.json().catch(() => ({})), "The seasons did not save.") };
       load();
-    } catch { toast.error("Save failed"); }
-    setSaving(false);
+      return { ok: true };
+    } catch { setSaving(false); return { ok: false, reason: "The seasons did not reach the server." }; }
   };
 
   if (!cfg) return <div className="text-center py-12 text-gray-400">Loading...</div>;
+  const seasonChanges = changedKeys(base, cfg, ["cadence", "timezone"]).length + Math.abs((cfg.seasons ?? []).length - (base.seasons ?? []).length) +
+    (cfg.seasons ?? []).filter((x: any, i: number) => JSON.stringify(x) !== JSON.stringify((base.seasons ?? [])[i])).length;
 
   const seasons: SeasonRow[] = cfg.seasons ?? [];
   const setSeasons = (next: SeasonRow[]) => setCfg({ ...cfg, seasons: next });
@@ -6814,10 +6786,6 @@ export function SeasonTab({ password }: { password: string }) {
             whichever season covers today. Queue the next one and it hands over by itself.
           </p>
         </div>
-        {/* Arrow, not `save` itself: it takes body fields now, and onClick would pass the event as one. */}
-        <button onClick={() => save()} disabled={saving} className="px-4 py-2 bg-teal-deep text-white rounded-lg text-sm font-medium disabled:opacity-50 shrink-0">
-          {saving ? "Saving..." : "Save"}
-        </button>
       </div>
 
       {cfg.needsNextSeason && (
@@ -6844,7 +6812,7 @@ export function SeasonTab({ password }: { password: string }) {
           answered={!!cfg.timezoneAnswer}
           saving={saving}
           onChange={(timezone) => setCfg({ ...cfg, timezone })}
-          onConfirm={() => save({ confirmTimezone: true })}
+          onConfirm={() => { void save({ confirmTimezone: true }).then((r) => { if (r.ok) toast.success("Seasons saved"); else toast.error(r.reason ?? "Save failed"); }); }}
         />
       </div>
 
@@ -6913,6 +6881,7 @@ export function SeasonTab({ password }: { password: string }) {
           <span className="text-xs text-gray-400">({cfg.suggestion.startsOn} → {cfg.suggestion.endsOn})</span>
         )}
       </button>
+      <SaveBar count={saving ? Math.max(seasonChanges, 1) : seasonChanges} onSave={() => save()} onDiscard={() => setCfg(base)} />
     </div>
   );
 }
@@ -7046,6 +7015,7 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
   const [brand, setBrand] = useState<any>(null);
   const [defaults, setDefaults] = useState<any>(null);
   const [savingSection, setSavingSection] = useState<string | null>(null);
+  const [savedBrand, setSavedBrand] = useState<any>(null); // As the server holds it: the save bar counts against this.
   const [savedCurrency, setSavedCurrency] = useState(""); // As last stored, so the picker can say when a choice is not saved yet.
   const wizard = useWizardFacts();
   const needsSetup = useNeedsSetupObservation(password);
@@ -7053,7 +7023,7 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
     try {
       const res = await fetch(`${API_BASE}/admin/brand`, { headers: authHeaders(password) });
       const data = await res.json();
-      setBrand(data.brand);
+      setBrand(data.brand); setSavedBrand(data.brand);
       setSavedCurrency(String(data.brand?.project?.fiatCurrency ?? ""));
       setDefaults(data.defaults);
     } catch { toast.error("Failed to load setup"); }
@@ -7061,7 +7031,8 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
 
   useEffect(() => { load(); }, [load]);
 
-  const saveBrand = async (section: string, partial: any) => {
+  /** Null when it landed, the server's reason when it did not. Groups not in `partial` keep their unsaved edits. */
+  const saveBrand = async (section: string, partial: any): Promise<string | null> => {
     setSavingSection(section);
     try {
       const res = await fetch(`${API_BASE}/admin/brand`, {
@@ -7069,14 +7040,20 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
         headers: authHeaders(password, { "Content-Type": "application/json" }),
         body: JSON.stringify(partial),
       });
-      if (!res.ok) throw new Error();
+      if (!res.ok) { setSavingSection(null); return refusal(await res.json().catch(() => ({})), "Save failed"); }
       const data = await res.json();
-      setBrand(data.brand); void refreshGameConfig();
+      setSavedBrand(data.brand); void refreshGameConfig();
+      setBrand((prev: any) => ({ ...data.brand, ...Object.fromEntries(Object.keys(prev ?? {}).filter((k) => !(k in partial)).map((k) => [k, prev[k]])) }));
       setSavedCurrency(String(data.brand?.project?.fiatCurrency ?? ""));
-      toast.success("Saved");
-    } catch { toast.error("Save failed"); }
-    setSavingSection(null);
+      setSavingSection(null);
+      return null;
+    } catch { setSavingSection(null); return "Save failed"; }
   };
+  const brandGroups = (["project", "images"] as const).filter((g) => savedBrand && brand && changedKeys(savedBrand[g] ?? {}, brand[g] ?? {}).length > 0);
+  const brandChanges = brandGroups.reduce((n, g) => n + changedKeys(savedBrand[g] ?? {}, brand[g] ?? {}).length, 0);
+  const saveBrandBar = async (): Promise<SaveResult> => (await saveEach(brandGroups.map((g) => ({
+    key: g, label: g === "project" ? "Identity" : "Pictures", run: () => saveBrand(g, { [g]: brand[g] }),
+  })))).result;
 
   const setField = (group: "project" | "currency" | "images", key: string, value: string) =>
     setBrand({ ...brand, [group]: { ...brand[group], [key]: value } });
@@ -7084,7 +7061,7 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
   const toggleStep = (key: string) => {
     const next = { ...brand.setup, [key]: !brand.setup[key] };
     setBrand({ ...brand, setup: next });
-    saveBrand("setup", { setup: next });
+    void saveBrand("setup", { setup: next }).then((why) => { if (why) toast.error(why); });
   };
 
   if (!brand || !defaults) return <div className="text-center py-12 text-gray-400">Loading...</div>;
@@ -7101,7 +7078,7 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
   const resetSetup = () => {
     const cleared = Object.fromEntries(SETUP_STEPS.map((s) => [s.key, false]));
     setBrand({ ...brand, setup: cleared });
-    saveBrand("setup", { setup: cleared });
+    void saveBrand("setup", { setup: cleared }).then((why) => { if (why) toast.error(why); });
   };
 
   /* `project` only. The two `currency` calls came out with the dead boxes, and
@@ -7228,9 +7205,6 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
             writes it. The route merges rather than replaces, so an old stored
             value stays exactly where it is; nothing reads it, and this screen
             no longer adds to it. */}
-        <button onClick={() => saveBrand("identity", { project: brand.project })} disabled={savingSection === "identity"} className="px-4 py-2 bg-teal-deep text-white rounded-lg text-sm font-medium disabled:opacity-50">
-          {savingSection === "identity" ? "Saving..." : "Save identity"}
-        </button>
         <p className="text-xs text-gray-400 mt-2">Instantly updates the game layer (profile, recognition, season banner, pulse). Page marketing copy is edited under Content below.</p>
       </SetupSection>
 
@@ -7256,9 +7230,6 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
             "A tab icon has no alt text. Browsers name the tab from the page title, so there is nothing here for a screen reader to read.",
           )}
         </div>
-        <button onClick={() => saveBrand("images", { images: brand.images })} disabled={savingSection === "images"} className="px-4 py-2 bg-teal-deep text-white rounded-lg text-sm font-medium disabled:opacity-50">
-          {savingSection === "images" ? "Saving..." : "Save pictures"}
-        </button>
         <p className="text-xs text-gray-400 mt-2">The logo, footer mark and tab icon apply live, no deploy. Alt text ships with the pictures and is what a screen reader reads aloud in place of the image. What a shared link shows (its sentence and picture) is set in Make it yours, Pages, Whole site, and falls back to your Tagline and homepage picture.</p>
         {/* Typography lives with Pictures: both are "how the village looks".
             Self-contained component — see client/src/components/TypographyPanel.tsx. */}
@@ -7357,6 +7328,7 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
           </li>
         </ol>
       </SetupSection>
+      <SaveBar count={brandChanges} onSave={saveBrandBar} onDiscard={() => setBrand((b: any) => ({ ...b, project: savedBrand.project, images: savedBrand.images }))} />
     </div>
   );
 }
@@ -7825,9 +7797,15 @@ export default function Admin() {
   // `activeTab`/`setActiveTab` contract, so the ~35 call sites are untouched,
   // and back/forward now walk tab history the way a browser should.
   const [activeTab, setActiveTabState] = useState<string>(() => tabFromSearch(window.location.search));
+  const tabNow = useRef(activeTab);
+  const tabHref = useRef(window.location.href);
+  useEffect(() => { tabNow.current = activeTab; tabHref.current = window.location.href; }, [activeTab]);
   const setActiveTab = useCallback((tab: string) => {
+    // Unsaved edits on the open panel ask first (lib/unsavedChanges.ts).
+    if (tab !== tabFromSearch(window.location.search) && !confirmLeave()) return;
     setActiveTabState(tab);
     const p = new URLSearchParams(window.location.search);
+    if (p.get("tab") !== tab) { p.delete("circle"); p.delete("role"); }
     p.set("tab", tab);
     window.history.pushState({}, "", `${window.location.pathname}?${p.toString()}`);
     // Choosing from low in the rail leaves you scrolled past the top of the
@@ -7837,7 +7815,12 @@ export default function Admin() {
     window.scrollTo({ top: 0 });
   }, []);
   useEffect(() => {
-    const onPop = () => setActiveTabState(tabFromSearch(window.location.search));
+    const onPop = () => {
+      const next = tabFromSearch(window.location.search);
+      // Back to another tab with edits waiting: ask, and stay put on a no.
+      if (next !== tabNow.current && !confirmLeave()) { window.history.pushState({}, "", tabHref.current); return; }
+      setActiveTabState(next);
+    };
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
   }, []);
