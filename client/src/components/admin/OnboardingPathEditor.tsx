@@ -27,6 +27,9 @@ const WORDS = {
   failed: "The onboarding path did not load.",
 } as const;
 
+// A JSON document in a text box reads in a fixed-width face.
+const JSON_BOX = "mt-1 w-full rounded-lg border border-border bg-background p-3 font-mono text-xs text-foreground"; // design-ok: JSON document box
+
 export default function OnboardingPathEditor({ password }: { password: string }) {
   const [text, setText] = useState("");
   // What the server holds, so the floating save bar knows when this differs.
@@ -106,7 +109,7 @@ export default function OnboardingPathEditor({ password }: { password: string })
           disabled={!loaded}
           rows={16}
           spellCheck={false}
-          className="mt-1 w-full rounded-lg border border-border bg-background p-3 font-mono text-xs text-foreground"
+          className={JSON_BOX}
         />
       </label>
       <SaveBar count={loaded ? docChangeCount(savedText, text) : 0} onSave={save} onDiscard={() => setText(savedText)} what={WORDS.heading} />
