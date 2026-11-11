@@ -27,13 +27,11 @@ import {
 import type { CheckinAnswers, PathItemState } from "@shared/onboardingPath";
 
 export const ONBOARDING_WORDS = {
-  eyebrow: "Our first days together",
-  heading: (title: string, role: string) => `${title} in ${role}`,
+  heading: (role: string) => role,
   line: (day: number, due: string) =>
     `Day ${day}. The steps are due by ${due}.`,
   days: (a: number, b: number) => (a === b ? `Day ${a}` : `Days ${a} to ${b}`),
-  holderOf: (title: string, role: string) =>
-    `A new holder: ${title} in ${role}`,
+  holderOf: (role: string) => `A new holder in ${role}`,
   buddy: (name: string) => `Your buddy is ${name}.`,
   noBuddy: "No buddy is named yet. Ask the one who adopted you.",
   open: (n: number) => (n === 1 ? "1 step open" : `${n} steps open`),
@@ -49,7 +47,7 @@ export const ONBOARDING_WORDS = {
   connection: "Who have you worked with? Who do you still want to meet?",
   culture: "What has surprised you about how we work together?",
   basics: "Do you have the access and tools you need? What is missing?",
-  load: "Hours given against hours expected. Any early signs of stretch?",
+  load: "How stretched or steady do we feel against the commitment we agreed?",
   oneThing: "One thing that would help most next moon",
   file: "File check-in",
   failed: "The onboarding path did not load.",
@@ -201,11 +199,11 @@ function PathCard({
   }
   return (
     <section aria-labelledby={`onb-${p.id}`} className={CARD}>
-      <p className={EYEBROW}>{ONBOARDING_WORDS.eyebrow}</p>
+      <p className={EYEBROW}>{p.title}</p>
       <h2 id={`onb-${p.id}`} className={`${H2} mt-1`}>
         {p.mine
-          ? ONBOARDING_WORDS.heading(p.title, p.roleName)
-          : ONBOARDING_WORDS.holderOf(p.title, p.roleName)}
+          ? ONBOARDING_WORDS.heading(p.roleName)
+          : ONBOARDING_WORDS.holderOf(p.roleName)}
       </h2>
       <p className="mt-2 text-foreground">
         {ONBOARDING_WORDS.line(p.day, p.dueOn)}
