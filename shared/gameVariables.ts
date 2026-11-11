@@ -2533,6 +2533,33 @@ export const VARIABLES: VariableDef[] = [
     unit: "days",
   },
   {
+    key: "org.review_before_conversations",
+    category: "The village's people",
+    label: "Review each application before the conversations",
+    description:
+      "On, an application waits for our review once its address confirms: a holder of the power to place people in roles invites the applicant to the conversations, in the order the role names them, or sends the not-invited letter, which thanks them and points to open ways to stay close. The first conversation opens only with the invitation, and the circle is asked to consent once the conversations are written up. Off, the first conversation opens as the address confirms. An application keeps the setting it confirmed under.",
+    type: "boolean",
+    default: "false",
+  },
+  {
+    key: "org.stay_close_name",
+    category: "The village's people",
+    label: "The way to stay close, named in the not-invited letter",
+    description:
+      "The name of the village's open way in for someone not invited to a role, such as its supporters' circle. The not-invited letter and the status page point to it first, then to quests and events. Leave it empty and they point to quests and events only.",
+    type: "text",
+    default: "",
+  },
+  {
+    key: "org.stay_close_link",
+    category: "The village's people",
+    label: "Where the way to stay close is",
+    description:
+      "A page of this site, such as /resident, or an https address. Used only when the way to stay close has a name.",
+    type: "text",
+    default: "",
+  },
+  {
     key: "org.sync_starts_unlisted",
     category: "The village's people",
     label: "Roles accepted from a sync start unlisted",

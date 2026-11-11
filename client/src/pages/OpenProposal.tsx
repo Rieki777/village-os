@@ -87,7 +87,9 @@ export interface ServedOpenProposal {
   } | null;
   /** An agent proposed by its keeper (0374): what it is, who keeps it, its reach and how to switch it off. */
   agent?: ServedAgent | null;
-  you: { mayEditTerms?: boolean; holdsThePower: boolean; own: boolean; mayAdopt: boolean; mayDecline: boolean; mayReissue: boolean; formerMember?: boolean };
+  /** Our review (Phase A): where it stands, and the conversations an invitation opens, in order (deciders only). */
+  review?: { stage: "review" | "invited" | "not_invited"; conversations: Array<{ role: string; minutes: number }> } | null;
+  you: { mayEditTerms?: boolean; holdsThePower: boolean; own: boolean; mayAdopt: boolean; mayDecline: boolean; mayReview?: boolean; mayReissue: boolean; formerMember?: boolean };
 }
 
 export interface ServedAgent {
@@ -194,6 +196,8 @@ export default function OpenProposal() {
   const [said, setSaid] = useState<Said | null>(null);
   // Decline asks once before it acts.
   const [declining, setDeclining] = useState(false);
+  // The not-invited letter asks once before it goes.
+  const [notInviting, setNotInviting] = useState(false);
   // A note for the applicant, sent with an adoption or a decline.
   const [note, setNote] = useState("");
   // Adopting while a setting is still being talked about asks once more (joining lane PR 4).
@@ -408,7 +412,21 @@ export default function OpenProposal() {
                   {" · "}
                   {p.roles.map((r) => r.name ?? DECIDE_WORDS.roleGone).join(", ")}
                 </p>
-                {p.you.mayAdopt || p.you.mayDecline ? (
+                {p.you.mayReview && p.review ? (
+                  <OurReview
+                    review={p.review}
+                    note={note}
+                    onNote={setNote}
+                    busy={busy}
+                    asking={notInviting}
+                    onAsk={setNotInviting}
+                    onInvite={() => void act(`${base(p.id)}/invite`, undefined, true)}
+                    onNotInvite={() => {
+                      setNotInviting(false);
+                      void act(`${base(p.id)}/not-invited`, undefined, true);
+                    }}
+                  />
+                ) : p.you.mayAdopt || p.you.mayDecline ? (
                   <>
                     <p className="mt-1 text-foreground">{p.you.formerMember ? DECIDE_WORDS.formerMember : record ? CONSENT_WORDS.recordLine : DECIDE_WORDS.deciderLine}</p>
                     <div className="mt-4" data-applicant-note-field="">
@@ -557,6 +575,84 @@ export default function OpenProposal() {
         )}
       </div>
     </div></Layout>
+  );
+}
+
+/**
+ * OUR REVIEW (Phase A), in the founding register: quiet, a gold rule, one
+ * primary act. A decider invites the applicant to the conversations, which
+ * open in the order the role names them, or sends the not-invited letter,
+ * which asks once before it goes. The note rides with either answer.
+ */
+function OurReview({ review, note, onNote, busy, asking, onAsk, onInvite, onNotInvite }: {
+  review: NonNullable<ServedOpenProposal["review"]>;
+  note: string;
+  onNote: (v: string) => void;
+  busy: boolean;
+  asking: boolean;
+  onAsk: (v: boolean) => void;
+  onInvite: () => void;
+  onNotInvite: () => void;
+}) {
+  const { t } = useLingui();
+  const total = review.conversations.reduce((n, c) => n + c.minutes, 0);
+  return (
+    <div className="mt-3 space-y-5" data-our-review={review.stage}>
+      <p className="font-display text-xl leading-snug text-foreground">{DECIDE_WORDS.review.heading}</p>
+      <p className="leading-relaxed text-muted-foreground">{DECIDE_WORDS.review.line}</p>
+      <div className="border-t border-notice/40 pt-4">
+        <p className="text-sm font-semibold text-foreground">{DECIDE_WORDS.review.conversations}</p>
+        {review.conversations.length ? (
+          <ol className="mt-2 grid gap-1.5 text-foreground" data-review-conversations="">
+            {review.conversations.map((c, i) => (
+              <li key={i} className="flex items-baseline justify-between gap-3">
+                <span>{i + 1}. {c.role}</span>
+                <span className="shrink-0 text-sm text-muted-foreground">{t({ message: `${c.minutes} minutes`, context: "open proposal: our review, a conversation's length" })}</span>
+              </li>
+            ))}
+            <li className="text-sm text-muted-foreground">{t({ message: `${total} minutes in all`, context: "open proposal: our review, the conversations' total" })}</li>
+          </ol>
+        ) : (
+          <p className="mt-1 text-sm text-muted-foreground">{DECIDE_WORDS.review.noConversations}</p>
+        )}
+      </div>
+      <div className="border-t border-notice/40 pt-4" data-applicant-note-field="">
+        <label htmlFor="op-review-note" className="mb-2 block text-sm font-semibold text-card-foreground">
+          {t`A note for the applicant (they will see this)`}
+        </label>
+        <textarea
+          id="op-review-note"
+          rows={3}
+          maxLength={APPLICANT_NOTE_MAX}
+          value={note}
+          onChange={(e) => onNote(e.target.value)}
+          className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        />
+      </div>
+      {!asking ? (
+        <div className="flex flex-wrap gap-2">
+          <button type="button" disabled={busy} onClick={onInvite} className={PRIMARY} data-review-invite="">
+            <Mail className="h-4 w-4" aria-hidden="true" />
+            {DECIDE_WORDS.review.invite}
+          </button>
+          <button type="button" disabled={busy} onClick={() => onAsk(true)} className={SECONDARY} data-review-not-invite="">
+            {DECIDE_WORDS.review.notInvite}
+          </button>
+        </div>
+      ) : (
+        <div role="group" aria-label={DECIDE_WORDS.review.notInvite} className="rounded-xl border border-border bg-card p-4">
+          <p className="text-foreground">{DECIDE_WORDS.review.notInviteAsk}</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button type="button" disabled={busy} onClick={onNotInvite} className={PRIMARY} data-review-not-invite-yes="">
+              {DECIDE_WORDS.review.notInviteYes}
+            </button>
+            <button type="button" onClick={() => onAsk(false)} className={SECONDARY}>
+              {DECIDE_WORDS.review.notInviteNo}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
