@@ -114,12 +114,13 @@ describe("show only what matches my roots", () => {
     const { result } = renderHook(() => useRootsFilter("u1"));
     await waitFor(() => expect(result.current.available).toBe(true));
     expect(result.current.on).toBe(true);
-    expect(result.current.apply([{ r: ["building"] }, { r: ["researching"] }], (x) => x.r).shown).toEqual([{ r: ["building"] }]);
+    // Work tagged with none of my roots goes; work not tagged yet stays.
+    expect(result.current.apply([{ r: ["building"] }, { r: ["researching"] }, { r: [] }], (x) => x.r).shown).toEqual([{ r: ["building"] }, { r: [] }]);
 
-    render(<RootsFilterToggle filter={result.current} total={2} shown={1} noun="quests" />, { wrapper: wrap });
+    render(<RootsFilterToggle filter={result.current} total={3} shown={2} noun="quests" />, { wrapper: wrap });
     const sw = screen.getByRole("switch", { name: "Show only what matches my roots" });
     expect(sw.getAttribute("aria-checked")).toBe("true");
-    expect(screen.getByText(/Showing 1 of 2 quests/)).toBeTruthy();
+    expect(screen.getByText(/Showing 2 of 3 quests: the ones that grow from your roots, and the ones not tagged yet/)).toBeTruthy();
     act(() => fireEvent.click(sw));
     await waitFor(() => expect(result.current.on).toBe(false));
     expect(store.get(ROOTS_FILTER_OFF_KEY)).toBe("1");

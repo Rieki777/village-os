@@ -90,14 +90,17 @@ export function rootsForWork(
 /**
  * Does this piece of work grow from any of my roots?
  *
- * Work with no roots matches nobody's filter: "show only what matches my
- * roots" means exactly that, and the list says how many it is hiding so the
- * rest is one press away. A person with no roots matches everything, because
- * there is nothing to filter by.
+ * Work with no roots STILL SHOWS (coordinator, 11 Nov 2026): the filter
+ * hides only work tagged with none of my roots. Untagged work has not been
+ * sorted yet, so it says nothing about whether it suits me, and hiding it
+ * would empty most of the board in a village that has tagged only a few
+ * quests. A person with no roots matches everything, because there is
+ * nothing to filter by.
  */
 export function rootsMatch(workRoots: readonly string[] | null | undefined, mine: readonly string[]): boolean {
   if (!mine.length) return true;
   const roots = workRoots ?? [];
+  if (!roots.length) return true;
   return roots.some((k) => mine.includes(k));
 }
 

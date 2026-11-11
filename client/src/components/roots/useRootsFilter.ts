@@ -10,6 +10,9 @@
  *     with the filter on.
  *   - Signed out, or with no roots picked, there is nothing to filter by and
  *     the list shows everything.
+ *   - It hides only work tagged with NONE of the person's roots. Work not
+ *     tagged yet always shows, so a village that has tagged a few quests
+ *     never sees most of its board vanish (coordinator, 11 Nov 2026).
  *
  * The matching itself is `filterByRoots` in shared/archetypeRoots.ts, so the
  * rule a test pins is the rule both lists run.

@@ -126,11 +126,17 @@ describe("show only what matches my roots", () => {
   ];
   const of = (w: (typeof work)[number]) => w.roots;
 
-  it("keeps work that grows from any of my roots, in the list's own order", () => {
+  it("keeps work that grows from any of my roots, and untagged work, in the list's own order", () => {
     const r = filterByRoots(work, of, ["catalyzing", "building"], true);
-    expect(r.shown.map((w) => w.id)).toEqual(["a", "b"]);
-    expect(r.hidden).toBe(2);
+    expect(r.shown.map((w) => w.id)).toEqual(["a", "b", "c", "d"]);
+    expect(r.hidden).toBe(0);
     expect(r.tagged).toBe(true);
+  });
+
+  it("hides only work tagged with none of my roots", () => {
+    const r = filterByRoots(work, of, ["building"], true);
+    expect(r.shown.map((w) => w.id)).toEqual(["a", "c", "d"]);
+    expect(r.hidden).toBe(1);
   });
 
   it("stands aside on a list nothing is tagged on yet, so a new village never reads as empty", () => {
@@ -149,8 +155,10 @@ describe("show only what matches my roots", () => {
     expect(rootsFilterOn([], false)).toBe(false);
   });
 
-  it("matches untagged work for nobody, and everything for somebody with no roots", () => {
-    expect(rootsMatch([], ["building"])).toBe(false);
+  it("matches untagged work for everybody, and everything for somebody with no roots", () => {
+    expect(rootsMatch([], ["building"])).toBe(true);
+    expect(rootsMatch(undefined, ["building"])).toBe(true);
+    expect(rootsMatch(["storytelling"], ["building"])).toBe(false);
     expect(rootsMatch(null, [])).toBe(true);
   });
 });

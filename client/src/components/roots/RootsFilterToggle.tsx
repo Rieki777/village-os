@@ -3,7 +3,8 @@
  *
  * On by default once somebody has picked roots, and one press turns it off
  * (`useRootsFilter`). It says what it is doing in numbers about the LIST, never
- * about the person ("Showing 6 of 20"), and when it hides everything it offers
+ * about the person ("Showing 6 of 20", counting work not tagged yet, which
+ * always shows), and when it hides everything it offers
  * the way back in the same sentence, so a filter can never read as an empty
  * village.
  *
@@ -64,7 +65,7 @@ export default function RootsFilterToggle({ filter, total, shown, noun, classNam
       <RootTags roots={filter.mine} size="sm" className="hidden sm:flex" />
       <p className="text-sm text-muted-foreground sm:ml-auto" aria-live="polite">
         {filter.on
-          ? t({ message: `Showing ${shown} of ${total} ${noun}.`, context: "roots filter count" })
+          ? t({ message: `Showing ${shown} of ${total} ${noun}: the ones that grow from your roots, and the ones not tagged yet.`, context: "roots filter count" })
           : t({ message: `Showing all ${total} ${noun}.`, context: "roots filter count, filter off" })}{" "}
         <Link href={ROOTS_PAGE} className="font-medium text-notice underline underline-offset-2 hover:text-foreground">
           {t({ message: "Change my roots", context: "roots filter, link to the profile's characters page" })}
