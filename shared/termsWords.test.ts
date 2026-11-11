@@ -165,8 +165,9 @@ describe("no hours in the joining flow", () => {
   it("says nothing about hours in the open form, the role card or the terms step", () => {
     for (const f of FILES) {
       const hits = copyOf(f).match(/[^\n]*\bhours?\b[^\n]*/gi) ?? [];
-      // The one allowed line is the hint that says commitment is never hours, and the open form's own 48-hour retention note.
-      const bad = hits.filter((l) => !/never hours/i.test(l) && !/48 hours/i.test(l));
+      // The one allowed line is the hint that says commitment is never hours, and the open form's own 48-hour
+      // retention note, which #1172 now writes from its constant (`${OPEN_CONFIRM_HOURS}`, `${confirmHours}`).
+      const bad = hits.filter((l) => !/never hours/i.test(l) && !/48 hours/i.test(l) && !/\$\{(OPEN_CONFIRM_HOURS|confirmHours)\} hours/.test(l));
       expect(bad, f).toEqual([]);
     }
     expect(JSON.stringify(roleCardView({ card: { commitmentPct: 100 } }))).not.toMatch(/hour/i);
