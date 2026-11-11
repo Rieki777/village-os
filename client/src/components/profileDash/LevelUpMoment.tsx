@@ -13,6 +13,7 @@
  * the words and drops the sparks' glow pulse.
  */
 import { useEffect, useRef, useState } from "react";
+import FramelessImg from "@/components/FramelessImg";
 import { capabilityLabel } from "@shared/capabilities";
 import { playMoment } from "@/lib/sound";
 import type { StageAdvance } from "@/components/StageAdvanced";
@@ -105,7 +106,7 @@ export default function LevelUpMoment({
       <div className="relative h-56 w-56 rounded-full bg-dash-gold-lit p-2 shadow-[0_0_90px_color-mix(in_srgb,var(--color-dash-gold-lit)_55%,transparent)] sm:h-72 sm:w-72">
         <div className="flex h-full w-full items-end justify-center overflow-hidden rounded-full border-[5px] border-background bg-muted">
           {portrait?.src && !broken ? (
-            <img src={portrait.src} alt={portrait.label} onError={() => setBroken(true)} className="h-full w-full object-cover object-top" />
+            <FramelessImg src={portrait.src} alt={portrait.label} onError={() => setBroken(true)} className="h-full w-full object-cover object-top" />
           ) : (
             <span className="flex h-full w-full items-center justify-center font-display text-6xl text-foreground">
               {(portrait?.label ?? name).replace(/^The\s+/i, "").slice(0, 1)}

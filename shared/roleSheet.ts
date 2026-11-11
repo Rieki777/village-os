@@ -240,31 +240,8 @@ export function fnv1a(s: string): number {
 const PRESENTATIONS = ["f", "m"] as const;
 const TONES = ["olive", "deep", "light"] as const;
 
-/**
- * THE STOCK DRAWINGS PAINTED ON A PAPER MARGIN.
- *
- * Nine of the thirty files carry a near-white border, 19 to 65 pixels wide on
- * a 765 by 1024 drawing, along the top and usually both sides. On a night card
- * that border reads as a cream frame inside the art window. The card zooms
- * these nine inside the window so the margin falls outside it, and leaves the
- * others untouched. `roleSheet.test.ts` reads the edges of every file in
- * `server/assets/avatars` (served at /images/avatars) and holds this list to exactly the files
- * that have a margin, so a new bordered drawing cannot arrive unlisted.
- */
-export const FRAMED_PORTRAITS: ReadonlySet<string> = new Set([
-  "catalyzing-f-light",
-  "facilitating-f-olive",
-  "facilitating-m-deep",
-  "facilitating-m-olive",
-  "researching-f-olive",
-  "researching-m-deep",
-  "researching-m-light",
-  "researching-m-olive",
-  "storytelling-m-olive",
-]);
-
 export type Portrait =
-  | { kind: "class"; src: string; alt: string; key: string; framed: boolean }
+  | { kind: "class"; src: string; alt: string; key: string }
   | { kind: "sigil"; letter: string };
 
 /**
@@ -292,7 +269,6 @@ export function portraitFor(
       kind: "class",
       key,
       src: `/images/avatars/${file}.webp`,
-      framed: FRAMED_PORTRAITS.has(file),
       alt: className
         ? `Stock art for ${className}, a class suggested for this role`
         : "Stock art for a class suggested for this role",

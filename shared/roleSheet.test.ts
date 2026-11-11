@@ -16,12 +16,12 @@ import fs from "node:fs";
 import path from "node:path";
 import sharp from "sharp";
 import { describe, expect, it } from "vitest";
+import { findFrame, frameBands, type FrameBands } from "./portraitFrame";
 import { GAME_CONFIG } from "./gameConfig";
 import { CAPABILITY_LABELS } from "./capabilities";
 import { normaliseProposedSeat } from "./proposedSeats";
 import {
   COMMITMENT_LABELS,
-  FRAMED_PORTRAITS,
   SEAT_STATES,
   SHEET_WORDS,
   STATE_WORDS,
@@ -160,28 +160,22 @@ const sheet = (input: SeatInput, ctx: SheetContext = CTX) => seatSheet(input, ct
 const figure = (v: SeatSheetView, key: string) => v.figures.find((f) => f.key === key) ?? null;
 const labels = (v: SeatSheetView) => v.figures.map((f) => f.label);
 
-/**
- * The widest near-white band along a drawing's top or either side, in pixels:
- * a row (or column) counts while most of it is paper white. The bottom is
- * left out, since the name plate always covers it.
- */
-async function paperMargin(file: string): Promise<number> {
-  const { data, info } = await sharp(file).removeAlpha().greyscale().raw().toBuffer({ resolveWithObject: true });
-  const { width: W, height: H, channels: C } = info;
-  const light = (x: number, y: number) => data[(y * W + x) * C] >= 235;
-  const share = (n: number, at: (i: number) => boolean) => {
-    let hits = 0;
-    for (let i = 0; i < n; i += 4) if (at(i)) hits++;
-    return hits / Math.ceil(n / 4);
-  };
-  const row = (y: number) => share(W, (x) => light(x, y));
-  const col = (x: number) => share(H, (y) => light(x, y));
-  const band = (at: (k: number) => number, max: number) => {
-    let k = 0;
-    while (k < max && at(k) >= 0.6) k++;
-    return k;
-  };
-  return Math.max(band(row, H / 2), band(col, W / 2), band((k) => col(W - 1 - k), W / 2));
+/** The paper band on each side of a drawing, as `findFrame` reads it (shared/portraitFrame.ts). */
+async function bandsOf(file: string): Promise<FrameBands> {
+  const { data, info } = await sharp(file).removeAlpha().resize({ width: 160 }).raw().toBuffer({ resolveWithObject: true });
+  return frameBands(data, info.width, info.height, info.channels);
+}
+
+/** A 160 by 214 picture of one colour with a band of paper (and optionally a dark backdrop outside it) on every side. */
+function framedPicture(paper: number, backdrop = 0): Uint8Array {
+  const W = 160, H = 214, px = new Uint8Array(W * H * 3);
+  for (let y = 0; y < H; y++)
+    for (let x = 0; x < W; x++) {
+      const d = Math.min(x, y, W - 1 - x, H - 1 - y);
+      const rgb = d < backdrop ? [20, 20, 20] : d < backdrop + paper ? [244, 240, 228] : [120, 140, 70];
+      px.set(rgb, (y * W + x) * 3);
+    }
+  return px;
 }
 
 /** Every string value in a view, keys excluded. */
@@ -815,37 +809,46 @@ describe("the portrait and the chips", () => {
   });
 
   /*
-   * A PAPER MARGIN IS READ OFF THE PIXELS, NOT TRUSTED TO A LIST. Every file
-   * the portrait can pick is decoded, and the widest near-white band along
-   * its top or either side is measured. The list the card zooms must be
-   * exactly the files with such a band, so a new bordered drawing fails here
-   * until it is listed, and a listed one that was trimmed fails until it is
-   * taken off.
+   * NO STOCK DRAWING CARRIES A FRAME (lead, 11 Nov: "remove the white borders
+   * on any of the character images"). Eleven of the thirty were painted on a
+   * paper card, two of them photographed on a dark table; they were cropped at
+   * the source. Every file is decoded and every side read, so a framed
+   * drawing cannot come back through a regeneration unnoticed.
    */
-  it("zooms exactly the drawings painted on a paper margin", async () => {
+  it("ships every stock drawing painted to its edge, with no paper on any side", async () => {
     const dir = path.join(ROOT, "server/assets/avatars");
     const files = fs.readdirSync(dir).filter((f) => f.endsWith(".webp"));
     expect(files).toHaveLength(30);
-    const measured: Record<string, number> = {};
-    for (const f of files) measured[f.replace(/\.webp$/, "")] = await paperMargin(path.join(dir, f));
-    const framed = Object.keys(measured).filter((k) => measured[k] >= 10).sort();
-    expect(framed).toEqual([...FRAMED_PORTRAITS].sort());
-    // Control: the measure finds a margin where one is (the widest is 65px)
-    // and none on a drawing painted to its edge.
-    expect(measured["facilitating-m-olive"]).toBeGreaterThan(50);
-    expect(measured["researching-f-deep"]).toBe(0);
-
-    // The view model carries the mark for the file it picked, framed or not.
-    const seen = new Set<boolean>();
-    for (let i = 0; i < 60; i++) {
-      const p = portraitFor({ id: `seat-${i}`, name: "Seat" }, ["researching"]);
-      if (p.kind !== "class") throw new Error("expected class art");
-      const file = p.src.replace(/^\/images\/avatars\//, "").replace(/\.webp$/, "");
-      expect(p.framed, file).toBe(FRAMED_PORTRAITS.has(file));
-      seen.add(p.framed);
+    const framed: string[] = [];
+    for (const f of files) {
+      const b = await bandsOf(path.join(dir, f));
+      const sides = (Object.keys(b) as (keyof FrameBands)[]).filter((k) => b[k] !== null);
+      if (sides.length) framed.push(`${f} (${sides.join(", ")})`);
     }
-    expect([...seen].sort()).toEqual([false, true]);
+    expect(framed).toEqual([]);
+    // The view model points at one of those files.
+    const p = portraitFor({ id: "seat-1", name: "Seat" }, ["researching"]);
+    expect(p).toMatchObject({ kind: "class" });
   }, 30000);
+
+  it("finds a paper frame all the way round, and leaves a picture without one alone", () => {
+    const cut = findFrame(framedPicture(10), 160, 214, 3);
+    expect(cut).not.toBeNull();
+    // The cut clears the paper on every side, with a little more for a feathered edge.
+    expect(cut!.left).toBeGreaterThan(10 / 160);
+    expect(cut!.top).toBeGreaterThan(10 / 214);
+    expect(cut!.left).toBeLessThan(0.15);
+    // A card photographed on a dark table: backdrop, then paper.
+    expect(findFrame(framedPicture(8, 6), 160, 214, 3)!.left).toBeGreaterThan(14 / 160);
+    // Painted to the edge.
+    expect(findFrame(framedPicture(0), 160, 214, 3)).toBeNull();
+    // A pale band on three sides only (a portrait against a white wall) is not a frame.
+    const wall = framedPicture(12);
+    for (let y = 200; y < 214; y++) for (let x = 0; x < 160; x++) wall.set([120, 140, 70], (y * 160 + x) * 3);
+    expect(findFrame(wall, 160, 214, 3)).toBeNull();
+    // Paper deeper than a quarter is a pale picture, never a margin.
+    expect(findFrame(framedPicture(60), 160, 214, 3)).toBeNull();
+  });
 
   it("draws the sigil for no tag or a key that is not a class", () => {
     expect(portraitFor({ id: "x", name: "bridge keeper" }, [])).toEqual({ kind: "sigil", letter: "B" });

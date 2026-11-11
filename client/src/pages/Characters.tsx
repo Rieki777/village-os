@@ -33,6 +33,7 @@
  *     to announce itself.
  */
 import DraftCarry from "@/components/roleDraft/DraftCarry";
+import FramelessImg from "@/components/FramelessImg";
 import { Link } from "wouter";
 import Layout from "@/components/Layout";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -378,9 +379,15 @@ export default function Characters() {
                 left on wide ones. */}
             <section className="order-1 lg:order-2">
               <div className="relative overflow-hidden rounded-2xl bg-white shadow-lg">
-                <div className="mx-auto aspect-[3/4] w-full max-w-sm">
+                {/* On a wide stage the drawing is narrower than the card, so the card
+                    beside it takes the drawing's own colours, softened, and never
+                    reads as a white frame around it. */}
+                {active && !heroBroken ? (
+                  <FramelessImg src={heroSrc} alt="" aria-hidden="true" className="absolute inset-0 h-full w-full scale-125 object-cover opacity-80 blur-2xl" />
+                ) : null}
+                <div className="relative mx-auto aspect-[3/4] w-full max-w-sm">
                   {active && !heroBroken ? (
-                    <img
+                    <FramelessImg
                       src={heroSrc}
                       alt={active.name}
                       onError={() => setBroken((b) => ({ ...b, [`${activeKey}-${presentation}-${tone}`]: true }))}
@@ -586,7 +593,7 @@ export default function Characters() {
                             {a.name.replace(/^The\s+/i, "").slice(0, 1)}
                           </span>
                         ) : (
-                          <img
+                          <FramelessImg
                             src={src}
                             alt={a.name}
                             onError={() => setBroken((b) => ({ ...b, [src]: true }))}
@@ -786,7 +793,7 @@ export default function Characters() {
                     >
                       <div className="aspect-[3/4] w-full bg-gray-50">
                         {c.avatar && !broken[c.avatar] ? (
-                          <img
+                          <FramelessImg
                             src={c.avatar}
                             alt={label}
                             onError={() => setBroken((b) => ({ ...b, [c.avatar as string]: true }))}
