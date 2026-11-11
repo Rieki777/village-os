@@ -52,7 +52,7 @@ import { readStoredJson, writeStoredJson } from "@/lib/safeStorage";
 import { fromOrgSeat, seasonForSheet } from "@shared/roleSheetInputs";
 import { OPEN_PROPOSAL_MAX_ROLES } from "@shared/openProposals";
 import { roleCardView } from "@shared/roleCardView";
-import { BEING_WRITTEN, roughHours } from "@shared/roleParams";
+import { BEING_WRITTEN } from "@shared/roleParams";
 import { termsSlotFor } from "@/components/power/SeatTermsSlot";
 import {
   ROLE_DRAFT_KEY,
@@ -467,7 +467,6 @@ export default function RoleDraft() {
                   const isOpen = open === role.id;
                   const openPlaces = role.openPlaces;
                   const answers = role.accountabilities;
-                  const hours = role.timeCommitment ?? "";
                   const seats = role.seats;
                   return (
                     <article key={role.id} data-on={drafted} className={`sel-lift flex min-w-0 flex-col overflow-hidden rounded-2xl border-2 bg-card ${isOpen ? "sm:col-span-2" : ""} ${drafted ? "border-notice" : "border-border"}`}>
@@ -493,14 +492,12 @@ export default function RoleDraft() {
                       <dl className="grid grid-cols-2 border-b border-border text-center text-sm">
                         <div className="border-r border-border px-2 py-2">
                           <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                            <InfoTip tip={t`We don't pay for hours. We pay for contracted work and the contributions you lay out each moon and season. Hours are an estimate: full time is roughly 30 to 40 hours a week, half time roughly 20.`}>
-                              {t({ message: "Time", context: "role draft stat" })}
+                            <InfoTip tip={t`We don't track time and we don't pay for it. We pay for contracted work and the contributions you lay out each moon and season. Commitment is how much energy and attention the role asks.`}>
+                              {t({ message: "Commitment", context: "role draft stat" })}
                             </InfoTip>
                           </dt>
                           <dd className="font-semibold text-foreground">
-                            {role.timeCommitment
-                              ? roughHours(hours)
-                              : t({ message: "~20 h half time, ~30 to 40 h full time", context: "role draft stat" })}
+                            {/^Commitment: \d{1,3}%$/.test(role.timeCommitment ?? "") ? role.timeCommitment : t({ message: "Part or full commitment", context: "role draft stat" })}
                           </dd>
                         </div>
                         <div className="px-2 py-2">
