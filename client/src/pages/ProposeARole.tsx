@@ -119,8 +119,9 @@ function targetFor(field: string | null): string | null {
     case "card": return "[data-role-card]";
     case "terms": return "[data-terms-section]";
     case "agreed": return "[data-agreements] input[type=checkbox][required]";
+    // The tick itself, where the box is (final verification: the cursor went to the top of the stone).
     case "checkConsent":
-    case "references":
+    case "references": return "#propose-about-consent";
     case "about":
     case "links":
     case "files": return "[data-about-you-section]";
@@ -137,8 +138,32 @@ function goToProblem(target: string | null) {
   const spot = el ?? form?.querySelector<HTMLElement>("#propose-problems") ?? null;
   if (!spot) return;
   spot.scrollIntoView?.({ block: "center", behavior: prefersStill() ? "auto" : "smooth" });
-  const focusable = spot.matches("input,textarea,select,button,[tabindex]") ? spot : spot.querySelector<HTMLElement>("input,textarea,select,button");
-  (focusable ?? spot).focus({ preventScroll: true });
+  const focusable = spot.matches("input,textarea,select,button,[tabindex]") ? spot : (firstUnanswered(spot) ?? spot.querySelector<HTMLElement>("input,textarea,select,button"));
+  const at = focusable ?? spot;
+  // A field found inside a section is centred itself, so the cursor is never off screen.
+  if (at !== spot) at.scrollIntoView?.({ block: "center", behavior: "auto" });
+  at.focus({ preventScroll: true });
+}
+
+/**
+ * The first field in a section still waiting for an answer, in reading order:
+ * a choice group with nothing picked, an empty list, an empty one-line field,
+ * or an empty note box marked required. Null when every field holds
+ * something, and the first control is used.
+ */
+export function firstUnanswered(spot: HTMLElement): HTMLElement | null {
+  for (const el of Array.from(spot.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>("input,textarea,select"))) {
+    if (el.disabled || (el instanceof HTMLInputElement && el.type === "hidden")) continue;
+    if (el instanceof HTMLInputElement && el.type === "radio") {
+      if (!spot.querySelector(`input[type=radio][name="${CSS.escape(el.name)}"]:checked`)) return el;
+      continue;
+    }
+    if (el instanceof HTMLInputElement && el.type === "checkbox") continue;
+    // A note box is optional unless it says otherwise; a one-line field or a list is an answer.
+    if (el instanceof HTMLTextAreaElement && !el.required) continue;
+    if (el.value.trim() === "") return el;
+  }
+  return null;
 }
 
 /** The words for a problem shown beside its field. */
@@ -309,7 +334,8 @@ export default function ProposeARole() {
         const own = (r.accountabilities ?? []).map((a) => a.trim());
         const asked = (cards[r.id] ?? EMPTY_ROLE_CARD).goals.map((g) => ({ ...g, roleId: r.id }));
         const judged = parseGoals(asked, { roleGoalsOf: () => own, seasonKeys, today });
-        if (!judged.ok) add("card", chosen.length > 1 ? `${r.name}: ${judged.error}` : judged.error, `[data-role-card="${r.id}"]`);
+        // The goals list itself: its first empty field ("The goal"), or "Add a goal" when there is none yet.
+        if (!judged.ok) add("card", chosen.length > 1 ? `${r.name}: ${judged.error}` : judged.error, `[data-role-card="${r.id}"] [data-goals-list]`);
       }
       if (chosen.length > 0 && form.goals.length > 0 && chosen.every((r) => Object.keys(cards[r.id]?.serves ?? {}).length === 0)) {
         add("serves", CARD_WORDS.needGoal, `[data-card-serves="${chosen[0].id}"]`);
@@ -427,9 +453,11 @@ export default function ProposeARole() {
         show(p);
         return;
       }
+      // Always our own words, in the reader's language: the server's `message` is English (final verification).
+      const sentTo = email.trim();
       setSent({
-        message: typeof data?.message === "string" ? data.message : OPEN_WORDS.sent(email.trim()),
-        to: email.trim(),
+        message: t({ message: `Check ${sentTo}. We sent a link to confirm it's you. Your proposal reaches the village once you open it.`, context: "open proposal sent" }),
+        to: sentTo,
         at: new Date(),
         replyDays: typeof data?.replyDays === "number" ? data.replyDays : null,
       });

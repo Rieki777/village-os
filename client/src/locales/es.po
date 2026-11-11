@@ -523,10 +523,11 @@ msgctxt "terms setting"
 msgid "Ending"
 msgstr "Cierre"
 
+#. needs-native-review
 #: client/src/components/openProposal/TermsWeOffer.tsx
 msgctxt "reviewer's terms panel for a proposal"
 msgid "Let's talk"
-msgstr ""
+msgstr "Hablemos"
 
 #: client/src/components/governance/GoalsList.tsx
 msgid "That is the most a proposal holds: {cap}."
@@ -1423,10 +1424,11 @@ msgstr ""
 #~ msgstr ""
 
 #. placeholder {0}: choiceWords(r.theirs.choice)
+#. needs-native-review
 #: client/src/components/openProposal/TermsWeOffer.tsx
 msgctxt "reviewer's terms panel for a proposal"
 msgid "They said: {0}"
-msgstr ""
+msgstr "Dijeron: {0}"
 
 #: client/src/components/admin/AiSetupBanner.tsx
 msgctxt "admin, AI setup banner"
@@ -1696,14 +1698,16 @@ msgid "Full card"
 msgstr "Ficha completa"
 
 #. placeholder {0}: offer.roleCommitment
+#. needs-native-review
 #: client/src/components/openProposal/TermsWeOffer.tsx
 msgid "The role asks {0}%"
-msgstr ""
+msgstr "El rol pide {0}%"
 
 #. placeholder {0}: settings.join(", ")
+#. needs-native-review
 #: client/src/components/openProposal/TermsWeOffer.tsx
 msgid "We have not agreed these yet: {0}."
-msgstr ""
+msgstr "Todavía no hemos acordado estos: {0}."
 
 #. needs-native-review
 #: client/src/components/fireflyPath/Thresholds.tsx
@@ -2176,9 +2180,10 @@ msgstr ""
 #. placeholder {0}: h.n
 #. placeholder {1}: day(h.at)
 #. placeholder {2}: h.by
+#. needs-native-review
 #: client/src/components/openProposal/TermsWeOffer.tsx
 msgid "Revision {0}, {1}, by {2}"
-msgstr ""
+msgstr "Revisión {0}, {1}, por {2}"
 
 #: client/src/pages/OpenProposal.tsx
 msgctxt "open proposal: an agent's proposal"
@@ -3098,10 +3103,11 @@ msgid "Amount"
 msgstr ""
 
 #. placeholder {0}: r.current ?? ""
+#. needs-native-review
 #: client/src/components/openProposal/TermsWeOffer.tsx
 msgctxt "reviewer's terms panel for a proposal"
 msgid "Our wording: {0}"
-msgstr ""
+msgstr "Nuestra redacción: {0}"
 
 #. needs-native-review
 #: client/src/components/fireflyPath/Thresholds.tsx
@@ -3441,10 +3447,11 @@ msgid "Close the agreement's frames"
 msgstr ""
 
 #. placeholder {0}: offer.ourCommitment
+#. needs-native-review
 #: client/src/components/openProposal/TermsWeOffer.tsx
 msgctxt "reviewer's terms panel for a proposal"
 msgid "We'd agree {0}%"
-msgstr ""
+msgstr "Acordaríamos {0}%"
 
 #: client/src/components/review/SeraBulk.tsx
 msgctxt "sera answers"
@@ -4461,9 +4468,10 @@ msgstr ""
 msgid "Ask about any step…"
 msgstr ""
 
+#. needs-native-review
 #: client/src/components/openProposal/TermsWeOffer.tsx
 msgid "The terms as they stand for this proposal. Whoever holds the power to fill roles can change them."
-msgstr ""
+msgstr "Los términos tal como están para esta propuesta. Quien tiene el poder de asignar roles puede cambiarlos."
 
 #: client/src/components/canvas/CanvasSeason.tsx
 msgctxt "the canvas foundations a season week works on"
@@ -4751,9 +4759,10 @@ msgstr ""
 msgid "That was not saved."
 msgstr ""
 
+#. needs-native-review
 #: client/src/components/openProposal/TermsWeOffer.tsx
 msgid "Adopting now records the terms as they stand."
-msgstr ""
+msgstr "Adoptarla ahora registra los términos tal como están."
 
 #: client/src/components/SaveBar.tsx
 msgctxt "save bar"
@@ -4831,9 +4840,10 @@ msgctxt "role draft discover"
 msgid "Use my profile"
 msgstr "Usar mi perfil"
 
+#. needs-native-review
 #: client/src/components/openProposal/TermsWeOffer.tsx
 msgid "Saved. We told the applicant."
-msgstr ""
+msgstr "Guardado. Se lo dijimos a la persona que propone."
 
 #: client/src/components/canvas/CanvasBlockFrames.tsx
 msgid "See: what the village shows about {name}"
@@ -5005,9 +5015,10 @@ msgctxt "who answered a note"
 msgid "{by} answered"
 msgstr ""
 
+#. needs-native-review
 #: client/src/components/openProposal/TermsWeOffer.tsx
 msgid "They have not chosen"
-msgstr ""
+msgstr "Todavía no ha elegido"
 
 #: client/src/components/admin/OrgChartTab.tsx
 msgctxt "org chart, a sample circle or role"
@@ -5372,9 +5383,10 @@ msgctxt "open proposal side by side"
 msgid "Commitment: {asked}%"
 msgstr "Compromiso: {asked} %"
 
+#. needs-native-review
 #: client/src/components/openProposal/TermsWeOffer.tsx
 msgid "Waiting for their answer"
-msgstr ""
+msgstr "Esperando su respuesta"
 
 #: client/src/components/canvas/CanvasSeason.tsx
 msgctxt "button that checks a pasted season file"
@@ -5931,10 +5943,11 @@ msgctxt "settlement table column"
 msgid "Credited"
 msgstr ""
 
+#. needs-native-review
 #: client/src/components/openProposal/TermsWeOffer.tsx
 msgctxt "reviewer's terms panel for a proposal"
 msgid "Counter-offer"
-msgstr ""
+msgstr "Contraoferta"
 
 #: client/src/components/canvas/CanvasFrameAdopt.tsx
 msgid "Your note (needed to decline)"
@@ -6199,9 +6212,10 @@ msgctxt "admin age band"
 msgid "Confirm {name}'s age band as {0}? The change is recorded with your name."
 msgstr ""
 
+#. needs-native-review
 #: client/src/components/openProposal/TermsWeOffer.tsx
 msgid "Our wording for this proposal"
-msgstr ""
+msgstr "Nuestra redacción para esta propuesta"
 
 #. placeholder {0}: reading.type
 #. placeholder {1}: reading.lines[0]
@@ -6402,10 +6416,11 @@ msgid "A village that designs its exits before it needs them can afford to welco
 msgstr ""
 
 #. placeholder {0}: offer.revision + 1
+#. needs-native-review
 #: client/src/components/openProposal/TermsWeOffer.tsx
 msgctxt "reviewer's terms panel for a proposal"
 msgid "Save revision {0}"
-msgstr ""
+msgstr "Guardar la revisión {0}"
 
 #: client/src/components/fundingRounds/RoundParts.tsx
 msgctxt "funding rounds"
@@ -6631,10 +6646,11 @@ msgstr "Todavía no se ha alineado con la carta de membresía."
 msgid "Not approved. Both tools are closed."
 msgstr ""
 
+#. needs-native-review
 #: client/src/components/openProposal/TermsWeOffer.tsx
 msgctxt "reviewer's terms panel for a proposal"
 msgid "I accept"
-msgstr ""
+msgstr "Acepto"
 
 #: client/src/pages/ApplicationStatus.tsx
 msgid "You did not answer this one."
@@ -6644,9 +6660,10 @@ msgstr "No respondiste a este punto."
 #~ msgid "Chosen by {names}."
 #~ msgstr ""
 
+#. needs-native-review
 #: client/src/components/openProposal/TermsWeOffer.tsx
 msgid "Nothing has been changed yet."
-msgstr ""
+msgstr "Todavía no se ha cambiado nada."
 
 #: client/src/pages/RoleMeasures.tsx
 msgid "How roles are going"
@@ -7339,10 +7356,11 @@ msgstr ""
 msgid "This role comes with its new circle. Add the circle, and it comes with it."
 msgstr ""
 
+#. needs-native-review
 #: client/src/components/openProposal/TermsWeOffer.tsx
 msgctxt "reviewer's terms panel for a proposal"
 msgid "Agreed"
-msgstr ""
+msgstr "Acordado"
 
 #: client/src/components/openProposal/AboutYou.tsx
 msgctxt "about you"
@@ -8244,10 +8262,11 @@ msgctxt "terms step"
 msgid "The terms"
 msgstr "Las condiciones"
 
+#. needs-native-review
 #: client/src/components/openProposal/TermsWeOffer.tsx
 msgctxt "reviewer's terms panel for a proposal"
 msgid "Commitment"
-msgstr ""
+msgstr "Compromiso"
 
 #: client/src/components/roleEdit/RoleEditor.tsx
 msgctxt "role editor"
@@ -8602,9 +8621,10 @@ msgstr ""
 msgid "Not written yet. What you see is drawn from the exit policy's restorative path."
 msgstr ""
 
+#. needs-native-review
 #: client/src/components/openProposal/TermsWeOffer.tsx
 msgid "Not written. We'll set this together."
-msgstr ""
+msgstr "Sin escribir. Lo definiremos juntos."
 
 #: client/src/components/myMoon/InvoicesDesk.tsx
 msgctxt "invoice desk"
@@ -8881,10 +8901,11 @@ msgctxt "quest safety, age band"
 msgid "That did not save. Try again."
 msgstr ""
 
+#. needs-native-review
 #: client/src/components/openProposal/TermsWeOffer.tsx
 msgctxt "reviewer's terms panel for a proposal"
 msgid "Terms we offer"
-msgstr ""
+msgstr "Términos que ofrecemos"
 
 #: client/src/pages/ChangeRequests.tsx
 msgid "Move to its own change request"
@@ -8980,9 +9001,10 @@ msgstr ""
 msgid "What would you do?"
 msgstr ""
 
+#. needs-native-review
 #: client/src/components/openProposal/TermsWeOffer.tsx
 msgid "Energy and attention. We agree it together."
-msgstr ""
+msgstr "Energía y atención. Lo acordamos juntos."
 
 #: client/src/components/canvas/CanvasSuggestionForm.tsx
 #: client/src/components/canvas/DecisionMatrixRows.tsx
@@ -9042,10 +9064,11 @@ msgctxt "sera changes"
 msgid "Small changes {nSmall}"
 msgstr ""
 
+#. needs-native-review
 #: client/src/components/openProposal/TermsWeOffer.tsx
 msgctxt "reviewer's terms panel for a proposal"
 msgid "not set"
-msgstr ""
+msgstr "sin definir"
 
 #: client/src/components/openProposal/RoleCardBridge.tsx
 msgctxt "open proposal side by side"
@@ -9271,9 +9294,10 @@ msgstr "Una decisión avanza cuando nadie tiene una objeción razonada. El conse
 #~ msgid "Compare them"
 #~ msgstr ""
 
+#. needs-native-review
 #: client/src/components/openProposal/TermsWeOffer.tsx
 msgid "The commitment we'd agree on"
-msgstr ""
+msgstr "El compromiso que acordaríamos"
 
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgctxt "role pay"
@@ -10255,10 +10279,11 @@ msgid "Open the agreement, where a member who can open votes proposes a change"
 msgstr ""
 
 #. placeholder {0}: offer.revision + 1
+#. needs-native-review
 #: client/src/components/openProposal/TermsWeOffer.tsx
 msgctxt "save bar, the counter-offer being saved"
 msgid "Revision {0} of the terms"
-msgstr ""
+msgstr "Revisión {0} de los términos"
 
 #: client/src/components/openProposal/RoleCardBridge.tsx
 msgctxt "open proposal side by side goals"
@@ -10661,10 +10686,11 @@ msgstr ""
 msgid "That could not be published"
 msgstr ""
 
+#. needs-native-review
 #: client/src/components/openProposal/TermsWeOffer.tsx
 msgctxt "reviewer's terms panel for a proposal"
 msgid "Choose"
-msgstr ""
+msgstr "Elegir"
 
 #: client/src/pages/StewardJourney.tsx
 msgid "Not ready for a role yet"
@@ -10788,9 +10814,10 @@ msgstr ""
 #~ msgid "The helper runs on Claude, using an Anthropic key that belongs to your village. Nobody can set it from this page, and the key never comes to your browser."
 #~ msgstr ""
 
+#. needs-native-review
 #: client/src/components/openProposal/TermsWeOffer.tsx
 msgid "Word any setting for this proposal. Each save is a new revision, the applicant sees what changed and answers it, and the history stays here."
-msgstr ""
+msgstr "Redacta cualquier ajuste para esta propuesta. Cada guardado es una nueva revisión, la persona que propone ve lo que cambió y responde, y el historial se queda aquí."
 
 #: client/src/components/admin/AgentPathTree.tsx
 msgctxt "agent paths"
@@ -10803,10 +10830,11 @@ msgid "Close"
 msgstr "Cerrar"
 
 #. placeholder {0}: r.theirs.note
+#. needs-native-review
 #: client/src/components/openProposal/TermsWeOffer.tsx
 msgctxt "reviewer's terms panel for a proposal"
 msgid "Their note: {0}"
-msgstr ""
+msgstr "Su nota: {0}"
 
 #: client/src/components/canvas/ConflictAgreementEditor.tsx
 msgctxt "a saved choice the picker no longer offers"
@@ -11235,18 +11263,20 @@ msgid "The membership letter didn't load. Reload the page to read it and align."
 msgstr "La carta de membresía no cargó. Recarga la página para leerla y alinearte."
 
 #. placeholder {0}: offer.history.length
+#. needs-native-review
 #: client/src/components/openProposal/TermsWeOffer.tsx
 msgctxt "reviewer's terms panel for a proposal"
 msgid "History ({0})"
-msgstr ""
+msgstr "Historial ({0})"
 
 #: client/src/components/canvas/ConflictAgreementEditor.tsx
 msgid "That did not reach the server, so nothing was saved."
 msgstr ""
 
+#. needs-native-review
 #: client/src/components/openProposal/TermsWeOffer.tsx
 msgid "I know, and I want to adopt anyway"
-msgstr ""
+msgstr "Lo sé, y quiero adoptarla de todos modos"
 
 #: client/src/components/journal/GuideTasks.tsx
 msgctxt "journal guide tasks"
@@ -11611,10 +11641,11 @@ msgctxt "voice field label: profile bio"
 msgid "Your bio"
 msgstr ""
 
+#. needs-native-review
 #: client/src/components/openProposal/TermsWeOffer.tsx
 msgctxt "reviewer's terms panel for a proposal"
 msgid "The role suggests"
-msgstr ""
+msgstr "El rol sugiere"
 
 #: client/src/components/valuation/PricingDesk.tsx
 msgctxt "pricing desk"
@@ -11655,10 +11686,11 @@ msgid "Your own figure was {0}."
 msgstr ""
 
 #. placeholder {0}: offer.theirCommitment
+#. needs-native-review
 #: client/src/components/openProposal/TermsWeOffer.tsx
 msgctxt "reviewer's terms panel for a proposal"
 msgid "They chose {0}%"
-msgstr ""
+msgstr "Eligió {0}%"
 
 #: client/src/components/review/SeraDifferences.tsx
 msgctxt "sera changes"
@@ -11826,3 +11858,19 @@ msgstr ""
 msgctxt "open proposal review"
 msgid "1 goal for your first moon"
 msgstr "1 meta para tu primera luna"
+
+#. needs-native-review
+#: client/src/pages/ProposeARole.tsx
+msgctxt "open proposal sent"
+msgid "Check {sentTo}. We sent a link to confirm it's you. Your proposal reaches the village once you open it."
+msgstr "Revisa {sentTo}. Te enviamos un enlace para confirmar que eres tú. Tu propuesta llega a la aldea cuando lo abres."
+
+#. needs-native-review
+#: client/src/pages/RoleProposal.tsx
+msgid "Members sign in here to propose the roles they will hold this moon."
+msgstr "Los miembros inician sesión aquí para proponer los roles que tendrán esta luna."
+
+#. needs-native-review
+#: client/src/pages/RoleProposal.tsx
+msgid "Propose a role for this moon without an account"
+msgstr "Propón un rol para esta luna sin una cuenta"

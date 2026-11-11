@@ -25,6 +25,9 @@ import {
   type TermsWords,
 } from "@shared/termsWords";
 
+/** A person offering a role starts at 10%: 0% is no commitment at all (final verification, 11 Nov 2026). */
+export const CANDIDATE_COMMITMENTS = COMMITMENT_CHOICES.filter((n) => n >= 10);
+
 export interface TermsRole {
   id: string;
   name: string;
@@ -147,7 +150,7 @@ export default function TermsEight({
                   required
                 >
                   <option value="">{t({ message: "Choose your commitment", context: "terms commitment" })}</option>
-                  {COMMITMENT_CHOICES.map((n) => (
+                  {CANDIDATE_COMMITMENTS.map((n) => (
                     <option key={n} value={n}>
                       {n}%
                     </option>

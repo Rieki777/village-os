@@ -90,4 +90,18 @@ describe("/role-proposals/new", () => {
     await waitFor(() => expect(posts.length).toBe(1));
     expect(document.querySelector("[data-moon-or-season]")).toBeNull();
   });
+
+  it("signed out: says this moon and opens the form that needs no account, beside the sign-in (final verification)", async () => {
+    me.user = null as unknown as { id: string };
+    try {
+      visit({ draftId: null, proposals: [], nextSeason: null, nextSeasonWords: null });
+      await waitFor(() => expect(document.querySelector("[data-open-form-door]")).toBeTruthy());
+      const door = document.querySelector("[data-open-form-door]") as HTMLAnchorElement;
+      expect(door.getAttribute("href")).toBe("/propose-a-role");
+      expect(document.body.textContent).toContain("this moon");
+      expect(document.body.textContent).not.toContain("next season");
+    } finally {
+      me.user = { id: "u1" };
+    }
+  });
 });

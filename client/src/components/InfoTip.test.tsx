@@ -267,6 +267,8 @@ describe("a short worded trigger's own box reaches 44px wide (rehearsal, /roles 
     expect(s.marginRight).toBe(-side);
     // A word that short never wraps, so the padding cannot stack it one letter per line.
     expect(s.whiteSpace).toBe("nowrap");
+    // The class max-w-full would clamp the grown box back to the words' width.
+    expect(s.maxWidth).toBe("none");
   });
 
   it("leaves a wide trigger, and one not laid out yet, exactly as it was", () => {

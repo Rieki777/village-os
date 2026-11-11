@@ -22,7 +22,7 @@ vi.mock("@/components/Layout", () => ({ default: ({ children }: { children: Reac
 const auth = vi.hoisted(() => ({ user: null as null | { name: string; email: string } }));
 vi.mock("@/contexts/AuthContext", () => ({ useOptionalAuth: () => ({ user: auth.user }) }));
 
-import ProposeARole, { ConfirmProposal } from "./ProposeARole";
+import ProposeARole, { ConfirmProposal, firstUnanswered } from "./ProposeARole";
 
 const FORM = {
   open: true,
@@ -43,7 +43,7 @@ let posted: any[] = [];
 /** How each post went: its files, and the headers set by hand. */
 let sentAs: Array<{ files: File[]; headers: RequestInit["headers"] }> = [];
 
-function serve(form: unknown, answer: { status: number; body: unknown } = { status: 200, body: { sent: true, message: OPEN_WORDS.sent("rowan@example.test") } }) {
+function serve(form: unknown, answer: { status: number; body: unknown } = { status: 200, body: { sent: true, message: "The server's own English words, never shown." } }) {
   posted = [];
   sentAs = [];
   vi.stubGlobal(
@@ -117,6 +117,8 @@ describe("the form", () => {
 
     expect(await screen.findByRole("heading", { name: "Check your email" })).toBeTruthy();
     expect(screen.getByText(OPEN_WORDS.sent("rowan@example.test"))).toBeTruthy();
+    // Our own words in the reader's language, whatever the server said (final verification).
+    expect(screen.queryByText(/server's own English/)).toBeNull();
     expect(posted).toHaveLength(1);
     expect(posted[0].url).toBe("/api/open-proposals");
     expect(posted[0].body.card.terms).toEqual({ answers: {} });
@@ -240,6 +242,37 @@ describe("the form", () => {
     expect(document.querySelector("#propose-problem-aim")?.textContent).toBe(OPEN_WORDS.needAim);
     await waitFor(() => expect(document.activeElement?.id).toBe("propose-aim"));
     expect(screen.getByLabelText(OPEN_WORDS.aimLabel).getAttribute("aria-invalid")).toBe("true");
+  });
+
+  it("a missing goal puts the cursor on the goal's own field, never the first box on the card (final verification, 11 Nov)", async () => {
+    serve(FORM);
+    render(<ProposeARole />);
+    fireEvent.click(within((await screen.findByText("Gate Keeper")).closest("[data-role]") as HTMLElement).getByRole("checkbox"));
+    pressNext();
+    fireEvent.change(screen.getByLabelText(OPEN_WORDS.aimLabel), { target: { value: "Keep the gate open for every visitor." } });
+    pressNext();
+    expect(stoneNow()).toBe("moon");
+    const goals = document.querySelector('[data-role-card="r-gate"] [data-goals-list]') as HTMLElement;
+    const title = goals.querySelector<HTMLInputElement>('input[id$="-title"]');
+    // An empty goal row is answered on its title; with no row yet, "Add a goal" takes the cursor.
+    const want = title ?? goals.querySelector<HTMLElement>('button[id$="-add"]');
+    await waitFor(() => expect(document.activeElement).toBe(want));
+  });
+
+  it("the first unanswered field: an unpicked choice, an empty line or list, and an optional note passed over", () => {
+    const box = document.createElement("div");
+    box.innerHTML = `
+      <input type="radio" name="a" checked><input type="radio" name="a">
+      <textarea id="note"></textarea>
+      <input type="checkbox" id="tick">
+      <input id="filled" value="here">
+      <select id="pick"><option value="">Choose</option><option value="10">10%</option></select>
+      <input id="later">`;
+    expect(firstUnanswered(box)?.id).toBe("pick");
+    (box.querySelector("#pick") as HTMLSelectElement).value = "10";
+    expect(firstUnanswered(box)?.id).toBe("later");
+    box.insertAdjacentHTML("afterbegin", `<input type="radio" name="b" id="open">`);
+    expect(firstUnanswered(box)?.id).toBe("open");
   });
 
   it("M1, the final review: Send lists every gap on the whole path at once, in walking order, and each takes you to its stone and field", async () => {

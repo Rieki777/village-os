@@ -99,13 +99,17 @@ export const TAP_MIN = 44;
  * on /roles at 390: WORDED_TAP's inset widens the hit area, and a measurement
  * of the button's own box cannot see a pseudo-element. Padding with an equal
  * negative margin grows the box and gives the space back, so the words stay
- * where they were. A word that short never needs to wrap, and `nowrap` is what
- * stops the padding wrapping it one letter per line.
+ * where they were. A word that short never needs to wrap, and `nowrap` with no
+ * max width is what stops the padding wrapping it one letter per line.
  */
 export function widenStyle(naturalWidth: number): React.CSSProperties | undefined {
   if (!(naturalWidth > 0) || naturalWidth >= TAP_MIN) return undefined;
-  const side = Math.ceil((TAP_MIN - naturalWidth) / 2);
-  return { paddingLeft: side, paddingRight: side, marginLeft: -side, marginRight: -side, whiteSpace: "nowrap" };
+  // One pixel spare: offsetWidth rounds, and a 23.6px word read as 24 fell 0.4px short.
+  const side = Math.ceil((TAP_MIN + 1 - naturalWidth) / 2);
+  // maxWidth: the trigger's `max-w-full` is measured against its wrapper, which
+  // the negative margins keep at the words' own width, so it would clamp the
+  // grown box straight back to the words (measured: "role" stayed 35px).
+  return { paddingLeft: side, paddingRight: side, marginLeft: -side, marginRight: -side, whiteSpace: "nowrap", maxWidth: "none" };
 }
 
 interface InfoTipProps {
@@ -142,16 +146,18 @@ export default function InfoTip({ tip, children, label, className = "", triggerC
   useLayoutEffect(() => {
     const el = triggerRef.current;
     if (!padded || !el) return;
+    // offsetWidth is the laid-out box, untouched by an entrance animation's
+    // transform, and the observer measures again whenever the words change
+    // size (a web font arriving, a language switch).
     const measure = () => {
       const pad = (parseFloat(el.style.paddingLeft) || 0) * 2;
-      setNatural(el.getBoundingClientRect().width - pad);
+      setNatural(el.offsetWidth - pad);
     };
     measure();
-    let live = true;
-    document.fonts?.ready.then(() => live && measure());
-    return () => {
-      live = false;
-    };
+    if (typeof ResizeObserver === "undefined") return;
+    const watch = new ResizeObserver(measure);
+    watch.observe(el);
+    return () => watch.disconnect();
   }, [padded, children]);
 
   const place = () => {
