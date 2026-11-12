@@ -31,7 +31,7 @@
 import { Link } from "wouter";
 import { Trans, useLingui } from "@lingui/react/macro";
 
-import Vesica from "@/components/journey/nature/Vesica";
+import { fx, vesica } from "@/components/journey/nature/geometry";
 import type { WallEntry, WallPerson } from "@shared/gratitudeVoices";
 
 function Face({ who, size = "h-8 w-8" }: { who: WallPerson; size?: string }) {
@@ -100,6 +100,23 @@ function Person({ who }: { who: WallPerson }) {
   );
 }
 
+/**
+ * Two circles meeting, for a pair who thanked each other both ways: the
+ * vesica of the sitewide grammar, drawn at the size of the thread it stands
+ * in for, with the lens where they overlap filled softly. Built on the nature
+ * kit's own `vesica` geometry so it is the same shape as every other vesica.
+ */
+function BothWays({ label }: { label: string }) {
+  const shape = vesica(32, 12, 9, 9);
+  return (
+    <svg viewBox="0 0 64 24" role="img" aria-label={label} className="h-6 w-16 shrink-0 overflow-visible">
+      <path d={shape.lens} fill="currentColor" fillOpacity={0.2} className="text-notice" />
+      <circle cx={fx(shape.left.x)} cy={12} r={9} fill="none" stroke="currentColor" strokeWidth={1.4} className="text-open" />
+      <circle cx={fx(shape.right.x)} cy={12} r={9} fill="none" stroke="currentColor" strokeWidth={1.4} className="text-notice" />
+    </svg>
+  );
+}
+
 /** A thread between two faces, for a thanks that went one way. */
 function OneThread() {
   return (
@@ -152,30 +169,29 @@ export default function WallEntryCard({ entry, mutual = false, lit = false, onLi
       <blockquote className="mb-3 font-display text-lg leading-snug text-card-foreground sm:text-xl">
         &ldquo;{entry.message}&rdquo;
       </blockquote>
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
-        <span className="inline-flex items-center gap-1">
+      <div className="flex flex-col gap-1 text-sm text-muted-foreground">
+        <span className="inline-flex items-center">
           <Face who={entry.from} />
           {mutual ? (
-            <Vesica
-              met
-              size="sm"
-              label={t({ message: "They thanked each other both ways", context: "thanks thread: the vesica, read aloud" })}
-            />
+            <BothWays label={t({ message: "They thanked each other both ways", context: "thanks thread: the vesica, read aloud" })} />
           ) : (
             <OneThread />
           )}
           <Face who={entry.to} />
         </span>
-        <span className="inline-flex flex-wrap items-center gap-x-1.5">
-          <Trans context="thanks thread: who thanked whom">{from} thanked {to}</Trans>
-          <span aria-hidden="true">·</span>
-          <time dateTime={entry.at}>{whenLabel(entry.at, i18n.locale || "en")}</time>
-        </span>
-        {mutual && (
-          <span className="inline-flex items-center rounded-full border border-notice/50 px-2.5 py-0.5 text-xs font-semibold text-notice">
-            {t({ message: "Both ways", context: "thanks thread: the two thanked each other" })}
+        <span className="min-w-0">
+          <span className="flex flex-wrap items-center gap-x-1.5 leading-tight">
+            <Trans context="thanks thread: who thanked whom">{from} thanked {to}</Trans>
           </span>
-        )}
+          <span className="flex flex-wrap items-center gap-x-2 text-xs">
+            <time dateTime={entry.at}>{whenLabel(entry.at, i18n.locale || "en")}</time>
+            {mutual && (
+              <span className="inline-flex items-center rounded-full border border-notice/50 px-2 py-0.5 font-semibold text-notice">
+                {t({ message: "Both ways", context: "thanks thread: the two thanked each other" })}
+              </span>
+            )}
+          </span>
+        </span>
       </div>
     </article>
   );

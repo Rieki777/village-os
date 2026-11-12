@@ -335,7 +335,7 @@ export default function GratitudeWall() {
               {/* The phone's web: a full-bleed band above the words. */}
               {wall && wall.length > 0 && (
                 <section aria-labelledby="web-phone-h" className="-mx-4 mb-8 border-y border-border bg-card/40 px-2 py-4 lg:hidden">
-                  <h2 id="web-phone-h" className={`${EYEBROW} px-2 text-open`}>{t({ message: "The web this moon", context: "thanks web heading" })}</h2>
+                  <h2 id="web-phone-h" className={`${EYEBROW} px-2 font-sans text-open`}>{t({ message: "The web this moon", context: "thanks web heading" })}</h2>
                   {web("mx-auto mt-2 max-w-sm")}
                   <p className={`${HINT} px-2 text-center`}>
                     {t({ message: "Faces sit in alphabetical order, and nobody sees how many threads anyone holds.", context: "thanks web: how to read it" })}
@@ -379,7 +379,7 @@ export default function GratitudeWall() {
             {/* The desktop's persistent side: the web, then the composer under it. */}
             <aside className="contents lg:sticky lg:top-6 lg:block lg:max-h-[calc(100svh-3rem)] lg:space-y-6 lg:overflow-y-auto lg:pb-2">
               <section aria-labelledby="web-desk-h" className="hidden rounded-2xl border border-border bg-card p-6 shadow-sm lg:block">
-                <h2 id="web-desk-h" className={`${EYEBROW} text-open`}>{t({ message: "The web this moon", context: "thanks web heading" })}</h2>
+                <h2 id="web-desk-h" className={`${EYEBROW} font-sans text-open`}>{t({ message: "The web this moon", context: "thanks web heading" })}</h2>
                 {web("mt-3")}
                 <p className={`${HINT} mt-2`}>
                   {t({ message: "Hover a thanks and its thread lights. Faces sit in alphabetical order, and nobody sees how many threads anyone holds.", context: "thanks web: how to read it, desktop" })}
@@ -409,11 +409,18 @@ export default function GratitudeWall() {
                     }}
                     className={`fixed inset-x-0 bottom-0 z-[70] max-h-[88svh] overflow-y-auto rounded-t-2xl border-t border-border bg-card px-4 pb-8 pt-3 shadow-sm transition-transform duration-500 ease-out motion-reduce:transition-none ${sheetOpen ? "translate-y-0" : "translate-y-full"} lg:static lg:z-auto lg:max-h-none lg:translate-y-0 lg:overflow-visible lg:rounded-2xl lg:border lg:p-6 lg:transition-none`}
                   >
-                    <div className="mb-3 flex items-center justify-between lg:hidden">
+                    {/* The phone's sheet: a grab handle to swipe, and a close within the thumb's reach. */}
+                    <div className="mb-2 grid grid-cols-[2.75rem_1fr_2.75rem] items-center lg:hidden">
+                      <span />
                       <span aria-hidden="true" className="mx-auto block h-1.5 w-11 rounded-full bg-border" />
+                      {asSheet && (
+                        <button type="button" onClick={closeSheet} className={`${BTN_SECONDARY} px-0`} aria-label={t({ message: "Close", context: "thanks composer: close the sheet" })}>
+                          <X className="h-4 w-4" aria-hidden="true" />
+                        </button>
+                      )}
                     </div>
                     <div className="mb-4 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-                      <h2 id="carry-h" className={EYEBROW}>{t({ message: "Carry a thanks", context: "thanks composer heading" })}</h2>
+                      <h2 id="carry-h" className={`${EYEBROW} font-sans`}>{t({ message: "Carry a thanks", context: "thanks composer heading" })}</h2>
                       {/*
                         The allowance: what the member holds to give this cycle.
                         `flex-wrap` and a gap, because at 390px the heading and
@@ -434,11 +441,6 @@ export default function GratitudeWall() {
                         <span className="text-xs italic text-muted-foreground">
                           {t({ message: "Your allowance didn't load. Reload to see it.", context: "thanks composer: allowance failed to load" })}
                         </span>
-                      )}
-                      {asSheet && (
-                        <button type="button" onClick={closeSheet} className={`${BTN_SECONDARY} lg:hidden`} aria-label={t({ message: "Close", context: "thanks composer: close the sheet" })}>
-                          <X className="h-4 w-4" aria-hidden="true" />
-                        </button>
                       )}
                     </div>
 
@@ -537,7 +539,7 @@ export default function GratitudeWall() {
                         )}
                         {/* An UNKNOWN budget does not disable Send: the server's guard is the authority. */}
                         <div className="flex flex-wrap items-center gap-3">
-                          <Fireflies count={6} block={asSheet}>
+                          <Fireflies count={6} block={asSheet} className={asSheet ? "w-full" : ""}>
                             <button
                               type="submit"
                               disabled={sending || (!!budget && (budget.total <= 0 || budget.remaining <= 0))}
