@@ -22,21 +22,21 @@ There is no timestamp and no author line, on purpose. Both would change on every
 
 ## Who may change what
 
-Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 235 open and 50 founder:
+Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 236 open and 50 founder:
 
 - **open**, the whole village. Community-governable. These are the dials the village decides together, through the proposal loop. A founder can close one of these to their community; the platform ceiling says it may be open.
 - **founder**, the founder or an admin. Founder-held. Legal posture, infrastructure, privacy windows and abuse guards. They stay visible to everybody and they are never proposable. Nothing can open one of these to the village.
 
 The BOUNDS are constitutional in every case. Governance moves a value between the min and the max printed below; nothing here moves the min or the max. That is what keeps a vote from turning a dial into a different mechanism.
 
-Each dial also says WHEN a change lands. 258 of them as soon as it is saved, and 27 of them at the next cycle close.
+Each dial also says WHEN a change lands. 259 of them as soon as it is saved, and 27 of them at the next cycle close.
 
 - **instant**, as soon as it is saved. The new value is live immediately.
 - **cycle-close**, at the next cycle close. Changing one of these mid-cycle would move the basis a settlement is already being measured against, so the new value waits for the cycle to close. That gap is deliberate: it gives the village the window between a decision passing and the decision biting.
 
 ## At a glance
 
-285 dials in 39 categories. 149 carry a minimum and a maximum. By type: 112 integer, 19 decimal, 19 percentage, 41 boolean, 34 choice, 55 text, 5 longtext.
+286 dials in 39 categories. 149 carry a minimum and a maximum. By type: 112 integer, 19 decimal, 19 percentage, 41 boolean, 34 choice, 55 text, 6 longtext.
 
 | Category | Dials | the whole village | the founder or an admin |
 | --- | --- | --- | --- |
@@ -57,7 +57,7 @@ Each dial also says WHEN a change lands. 258 of them as soon as it is saved, and
 | Data lifecycle | 3 | 0 | 3 |
 | Automation | 1 | 0 | 1 |
 | Village map | 12 | 9 | 3 |
-| The village's people | 16 | 15 | 1 |
+| The village's people | 17 | 16 | 1 |
 | The founding team | 12 | 12 | 0 |
 | Events | 3 | 3 | 0 |
 | Forum | 1 | 1 | 0 |
@@ -282,6 +282,7 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | The role that holds first conversations | `org.first_conversation_role` | The village's people | text | blank | the whole village |
 | The circle that consents paid roles | `org.paid_consent_circle` | The village's people | text | blank | the whole village |
 | Show the CCOS term on circle and role card headings | `org.ccos_terms` | The village's people | boolean | `true` | the whole village |
+| How we see conflict, before the conflict steps | `org.conflict_intro` | The village's people | longtext | `Conflict helps us evolve. As a culture, we meet it as an opportunity for growth, so everyone in it can take something good from it. Together we seek to understand what each conflict teaches us, so that every one helps us grow stronger.` | the whole village |
 | Feature the founding team on the Roles page | `org.founding_team` | The village's people | boolean | `false` | the whole village |
 | The founding team's roles | `org.founding_team_roles` | The village's people | text | blank | the whole village |
 | Show pay ranges on role cards | `org.show_pay_ranges` | The village's people | boolean | `false` | the whole village |
@@ -3421,7 +3422,7 @@ A photograph taken down loses its file immediately. What stays is the record of 
 
 ## The village's people
 
-16 dials. 15 for the whole village, 1 for the founder or an admin.
+17 dials. 16 for the whole village, 1 for the founder or an admin.
 
 ### Show who holds each role to visitors
 
@@ -3606,6 +3607,20 @@ Each heading on a circle card, and on each role in full on a player's card, is p
 | A change takes effect | as soon as it is saved |
 | What it costs to change | a routine vote |
 
+### How we see conflict, before the conflict steps
+
+The paragraph above the conflict steps on /roles and /governance, under How we evolve through conflict: how this village sees conflict, in its own words. Empty, the steps show with no paragraph above them.
+
+| Fact | Value |
+| --- | --- |
+| Key | `org.conflict_intro` |
+| Type | longtext, free text, several lines, shown to members as plain words |
+| Default | `Conflict helps us evolve. As a culture, we meet it as an opportunity for growth, so everyone in it can take something good from it. Together we seek to understand what each conflict teaches us, so that every one helps us grow stronger.` |
+| Range | no bounds are set |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
 ### Feature the founding team on the Roles page
 
 On, the top of the Roles and Circles page is a quiet "Join the founding team" section: the paid founding roles the village is hiring for, each with its full card and one Apply act. The roles are the ones written in "The founding team's roles". Off, the page opens on the roles and circles as before.
@@ -3654,7 +3669,7 @@ Off, no role card shows a pay range or an amount to visitors or members, whateve
 
 ### How rewards work, on every role card
 
-The shape of the pay every role card shows under "How rewards work", as shares of the whole, never an amount: write each share's name and percent, separated by commas, like Cash 40, Equity 55, Credits 5. The shares add up to 100 or less. A role whose card writes its own shares shows those instead. Empty, cards show no pay shape.
+The shape of the pay every role card shows under "How rewards work", as shares of the whole, never an amount: write each share's name and percent, separated by commas, like Cash 60, Equity 40, Credits 0. The shares add up to 100 or less, and a share at 0 still shows, as 0%. A role whose card writes its own shares shows those instead. Empty, cards show no pay shape.
 
 | Fact | Value |
 | --- | --- |
@@ -3682,7 +3697,7 @@ One line under the shares on every role card, in the village's words, saying whi
 
 ### The note under the pay shape
 
-The last line under the pay shape on every role card, like Indicative only. Terms are still being defined and are subject to legal review. No amounts. A role's card may write its own. Empty, no note.
+The last line under the pay shape on every role card, like Indicative only. Terms are still being defined and are subject to legal review. No amounts. A role's card may write its own. A note that starts with * puts a matching * after the card's total compensation line, so it reads as that line's fine print. Empty, no note.
 
 | Fact | Value |
 | --- | --- |
@@ -5044,6 +5059,7 @@ The generator reads these and fails loudly if any of them moves:
 - `shared/changeSetCap.ts`
 - `shared/closingPolicies.ts`
 - `shared/conflictAgreement.ts`
+- `shared/conflictIntro.ts`
 - `shared/gameConfig.ts`
 - `shared/gameVariables.ts`
 - `shared/governanceEngine.ts`

@@ -3536,8 +3536,8 @@ msgid "When shaping starts (leave empty to keep the round in Seed)"
 msgstr "When shaping starts (leave empty to keep the round in Seed)"
 
 #: client/src/components/governance/VillageConflictSteps.tsx
-msgid "When tension between people needs repair, these are the steps this village wrote for it:"
-msgstr "When tension between people needs repair, these are the steps this village wrote for it:"
+#~ msgid "When tension between people needs repair, these are the steps this village wrote for it:"
+#~ msgstr "When tension between people needs repair, these are the steps this village wrote for it:"
 
 #: client/src/components/valuation/PricingDesk.tsx
 msgctxt "pricing desk"
@@ -10333,6 +10333,11 @@ msgctxt "close a form without saving"
 msgid "Not now"
 msgstr "Not now"
 
+#: client/src/components/governance/VillageConflictSteps.tsx
+msgctxt "conflict steps: how the village sees conflict, the platform's default"
+msgid "Conflict helps us evolve. As a culture, we meet it as an opportunity for growth, so everyone in it can take something good from it. Together we seek to understand what each conflict teaches us, so that every one helps us grow stronger."
+msgstr "Conflict helps us evolve. As a culture, we meet it as an opportunity for growth, so everyone in it can take something good from it. Together we seek to understand what each conflict teaches us, so that every one helps us grow stronger."
+
 #: client/src/components/review/useSeraActs.ts
 msgctxt "sera answers"
 msgid "it comes with its circle"
@@ -13475,6 +13480,10 @@ msgstr "No circle matches."
 msgctxt "agent paths"
 msgid "A person confirms"
 msgstr "A person confirms"
+
+#: client/src/components/governance/VillageConflictSteps.tsx
+msgid "When tension between people needs repair, these are the steps we follow:"
+msgstr "When tension between people needs repair, these are the steps we follow:"
 
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "review response"
