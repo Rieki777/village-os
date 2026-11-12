@@ -156,7 +156,7 @@
     "foundingTeam": {
       "eyebrow": "Join the founding team",
       "heading": "The team that builds {village}",
-      "body": "We are seating three circle leads: the Lead Finance Steward, the Regenerative Land & Building Lead and the Community Building Lead. Each is a paid, multi-year founding role, from the foundation through to completion. A rare invitation, for people ready to hold a whole domain.",
+      "body": "We are building the team that will lead each domain of {village}, from the foundation through to completion. The roles open now are {foundingRoles}. A rare invitation, for people ready to hold a whole domain.",
       "ctaLabel": "Join the founding team",
       "ctaTarget": "/roles"
     },

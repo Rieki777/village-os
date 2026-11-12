@@ -10,6 +10,8 @@ import { NO_VILLAGE_PAY, readSections, villagePayFrom, type RoleCardSections, ty
 export interface FoundingTeamAnswer {
   on: boolean;
   roleIds: string[];
+  /** Each featured role's name, by id, for words that name the open founding roles. */
+  names: Record<string, string>;
   sections: Record<string, RoleCardSections>;
   showPayRanges: boolean;
   villagePay: VillagePay;
@@ -24,7 +26,7 @@ export interface RoleCardAnswer {
   mayEdit: boolean;
 }
 
-const OFF: FoundingTeamAnswer = { on: false, roleIds: [], sections: {}, showPayRanges: false, villagePay: NO_VILLAGE_PAY };
+const OFF: FoundingTeamAnswer = { on: false, roleIds: [], names: {}, sections: {}, showPayRanges: false, villagePay: NO_VILLAGE_PAY };
 
 /** The village's pay block as the server sent it, read again here so a bad answer draws nothing. */
 function payOf(v: any): VillagePay {
@@ -41,11 +43,14 @@ export async function readFoundingTeam(): Promise<FoundingTeamAnswer> {
     const d = await r.json();
     const roleIds = Array.isArray(d?.roleIds) ? d.roleIds.filter((x: unknown): x is string => typeof x === "string") : [];
     const sections: Record<string, RoleCardSections> = {};
+    const names: Record<string, string> = {};
     for (const id of roleIds) {
+      const name = d?.names?.[id];
+      if (typeof name === "string" && name.trim()) names[id] = name.trim();
       const read = readSections(d?.sections?.[id]);
       if (read.ok) sections[id] = read.value;
     }
-    return { on: d?.on === true && roleIds.length > 0, roleIds, sections, showPayRanges: d?.showPayRanges === true, villagePay: payOf(d?.villagePay) };
+    return { on: d?.on === true && roleIds.length > 0, roleIds, names, sections, showPayRanges: d?.showPayRanges === true, villagePay: payOf(d?.villagePay) };
   } catch {
     return OFF;
   }

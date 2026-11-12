@@ -1289,7 +1289,19 @@ export async function endSeating(pool: Pool | PoolConnection, assignmentId: stri
 }
 
 /**
- * Release every seat a departing member holds, and take their name off it.
+ * Release every seat a departing member holds. An ERASURE also takes their
+ * name off it; a member who simply LEAVES keeps their name on the record.
+ *
+ * WHICH ONE, AND WHY (lead, 12 Nov 2026: "we can keep names on record"). A
+ * role's history is the village's record of who carried it, and somebody who
+ * leaves the village is still the person who held the role. So leaving
+ * (`keepAsFormerMember`, server/lib/exitResolve.ts) passes `keepName` and the
+ * seating ends with `display_name` in place. Erasure, a person asking to be
+ * forgotten (server/lib/erasure.ts), passes nothing: forgetting is the
+ * default, so a caller that does not say which it means removes the name, and
+ * a later erasure of a former member still takes it off every row they held.
+ * The note goes either way: it describes the holding while it was live
+ * ("Away and inactive"), which stops being true the day it ends.
  *
  * `anonymizeMember` ends PERMISSION holdings (`role_holders`) and touched
  * nothing here, because "role" means two unrelated things (§3.15). So a
@@ -1311,6 +1323,7 @@ export async function releaseSeatingsForUser(
   pool: Pool,
   userId: string,
   reason: string,
+  opts: { keepName?: boolean } = {},
 ): Promise<number> {
   const liveIds = await liveAssignmentIdsOfUser(pool, userId);
   const [ended]: any = await pool.query(
@@ -1320,7 +1333,9 @@ export async function releaseSeatingsForUser(
   seatingsChanged();
   await raiseRevokeForEnded(pool, liveIds);
   await pool.query(
-    "UPDATE org_role_assignments SET display_name = NULL, note = NULL WHERE user_id = ?",
+    opts.keepName === true
+      ? "UPDATE org_role_assignments SET note = NULL WHERE user_id = ?"
+      : "UPDATE org_role_assignments SET display_name = NULL, note = NULL WHERE user_id = ?",
     [userId],
   );
   return Number(ended?.affectedRows ?? 0);

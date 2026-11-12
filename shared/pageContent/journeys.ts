@@ -688,6 +688,7 @@ function foundingTeamSection(): SectionSpec {
         "Paragraph",
         360,
         "We are bringing together the few people who will carry {village} from an idea to a living village. Each role is a long commitment, held with care. Read the open roles and apply for the one that is yours.",
+        { help: "{foundingRoles} becomes the founding roles open now, by name, from the Roles page. With none open, the sentence holding it is left out." },
       ),
       ...button("cta", "Button", "Join the founding team", "/roles"),
     ],

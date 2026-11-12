@@ -40,7 +40,8 @@
  *   - The account tier (`role`) goes back to `member`, as the tombstone writes
  *     it, so somebody who left the village cannot keep administering it.
  *   - Their PERMISSION holdings (`endPermissionHoldings`), their ORG seatings
- *     (`releaseSeatingsForUser`), and every seat application not yet seated
+ *     (`releaseSeatingsForUser`, which keeps their name on each role's
+ *     history: only an erasure takes it off), and every seat application not yet seated
  *     (`withdrawUnseatedOf`), after the alignment texts they are party to are
  *     marked `party_left` (`recordPartyLeft`), in the erasure's order and for
  *     the erasure's reason: a released seating ends seat terms by the
@@ -256,7 +257,8 @@ export async function keepAsFormerMember(
       roles: () => deps.loadRoleHolders().filter((h) => h.userId === userId).map((h) => String(h.roleId ?? "")).filter(Boolean),
       run: () => endPermissionHoldings(userId, deps),
     },
-    { name: "org-seatings", run: () => releaseSeatingsForUser(pool, userId, "member left the village") },
+    // Leaving ends the seatings and keeps the name on each role's history (lead, 12 Nov 2026). Only erasure removes it.
+    { name: "org-seatings", run: () => releaseSeatingsForUser(pool, userId, "member left the village", { keepName: true }) },
     { name: "role-applications", run: () => withdrawUnseatedOf(pool, userId) },
     // A link is its maker's vouch, and a former member can no longer vouch: their open links stop admitting (R5-2).
     { name: "invitations", run: () => revokeOpenInvitesOf(pool, userId) },

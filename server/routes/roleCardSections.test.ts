@@ -210,5 +210,9 @@ describe.skipIf(!configured)("the founding sections and the founding team", () =
     const on = await call("GET", "/api/org/founding-team", null);
     expect(on.json.on).toBe(true);
     expect(on.json.roleIds).toEqual([b.id, a.id]);
+    // The names travel with the ids, for the steward page's band, and only the featured roles' names.
+    expect(on.json.names).toEqual({ [b.id]: `Reader ${b.id.split("-").pop()}`, [a.id]: `Reader ${a.id.split("-").pop()}` });
+    await setVar("org.founding_team", null);
+    expect((await call("GET", "/api/org/founding-team", null)).json.names).toEqual({});
   });
 });
