@@ -10,9 +10,10 @@
  * own: one that fails stays out with its sentence, the rest pass. Return
  * with a note sends one back to the member.
  *
- * Each row reads FIRST (the A4 reading), then the numbers: the lines, the
- * total, Bill to, the route check, the tax form, the payer authority note and
- * the queue note. A self-approval carries its mark. Nothing here decides
+ * Each row reads the numbers: the lines, the total, Bill to, the route check, the tax form, the payer authority note and
+ * the queue note. A self-approval carries its mark. The member's task score
+ * and its band never show here: they are the member's own reading (Phase C,
+ * decision 2), and the server no longer sends them on a queue row. Nothing here decides
  * permission: a refusal from the server draws its sentence.
  */
 import { useCallback, useEffect, useState } from "react";
@@ -31,7 +32,7 @@ import {
 } from "@shared/moonRecap";
 import * as api from "./moonApi";
 import type { QueueData, QueueRowView } from "./moonApi";
-import { ReadingFirst, RowHead } from "./ReviewQueue";
+import { RowHead } from "./ReviewQueue";
 import { Amount, ERROR, INPUT, LABEL, MUTED, SMALL_BTN, SMALL_BTN_ON } from "./moonUi";
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
@@ -67,7 +68,6 @@ function InvoiceRow({ row, picked, onPick, init, onDone }: {
         <div className="flex min-w-0 flex-1 flex-col gap-2">
           <RowHead row={row} />
           {inv.selfApproved && !row.selfApproved ? <p className="m-0 text-xs font-semibold text-destructive">{SELF_APPROVED_WORDS}</p> : null}
-          <ReadingFirst reading={row.taskReading} />
           <p className="m-0 text-sm text-foreground">{inv.statusLine}</p>
           <p className="m-0 flex justify-between text-sm font-semibold text-foreground">
             <span>{MOON_WORDS.total}</span>
