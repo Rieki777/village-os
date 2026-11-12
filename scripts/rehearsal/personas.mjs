@@ -121,6 +121,13 @@ export async function neighbour(w, ctx) {
     await page.locator("main").waitFor();
   });
   await w.look("roles");
+  // Phase D: the season's goals are the commons, circles with moss for each goal reached. The seed reaches one.
+  await w.step("see the season's goals as the commons", async () => {
+    const drawing = page.getByRole("img", { name: /goals as circles|metas de esta temporada como círculos/i }).first();
+    await drawing.scrollIntoViewIfNeeded();
+    if ((await drawing.locator("[data-state=reached]").count()) !== 1) throw new Error("the commons should show one goal reached, with moss");
+    if ((await drawing.locator("[data-state=seed]").count()) !== 3) throw new Error("the commons should show three goals still seeds");
+  });
   await w.step("pick the Land Steward", async () => {
     await w.goto("/roles/select");
     const pick = page.getByRole("button", { name: /(Select|Elegir|Seleccionar) Land Steward/i }).first();
