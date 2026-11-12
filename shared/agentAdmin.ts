@@ -144,8 +144,8 @@ export const ALWAYS_A_PERSON: ReadonlyArray<{ key: string; words: string; mode: 
   {
     key: "agents",
     mode: "always",
-    words: "The agent accounts, their admin flag and their tokens are always a person's act.",
-    test: (_m, p) => /\/agent(s)?(\/|$)|agent-admin-paths|agent-accounts|agent-actions|ai-?agents?-?approval|agent-proposals|\/api\/agent\//i.test(p),
+    words: "The agent accounts, their admin flag and their tokens are always a person's act. Proposed changes reach a person through propose_changes, and only a person accepts them.",
+    test: (_m, p) => /\/agent(s)?(\/|$)|agent-admin-paths|agent-accounts|agent-actions|ai-?agents?-?approval|agent-proposals|\/api\/agent\/|\/api\/admin\/proposals(\/|$)/i.test(p),
   },
 ];
 

@@ -43,6 +43,8 @@ The village connector is a remote MCP server at `VILLAGE_ORIGIN/api/agent/v1/mcp
 | `get_review_queue` | `moon.review` | For a reviewer: the moon's queue, never with amounts. |
 | `get_seat_signals` | `moon.review` | For a reviewer: which empty roles members keep covering. |
 | `admin_request` | `admin` | For an admin's agent only: call one admin path the village has opened to agents, as the admin, with their own admin checks. The list is the village's (Admin, agent paths); erasure, powers, money, secrets and the agent accounts are never on it. |
+| `propose_changes` | `admin` | For an admin's agent: put one change, or a whole batch, in front of a person on the review page (`/admin/proposals`). Nothing changes live; the person edits and accepts it there. Covers every setting an admin can change. |
+| `read_proposal_lessons` | `admin` | What people changed in earlier proposals before accepting them, by kind and field. Read it before drafting. |
 
 Every write here, the moon tools included, takes the two calls below. A moon tool answers "My moon is not open here yet" while the village has the moon review off.
 
@@ -58,6 +60,31 @@ Done tells Sera exactly as a tap on the board does. Do not also close the task i
 ## Admin paths: the same two calls
 
 `admin_request` takes `method`, `path` and, for a write, `body`. A GET answers at once. A write answers first with the echo and a `confirmToken`, and writes only when called again with the same arguments and the token. A write the village marked for a person answers `person_confirms`: tell a person what you would change, and they make it in the app. Every call is recorded with the token, the method, the path and what happened.
+
+## Proposing changes for a person to review
+
+`propose_changes` needs no `confirmToken`, because a proposal changes nothing: a person reads it on `/admin/proposals` beside what is live, edits the words, and accepts or discards it there. Accepting runs each change through its own admin route as that person, so it lands only where they hold the power. The connector can never accept or discard.
+
+Send `{batch, items}`, where `batch` is a short title ("Phase A content") or `batchId` adds to a batch already waiting, and each item is `{kind, target, body, summary}`. `summary` is one plain sentence. The kinds:
+
+| kind | target | body |
+|---|---|---|
+| `role_card` | `{roleId}` | any of `{words, parameters, pay, archetypes, sections}`; sections merge onto the card |
+| `page_content` | `{section}`, such as `page-home` | the fields to change, merged onto the page |
+| `faq_add` | `{pathway}` | `{question, answer}` |
+| `faq_edit` | `{pathway, id}` | `{question, answer}` |
+| `faq_remove` | `{pathway, id}` | `{}` |
+| `variable` | `{key}` | `{value}` |
+| `module_lifecycle` | `{id}` | `{lifecycle}` |
+| `module_config` | `{id}` | the settings to change, merged onto the module's |
+| `role_listing` | `{}` | `{ids}`: list only these |
+| `season_goals` | `{seasonId}` | `{goals: [{text, done}]}` |
+| `onboarding_path` | `{}` | `{doc}` |
+| `setting` | `{method, path, readPath?}` | the route's own body: any other admin setting (brand, email words, launch, terms wording, org drafts, seat notes) |
+
+Each item is checked by its route's own validator when it is proposed. When any item is broken the batch is refused whole, and `refused` names each one's index, reason and field. Never proposable: secrets and keys, erasure, the agent accounts and tokens, powers and badges, moving value, seating or unseating a person, and sending letters or email.
+
+`read_proposal_lessons` (optionally `kind`) answers, by kind and field, what a person changed before accepting: the proposed text, the accepted text and the summary. Write the next proposal the way people accepted the last ones.
 
 ## Sera's tools write at once
 

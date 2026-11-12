@@ -42,6 +42,7 @@ import { Link, Redirect } from "wouter";
 import { legacyModulesTabTarget } from "@shared/moduleSetupLink";
 import AdminHeader from "@/components/admin/AdminHeader";
 import AdminHelperHost from "@/components/admin/AdminHelperHost";
+import ProposedChangesLink from "@/components/admin/ProposedChangesLink";
 import AiSetupBanner from "@/components/admin/AiSetupBanner";
 import ConnectorSetupPanel from "@/components/agent/ConnectorSetupPanel";
 import { adminRootClass, readAdminNight, writeAdminNight } from "@/components/admin/adminNight";
@@ -7931,6 +7932,7 @@ export default function Admin() {
               open, keyed by the open tab's module. It also feeds the nav
               filter, so the rail and the card ride one fetch. */}
           <TourCard wait={activeTab === "home"} />
+          <ProposedChangesLink password={password} always={activeTab === "home"} />
           <HealthStrip password={password} full={activeTab === "home" || activeTab === "integrations"} onOpen={setActiveTab} />
           <AdminHelp tab={activeTab} />
           {activeTab === "home" && <Suspense fallback={null}><HomeBase password={password} onOpenTab={setActiveTab} groups={shownGroups} role={user?.role} /></Suspense>}

@@ -2205,3 +2205,7 @@ Admin, Integrations has two new cards, `railway_project_token` (one Railway proj
 ## The founding-team application (Phase A, 2026-11-11, no migration)
 
 - No env var and nothing at boot. Four village settings under Admin, Game Mechanics, The founding team (`FOUNDING_KEYS` in `shared/foundingApplication.ts`) hold the application's own words at `/propose-a-role`: the ways to get to know us, the note beside them, the first cycle and the first conversations. Its terms step shows the role cards' pay shape (`org.pay_shape`, `org.pay_shape_at_risk`, `org.pay_shape_note`, in the same Admin category), reading "N%" until a village writes one. A new village sees neutral defaults; Amora's own values are `server/seeds/amora/founding-application-seed.json`, applied by hand.
+
+## Proposed changes, reviewed on one page (migration 0379, 2026-11-12)
+
+- No env var and nothing to set. Migration 0379 adds `proposed_change_batches` and `proposed_changes` at boot. An admin's agent proposes through the connector's `propose_changes` (or `POST /api/admin/proposals`); a person reviews, edits and accepts on `/admin/proposals`, linked from Admin with a count, and each change runs through its own admin route as that person. What people edit before accepting is kept and read back by `read_proposal_lessons`.
