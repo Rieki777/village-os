@@ -40,8 +40,8 @@ import {
   LIMITS, NOTICE_WORDS, PAYMENT_DETAILS_REFUSED, RECAP_ID, RECAP_STATUS_WORDS, SELF_APPROVED_WORDS, WORK_APPROVE_CAPABILITY,
   GOAL_STATUS_WORDS, approvalDecision, approvalHash, goalScoreProblem, invoicePaidFrom, parseMoonGoals, rowExistsRefusal, authorityNote, carriedTooOften, confirmRouteRefusal, coverage, eligibleApprovers,
   financeApprovalRefusal, goalScore, invoiceSendRefusal, invoiceTotals, isPayableLine, linesFromTerms, memberView, packMoonDates,
-  parseAttestation, payerForRoute, rangeChangedNote, readingOf, recapEditable, recapStatusAfterWork, reviewDedupeKey,
-  scoreContextOf, seatCoverage, seatReadingOf, taskScore, termsCarryMoney, validatePack, waitingStage,
+  parseAttestation, payerForRoute, rangeChangedNote, recapEditable, recapStatusAfterWork, reviewDedupeKey,
+  termsCarryMoney, validatePack, waitingStage,
   type ApprovalStage, type ApprovalSubject, type ApproverKeys, type ApproverPool, type BulkApproveResponse, type FromBlock,
   type ImportPackResponse, type InvoiceLine, type PayRouteRecord, type InvoiceView, type MoonAttestation, type QueueResponse, type QueueRow,
   type RecapItem, type ReviewEventKind, type RoleAudit, type RoomResponse, type SendInvoiceResponse,
@@ -349,9 +349,17 @@ export interface QueueReader {
 /**
  * THE REVIEW QUEUE: every SENT recap of the moon, what it waits on, who can
  * give each approval (by name, from the live holders, never an admin who holds
- * no seat), the roles and Outside my roles per person, and the reading first
- * with the numbers after it (A4). The invoice, the only part with an amount,
- * is in a row only for a `cash.pay` reader.
+ * no seat), the roles and Outside my roles per person, and the items. The
+ * invoice, the only part with an amount, is in a row only for a `cash.pay`
+ * reader.
+ *
+ * NO SCORE READING HERE (Phase C, decision 2, 12 Nov 2026). The member's task
+ * score, its band ("Rethink the plan") and their role coverage are the
+ * member's own reading, served only on `GET /api/me/moon`. A row is read by
+ * the people who approve the member's pay, so it carries none of them: no
+ * `taskReading`, no `seatReading`, no `score`. The score arithmetic is
+ * untouched (`taskScore`, `readingOf` in shared/moonRecap.ts), and so are the
+ * hash, the approvals and the invoice: none of them ever read the score.
  */
 export async function reviewQueue(pool: Pool, moon: Moon, reader: QueueReader, deps: FrameDeps & Pick<ReviewDeps, "keyHolders" | "nameOf">): Promise<QueueResponse> {
   const [recaps, holders, payers, settings] = await Promise.all([store.recapsForCycle(pool, moon.bounds.id), approverPool(deps.keyHolders), payersDoc(pool), settingsDoc(pool)]);
@@ -370,8 +378,6 @@ export async function reviewQueue(pool: Pool, moon: Moon, reader: QueueReader, d
     if (stage && eligible[stage].length === 0) noEligible.push({ recapId: r.id, stage });
     const heldIds = frame.roles.map((x) => x.roleId);
     const outside = items.filter((i) => i.state === "kept" && (!i.roleId || !heldIds.includes(i.roleId))).length;
-    const t = taskScore(items, moon.days);
-    const seats = seatCoverage(frame.roles, items);
     for (const roleId of cov.rolesWithNoItems) rolesWithNoItems.push({ userId: r.userId, roleId, name: frame.roles.find((x) => x.roleId === roleId)?.name ?? roleId });
     const hash = await approvalHash(subjectOf(invoice, route, items));
     let cash: QueueRow["invoice"] = null;
@@ -395,7 +401,6 @@ export async function reviewQueue(pool: Pool, moon: Moon, reader: QueueReader, d
       selfApproved: r.selfApproved, workApprovers: await names(eligible.work), invoiceApprovers: invoice ? await names(eligible.invoice) : [],
       roles: cov.roles.map((x) => ({ roleId: x.roleId, name: x.name, itemCount: x.itemCount })), outsideMyRoles: outside,
       hash,
-      taskReading: readingOf(t, scoreContextOf(t, outside)), seatReading: seatReadingOf(seats.on, seats.total), score: { numHalves: t.numHalves, den: t.den, pct: t.pct },
       items,
       invoice: cash,
     });

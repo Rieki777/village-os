@@ -15,6 +15,9 @@
  *   paid              the transfers door makes a fully paid invoice Paid
  *   privacy           the moon.approve queue carries no invoice; the room
  *                     panel has no amount; imported items show privately
+ *   decision 2        no queue row carries the member's band or score; the
+ *                     member still reads it, and the hash, the invoice and
+ *                     both approvals are unchanged
  *   import            twice adds nothing; a pack with an amount key is refused
  *   clocks            cashKeys.role and moon_recaps.cycle_id agree on both clocks
  *
@@ -25,12 +28,14 @@ import type mysql from "mysql2/promise";
 import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "../db/testDb";
 import { CALENDAR_CLOCK, LUNAR_CLOCK } from "../../shared/cycleClock";
 import {
-  APPROVAL_REFUSALS, MOON_ROUTES, NOTICE_WORDS, PACK_REFUSAL_WORDS, SEND_REFUSALS, packMoonDates, rowExistsRefusal,
+  APPROVAL_REFUSALS, MOON_ROUTES, NOTICE_WORDS, PACK_REFUSAL_WORDS, QUEUE_ROW_KEYS, SEND_REFUSALS, TASK_BANDS, packMoonDates, readingOf,
+  rowExistsRefusal, scoreContextOf, taskScore,
 } from "../../shared/moonRecap";
 import { cashKeys, moonLineCashKey, recordCashTransfer } from "./cashOwed";
 import { currentCycle } from "./gratitude-cycles";
 import { moonOf, resolveMoon } from "./moonRecap";
-import { settlePaidInvoices } from "./moonReview";
+import { currentHash, settlePaidInvoices } from "./moonReview";
+import { itemsOf, recapById } from "../repos/moonRecaps";
 import { register } from "../routes/moonRecaps";
 
 type Handler = (req: any, res: any) => Promise<unknown> | unknown;
@@ -315,7 +320,7 @@ describe.skipIf(!configured)("the review against a real schema", () => {
     expect((await call(`PUT ${MOON_ROUTES.confirmRoute}`, { params: { user: "m-wren" } })).status).toBe(200);
   });
 
-  it("privacy: the moon.approve queue carries the reading and no invoice; the cash.pay queue carries the amounts", async () => {
+  it("privacy: the moon.approve queue carries no reading and no invoice; the cash.pay queue carries the amounts", async () => {
     await configure();
     await route("m-wren");
     await sendRecap("m-wren");
@@ -325,14 +330,70 @@ describe.skipIf(!configured)("the review against a real schema", () => {
     const ops = await queueRow("m-wren");
     expect(ops.invoice).toBeNull();
     expect(JSON.stringify(ops)).not.toContain("100000");
-    expect(ops).toHaveProperty("taskReading");
+    expect(ops).not.toHaveProperty("taskReading");
+    expect(ops).not.toHaveProperty("seatReading");
+    expect(ops).not.toHaveProperty("score");
     expect(ops.items.map((i: any) => i.text)).toEqual(["Fixed the pump"]);
-    expect(ops.score).toMatchObject({ den: expect.any(Number) });
     gateKeys = ["cash.pay"];
     const fin = await queueRow("m-wren");
     expect(fin.invoice).toMatchObject({ totalMinor: 100000, routeCheck: null, hash: fin.hash });
     gateKeys = [];
     expect((await call(`GET ${MOON_ROUTES.queue}`, { query: { cycle: CYCLE } })).status).toBe(403);
+  });
+
+  it("decision 2: the people approving pay never read the member's band or score; the member still does, and the score, the hash, the invoice and both approvals are unchanged", async () => {
+    // Break-the-fix control: put `taskReading: readingOf(...)` back on the row in
+    // reviewQueue (server/lib/moonReview.ts) and the key and band checks below fail.
+    await configure();
+    await route("m-wren");
+    as("m-wren");
+    expect((await call(`POST ${MOON_ROUTES.addItem}`, { params: { cycle: CYCLE }, body: { text: "Fixed the pump", roleId: "r-water", accountabilityWords: "Keep the water clean" } })).status).toBe(201);
+    const mine0 = await call(`GET ${MOON_ROUTES.myMoon}`, { query: { cycle: CYCLE } });
+    const itemId = mine0.body.items[0].id;
+    expect((await call(`PATCH ${MOON_ROUTES.editItem}`, { params: { id: itemId }, body: { taskStatus: "carry" } })).status).toBe(200);
+    await q("UPDATE `moon_recap_items` SET `set_on` = NULL WHERE `id` = ?", [itemId]); // module-review-ok: fixture SQL, an item made in this recap
+    expect((await call(`POST ${MOON_ROUTES.sendRecap}`, { params: { cycle: CYCLE }, body: {} })).status).toBe(200);
+    expect((await sendInvoice("m-wren")).status).toBe(200);
+
+    // The member's own reading is still there, and the arithmetic is the shared one.
+    as("m-wren");
+    const mine = (await call(`GET ${MOON_ROUTES.myMoon}`, { query: { cycle: CYCLE } })).body;
+    const recap = (await q("SELECT `id` FROM `moon_recaps` WHERE `user_id` = 'm-wren'"))[0]; // module-review-ok: fixture SQL
+    const items = await itemsOf(pool, recap.id);
+    const expected = taskScore(items, MOON.days);
+    expect(mine.taskScore).toEqual(expected);
+    expect(expected).toMatchObject({ numHalves: 0, den: 1, pct: 0, carry: 1 });
+    expect(mine.taskReading).toEqual(readingOf(expected, scoreContextOf(expected, 0)));
+    expect(mine.taskReading.label).toBe(TASK_BANDS.find((b) => b.key === "rethink")!.label);
+    expect(mine.seatReading).not.toBeNull();
+    const band = mine.taskReading.label as string;
+    const seatBand = mine.seatReading.label as string;
+
+    // Neither approver view carries it: the keys are exactly the contract's, and no band words.
+    for (const keys of [["moon.approve"], ["cash.pay"]]) {
+      as(keys[0] === "cash.pay" ? "m-fin" : "m-ops");
+      gateKeys = keys;
+      const row = await queueRow("m-wren");
+      expect(Object.keys(row).sort()).toEqual([...QUEUE_ROW_KEYS].sort());
+      const text = JSON.stringify(row);
+      expect(text).not.toContain(band);
+      expect(text).not.toContain(seatBand);
+      expect(text).not.toContain(mine.taskReading.says);
+      // The hash is the approval subject's, as before.
+      expect(row.hash).toBe(await currentHash(pool, (await recapById(pool, recap.id))!));
+    }
+    // The invoice the payer reads is the member's own invoice, amount for amount.
+    const fin = await queueRow("m-wren");
+    expect(fin.invoice).toMatchObject({ id: mine.invoice.id, totalMinor: mine.invoice.totalMinor, currency: mine.invoice.currency, lines: mine.invoice.lines });
+    expect(fin.invoice.totalMinor).toBe(100000);
+
+    // Both approvals go through with the row's hash, and the pay owed is the terms' amount.
+    gateKeys = "all";
+    expect((await approveWork("m-ops", "m-wren")).status).toBe(200);
+    const paid = await approveInvoices("m-fin", ["m-wren"]);
+    expect(paid.body.approved).toHaveLength(1);
+    const owed = await q("SELECT `amount_minor`, `user_id`, `state` FROM `cash_owed`"); // module-review-ok: fixture SQL
+    expect(owed).toEqual([{ amount_minor: 100000, user_id: "m-wren", state: "claimed" }]);
   });
 
   it("the room panel answers only a member joined to the room, holds back a Speak only holder, and carries no amount, score or count", async () => {

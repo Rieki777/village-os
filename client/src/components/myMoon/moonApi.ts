@@ -14,9 +14,10 @@
  * sends it:
  *   - `MyMoonResponse` has no `guideUrl` (B1) and no `thanks` (A7).
  *   - `SendRecapRequest` has no `thanks`.
- *   - `QueueRow` has no items, no approval `hash` and no reading (A4), so the
- *     work review cannot approve per item from the queue alone, and the
- *     invoice in it has no `hash` for `BulkApproveRequest`.
+ *   - `QueueRow` has no items and no approval `hash` on an older server, so
+ *     the work review cannot approve per item from the queue alone, and the
+ *     invoice in it has no `hash` for `BulkApproveRequest`. It carries no
+ *     score reading at all, on purpose (Phase C, decision 2).
  */
 import { gameFetch } from "@/lib/gameApi";
 import {
@@ -40,7 +41,6 @@ import {
   type QueueResponse,
   type QueueRow,
   type RangeAnswerRequest,
-  type Reading,
   type RecapItem,
   type ReturnRequest,
   type ScoreGoalRequest,
@@ -63,8 +63,6 @@ export type MyMoonData = MyMoonResponse & { guideUrl?: string | null; thanks?: T
 export type QueueRowView = QueueRow & {
   items?: RecapItem[];
   hash?: string;
-  taskReading?: Reading | null;
-  seatReading?: Reading | null;
   invoice: (NonNullable<QueueRow["invoice"]> & { hash?: string }) | null;
 };
 export type QueueData = Omit<QueueResponse, "rows"> & { rows: QueueRowView[] };

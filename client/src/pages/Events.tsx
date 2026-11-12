@@ -14,15 +14,23 @@
  *
  * The module ships off, so an absent module renders NotFound exactly as every
  * other module page does. Existence is hidden, not merely unlinked.
+ *
+ * THE MOON FIRST (Phase C, decision 3). The page opens on the moon: this
+ * moon's days on a golden spiral for the glance, a strip of days the thumb
+ * swipes along under it on a phone, and the chosen day beside it on a desktop
+ * with the moon's turnings. The month grid, the week, the year wheel and the
+ * list stay one click away on the same row of tabs. The page stands in the
+ * sheet's night world (docs/DESIGN_RULE.md).
  */
 import Layout from "@/components/Layout";
 import ModuleGate from "@/components/modules/ModuleGate";
 import { storedText, writeStored } from "@/lib/safeStorage";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "wouter";
 import { useModule, useModules } from "@/modules/ModuleProvider";
 import { authToken } from "@/lib/gameApi";
 import { CalendarDays, ChevronLeft, ChevronRight, ExternalLink, MapPin, Users, Video } from "lucide-react";
+import { useLingui } from "@lingui/react/macro";
+import { CARD_FEATURED, EYEBROW, H1, H2, HINT, WORLD } from "@/components/journey/look";
 import type { CalendarItem, RsvpStatus } from "@shared/gatherings";
 import { civilDate, lunarYearOf, type YearAnchor } from "@shared/lunar";
 import { moonCountLabel } from "@shared/villageMoon";
@@ -32,6 +40,11 @@ import MonthView, { type GridMode } from "@/components/calendar/MonthView";
 import WeekView from "@/components/calendar/WeekView";
 import MoonGlyph from "@/components/calendar/MoonGlyph";
 import CalendarFeedCard from "@/components/calendar/CalendarFeedCard";
+import MoonSpiral from "@/components/calendar/MoonSpiral";
+import DayStrip from "@/components/calendar/DayStrip";
+import MoonTurnings from "@/components/calendar/MoonTurnings";
+import CalendarNotes, { notesUnderMoon, usePhoneWidth } from "@/components/calendar/CalendarNotes";
+import { moonDays } from "@/components/calendar/moonSpiral";
 import GatheringEmailSettings from "@/components/comms/GatheringEmailSettings";
 // Village Comms (5.8, 5.9): a visitor's guest door, and the host's recap after it begins.
 import GuestRsvpForm from "@/components/comms/GuestRsvpForm";
@@ -61,13 +74,9 @@ const headers = (): Record<string, string> => {
   return t ? { Authorization: `Bearer ${t}` } : {};
 };
 
-type Tab = "wheel" | "month" | "week" | "list";
-const TABS: Array<{ id: Tab; label: string }> = [
-  { id: "wheel", label: "Year" },
-  { id: "month", label: "Month" },
-  { id: "week", label: "Week" },
-  { id: "list", label: "List" },
-];
+type Tab = "moon" | "month" | "week" | "wheel" | "list";
+/** The moon leads; the month is the next tab along, one click away. */
+const TAB_IDS: readonly Tab[] = ["moon", "month", "week", "wheel", "list"];
 const MODE_KEY = "calendar.gridMode";
 const TAB_KEY = "calendar.tab";
 
@@ -89,12 +98,13 @@ function whenLabel(days: number): string {
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
 export default function Events() {
+  const { t, i18n } = useLingui();
   const modules = useModules();
   const eventsModule = useModule("events");
   const [payload, setPayload] = useState<EventsPayload | null>(null);
   const [span, setSpan] = useState<CalendarItem[]>([]);
   const [spanYear, setSpanYear] = useState<number | null>(null);
-  const [tab, setTab] = useState<Tab>(() => remembered(TAB_KEY, TABS.map((t) => t.id), "month"));
+  const [tab, setTab] = useState<Tab>(() => remembered(TAB_KEY, TAB_IDS, "moon"));
   const [mode, setMode] = useState<GridMode>(() => remembered(MODE_KEY, ["months", "moons"] as const, "months"));
   const [cursor, setCursor] = useState<CivilDay | null>(null);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
@@ -177,7 +187,7 @@ export default function Events() {
     if (!cursor) return;
     if (tab === "week") { const n = addDays(cursor, 7 * dir, timezone); setCursor(n); setSelectedKey(n.key); return; }
     if (tab === "wheel") { setCursor(civilDayFor(cursor.year + dir, 1, 1, timezone)); return; }
-    if (mode === "moons") {
+    if (tab === "moon" || mode === "moons") {
       const info = lunarDayInfo(cursor, anchor, timezone);
       if (!info) return;
       // Day 1 of the next moon, or a day inside the previous one.
@@ -199,6 +209,34 @@ export default function Events() {
   const byDay = useMemo(() => itemsByDay(span, timezone), [span, timezone]);
   const selectedItems = selectedKey ? byDay.get(selectedKey) ?? [] : [];
   const listItems = (payload?.events ?? []).filter((i) => i.kind !== "sky");
+  const moon = useMemo(
+    () => (payload && cursor ? moonDays(cursor, today, anchor, timezone, byDay) : null),
+    [payload, cursor, today, anchor, timezone, byDay],
+  );
+  const phone = usePhoneWidth();
+  const tuckNotes = notesUnderMoon(phone, tab, Boolean(payload && cursor && moon));
+
+  /** Dates on the moon view, in the reader's language and the village's zone. */
+  const fmt = (d: CivilDay, opts: Intl.DateTimeFormatOptions): string => {
+    try { return new Intl.DateTimeFormat(i18n.locale, { ...opts, timeZone: timezone }).format(d.noon); }
+    catch { return new Intl.DateTimeFormat(undefined, opts).format(d.noon); }
+  };
+  const dayName = (d: CivilDay) => fmt(d, { weekday: "long", day: "numeric", month: "long" });
+  const weekdayShort = (d: CivilDay) => fmt(d, { weekday: "short" });
+  const shortDate = (d: CivilDay) => fmt(d, { day: "numeric", month: "short" });
+  const dayFor = (key: string): CivilDay => {
+    const [y, m, d] = key.split("-").map(Number);
+    return civilDayFor(y, m, d, timezone);
+  };
+  const tabLabel = (id: Tab): string => {
+    switch (id) {
+      case "moon": return t({ message: "Moon", context: "calendar view tab" });
+      case "month": return t({ message: "Month", context: "calendar view tab" });
+      case "week": return t({ message: "Week", context: "calendar view tab" });
+      case "wheel": return t({ message: "Year", context: "calendar view tab" });
+      case "list": return t({ message: "List", context: "calendar view tab" });
+    }
+  };
 
   if (modules.loaded && !eventsModule) return <ModuleGate moduleId="events" name="Village Calendar" />;
 
@@ -215,7 +253,7 @@ export default function Events() {
         {/* 0092: what a place costs, beside the button that takes it. A price
             a member reads only after the charge is a surprise charge. */}
         {(g.seatPrice ?? 0) > 0 && (
-          <span className="text-xs font-medium text-teal-deep bg-teal-deep/10 rounded-lg px-2 py-1">
+          <span className="text-xs font-medium text-notice border border-notice/50 rounded-lg px-2 py-1">
             {g.seatPrice} {g.seatTokenName ?? g.seatToken}
           </span>
         )}
@@ -231,8 +269,8 @@ export default function Events() {
               onClick={() => answer(g, s)}
               disabled={busy === key || blocked}
               aria-pressed={mine}
-              className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors disabled:opacity-40 ${
-                mine ? "bg-teal-deep text-white border-teal-deep" : "bg-background text-foreground border-border hover:bg-muted"
+              className={`jw-btn min-h-11 px-3 py-1.5 text-sm font-medium rounded-lg border transition-colors disabled:opacity-40 ${
+                mine ? "bg-notice text-background border-notice" : "bg-background text-foreground border-border hover:bg-muted"
               }`}
             >
               {s === "going" ? "I'm coming" : s === "maybe" ? "Maybe" : "Can't make it"}
@@ -247,29 +285,29 @@ export default function Events() {
     );
   };
 
-  const itemCard = (g: CalendarItem, showWhen: boolean) => {
+  const itemCard = (g: CalendarItem, showWhen: boolean, surface: "card" | "muted" = "card") => {
     const second = localSecondLine(g, timezone);
     const key = `${g.id}:${g.occurrenceKey}`;
     return (
-      <li key={key} className="border border-border rounded-xl p-4 sm:p-5 bg-card">
+      <li key={key} className={`border border-border rounded-xl p-4 sm:p-5 ${surface === "muted" ? "bg-muted" : "bg-card"}`}>
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div className="min-w-0">
             <h3 className="font-semibold text-lg text-foreground flex items-center gap-2 flex-wrap">
               <span className="inline-block h-2.5 w-2.5 rounded-full shrink-0" style={{ background: kindColour(g) }} aria-hidden="true" />
               <span className={g.status === "cancelled" ? "line-through opacity-70" : ""}>{g.title}</span>
               {g.kind !== "gathering" && (
-                <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground border border-border rounded px-1.5 py-0.5">
+                <span className="text-xs font-medium uppercase tracking-widest text-muted-foreground border border-border rounded-lg px-1.5 py-0.5">
                   {kindLabel(g.kind)}
                 </span>
               )}
               {g.status === "cancelled" && (
-                <span className="text-xs font-medium text-red-700 bg-red-50 border border-red-100 rounded px-1.5 py-0.5">Cancelled</span>
+                <span className="text-xs font-medium text-destructive bg-destructive/10 border border-destructive/40 rounded-lg px-1.5 py-0.5">Cancelled</span>
               )}
               {g.status === "postponed" && (
-                <span className="text-xs font-medium text-amber-700 bg-amber-50 border border-amber-100 rounded px-1.5 py-0.5">Postponed</span>
+                <span className="text-xs font-medium text-notice border border-notice/50 rounded-lg px-1.5 py-0.5">Postponed</span>
               )}
               {g.isExample && (
-                <span className="text-[10px] font-medium uppercase tracking-wide text-amber-800 bg-amber-50 border border-amber-100 rounded px-1.5 py-0.5">example</span>
+                <span className="text-xs font-medium uppercase tracking-widest text-notice border border-notice/50 rounded-lg px-1.5 py-0.5">example</span>
               )}
             </h3>
             <p className="text-sm text-muted-foreground mt-0.5 flex items-center gap-1.5 flex-wrap">
@@ -305,7 +343,7 @@ export default function Events() {
                     and must not read as "no limit". */}
                 {g.capacity === null ? `${g.goingCount} going` : `${g.goingCount} of ${g.capacity} going`}
               </p>
-              {g.spotsLeft === 0 && <p className="text-xs text-amber-700 mt-0.5">Full</p>}
+              {g.spotsLeft === 0 && <p className="text-xs text-notice mt-0.5">Full</p>}
             </div>
           )}
         </div>
@@ -328,77 +366,73 @@ export default function Events() {
   const skyToday = selectedItems.filter((i) => i.kind === "sky");
   const dayItems = selectedItems.filter((i) => i.kind !== "sky");
 
+  const moonName = moon ? moonLabel(moon.info.monthIndex, moon.info.cycleNumber, moonOneCycle, monthNames) : null;
+  const moonTitle = moonName && (moonName.title || moonName.name)
+    ? [moonName.title, moonName.name].filter(Boolean).join(", ")
+    : t({ message: "This moon", context: "calendar moon view heading, a village with no moon count or names" });
+  const chosen = moon && selectedKey ? moon.days.find((d) => d.day.key === selectedKey) ?? null : null;
+  const segBtn = (on: boolean) =>
+    `jw-btn inline-flex min-h-11 items-center justify-center px-3 py-1.5 text-sm rounded-lg transition-colors ${on ? "bg-notice text-background font-semibold" : "text-foreground hover:bg-muted"}`;
+
   return (
     <Layout>
-      <section className="py-10 bg-gradient-to-b from-teal-deep/5 to-background">
-        <div className="container text-center">
-          <h1 className="font-display text-4xl font-bold text-foreground mb-3">Village Calendar</h1>
+      <div className={WORLD}>
+      <section className="pt-8 pb-4 sm:pt-10">
+        <div className={`container ${tab === "moon" ? "max-w-6xl" : "max-w-4xl"}`}>
+          <p className={EYEBROW}>{t({ message: "Calendar", context: "calendar page eyebrow" })}</p>
+          <h1 className={`${H1} mt-2`}>{t({ message: "Village calendar", context: "calendar page title" })}</h1>
           {/* R47: the Trail line leads, the tooltip defines the moons, and
               the two clocks line is the Lore, last and quiet. */}
-          <p className="text-muted-foreground max-w-xl mx-auto">
-            Pick a day to see what's on, by month or by{" "}
-            <InfoTip tip="The moons are the lunar months the land turns by. The wheel and the grid show them beside the civil calendar, and the village's cycles close when the moon does.">moon</InfoTip>.
+          <p className="mt-2 max-w-2xl text-muted-foreground">
+            {t({ message: "Pick a day to see what is on. The village keeps two clocks: the twelve months everyone shares, and the moons the land turns by.", context: "calendar page lede" })}{" "}
+            <InfoTip tip="The moons are the lunar months the land turns by. The wheel and the grid show them beside the civil calendar, and the village's cycles close when the moon does." label={t({ message: "About the moons", context: "calendar page: tip about moons" })} />
           </p>
           {lunar && (
             <p className="mt-3 inline-flex items-center gap-2 text-sm text-foreground bg-card border border-border rounded-full px-3 py-1.5">
               <MoonGlyph phase={lunar.phase} size={16} hemisphere={hemisphere} title={lunar.phaseName} />
               <span>
-                Today is day {lunar.day} of {lunar.length}
                 {(() => {
                   // The village's own count and the moon's name, with whichever
                   // of the two this village has. A village that has not set a
                   // first moon reads the name alone, and never a Moon 0.
+                  const lunarDay = lunar.day;
+                  const moonLength = lunar.length;
                   const said = [moonCountLabel(lunar.cycleNumber, moonOneCycle), lunar.name].filter(Boolean).join(", ");
-                  return said ? ` in ${said}` : "";
+                  return said
+                    ? t({ message: `Today is day ${lunarDay} of ${moonLength} in ${said}`, context: "calendar page: today's place in the moon, with the moon's name" })
+                    : t({ message: `Today is day ${lunarDay} of ${moonLength}`, context: "calendar page: today's place in the moon" });
                 })()}
-                {lunar.name && lunar.isExampleName ? " (example name)" : ""}
               </span>
             </p>
           )}
-          {payload && <p className="mt-2 text-xs text-muted-foreground">{zoneNote(timezone)}</p>}
-          {/* The season page is what this calendar sits inside, and it is
-              ungated core content, so this link is safe on every fork. It is
-              also the second door onto /seasonal-festivals, which lived behind
-              one menu entry. */}
-          <p className="mt-3 text-xs text-muted-foreground">
-            The turnings that shape this year are on the{" "}
-            <Link href="/seasonal-festivals" className="text-teal-deep font-medium hover:underline">
-              Seasonal Festivals
-            </Link>{" "}
-            page.
-          </p>
-          <p className="mt-3 text-sm italic text-muted-foreground max-w-xl mx-auto">
-            The village keeps two clocks: the twelve months everyone shares,
-            and the moons the land turns by.
-          </p>
+          {/* The clock line and the festivals door; on a phone in the moon view they sit under the moon (CalendarNotes). */}
+          {!tuckNotes && <CalendarNotes zoneLine={payload ? zoneNote(timezone) : null} />}
         </div>
       </section>
 
-      <section className="py-6 bg-background">
-        <div className="container max-w-4xl">
+      <section className="pb-12">
+        <div className={`container ${tab === "moon" ? "max-w-6xl" : "max-w-4xl"}`}>
           {notice && (
-            <p role="status" className="mb-4 text-sm text-teal-deep bg-teal-deep/10 border border-teal-deep/20 rounded-lg px-3 py-2">{notice}</p>
+            <p role="status" className="mb-4 text-sm text-open bg-card border border-open/40 rounded-lg px-3 py-2">{notice}</p>
           )}
           {problem && (
-            <p role="alert" className="mb-4 text-sm text-red-700 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{problem}</p>
+            <p role="alert" className="mb-4 text-sm text-destructive bg-destructive/10 border border-destructive/40 rounded-lg px-3 py-2">{problem}</p>
           )}
           {/* The host nudge's link opens the composer here (recapComposerPath). */}
           {authToken() && recapLink && <HostRecapPanel eventId={recapLink.eventId} occurrenceKey={recapLink.occurrenceKey} startOpen withTitle />}
 
           <div className="flex items-center justify-between gap-2 flex-wrap mb-4">
-            <div role="tablist" aria-label="Calendar views" className="inline-flex rounded-lg border border-border bg-card p-0.5">
-              {TABS.map((t) => (
-                <button key={t.id} role="tab" type="button" aria-selected={tab === t.id} onClick={() => pickTab(t.id)}
-                  className={`px-3 py-1.5 text-sm rounded-md transition-colors ${tab === t.id ? "bg-teal-deep text-white" : "text-foreground hover:bg-muted"}`}>
-                  {t.label}
+            <div role="tablist" aria-label={t({ message: "Calendar views", context: "calendar view tabs" })} className="inline-flex flex-wrap rounded-xl border border-border bg-card p-0.5">
+              {TAB_IDS.map((id) => (
+                <button key={id} role="tab" type="button" aria-selected={tab === id} onClick={() => pickTab(id)} className={segBtn(tab === id)}>
+                  {tabLabel(id)}
                 </button>
               ))}
             </div>
             {tab === "month" && (
-              <div role="radiogroup" aria-label="Grid by months or by moons" className="inline-flex rounded-lg border border-border bg-card p-0.5">
+              <div role="radiogroup" aria-label="Grid by months or by moons" className="inline-flex rounded-xl border border-border bg-card p-0.5">
                 {(["months", "moons"] as GridMode[]).map((m) => (
-                  <button key={m} role="radio" type="button" aria-checked={mode === m} onClick={() => pickMode(m)}
-                    className={`px-3 py-1.5 text-sm rounded-md transition-colors ${mode === m ? "bg-teal-deep text-white" : "text-foreground hover:bg-muted"}`}>
+                  <button key={m} role="radio" type="button" aria-checked={mode === m} onClick={() => pickMode(m)} className={segBtn(mode === m)}>
                     {m === "months" ? "Months" : "Moons"}
                   </button>
                 ))}
@@ -406,18 +440,89 @@ export default function Events() {
             )}
             {tab !== "list" && (
               <div className="inline-flex items-center gap-1">
-                <button type="button" onClick={() => step(-1)} aria-label="Earlier" className="p-1.5 rounded-lg border border-border bg-card hover:bg-muted">
+                <button type="button" onClick={() => step(-1)} aria-label={tab === "moon" ? t({ message: "The moon before", context: "calendar: step back one moon" }) : "Earlier"} className="jw-btn inline-flex size-11 items-center justify-center rounded-lg border border-border bg-card hover:bg-muted">
                   <ChevronLeft className="h-4 w-4" aria-hidden="true" />
                 </button>
-                <button type="button" onClick={goToday} className="px-3 py-1.5 text-sm rounded-lg border border-border bg-card hover:bg-muted">Today</button>
-                <button type="button" onClick={() => step(1)} aria-label="Later" className="p-1.5 rounded-lg border border-border bg-card hover:bg-muted">
+                <button type="button" onClick={goToday} className="jw-btn min-h-11 px-3 py-1.5 text-sm rounded-lg border border-border bg-card hover:bg-muted">{t({ message: "Today", context: "calendar: go to today" })}</button>
+                <button type="button" onClick={() => step(1)} aria-label={tab === "moon" ? t({ message: "The moon after", context: "calendar: step on one moon" }) : "Later"} className="jw-btn inline-flex size-11 items-center justify-center rounded-lg border border-border bg-card hover:bg-muted">
                   <ChevronRight className="h-4 w-4" aria-hidden="true" />
                 </button>
               </div>
             )}
           </div>
 
-          {payload === null && <p className="text-center text-muted-foreground py-16">Opening the calendar…</p>}
+          {payload === null && <p className="text-center text-muted-foreground py-16">{t({ message: "Opening the calendar", context: "calendar loading" })}</p>}
+
+          {payload && cursor && tab === "moon" && moon && (
+            <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_400px] lg:items-start lg:gap-8" data-testid="moon-view">
+              <div className="min-w-0">
+                <p className={EYEBROW}>{t({ message: "This moon", context: "calendar moon view eyebrow" })}</p>
+                <h2 className="mt-1 font-display text-3xl leading-tight text-foreground sm:text-4xl">{moonTitle}</h2>
+                <p className={`${HINT} mt-1`}>
+                  {(() => {
+                    const firstDay = dayName(moon.days[0].day);
+                    const lastDay = dayName(moon.days[moon.days.length - 1].day);
+                    return t({ message: `${firstDay} to ${lastDay}. The new moon is at the centre, and each day is a seed further out.`, context: "calendar moon view: the moon's window" });
+                  })()}
+                </p>
+                <p className="mt-1 hidden text-sm text-muted-foreground lg:block">
+                  {t({ message: "The arrow keys walk the days. Home and End go to the first and last day of the moon.", context: "calendar moon view: keyboard hint, desktop" })}
+                </p>
+                <div className="-mx-4 mt-4 border-y border-border/60 bg-card/40 sm:mx-0 sm:rounded-2xl sm:border lg:p-2">
+                  <MoonSpiral
+                    moon={moon}
+                    selectedKey={selectedKey}
+                    onSelect={selectDay}
+                    timezone={timezone}
+                    hemisphere={hemisphere}
+                    dayName={dayName}
+                    shortDate={shortDate}
+                  />
+                  <ul className="flex flex-wrap justify-center gap-x-4 gap-y-1 px-4 pb-3 text-xs text-muted-foreground" aria-label={t({ message: "What the marks mean", context: "calendar moon view legend" })}>
+                    <li className="inline-flex items-center gap-1.5"><span aria-hidden="true" className="size-2.5 rounded-full bg-notice" />{t({ message: "today", context: "calendar legend" })}</li>
+                    <li className="inline-flex items-center gap-1.5"><span aria-hidden="true" className="size-2.5 rounded-full border-2 border-notice" />{t({ message: "a gathering", context: "calendar legend" })}</li>
+                    <li className="inline-flex items-center gap-1.5"><span aria-hidden="true" className="size-1.5 rounded-full bg-notice" />{t({ message: "something else on", context: "calendar legend" })}</li>
+                    <li className="inline-flex items-center gap-1.5"><span aria-hidden="true" className="size-2.5 rounded-full bg-open/60" />{t({ message: "days walked", context: "calendar legend" })}</li>
+                  </ul>
+                </div>
+                <DayStrip
+                  className="lg:hidden"
+                  days={moon.days}
+                  selectedKey={selectedKey}
+                  onSelect={selectDay}
+                  weekdayShort={weekdayShort}
+                  dayName={dayName}
+                />
+              </div>
+              <div className="mt-2 space-y-4 lg:sticky lg:top-24 lg:mt-0">
+                {selectedDay && (
+                  <section className={CARD_FEATURED} aria-labelledby="moon-day-h" data-testid="moon-day">
+                    <p className={EYEBROW}>
+                      {[
+                        chosen?.today ? t({ message: "Today", context: "calendar day panel eyebrow" }) : "",
+                        dayName(selectedDay),
+                        selectedLunar ? (() => {
+                          const lunarDay = selectedLunar.day;
+                          const moonLength = selectedLunar.length;
+                          return t({ message: `day ${lunarDay} of ${moonLength}`, context: "calendar day panel: place in the moon" });
+                        })() : "",
+                      ].filter(Boolean).join(" · ")}
+                    </p>
+                    <h3 id="moon-day-h" className={`${H2} mt-1 font-normal`}>{t({ message: "What is on this day", context: "calendar day panel heading" })}</h3>
+                    {skyToday.length > 0 && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {skyToday.map((s) => `${s.title} at ${villageClock(new Date(s.startsAt), timezone)}`).join(", ")}
+                      </p>
+                    )}
+                    {dayItems.length === 0 && <p className={`${HINT} mt-3`}>{t({ message: "Nothing is on this day yet.", context: "calendar day panel: empty day" })}</p>}
+                    <ul className="space-y-3 mt-3">{dayItems.map((g) => itemCard(g, false, "muted"))}</ul>
+                  </section>
+                )}
+                <MoonTurnings moon={moon} dayFor={dayFor} onSelect={selectDay} dayName={dayName} />
+                {tuckNotes && <CalendarNotes zoneLine={zoneNote(timezone)} />}
+              </div>
+            </div>
+          )}
 
           {payload && cursor && tab === "wheel" && (
             <div>
@@ -455,7 +560,7 @@ export default function Events() {
 
           {payload && (tab === "month" || tab === "week") && selectedDay && (
             <div className="mt-5">
-              <h2 className="font-display text-xl font-semibold text-foreground flex items-center gap-2 flex-wrap">
+              <h2 className="font-display text-xl text-foreground flex items-center gap-2 flex-wrap">
                 <span>{villageDateLine({ startsAt: selectedDay.noon.toISOString(), endsAt: null, allDay: true }, timezone)}</span>
                 {selectedLunar && selectedMoonName && (
                   <span className="text-sm font-normal text-muted-foreground inline-flex items-center gap-1.5">
@@ -486,6 +591,7 @@ export default function Events() {
           {payload && <CalendarFeedCard signedIn={Boolean(authToken())} />}
         </div>
       </section>
+      </div>
     </Layout>
   );
 }
@@ -520,7 +626,6 @@ function MoonRoll({ year, anchor, timezone, monthNames, moonOneCycle, onPick }: 
                     not counting yet reads the name and the dates. */}
                 {label.title && <span className="font-semibold">{label.title}</span>}
                 {label.name && <span className="text-muted-foreground">{label.title ? ", " : ""}{label.name}</span>}
-                {label.isExample && <span className="ml-1 text-[10px] uppercase tracking-wide text-amber-800">example</span>}
               </span>
               <span className="text-xs text-muted-foreground shrink-0">{fmt(r.startsAt)} to {fmt(new Date(r.endsAt.getTime() - 60_000))}</span>
             </button>

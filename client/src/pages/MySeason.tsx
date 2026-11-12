@@ -48,6 +48,10 @@ import {
 import { AIM_MAX, applyHref, civilDayWords, PLAN_MEASURES_MAX } from "@shared/seasonPlans";
 import { questHint, type MeasureSuggestion } from "@shared/seasonPartSuggestions";
 import VoiceArea from "@/components/voice/VoiceArea";
+import CommonsPanel from "@/components/commons/CommonsPanel";
+import { useSeason } from "@/lib/gameApi";
+import { BTN_PRIMARY, BTN_SECONDARY, CARD, EYEBROW, FIELD, HINT, TILE, WORLD } from "@/components/journey/look";
+import type { SeasonGoalView } from "@shared/seasonGoalsView";
 
 export const MY_SEASON_WORDS = {
   title: "Your season",
@@ -104,6 +108,9 @@ export const MY_SEASON_WORDS = {
   changed: "You have changes that are not filed yet.",
   notFiled: "Not filed yet.",
   village: "See the village's plans",
+  commonsEyebrow: "What we tend together",
+  commonsHeading: "The commons",
+  commonsLine: "The village's goals for this season. Tick the ones your work serves below. Moss spreads into a goal when the whole village reaches it.",
 } as const;
 
 interface Measure {
@@ -111,10 +118,9 @@ interface Measure {
   target: string;
 }
 
-const inputClass =
-  "w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-base text-stone-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep";
-/** A value the page filled in and the member has not saved: dashed, so it reads as a suggestion. */
-const suggestedInputClass = inputClass.replace("border-stone-300 bg-white", "border-dashed border-amber-600 bg-amber-50");
+const inputClass = `${FIELD} min-h-11 text-base`;
+/** A value the page filled in and the member has not saved: dashed and gold, so it reads as a suggestion. */
+const suggestedInputClass = inputClass.replace("border-border bg-background", "border-dashed border-notice bg-notice/10");
 
 /** The same measure in other words of case and spacing. */
 const measureKey = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
@@ -148,37 +154,37 @@ function RoleMeasures(props: {
   const taken = new Set(measures.map((m) => measureKey(m.measure)).filter(Boolean));
   const room = measures.some((m) => !m.measure.trim()) || measures.length < PLAN_MEASURES_MAX;
   return (
-    <section aria-labelledby="ms-roles" className="mt-4 rounded-xl border border-stone-200 bg-stone-50 p-4" data-testid="role-measures">
-      <h3 id="ms-roles" className="text-sm font-semibold text-stone-900">
+    <section aria-labelledby="ms-roles" className="mt-4 rounded-xl border border-border bg-muted p-4" data-testid="role-measures">
+      <h3 id="ms-roles" className="text-sm font-semibold text-foreground">
         {MY_SEASON_WORDS.fromRoles}
       </h3>
       {!hasSeats ? (
-        <p className="mt-1 text-sm text-stone-700">
+        <p className="mt-1 text-sm text-muted-foreground">
           {MY_SEASON_WORDS.applyForMeasures}{" "}
           {applyLink && (
-            <Link href={applyLink} className="font-semibold text-teal-deep underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep">
+            <Link href={applyLink} className="font-semibold text-notice underline underline-offset-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
               {MY_SEASON_WORDS.apply}
             </Link>
           )}
         </p>
       ) : suggestions.length === 0 ? (
-        <p className="mt-1 text-sm text-stone-700">{MY_SEASON_WORDS.noRoleMeasures}</p>
+        <p className="mt-1 text-sm text-muted-foreground">{MY_SEASON_WORDS.noRoleMeasures}</p>
       ) : (
         <>
-          <p className="mt-1 text-sm text-stone-700">
-            {MY_SEASON_WORDS.fromRolesLine} <span className={room ? "" : "font-semibold text-stone-900"}>{MY_SEASON_WORDS.pickUpTo}</span>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {MY_SEASON_WORDS.fromRolesLine} <span className={room ? "" : "font-semibold text-foreground"}>{MY_SEASON_WORDS.pickUpTo}</span>
           </p>
           {bySeat(suggestions).map((g) => (
             <div key={g.seatId} className="mt-3">
-              <h4 className="text-sm font-bold text-stone-800">{g.seat}</h4>
+              <h4 className="text-sm font-bold text-foreground">{g.seat}</h4>
               <ul className="mt-1 space-y-2">
                 {g.items.map((s) => {
                   const added = taken.has(measureKey(s.measure));
                   return (
-                    <li key={`${s.from}:${s.measure}`} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-stone-200 bg-white px-3 py-2">
+                    <li key={`${s.from}:${s.measure}`} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-card px-3 py-2">
                       <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium text-stone-900">{s.measure}</p>
-                        <p className="text-xs text-stone-600">
+                        <p className="text-sm font-medium text-foreground">{s.measure}</p>
+                        <p className="text-xs text-muted-foreground">
                           {s.from === "terms" ? MY_SEASON_WORDS.fromTerms : MY_SEASON_WORDS.fromAnswersFor}
                           {s.target ? `. ${MY_SEASON_WORDS.termsTarget(s.target)}` : ""}
                         </p>
@@ -188,7 +194,7 @@ function RoleMeasures(props: {
                         onClick={() => onAdd(s)}
                         disabled={added || !room}
                         aria-label={added ? `${MY_SEASON_WORDS.added}: ${s.measure}` : MY_SEASON_WORDS.addNamed(s.measure)}
-                        className="inline-flex min-h-[44px] items-center gap-1.5 rounded-lg border border-teal-deep px-3 text-sm font-semibold text-teal-deep hover:bg-teal-deep/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep disabled:border-stone-300 disabled:text-stone-600 disabled:hover:bg-transparent"
+                        className="inline-flex min-h-[44px] items-center gap-1.5 rounded-lg border border-notice/70 px-3 text-sm font-semibold text-notice hover:bg-notice/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:border-border disabled:text-muted-foreground disabled:hover:bg-transparent"
                       >
                         {added ? MY_SEASON_WORDS.added : (
                           <>
@@ -209,8 +215,31 @@ function RoleMeasures(props: {
   );
 }
 
+/**
+ * THE COMMONS FOR THE SEASON BEING PLANNED: its goals as the drawing takes
+ * them. Only the live season knows which goals the village has reached, so a
+ * goal is marked reached only when the season planned here IS the live one;
+ * a season still to come is all seeds.
+ */
+export function commonsFor(
+  season: { id: string; goals: readonly string[] } | null,
+  live: { current: { id: string; goals: ReadonlyArray<{ text: string; done: boolean; id?: unknown }> } | null } | null,
+): SeasonGoalView[] {
+  if (!season) return [];
+  const current = live?.current && live.current.id === season.id ? live.current : null;
+  return season.goals
+    .map((text) => text.trim())
+    .filter(Boolean)
+    .map((text, i) => {
+      const same = current?.goals.find((g) => g.text.trim() === text);
+      const goalId = typeof same?.id === "string" && same.id.trim() ? same.id.trim() : null;
+      return { id: `${i}:${text}`, text, done: !!same?.done, goalId };
+    });
+}
+
 export default function MySeason() {
   const { user } = useAuth();
+  const live = useSeason();
   const modules = useModules();
   const governance = useModule("governance");
   const [renew] = useState(() => new URLSearchParams(window.location.search).get("renew") ?? "");
@@ -325,14 +354,16 @@ export default function MySeason() {
   if (!user) {
     return (
       <Layout>
-        <div className="container max-w-3xl px-4 py-8">
-          <div className="mt-6 rounded-xl border border-stone-200 bg-white p-8 text-center">
-            <h1 className="font-display text-2xl font-bold text-stone-900">{MY_SEASON_WORDS.signIn}</h1>
-            <p className="mx-auto mt-2 max-w-md leading-relaxed text-stone-600">{MY_SEASON_WORDS.signInLine}</p>
+        <div className={`${WORLD} py-8 sm:py-12`}>
+        <div className="container max-w-3xl px-4">
+          <div className={`mt-6 text-center ${CARD}`}>
+            <h1 className="font-display text-2xl text-foreground">{MY_SEASON_WORDS.signIn}</h1>
+            <p className="mx-auto mt-2 max-w-md leading-relaxed text-muted-foreground">{MY_SEASON_WORDS.signInLine}</p>
             <div className="mt-5">
               <SignInDoors next="/season-plans/mine" />
             </div>
           </div>
+        </div>
         </div>
       </Layout>
     );
@@ -340,15 +371,17 @@ export default function MySeason() {
 
   const season = data?.season ?? null;
   const w = data?.window ?? null;
+  const commonsGoals = commonsFor(season, live);
   const appsBySeat = new Map<string, MinePayload["applications"][number]>();
   for (const a of data?.applications ?? []) for (const s of a.seats) if (!appsBySeat.has(s.id)) appsBySeat.set(s.id, a);
 
   return (
     <Layout>
-      <div className="container max-w-3xl px-4 py-8">
+      <div className={`${WORLD} py-8 sm:py-12`}>
+      <div className="container max-w-3xl px-4">
         <Link
           href="/season-plans"
-          className="inline-flex min-h-[44px] items-center gap-1.5 text-sm font-medium text-stone-600 hover:text-teal-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
+          className="inline-flex min-h-11 items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-notice focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <ArrowLeft className="h-4 w-4" aria-hidden="true" />
           {MY_SEASON_WORDS.village}
@@ -360,29 +393,29 @@ export default function MySeason() {
           </div>
         )}
         {state === "error" && (
-          <p role="alert" className="mt-6 text-coral">
+          <p role="alert" className="mt-6 text-destructive">
             {error}
           </p>
         )}
 
         {state === "ready" && !season && (
-          <div className="mt-6 rounded-xl border border-stone-200 bg-white p-8 text-center">
-            <h1 className="font-display text-2xl font-bold text-stone-900">{MY_SEASON_WORDS.noSeason}</h1>
-            <p className="mx-auto mt-2 max-w-md text-stone-600">{MY_SEASON_WORDS.noSeasonLine}</p>
+          <div className={`mt-6 text-center ${CARD}`}>
+            <h1 className="font-display text-2xl text-foreground">{MY_SEASON_WORDS.noSeason}</h1>
+            <p className="mx-auto mt-2 max-w-md text-muted-foreground">{MY_SEASON_WORDS.noSeasonLine}</p>
           </div>
         )}
 
         {state === "ready" && season && data && (
           <article className="mt-3 space-y-8">
             <header>
-              <p className="text-sm font-semibold text-teal-deep">{season.name}</p>
-              <h1 className="mt-1 font-display text-3xl font-bold text-stone-900">{MY_SEASON_WORDS.title}</h1>
+              <p className={EYEBROW}>{season.name}</p>
+              <h1 className="mt-2 font-display text-4xl leading-tight text-foreground sm:text-5xl">{MY_SEASON_WORDS.title}</h1>
               {w && (
-                <p className="mt-2 text-stone-700">
+                <p className="mt-2 text-muted-foreground">
                   {w.state === "open" ? MY_SEASON_WORDS.open(w.closesOn) : w.state === "before" ? MY_SEASON_WORDS.before(w.opensOn) : MY_SEASON_WORDS.closed}
                 </p>
               )}
-              <p className="mt-1 text-sm font-medium text-stone-800" role="status">
+              <p className="mt-1 text-sm font-medium text-foreground" role="status">
                 {data.filed?.filedOn ? MY_SEASON_WORDS.filedOn(data.filed.filedOn) : MY_SEASON_WORDS.notFiled}
                 {data.changedSinceFiling ? ` ${MY_SEASON_WORDS.changed}` : ""}
               </p>
@@ -391,11 +424,11 @@ export default function MySeason() {
             <RoleCarryOn />
 
             <section aria-labelledby="ms-seats">
-              <h2 id="ms-seats" className="text-xl font-bold text-stone-900">
+              <h2 id="ms-seats" className="text-xl font-bold text-foreground">
                 {MY_SEASON_WORDS.seatsHeading}
               </h2>
               {data.heldSeats.length === 0 ? (
-                <p className="mt-2 text-stone-600">{MY_SEASON_WORDS.noSeats}</p>
+                <p className="mt-2 text-muted-foreground">{MY_SEASON_WORDS.noSeats}</p>
               ) : (
                 <ul className="mt-3 space-y-3">
                   {data.heldSeats.map((seat) => {
@@ -406,15 +439,15 @@ export default function MySeason() {
                       <li
                         key={seat.id}
                         id={`seat-${seat.id}`}
-                        className={`rounded-xl border bg-white p-4 ${lit ? "border-teal-deep ring-2 ring-teal-deep/30" : "border-stone-200"}`}
+                        className={`rounded-xl border bg-muted p-4 ${lit ? "border-notice ring-2 ring-notice/30" : "border-border"}`}
                       >
                         <div className="flex flex-wrap items-baseline justify-between gap-2">
-                          <p className="font-display text-lg font-bold text-stone-900">{seat.name}</p>
-                          {seat.termEndsOn && <p className="text-sm text-stone-600">Term until {civilDayWords(seat.termEndsOn)}</p>}
+                          <p className="font-display text-lg font-bold text-foreground">{seat.name}</p>
+                          {seat.termEndsOn && <p className="text-sm text-muted-foreground">Term until {civilDayWords(seat.termEndsOn)}</p>}
                         </div>
                         {app ? (
                           <div className="mt-2 flex flex-wrap items-center gap-2">
-                            <span className="text-sm text-stone-700">
+                            <span className="text-sm text-muted-foreground">
                               {seat.heldThrough === app.id ? MY_SEASON_WORDS.heldThrough : MY_SEASON_WORDS.carryingOn}:
                             </span>
                             <ApplicationChip app={app} />
@@ -423,7 +456,7 @@ export default function MySeason() {
                           <div className="mt-3 flex flex-wrap gap-2" role="group" aria-label={`What happens to ${seat.name}`}>
                             <Link
                               href={applyHref({ seasonId: season.id, renew: seat.id, supersedes: seat.heldThrough })}
-                              className="inline-flex min-h-[44px] items-center rounded-lg bg-teal-deep px-4 text-sm font-semibold text-white hover:bg-teal-deep-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep focus-visible:ring-offset-2"
+                              className={BTN_PRIMARY}
                             >
                               {MY_SEASON_WORDS.carryOn}
                             </Link>
@@ -431,7 +464,7 @@ export default function MySeason() {
                               type="button"
                               aria-pressed={back}
                               onClick={() => setHandingBack((list) => (list.includes(seat.id) ? list : [...list, seat.id]))}
-                              className={`inline-flex min-h-[44px] items-center rounded-lg border px-4 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep ${back ? "border-amber-500 bg-amber-50 text-amber-900" : "border-stone-400 text-stone-800 hover:bg-stone-50"}`}
+                              className={`inline-flex min-h-[44px] items-center rounded-lg border px-4 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${back ? "border-notice bg-notice/10 text-notice" : "border-border text-foreground hover:bg-muted"}`}
                             >
                               {MY_SEASON_WORDS.handBack}
                             </button>
@@ -439,13 +472,13 @@ export default function MySeason() {
                               type="button"
                               aria-pressed={!back}
                               onClick={() => setHandingBack((list) => list.filter((id) => id !== seat.id))}
-                              className={`inline-flex min-h-[44px] items-center rounded-lg border px-4 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep ${!back ? "border-stone-500 bg-stone-100 text-stone-900" : "border-stone-400 text-stone-800 hover:bg-stone-50"}`}
+                              className={`inline-flex min-h-[44px] items-center rounded-lg border px-4 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${!back ? "border-foreground/40 bg-muted text-foreground" : "border-border text-foreground hover:bg-muted"}`}
                             >
                               {MY_SEASON_WORDS.notSure}
                             </button>
                           </div>
                         )}
-                        {back && !app && <p className="mt-2 text-sm text-amber-900">{MY_SEASON_WORDS.handingBackLine}</p>}
+                        {back && !app && <p className="mt-2 text-sm text-notice">{MY_SEASON_WORDS.handingBackLine}</p>}
                       </li>
                     );
                   })}
@@ -453,20 +486,20 @@ export default function MySeason() {
               )}
             </section>
 
-            <section aria-labelledby="ms-apply" className="rounded-xl border border-stone-200 bg-stone-50 p-5">
-              <h2 id="ms-apply" className="text-lg font-bold text-stone-900">
+            <section aria-labelledby="ms-apply" className={TILE}>
+              <h2 id="ms-apply" className="text-lg font-bold text-foreground">
                 {MY_SEASON_WORDS.applyHeading}
               </h2>
               {data.mayApply === false ? (
                 // A guest is told before the wizard, never at its Review step (red team U5).
-                <p className="mt-1 text-stone-700">{MY_SEASON_WORDS.applyMembersOnly}</p>
+                <p className="mt-1 text-muted-foreground">{MY_SEASON_WORDS.applyMembersOnly}</p>
               ) : (
                 <>
-                  <p className="mt-1 text-stone-700">{MY_SEASON_WORDS.applyLine}</p>
+                  <p className="mt-1 text-muted-foreground">{MY_SEASON_WORDS.applyLine}</p>
                   <div className="mt-3 flex flex-wrap gap-2">
                     <Link
                       href={applyHref({ seasonId: season.id })}
-                      className="inline-flex min-h-[44px] items-center gap-2 rounded-lg bg-teal-deep px-4 text-sm font-semibold text-white hover:bg-teal-deep-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep focus-visible:ring-offset-2"
+                      className={BTN_PRIMARY}
                     >
                       <Plus className="h-4 w-4" aria-hidden="true" />
                       {MY_SEASON_WORDS.apply}
@@ -477,7 +510,7 @@ export default function MySeason() {
               {/* "Propose a role" waits for the role-proposal kind (PR7): the wizard has no such kind yet (red team U11). */}
               {data.applications.length > 0 && (
                 <div className="mt-4">
-                  <h3 className="text-sm font-semibold text-stone-800">{MY_SEASON_WORDS.applicationsHeading}</h3>
+                  <h3 className="text-sm font-semibold text-foreground">{MY_SEASON_WORDS.applicationsHeading}</h3>
                   <ul className="mt-2 flex flex-wrap gap-2">
                     {data.applications.map((a) => (
                       <li key={a.id}>
@@ -490,16 +523,30 @@ export default function MySeason() {
             </section>
 
             <section aria-labelledby="ms-part">
-              <h2 id="ms-part" className="text-xl font-bold text-stone-900">
+              <h2 id="ms-part" className="text-xl font-bold text-foreground">
                 {MY_SEASON_WORDS.partHeading}
               </h2>
-              <p className="mt-1 text-stone-700">{MY_SEASON_WORDS.partLine}</p>
+              <p className="mt-1 text-muted-foreground">{MY_SEASON_WORDS.partLine}</p>
+              {commonsGoals.length > 0 && (
+                <div className={`mt-4 ${CARD}`}>
+                  <CommonsPanel
+                    goals={commonsGoals}
+                    head={
+                      <>
+                        <p className={EYEBROW}>{MY_SEASON_WORDS.commonsEyebrow}</p>
+                        <h3 className="mt-2 font-display text-2xl text-card-foreground">{MY_SEASON_WORDS.commonsHeading}</h3>
+                        <p className={`mt-2 ${HINT}`}>{MY_SEASON_WORDS.commonsLine}</p>
+                      </>
+                    }
+                  />
+                </div>
+              )}
               <div className="mt-4 space-y-5">
                 <div>
-                  <label htmlFor="ms-aim" className="block text-sm font-semibold text-stone-800">
+                  <label htmlFor="ms-aim" className="block text-sm font-semibold text-foreground">
                     {MY_SEASON_WORDS.aim}
                   </label>
-                  <p id="ms-aim-help" className="text-sm text-stone-600">
+                  <p id="ms-aim-help" className="text-sm text-muted-foreground">
                     {MY_SEASON_WORDS.aimHelp}
                   </p>
                   <VoiceArea value={aim} onValue={setAim} talk={{ label: MY_SEASON_WORDS.aim, purpose: MY_SEASON_WORDS.aimHelp }}>
@@ -513,7 +560,7 @@ export default function MySeason() {
                     className={`mt-1 ${inputClass}`}
                   />
                   </VoiceArea>
-                  <p className="text-right text-xs text-stone-600">
+                  <p className="text-right text-xs text-muted-foreground">
                     {aim.length} / {AIM_MAX}
                   </p>
                 </div>
@@ -522,37 +569,37 @@ export default function MySeason() {
                 <SeasonalGoalsField rows={seasonal} onChange={setSeasonal} />
 
                 <fieldset aria-describedby={questsSuggested ? "ms-quests-hint" : undefined}>
-                  <legend className="text-sm font-semibold text-stone-800">{MY_SEASON_WORDS.quests}</legend>
+                  <legend className="text-sm font-semibold text-foreground">{MY_SEASON_WORDS.quests}</legend>
                   <div className="mt-1 grid max-w-xs grid-cols-2 gap-3">
-                    <label className="text-sm text-stone-700">
+                    <label className="text-sm text-muted-foreground">
                       {MY_SEASON_WORDS.fewest}
                       <input type="number" min={1} max={12} inputMode="numeric" value={fewest} onChange={(e) => setFewest(e.target.value)} className={`mt-1 ${questsSuggested ? suggestedInputClass : inputClass}`} />
                     </label>
-                    <label className="text-sm text-stone-700">
+                    <label className="text-sm text-muted-foreground">
                       {MY_SEASON_WORDS.most}
                       <input type="number" min={1} max={12} inputMode="numeric" value={most} onChange={(e) => setMost(e.target.value)} className={`mt-1 ${questsSuggested ? suggestedInputClass : inputClass}`} />
                     </label>
                   </div>
                   {questsSuggested && data.suggestions && (
-                    <div id="ms-quests-hint" data-testid="quests-suggested" className="mt-2 text-sm text-stone-700">
+                    <div id="ms-quests-hint" data-testid="quests-suggested" className="mt-2 text-sm text-muted-foreground">
                       <p>{questHint(data.suggestions.quests)}</p>
-                      <p className="mt-1 inline-flex items-center rounded-full border border-dashed border-amber-600 bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-900">
+                      <p className="mt-1 inline-flex items-center rounded-full border border-dashed border-notice bg-notice/10 px-2.5 py-0.5 text-xs font-semibold text-notice">
                         {MY_SEASON_WORDS.suggested}
                       </p>
                     </div>
                   )}
-                  <p className="mt-2 flex flex-wrap items-center gap-2 text-sm text-stone-700">
+                  <p className="mt-2 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
                     {MY_SEASON_WORDS.thisMoon}:{" "}
                     <QuestPips done={data.questsThisMoon.done} min={fewest ? Number(fewest) : null} max={most ? Number(most) : null} />
                   </p>
                 </fieldset>
 
                 <fieldset>
-                  <legend className="text-sm font-semibold text-stone-800">{MY_SEASON_WORDS.measures}</legend>
+                  <legend className="text-sm font-semibold text-foreground">{MY_SEASON_WORDS.measures}</legend>
                   <ul className="mt-2 space-y-3">
                     {measures.map((m, i) => (
                       <li key={i} className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
-                        <label className="text-sm text-stone-700">
+                        <label className="text-sm text-muted-foreground">
                           {MY_SEASON_WORDS.measure}
                           <input
                             type="text"
@@ -562,7 +609,7 @@ export default function MySeason() {
                             className={`mt-1 ${inputClass}`}
                           />
                         </label>
-                        <label className="text-sm text-stone-700">
+                        <label className="text-sm text-muted-foreground">
                           {MY_SEASON_WORDS.target}
                           <input
                             type="text"
@@ -576,7 +623,7 @@ export default function MySeason() {
                           type="button"
                           onClick={() => setMeasures((list) => list.filter((_, xi) => xi !== i))}
                           aria-label={MY_SEASON_WORDS.removeMeasure}
-                          className="inline-flex min-h-[44px] items-center justify-center self-end rounded-lg px-3 text-stone-600 hover:bg-stone-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
+                          className="inline-flex min-h-[44px] items-center justify-center self-end rounded-lg px-3 text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                         >
                           <Trash2 className="h-4 w-4" aria-hidden="true" />
                         </button>
@@ -587,7 +634,7 @@ export default function MySeason() {
                     <button
                       type="button"
                       onClick={() => setMeasures((list) => [...list, { measure: "", target: "" }])}
-                      className="mt-2 inline-flex min-h-[44px] items-center gap-1.5 rounded-lg px-3 text-sm font-medium text-teal-deep hover:bg-teal-deep/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
+                      className="mt-2 inline-flex min-h-[44px] items-center gap-1.5 rounded-lg px-3 text-sm font-medium text-notice hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
                       <Plus className="h-4 w-4" aria-hidden="true" />
                       {MY_SEASON_WORDS.addMeasure}
@@ -612,12 +659,12 @@ export default function MySeason() {
               </div>
             </section>
 
-            <div className="flex flex-wrap items-center gap-3 border-t border-stone-200 pt-5">
+            <div className="flex flex-wrap items-center gap-3 border-t border-border pt-5">
               <button
                 type="button"
                 disabled={busy}
                 onClick={() => void save(true)}
-                className="inline-flex min-h-[44px] items-center rounded-lg bg-teal-deep px-5 text-sm font-semibold text-white hover:bg-teal-deep-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep focus-visible:ring-offset-2 disabled:opacity-50"
+                className={BTN_PRIMARY}
               >
                 {MY_SEASON_WORDS.file}
               </button>
@@ -625,25 +672,26 @@ export default function MySeason() {
                 type="button"
                 disabled={busy}
                 onClick={() => void save(false)}
-                className="inline-flex min-h-[44px] items-center rounded-lg border border-stone-400 px-5 text-sm font-semibold text-stone-800 hover:bg-stone-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep disabled:opacity-50"
+                className={BTN_SECONDARY}
               >
                 {MY_SEASON_WORDS.save}
               </button>
               <Link
                 href="/season-plans"
-                className="ml-auto inline-flex min-h-[44px] items-center gap-1.5 text-sm font-medium text-teal-deep hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
+                className="ml-auto inline-flex min-h-[44px] items-center gap-1.5 text-sm font-medium text-notice hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <Users className="h-4 w-4" aria-hidden="true" />
                 {MY_SEASON_WORDS.village}
               </Link>
             </div>
             {said && (
-              <p role={said.ok ? "status" : "alert"} className={`text-sm font-medium ${said.ok ? "text-sage" : "text-coral"}`}>
+              <p role={said.ok ? "status" : "alert"} className={`text-sm font-medium ${said.ok ? "text-open" : "text-destructive"}`}>
                 {said.text}
               </p>
             )}
           </article>
         )}
+      </div>
       </div>
     </Layout>
   );

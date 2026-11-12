@@ -33,6 +33,12 @@
  * The section's own title heads each part, so "Last Monday's priorities" is
  * the template's words, never this file's.
  *
+ * FRIDAY'S HARVEST (Phase C). The read back draws each of Monday's priorities
+ * as a plant and answers in the garden's words: flowered, in bud, seed kept
+ * (HarvestPlant.tsx). The outcome underneath is still done, partly or carried
+ * over, so the carry to Monday and the season's count do not move. What
+ * Friday carried over reads back to Monday the same way.
+ *
  * It asks its own door every few seconds while the tab is visible, apart from
  * the room's poll, and draws nothing for a session opened without a template.
  */
@@ -42,7 +48,6 @@ import { Feather } from "lucide-react";
 import {
   MOON_ROOM_COPY,
   PRIORITY_OUTCOMES,
-  PRIORITY_OUTCOME_LABEL,
   SEASON_COPY,
   SECTION_KIND_DEFS,
   SHARE_KIND_LABEL,
@@ -61,6 +66,7 @@ import {
 import type { SessionItem } from "@shared/sessions";
 import { moonRoomPanel } from "@shared/moonRoom";
 import { gameFetch } from "@/lib/gameApi";
+import HarvestPlant, { HarvestSoil, HarvestWord } from "./HarvestPlant";
 import { useMoonReviewOn } from "./useMoonReviewOn";
 import { MoonGoalsBody, MoonInvoicesBody, MoonRecapBody, MoonShareChoice, useMoonRoom } from "./MoonSections";
 import { ServesChip, ServesPicker } from "./ServesPicker";
@@ -452,11 +458,16 @@ export default function TemplatePanel({ sessionId, agenda }: { sessionId: number
                 {readBackLine(view.review)} · {TEMPLATE_COPY.outcomeAsk}
               </p>
               {view.review.rows.length ? (
+                <>
                 <ul className="space-y-1.5">
                   {view.review.rows.map((p) => (
-                    <li key={p.id} className={`${SOFT} flex flex-wrap items-center justify-between gap-2`}>
-                      <span className="text-foreground">
-                        {p.text} <ServesChip goal={p.servesGoal} />
+                    <li key={p.id} className={`${SOFT} flex flex-wrap items-center justify-between gap-2`} data-outcome={p.outcome ?? "open"}>
+                      <span className="flex min-w-0 items-start gap-2 text-foreground">
+                        <HarvestPlant outcome={p.outcome} />
+                        <span className="min-w-0">
+                          {p.text} <ServesChip goal={p.servesGoal} />
+                          <span className="block text-xs text-muted-foreground"><HarvestWord outcome={p.outcome} /></span>
+                        </span>
                       </span>
                       <span className="flex flex-wrap gap-1" role="group" aria-label={TEMPLATE_COPY.outcomeAsk}>
                         {PRIORITY_OUTCOMES.map((o) => (
@@ -472,13 +483,15 @@ export default function TemplatePanel({ sessionId, agenda }: { sessionId: number
                             }
                             onClick={() => void write(`/priorities/${p.id}`, "PATCH", { outcome: p.outcome === o ? null : o })}
                           >
-                            {PRIORITY_OUTCOME_LABEL[o]}
+                            <HarvestWord outcome={o} />
                           </button>
                         ))}
                       </span>
                     </li>
                   ))}
                 </ul>
+                <HarvestSoil className={HINT} />
+                </>
               ) : (
                 <p className={HINT}>{TEMPLATE_COPY.reviewEmpty}</p>
               )}
@@ -496,9 +509,12 @@ export default function TemplatePanel({ sessionId, agenda }: { sessionId: number
           {view.carried?.rows.length ? (
             <ul className="space-y-1.5">
               {view.carried.rows.map((p) => (
-                <li key={p.id} className={`${SOFT} flex flex-wrap items-center justify-between gap-2`}>
-                  <span className="text-foreground">
-                    {p.text} {p.outcome && <span className={CHIP}>{PRIORITY_OUTCOME_LABEL[p.outcome]}</span>} <ServesChip goal={p.servesGoal} />
+                <li key={p.id} className={`${SOFT} flex flex-wrap items-center justify-between gap-2`} data-outcome={p.outcome ?? "open"}>
+                  <span className="flex min-w-0 items-start gap-2 text-foreground">
+                    <HarvestPlant outcome={p.outcome} />
+                    <span className="min-w-0">
+                      {p.text} {p.outcome && <span className={CHIP}><HarvestWord outcome={p.outcome} /></span>} <ServesChip goal={p.servesGoal} />
+                    </span>
                   </span>
                   {canHost && (
                     <button type="button" className={BTN_QUIET} disabled={busy} onClick={() => void write("/priorities", "POST", { fromCarried: p.id })}>

@@ -84,6 +84,17 @@ describe("season goals on /roles", () => {
     expect(within(block).getByRole("link", { name: "Explore the goals" }).getAttribute("href")).toBe("/roles/select#sel-season");
   });
 
+  it("draws the commons beside the goals: moss in the one reached, a seed in the other (Phase D)", () => {
+    seasonRef.value = season([{ id: "a", text: "Water system running" }, { id: "b", text: "First harvest shared", done: true }]);
+    renderRoles();
+    const block = screen.getByRole("region", { name: "Season of Foundations" });
+    const drawing = within(block).getByRole("img", { name: /This season's 2 goals as circles/ });
+    expect(drawing.querySelector('[data-goal="0"]')!.getAttribute("data-state")).toBe("seed");
+    expect(drawing.querySelector('[data-goal="1"]')!.getAttribute("data-state")).toBe("reached");
+    fireEvent.pointerEnter(within(block).getByText("Water system running").closest("li")!);
+    expect(drawing.querySelector('[data-goal="0"]')!.getAttribute("data-active")).toBe("true");
+  });
+
   it("changes with the season and holds no goals of its own", () => {
     seasonRef.value = season([{ text: "Seed bank open" }], "Season of Roots");
     renderRoles();

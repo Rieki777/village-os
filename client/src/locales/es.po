@@ -630,7 +630,7 @@ msgstr "Pide ayuda para redactar a {name}, nuestra asistente digital formada en 
 #: client/src/pages/GratitudeWall.tsx
 msgctxt "voice field purpose: the thank-you note on the wall"
 msgid "A short note thanking someone for what they did and what it meant to you."
-msgstr ""
+msgstr "Una nota breve para agradecer a alguien lo que hizo y lo que significó para ti."
 
 #: client/src/components/TreasurySync.tsx
 msgid "Your numbers, from every source"
@@ -4785,7 +4785,7 @@ msgstr ""
 #: client/src/pages/GratitudeWall.tsx
 msgctxt "voice field label: the thank-you note on the wall"
 msgid "Your thank you"
-msgstr ""
+msgstr "Tu agradecimiento"
 
 #: client/src/components/review/SeraDifferences.tsx
 msgctxt "sera changes"
@@ -13100,3 +13100,804 @@ msgstr ""
 #~ msgctxt "open proposal review"
 #~ msgid "1 goal for your first moon"
 #~ msgstr "1 meta para tu primera luna"
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar moon view legend"
+msgid "What the marks mean"
+msgstr "Qué significan las marcas"
+
+#: client/src/components/commons/CommonsPanel.tsx
+#: client/src/components/roleDraft/SeasonGoals.tsx
+msgctxt "the commons drawing: what a screen reader hears"
+msgid "This season's {total} goals as circles. Moss has spread into the {reached} we have reached together. Each goal not reached yet holds a seed."
+msgstr "Las {total} metas de esta temporada como círculos. El musgo ha crecido en las {reached} que hemos alcanzado juntos. Cada meta que aún no alcanzamos guarda una semilla."
+
+#: client/src/components/commons/CommonsPanel.tsx
+msgctxt "the commons: the village's own count of goals reached"
+msgid "We have reached {reached} of {total} goals so far."
+msgstr "Hasta ahora hemos alcanzado {reached} de {total} metas."
+
+#: client/src/components/commons/CommonsPanel.tsx
+msgctxt "the commons: a goal the village has reached"
+msgid "Reached"
+msgstr "Alcanzada"
+
+#: client/src/components/commons/CommonsPanel.tsx
+msgctxt "the commons: fold the list"
+msgid "Show fewer goals"
+msgstr "Mostrar menos metas"
+
+#: client/src/components/commons/CommonsPanel.tsx
+msgctxt "the commons: unfold the list"
+msgid "Show all {total} goals"
+msgstr "Mostrar las {total} metas"
+
+#: client/src/components/commons/CommonsPanel.tsx
+msgctxt "the commons: what the moss means"
+msgid "The moss shows the village's work, never one person's."
+msgstr "El musgo muestra el trabajo del pueblo, nunca el de una persona."
+
+#: client/src/components/VillagePulse.tsx
+msgctxt "landing commons eyebrow"
+msgid "What we tend together"
+msgstr "Lo que cuidamos juntos"
+
+#: client/src/components/VillagePulse.tsx
+msgctxt "landing commons heading"
+msgid "The commons"
+msgstr "Lo común"
+
+#: client/src/components/VillagePulse.tsx
+msgctxt "landing commons lede"
+msgid "This season's goals, held by the whole village. Each circle is one goal, and moss spreads into it when we reach it together."
+msgstr "Las metas de esta temporada, sostenidas por todo el pueblo. Cada círculo es una meta, y el musgo crece en ella cuando la alcanzamos juntos."
+
+#: client/src/components/VillagePulse.tsx
+msgctxt "landing commons door"
+msgid "See the roles that tend these goals"
+msgstr "Ver los roles que cuidan estas metas"
+
+#: client/src/components/commons/CommonsPanel.tsx
+msgid "{count, plural, one {# open quest grows {text}} other {# open quests grow {text}}}"
+msgstr "{count, plural, one {# misión abierta hace crecer {text}} other {# misiones abiertas hacen crecer {text}}}"
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar page: tip about moons"
+msgid "About the moons"
+msgstr "Sobre las lunas"
+
+#: client/src/components/calendar/DayStrip.tsx
+msgctxt "calendar day strip"
+msgid "The days of this moon"
+msgstr "Los días de esta luna"
+
+#: client/src/components/calendar/MoonSpiral.tsx
+msgctxt "calendar spiral: label beside today's seed"
+msgid "Today"
+msgstr "Hoy"
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar day panel eyebrow"
+msgid "Today"
+msgstr "Hoy"
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar view tab"
+msgid "Month"
+msgstr "Mes"
+
+#: client/src/components/calendar/DayStrip.tsx
+msgctxt "calendar day strip: this day is today"
+msgid "today"
+msgstr "hoy"
+
+#: client/src/components/calendar/MoonSpiral.tsx
+msgctxt "calendar spiral: label beside the full moon"
+msgid "Full moon, {date}"
+msgstr "Luna llena, {date}"
+
+#: client/src/components/calendar/MoonTurnings.tsx
+msgctxt "calendar turnings heading"
+msgid "This moon's turnings"
+msgstr "Los giros de esta luna"
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar page title"
+msgid "Village calendar"
+msgstr "Calendario de la aldea"
+
+#: client/src/components/calendar/MoonSpiral.tsx
+msgctxt "calendar spiral: a turning"
+msgid "new moon"
+msgstr "luna nueva"
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar page eyebrow"
+msgid "Calendar"
+msgstr "Calendario"
+
+#: client/src/components/calendar/MoonTurnings.tsx
+msgctxt "calendar turnings"
+msgid "New moon, the next moon opens"
+msgstr "Luna nueva, se abre la próxima luna"
+
+#: client/src/components/calendar/DayStrip.tsx
+msgctxt "calendar day strip: a turning"
+msgid "full moon"
+msgstr "luna llena"
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar view tab"
+msgid "Year"
+msgstr "Año"
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar day panel: empty day"
+msgid "Nothing is on this day yet."
+msgstr "Todavía no hay nada en este día."
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar view tab"
+msgid "Week"
+msgstr "Semana"
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar day panel heading"
+msgid "What is on this day"
+msgstr "Lo que hay este día"
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar moon view heading, a village with no moon count or names"
+msgid "This moon"
+msgstr "Esta luna"
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar day panel: place in the moon"
+msgid "day {lunarDay} of {moonLength}"
+msgstr "día {lunarDay} de {moonLength}"
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar legend"
+msgid "today"
+msgstr "hoy"
+
+#: client/src/components/calendar/MoonSpiral.tsx
+msgctxt "calendar spiral: what is on a day"
+msgid "something on the calendar"
+msgstr "algo en el calendario"
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar legend"
+msgid "days walked"
+msgstr "días andados"
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar loading"
+msgid "Opening the calendar"
+msgstr "Abriendo el calendario"
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar: step back one moon"
+msgid "The moon before"
+msgstr "La luna anterior"
+
+#: client/src/components/calendar/MoonSpiral.tsx
+msgctxt "calendar spiral: what the drawing is"
+msgid "This moon's {n} days on a golden spiral, the new moon at the centre"
+msgstr "Los {n} días de esta luna en una espiral dorada, con la luna nueva en el centro"
+
+#: client/src/components/calendar/MoonTurnings.tsx
+msgctxt "calendar turnings"
+msgid "Full moon"
+msgstr "Luna llena"
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar page lede"
+msgid "Pick a day to see what is on. The village keeps two clocks: the twelve months everyone shares, and the moons the land turns by."
+msgstr "Elige un día para ver lo que hay. La aldea lleva dos relojes: los doce meses que todos compartimos y las lunas con que gira la tierra."
+
+#: client/src/components/calendar/MoonSpiral.tsx
+msgctxt "calendar spiral: this day is today"
+msgid "today"
+msgstr "hoy"
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar view tabs"
+msgid "Calendar views"
+msgstr "Vistas del calendario"
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar: step on one moon"
+msgid "The moon after"
+msgstr "La luna siguiente"
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar moon view: keyboard hint, desktop"
+msgid "The arrow keys walk the days. Home and End go to the first and last day of the moon."
+msgstr "Las flechas recorren los días. Inicio y Fin llevan al primer y al último día de la luna."
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar legend"
+msgid "something else on"
+msgstr "algo más"
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar view tab"
+msgid "List"
+msgstr "Lista"
+
+#: client/src/components/calendar/MoonSpiral.tsx
+msgctxt "calendar spiral: label beside the first day"
+msgid "New moon, {date}"
+msgstr "Luna nueva, {date}"
+
+#: client/src/components/calendar/MoonSpiral.tsx
+msgctxt "calendar spiral: what is on a day"
+msgid "a gathering"
+msgstr "un encuentro"
+
+#: client/src/components/calendar/MoonTurnings.tsx
+msgctxt "calendar turnings"
+msgid "New moon, this moon opens"
+msgstr "Luna nueva, se abre esta luna"
+
+#: client/src/components/calendar/MoonSpiral.tsx
+msgctxt "calendar spiral: a day's place in the moon"
+msgid "day {lunarDay} of {n}"
+msgstr "día {lunarDay} de {n}"
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar moon view: the moon's window"
+msgid "{firstDay} to {lastDay}. The new moon is at the centre, and each day is a seed further out."
+msgstr "Del {firstDay} al {lastDay}. La luna nueva está en el centro, y cada día es una semilla más hacia afuera."
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar view tab"
+msgid "Moon"
+msgstr "Luna"
+
+#: client/src/components/calendar/MoonSpiral.tsx
+msgctxt "calendar spiral: a turning"
+msgid "full moon"
+msgstr "luna llena"
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar legend"
+msgid "a gathering"
+msgstr "un encuentro"
+
+#: client/src/components/calendar/DayStrip.tsx
+msgctxt "calendar day strip: what is on a day"
+msgid "a gathering"
+msgstr "un encuentro"
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar moon view eyebrow"
+msgid "This moon"
+msgstr "Esta luna"
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar: go to today"
+msgid "Today"
+msgstr "Hoy"
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar page: today's place in the moon, with the moon's name"
+msgid "Today is day {lunarDay} of {moonLength} in {said}"
+msgstr "Hoy es el día {lunarDay} de {moonLength} en {said}"
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar page: the moon's name is an example"
+msgid "(example name)"
+msgstr "(nombre de ejemplo)"
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar page: today's place in the moon"
+msgid "Today is day {lunarDay} of {moonLength}"
+msgstr "Hoy es el día {lunarDay} de {moonLength}"
+
+#: client/src/components/sessions/GatheringSeed.tsx
+msgctxt "coming up, the answer to a meeting"
+msgid "I'll be there"
+msgstr "Ahí estaré"
+
+#: client/src/components/sessions/GatheringSeed.tsx
+msgctxt "coming up, taking back i'll be there"
+msgid "I can't come after all"
+msgstr "Al final no puedo ir"
+
+#: client/src/components/sessions/GatheringSeed.tsx
+msgctxt "coming up, i'll be there"
+msgid "You said you will be there."
+msgstr "Dijiste que estarás ahí."
+
+#: client/src/components/sessions/GatheringSeed.tsx
+msgctxt "coming up, i'll be there"
+msgid "Nobody has said yet. The seed fills as we say we will come."
+msgstr "Nadie ha dicho todavía. La semilla se llena cuando decimos que vendremos."
+
+#: client/src/components/sessions/GatheringSeed.tsx
+msgctxt "coming up, i'll be there"
+msgid "That did not go through. Try again in a moment."
+msgstr "No se pudo. Inténtalo de nuevo en un momento."
+
+#: client/src/components/sessions/GatheringSeed.tsx
+msgctxt "coming up, i'll be there, the names of who said so"
+msgid "{named, plural, one {{names} said they will be there.} other {{names} said they will be there.}}"
+msgstr "{named, plural, one {{names} dijo que estará ahí.} other {{names} dijeron que estarán ahí.}}"
+
+#: client/src/components/sessions/GatheringSeed.tsx
+msgctxt "coming up, i'll be there, how many said so"
+msgid "{0, plural, one {# of us said we will be there.} other {# of us said we will be there.}}"
+msgstr "{0, plural, one {# de nosotros dijo que estará ahí.} other {# de nosotros dijimos que estaremos ahí.}}"
+
+#: client/src/components/sessions/GatheringSeed.tsx
+msgctxt "coming up, i'll be there, said once it lands"
+msgid "Thank you. The {circle} will see you there."
+msgstr "Gracias. El {circle} te verá ahí."
+
+#: client/src/components/sessions/GatheringSeed.tsx
+msgctxt "coming up, i'll be there, said once it is taken back"
+msgid "Thank you for saying. Your circle in the seed is open again."
+msgstr "Gracias por avisar. Tu círculo en la semilla vuelve a estar abierto."
+
+#: client/src/components/sessions/GatheringSeed.tsx
+msgctxt "coming up, the seed drawing"
+msgid "{filled, plural, one {Seed of Life, # of seven circles filled} other {Seed of Life, # of seven circles filled}}"
+msgstr "{filled, plural, one {Semilla de la Vida, # de siete círculos llenos} other {Semilla de la Vida, # de siete círculos llenos}}"
+
+#: client/src/components/sessions/SharedBreath.tsx
+msgctxt "live room, the gathering flower"
+msgid "{here, plural, one {# of us is here.} other {# of us are here.}}"
+msgstr "{here, plural, one {# de nosotros está aquí.} other {# de nosotros estamos aquí.}}"
+
+#: client/src/components/sessions/HarvestPlant.tsx
+msgctxt "friday harvest, a priority that was done"
+msgid "Flowered"
+msgstr "Floreció"
+
+#: client/src/components/sessions/HarvestPlant.tsx
+msgctxt "friday harvest, a priority partly done, carried to monday"
+msgid "In bud"
+msgstr "En botón"
+
+#: client/src/components/sessions/HarvestPlant.tsx
+msgctxt "friday harvest, a priority not started, carried to monday"
+msgid "Seed kept"
+msgstr "Semilla guardada"
+
+#: client/src/components/sessions/HarvestPlant.tsx
+msgctxt "friday harvest, a priority with no answer yet"
+msgid "A seed, not read back yet"
+msgstr "Una semilla, aún sin revisar"
+
+#: client/src/components/sessions/HarvestPlant.tsx
+msgctxt "friday harvest, the line under the read back"
+msgid "Nothing is marked as failed. What did not grow goes back to Monday's soil."
+msgstr "Nada se marca como fallido. Lo que no creció vuelve a la tierra del lunes."
+
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks composer: message field"
+msgid "What you saw them do"
+msgstr "Lo que viste que hizo"
+
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks composer: send in flight"
+msgid "Sending..."
+msgstr "Enviando..."
+
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks composer: allowance failed to load"
+msgid "Your allowance didn't load. Reload to see it."
+msgstr "Tu asignación no cargó. Recarga para verla."
+
+#: client/src/components/gratitude/WallEntryCard.tsx
+msgctxt "thanks thread: the two thanked each other"
+msgid "Both ways"
+msgstr "En ambos sentidos"
+
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks composer: recipient placeholder"
+msgid "Their @handle"
+msgstr "Su @usuario"
+
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks send: an unknown failure"
+msgid "Something went wrong"
+msgstr "Algo salió mal"
+
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks composer: tooltip label"
+msgid "How the allowance works"
+msgstr "Cómo funciona la asignación"
+
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks web heading"
+msgid "The web this moon"
+msgstr "La red de esta luna"
+
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks send: the request failed"
+msgid "Something went wrong. Try again."
+msgstr "Algo salió mal. Inténtalo de nuevo."
+
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks composer: allowance spent"
+msgid "You've given your whole allowance this cycle. It refills when the lunar cycle turns."
+msgstr "Ya diste toda tu asignación de este ciclo. Se renueva cuando cambia el ciclo lunar."
+
+#: client/src/components/gratitude/WallEntryCard.tsx
+msgctxt "thanks thread: who thanked whom"
+msgid "{from} thanked {to}"
+msgstr "{from} agradeció a {to}"
+
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks web: nothing this moon yet"
+msgid "No threads yet this moon. The first thanks carried draws one."
+msgstr "Aún no hay hilos esta luna. Las primeras gracias que alguien lleve dibujan uno."
+
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks composer: after the lantern arrived"
+msgid "Carry another thanks"
+msgstr "Llevar otras gracias"
+
+#: client/src/components/gratitude/WallEntryCard.tsx
+msgctxt "thanks thread: a person with no recorded name"
+msgid "A member"
+msgstr "Una persona del pueblo"
+
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks wall: signed out"
+msgid "Sign in to carry a thanks to a fellow member."
+msgstr "Inicia sesión para llevar unas gracias a otra persona del pueblo."
+
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks wall heading"
+msgid "What we saw in each other"
+msgstr "Lo que vimos en cada persona"
+
+#. placeholder {0}: currency.toLowerCase()
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks wall: what a thanks becomes"
+msgid "Every thanks here also carries <0>{0}</0> to the person it names."
+msgstr "Cada gracias aquí también lleva <0>{0}</0> a la persona que nombra."
+
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks web: how to read it"
+msgid "Faces sit in alphabetical order, and nobody sees how many threads anyone holds."
+msgstr "Las caras van en orden alfabético, y nadie ve cuántos hilos tiene otra persona."
+
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks web: how to read it, desktop"
+msgid "Hover a thanks and its thread lights. Faces sit in alphabetical order, and nobody sees how many threads anyone holds."
+msgstr "Pasa el cursor sobre unas gracias y su hilo se enciende. Las caras van en orden alfabético, y nadie ve cuántos hilos tiene otra persona."
+
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks wall: signed out door"
+msgid "Sign in"
+msgstr "Iniciar sesión"
+
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks composer heading"
+msgid "Carry a thanks"
+msgstr "Llevar unas gracias"
+
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks composer: the send button"
+msgid "Send the lantern"
+msgstr "Enviar la linterna"
+
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks composer: no allowance yet"
+msgid "Your allowance to give opens as you walk the {ladder}."
+msgstr "Tu asignación para dar se abre a medida que recorres el {ladder}."
+
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks composer: recipient field"
+msgid "Who you are thanking, by handle"
+msgstr "A quién agradeces, por su usuario"
+
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks wall: the list of threads"
+msgid "The thanks, newest first"
+msgstr "Las gracias, las más nuevas primero"
+
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks wall: the currency tooltip"
+msgid "Each cycle every member receives an allowance to send. Sending is thanks for real contributions, never pay, and the wall keeps every word."
+msgstr "Cada ciclo, cada persona recibe una asignación para enviar. Enviar es agradecer contribuciones reales, nunca un pago, y el muro guarda cada palabra."
+
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks composer: close the sheet"
+msgid "Close"
+msgstr "Cerrar"
+
+#: client/src/components/gratitude/ThreadWeb.tsx
+msgctxt "thanks web: what the drawing shows, read aloud"
+msgid "This moon's threads between people who thanked each other, faces in alphabetical order"
+msgstr "Los hilos de esta luna entre personas que se agradecieron, con las caras en orden alfabético"
+
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks composer: close after sending"
+msgid "Back to the wall"
+msgstr "Volver al muro"
+
+#: client/src/components/gratitude/Lantern.tsx
+msgctxt "lantern: a thanks arrived"
+msgid "Your lantern reached {name}"
+msgstr "Tu linterna llegó a {name}"
+
+#: client/src/components/gratitude/Lantern.tsx
+msgctxt "lantern: a thanks on its way"
+msgid "Carrying your thanks to {name}"
+msgstr "Llevando tus gracias a {name}"
+
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks wall eyebrow"
+msgid "Thanks between us"
+msgstr "Gracias entre nosotros"
+
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks wall: opens the composer on a phone"
+msgid "Carry a thanks"
+msgstr "Llevar unas gracias"
+
+#. placeholder {0}: currency.toLowerCase()
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks composer: amount field"
+msgid "Amount of {0} to send"
+msgstr "Cantidad de {0} para enviar"
+
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "lantern: after it arrived"
+msgid "It is a thread on the web now, and they see it on their profile."
+msgstr "Ahora es un hilo en la red, y lo ve en su perfil."
+
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks wall lede"
+msgid "Each thanks is a thread between two people. The wall keeps the words and never a count."
+msgstr "Cada gracias es un hilo entre dos personas. El muro guarda las palabras y nunca una cuenta."
+
+#: client/src/components/gratitude/WallEntryCard.tsx
+msgctxt "thanks thread: the vesica, read aloud"
+msgid "They thanked each other both ways"
+msgstr "Se agradecieron en ambos sentidos"
+
+#: client/src/components/gratitude/Lantern.tsx
+msgctxt "lantern: the person a thanks is going to, when no name is known"
+msgid "them"
+msgstr "esa persona"
+
+#. placeholder {0}: budget.remaining
+#. placeholder {1}: budget.total
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks composer: the allowance left this cycle"
+msgid "<0>{0}</0> of {1} left to give this cycle"
+msgstr "Te quedan <0>{0}</0> de {1} para dar este ciclo"
+
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks composer: the allowance tooltip"
+msgid "Your allowance refills when the cycle turns. Sending moves it from your allowance to the person you thank; it never costs you anything you earned."
+msgstr "Tu asignación se renueva cuando cambia el ciclo. Enviar la pasa de tu asignación a la persona que agradeces; nunca te cuesta nada de lo que ganaste."
+
+#: client/src/components/QuestCard.tsx
+msgctxt "open work card: people carrying this quest now"
+msgid "{active} hands on this"
+msgstr "{active} manos en esto"
+
+#: client/src/pages/Quests.tsx
+msgctxt "open work: clear the season goal filter"
+msgid "Show every goal"
+msgstr "Ver todas las metas"
+
+#: client/src/pages/Quests.tsx
+msgctxt "open work: the goal thread, one"
+msgid "1 open quest grows {goalName}"
+msgstr "1 misión abierta hace crecer {goalName}"
+
+#: client/src/components/openWork/statusWords.ts
+msgctxt "open work board: status mark, an open quest"
+msgid "Open: nobody carries it yet"
+msgstr "Abierta: nadie la lleva todavía"
+
+#: client/src/pages/Quests.tsx
+msgctxt "open work filter row"
+msgid "Season goal"
+msgstr "Meta de la temporada"
+
+#: client/src/components/QuestCard.tsx
+msgctxt "open work card: one person carries this quest now"
+msgid "1 hand on this"
+msgstr "1 mano en esto"
+
+#: client/src/components/openWork/QuestThreadPicker.tsx
+msgctxt "quest goal thread editor"
+msgid "This season has no goals yet. Add them in Admin, Season."
+msgstr "Esta temporada todavía no tiene metas. Agrégalas en Admin, Temporada."
+
+#: client/src/components/openWork/FitsYouCard.tsx
+msgctxt "open work: the one card chosen for the reader"
+msgid "Fits you"
+msgstr "Para ti"
+
+#: client/src/components/openWork/placeWords.ts
+msgctxt "open work: where a quest happens"
+msgid "On the land or remote"
+msgstr "En la tierra o a distancia"
+
+#: client/src/components/openWork/QuestThreadPicker.tsx
+msgctxt "quest goal thread editor: field"
+msgid "Season goal"
+msgstr "Meta de la temporada"
+
+#: client/src/pages/Quests.tsx
+msgctxt "open work filter: every place"
+msgid "Anywhere"
+msgstr "En cualquier lugar"
+
+#: client/src/components/openWork/statusWords.ts
+msgctxt "open work board: status mark, a carried quest"
+msgid "Underway: someone carries it"
+msgstr "En marcha: alguien la lleva"
+
+#: client/src/pages/Quests.tsx
+msgctxt "open work filter: all season goals"
+msgid "Every goal"
+msgstr "Todas las metas"
+
+#: client/src/pages/Quests.tsx
+msgctxt "open work board eyebrow"
+msgid "Quests"
+msgstr "Misiones"
+
+#: client/src/pages/Quests.tsx
+msgctxt "open work: the goal thread, none"
+msgid "No open quests grow {goalName} yet"
+msgstr "Todavía no hay misiones abiertas que hagan crecer {goalName}"
+
+#: client/src/pages/QuestDetail.tsx
+msgctxt "quest page: link to the board filtered to one season goal"
+msgid "See all the open work for this goal"
+msgstr "Ver todo el trabajo abierto para esta meta"
+
+#: client/src/components/openWork/statusWords.ts
+msgctxt "open work board: status mark, a quest done this moon"
+msgid "Done this moon"
+msgstr "Hecha esta luna"
+
+#: client/src/components/openWork/QuestThreadPicker.tsx
+msgctxt "quest goal thread editor: empty choice"
+msgid "Not said yet"
+msgstr "Sin decir todavía"
+
+#: client/src/pages/Quests.tsx
+msgctxt "open work filter row"
+msgid "Where it happens"
+msgstr "Dónde sucede"
+
+#: client/src/components/GameDashboard.tsx
+msgctxt "profile quests card: the door to the board"
+msgid "See the open work"
+msgstr "Ver el trabajo abierto"
+
+#: client/src/components/openWork/FitsYouCard.tsx
+msgctxt "open work: why the lead quest was chosen"
+msgid "It grows {goalText}, and that goal needs hands this season."
+msgstr "Hace crecer {goalText}, y esa meta necesita manos esta temporada."
+
+#: client/src/components/openWork/QuestThreadPicker.tsx
+msgctxt "quest goal thread editor"
+msgid "The goal this quest grows"
+msgstr "La meta que hace crecer esta misión"
+
+#: client/src/components/openWork/placeWords.ts
+msgctxt "open work: where a quest happens"
+msgid "On the land"
+msgstr "En la tierra"
+
+#: client/src/components/openWork/QuestThreadPicker.tsx
+msgctxt "quest goal thread editor: field"
+msgid "Where it happens"
+msgstr "Dónde sucede"
+
+#: client/src/components/openWork/QuestThreadPicker.tsx
+msgctxt "quest goal thread editor: button while saving"
+msgid "Saving"
+msgstr "Guardando"
+
+#: client/src/components/openWork/placeWords.ts
+msgctxt "open work: where a quest happens"
+msgid "Remote"
+msgstr "A distancia"
+
+#: client/src/components/openWork/QuestThreadPicker.tsx
+msgctxt "quest goal thread editor"
+msgid "That did not save. Try again."
+msgstr "No se guardó. Inténtalo de nuevo."
+
+#: client/src/components/openWork/FitsYouCard.tsx
+msgctxt "open work: the one act on the lead card"
+msgid "Take this on"
+msgstr "Tomar esto"
+
+#: client/src/components/openWork/FitsYouCard.tsx
+#: client/src/components/QuestCard.tsx
+#: client/src/pages/QuestDetail.tsx
+msgctxt "open work card: the season goal this quest grows"
+msgid "Grows: {goalText}"
+msgstr "Hace crecer: {goalText}"
+
+#: client/src/pages/Quests.tsx
+msgctxt "open work: the goal thread, several"
+msgid "{goalCount} open quests grow {goalName}"
+msgstr "{goalCount} misiones abiertas hacen crecer {goalName}"
+
+#: client/src/components/openWork/QuestThreadPicker.tsx
+msgctxt "quest goal thread editor: button"
+msgid "Save the thread"
+msgstr "Guardar el hilo"
+
+#: client/src/components/openWork/FitsYouCard.tsx
+msgctxt "open work: why the lead quest was chosen"
+msgid "A gentle place to begin."
+msgstr "Un lugar tranquilo para empezar."
+
+#: client/src/pages/Quests.tsx
+msgctxt "open work: the group for quests with no circle"
+msgid "Open to every circle"
+msgstr "Abierta a todos los círculos"
+
+#: client/src/components/openWork/QuestThreadPicker.tsx
+msgctxt "quest goal thread editor"
+msgid "Saved."
+msgstr "Guardado."
+
+#: client/src/components/openWork/QuestThreadPicker.tsx
+msgctxt "quest goal thread editor: empty choice"
+msgid "No goal yet"
+msgstr "Sin meta todavía"
+
+#: client/src/components/openWork/FitsYouCard.tsx
+msgctxt "open work: why the lead quest was chosen"
+msgid "It grows from your roots."
+msgstr "Crece de tus raíces."
+
+#: client/src/pages/Quests.tsx
+msgctxt "open work filters"
+msgid "Filter by season goal and place"
+msgstr "Filtrar por meta de la temporada y lugar"
+
+#: client/src/pages/Quests.tsx
+msgctxt "open work board heading"
+msgid "Open work"
+msgstr "Trabajo abierto"
+
+#: client/src/pages/Quests.tsx
+msgctxt "open work: gated quests explained once"
+msgid "Some of this work opens as you walk the {ladder} or step into a role. Each card says what opens it."
+msgstr "Parte de este trabajo se abre a medida que recorres el {ladder} o asumes un rol. Cada tarjeta dice qué lo abre."
+
+#: client/src/components/openWork/FitsYouCard.tsx
+msgctxt "open work: the lead card for a visitor"
+msgid "A good place to start"
+msgstr "Un buen lugar para empezar"
+
+#: client/src/components/CycleClock.tsx
+msgctxt "cycle clock: the clock has not answered yet"
+msgid "Reading when allowances refill"
+msgstr "Leyendo cuándo se renuevan las asignaciones"
+
+#: client/src/components/CycleClock.tsx
+msgctxt "cycle clock: the moon that turns and the day it turns"
+msgid "Allowances refill when the {month} Moon turns, on {date}."
+msgstr "Las asignaciones se renuevan cuando cambia la Luna de {month}, el {date}."
+
+#: client/src/components/CycleClock.tsx
+msgctxt "cycle clock: a village on calendar months, the day the month turns"
+msgid "Allowances refill when this calendar month turns, on {date}."
+msgstr "Las asignaciones se renuevan cuando cambia este mes del calendario, el {date}."
+
+#: client/src/components/calendar/CalendarNotes.tsx
+msgctxt "calendar page: the door to the Seasonal Festivals page"
+msgid "The turnings that shape this year are on the <0>Seasonal Festivals</0> page."
+msgstr "Los giros que dan forma a este año están en la página de <0>Festivales de temporada</0>."

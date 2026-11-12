@@ -61,7 +61,6 @@ export default function WeekView(p: WeekViewProps) {
       <StackedHeaders
         top={top}
         bottom={info && label ? `${moonHeading(label)}, day ${info.day} of ${info.length}` : "Outside the lunar table"}
-        pill={label?.isExample ? "example name" : null}
       />
       <LayerChips present={present} off={off} toggle={toggle} />
       {/* 0088: who is on the land this week, from stays. Renders nothing
@@ -81,12 +80,12 @@ export default function WeekView(p: WeekViewProps) {
               aria-pressed={selected}
               aria-label={`${WEEKDAYS[day.weekday]} ${day.day} ${MONTHS[day.month - 1]}${li ? `, ${moonDayLine(li, p.moonOneCycle)}` : ""}, ${list.length} item${list.length === 1 ? "" : "s"}`}
               className={`flex flex-col justify-start text-left rounded-lg border p-1 sm:p-2 min-h-[120px] transition-colors ${
-                selected ? "border-teal-deep bg-teal-deep/10" : "border-border bg-card hover:bg-muted/60"
+                selected ? "border-notice bg-muted" : "border-border bg-card hover:bg-muted/60"
               }`}
             >
               <div className="text-[10px] text-muted-foreground">{WEEKDAYS[day.weekday]}</div>
               <div className="flex items-center justify-between gap-1">
-                <span className={`text-base font-semibold leading-none ${isToday ? "rounded-full bg-teal-deep text-white px-1.5 py-0.5" : ""}`}>{day.day}</span>
+                <span className={`text-base font-semibold leading-none ${isToday ? "rounded-full bg-notice text-background px-1.5 py-0.5" : ""}`}>{day.day}</span>
                 {li && <MoonGlyph phase={li.phase} size={14} hemisphere={p.hemisphere} />}
               </div>
               <div className="text-[10px] text-muted-foreground mt-0.5">

@@ -1,98 +1,68 @@
-import { useEffect, useState } from "react";
-import { Activity, Heart, Sparkles, UserPlus, Sun, TrendingUp } from "lucide-react";
-
-interface PulseEvent {
-  id: string;
-  type: string;
-  text: string;
-  at: string;
-}
-
-const TYPE_ICON: Record<string, React.ComponentType<{ className?: string }>> = {
-  join: UserPlus,
-  quest: Sparkles,
-  gratitude: Heart,
-  stage: TrendingUp,
-  season: Sun,
-};
-
-function timeAgo(iso: string): string {
-  const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
-  if (s < 3600) return `${Math.max(1, Math.floor(s / 60))}m ago`;
-  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
-  return `${Math.floor(s / 86400)}d ago`;
-}
-
 /**
- * How many happenings show before "Show more". The feed itself reaches as far
- * back as Village Pulse length says (Admin, Variables, `village.pulse_max_entries`):
- * the server sends that many, and this used to cut every answer at eight, so
- * the setting changed nothing a visitor could see (audit item 28).
+ * THE COMMONS ON THE PUBLIC LANDING (Phase D, decision 2: "the public pulse
+ * becomes the commons").
+ *
+ * This used to be the Village Pulse, a feed of happenings read from
+ * `GET /api/game/pulse`: lines such as who joined or who finished a quest,
+ * shown to anybody who opened the landing page. A visitor never sees a
+ * member's name or a personal count, so the landing no longer reads that
+ * feed at all. It draws this season's goals as circles where moss spreads
+ * into each goal the village has reached, and the only number on it is the
+ * village's own: how many of the season's goals we have reached.
+ *
+ * It reads the live season (`useSeason`, the one cached read every page
+ * shares) and nothing else. No current season, or one with no goals, draws
+ * nothing, the way the pulse drew nothing when it had nothing to say.
+ *
+ * Drawn in the night world: the landing's one window onto the sheet. Phone
+ * and desktop are each laid out on purpose in CommonsPanel.
  */
-const FIRST_SCREEN = 8;
+import { Link } from "wouter";
+import { ArrowRight } from "lucide-react";
+import { useLingui } from "@lingui/react/macro";
+import { useSeason } from "@/lib/gameApi";
+import { seasonView } from "@shared/seasonGoalsView";
+import { BTN_SECONDARY, EYEBROW, HINT, LEDE } from "@/components/journey/look";
+import CommonsPanel from "@/components/commons/CommonsPanel";
 
 export default function VillagePulse() {
-  const [events, setEvents] = useState<PulseEvent[]>([]);
-  const [loaded, setLoaded] = useState(false);
-  const [all, setAll] = useState(false);
-
-  useEffect(() => {
-    let alive = true;
-    fetch("/api/game/pulse")
-      .then((r) => (r.ok ? r.json() : []))
-      .then((d) => { if (alive) { setEvents(Array.isArray(d) ? d : []); setLoaded(true); } })
-      .catch(() => { if (alive) setLoaded(true); });
-    return () => { alive = false; };
-  }, []);
-
-  if (!loaded || events.length === 0) return null;
+  const { t } = useLingui();
+  const season = useSeason();
+  const view = seasonView(season);
+  if (!view || !view.goals.length) return null;
+  const { name, dates, goals } = view;
 
   return (
-    <section className="bg-white py-16 border-t border-stone-100">
-      <div className="container max-w-2xl mx-auto px-4">
-        <div className="text-center mb-8">
-          <span className="inline-flex items-center gap-2 text-xs tracking-widest uppercase text-teal-deep font-semibold mb-2">
-            <Activity className="w-4 h-4" /> Village Pulse
-          </span>
-          <h2 className="font-display text-2xl md:text-3xl font-bold text-teal-deep">
-            The village is alive
-          </h2>
-        </div>
-        <ul className="space-y-2">
-          {(all ? events : events.slice(0, FIRST_SCREEN)).map((e) => {
-            const Icon = TYPE_ICON[e.type] ?? Sparkles;
-            return (
-              <li
-                key={e.id}
-                className="flex items-center gap-3 bg-stone-50 border border-stone-200 rounded-xl px-4 py-2.5"
-              >
-                <span className="shrink-0 w-8 h-8 rounded-full bg-teal-deep/10 text-teal-deep flex items-center justify-center">
-                  <Icon className="w-4 h-4" />
-                </span>
-                {/* min-w-0 and break-words together, and both are load-bearing.
-                    A flex child defaults to min-width:auto, so it refuses to
-                    shrink below its content's min-content width — and an event
-                    text carrying a bare URL ("tokens.base_rpc_url is now
-                    https://...") has no break opportunity, so min-content is the
-                    whole URL. On a 393px phone that pushed the document to 558px
-                    and gave the entire page a horizontal scroll. */}
-                <span className="min-w-0 flex-1 break-words text-sm text-stone-700">{e.text}</span>
-                <span className="shrink-0 text-xs text-stone-500">{timeAgo(e.at)}</span>
-              </li>
-            );
-          })}
-        </ul>
-        {!all && events.length > FIRST_SCREEN && (
-          <div className="text-center mt-4">
-            <button
-              type="button"
-              onClick={() => setAll(true)}
-              className="text-sm font-medium text-teal-deep underline underline-offset-2 hover:no-underline"
-            >
-              Show more
-            </button>
-          </div>
-        )}
+    <section aria-labelledby="commons-h" className="sheet-night relative bg-background py-14 sm:py-20" data-testid="landing-commons">
+      <div className="container mx-auto max-w-6xl px-4">
+        <CommonsPanel
+          goals={goals}
+          head={
+            <>
+              <p className={EYEBROW}>{t({ message: "What we tend together", context: "landing commons eyebrow" })}</p>
+              <h2 id="commons-h" className="mt-3 font-display text-3xl leading-tight text-foreground text-balance sm:text-4xl">
+                {t({ message: "The commons", context: "landing commons heading" })}
+              </h2>
+              {(name || dates) && (
+                <p className={`mt-2 ${HINT}`}>
+                  {[name, dates].filter(Boolean).join(". ")}
+                </p>
+              )}
+              <p className={`mt-4 ${LEDE}`}>
+                {t({
+                  message: "This season's goals, held by the whole village. Each circle is one goal, and moss spreads into it when we reach it together.",
+                  context: "landing commons lede",
+                })}
+              </p>
+            </>
+          }
+          door={
+            <Link href="/roles" className={BTN_SECONDARY}>
+              {t({ message: "See the roles that tend these goals", context: "landing commons door" })}
+              <ArrowRight className="size-4" aria-hidden="true" />
+            </Link>
+          }
+        />
       </div>
     </section>
   );

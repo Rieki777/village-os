@@ -3,8 +3,8 @@
  *
  * `/api/game/cycle/distributions` has been a public endpoint this whole time
  * and nothing rendered it. It is the largest piece of finished drama in this
- * module: closed cycles only, each with who was named, how much reached them,
- * how many distinct people named them, and what the value pool credited. The
+ * module: closed cycles only, each with who was named (by name, A to Z), how
+ * much reached them, and what the value pool credited. The
  * wall was a list of quotes; with this under it, it is a chronicle.
  *
  * ── IT SHOWS WHAT HAPPENED, NEVER WHAT MIGHT ─────────────────────────────
@@ -59,6 +59,21 @@ interface ClosedCycle {
  *  the near end; a village three years in does not want thirty-six blocks. */
 const MOONS_SHOWN = 6;
 
+/**
+ * BY NAME, NEVER BY HOW MUCH (Phase C, decision 4).
+ *
+ * This list was sorted by what each person received, largest first, which
+ * made every closed moon a leaderboard. The lead's ruling for the wall is that
+ * nothing orders people by how many thanks they have, so a moon lists its
+ * people alphabetically, and the per-person "from N people" count left with
+ * it. What each person received and what the pool released stay: they are the
+ * settlement record, and settlement itself is untouched.
+ */
+const nameOrder = new Intl.Collator(undefined, { sensitivity: "base" });
+export function byName<T extends { name: string }>(totals: readonly T[]): T[] {
+  return totals.slice().sort((a, b) => nameOrder.compare(a.name, b.name));
+}
+
 export default function MoonsPast({ currency }: { currency: string }) {
   const [cycles, setCycles] = useState<ClosedCycle[] | null>(null);
   const [moonOne, setMoonOne] = useState<number | null>(null);
@@ -105,7 +120,7 @@ export default function MoonsPast({ currency }: { currency: string }) {
 
       <div className="mt-6 space-y-4">
         {cycles.slice(0, MOONS_SHOWN).map((c) => {
-          const totals = (c.totals ?? []).slice().sort((a, b) => b.received - a.received);
+          const totals = byName(c.totals ?? []);
           const label = moonCountLabel(c.cycleNumber, moonOne) || `Moon ${c.cycleNumber}`;
           const pool = totals.find((t) => (t.credited ?? 0) > 0);
           return (
@@ -137,10 +152,6 @@ export default function MoonsPast({ currency }: { currency: string }) {
                       <span className="font-semibold text-notice">{t.name}</span>
                       <span className="text-muted-foreground">
                         {t.received} {currency.toLowerCase()}
-                      </span>
-                      <span className="text-muted-foreground">
-                        from {t.distinctSenders}{" "}
-                        {t.distinctSenders === 1 ? "person" : "people"}
                       </span>
                       {(t.credited ?? 0) > 0 && (
                         <span className="text-open">

@@ -2,11 +2,14 @@ import { authToken, gameFetch, GameMe } from "@/lib/gameApi";
 import { useTokenName } from "@/hooks/useTokenNames";
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
+import { useLingui } from "@lingui/react/macro";
 import { ArrowRight, Compass, Heart, Sparkles } from "lucide-react";
 import StageAdvanced from "@/components/StageAdvanced";
 import { claimMoment } from "@/lib/celebrated";
 import { onProfileRefresh } from "@/lib/profileRefresh";
 import { formatTokenAmount } from "@/lib/tokenAmount";
+import { claimStatus } from "@/lib/questStatus";
+import { PlantGlyph } from "@/components/openWork/StatusMark";
 
 const CLAIM_STATUS: Record<string, { label: string; cls: string }> = {
   claimed: { label: "In progress", cls: "bg-notice/10 text-notice" },
@@ -54,6 +57,7 @@ export default function GameDashboard({
   /** False where the stage panel already carries the next step, so it is never on the page twice. */
   showNextStep?: boolean;
 } = {}) {
+  const { t } = useLingui();
   const [me, setMe] = useState<GameMe | null>(null);
   const currency = useTokenName("Recognition");
   /**
@@ -285,8 +289,16 @@ export default function GameDashboard({
                     href={`/quests/${q.questId}`}
                     className="flex items-center justify-between gap-2 text-sm group"
                   >
-                    <span className="text-card-foreground truncate group-hover:text-notice transition-colors">
-                      {q.questTitle}
+                    <span className="flex min-w-0 items-center gap-2">
+                      {/* The board's status mark: a sprout in hand, a flower done this
+                          moon, nothing for an older finish (lib/questStatus.ts). */}
+                      {(() => {
+                        const plant = claimStatus(q);
+                        return plant ? <PlantGlyph state={plant} className="size-5" /> : <span className="size-5 shrink-0" aria-hidden="true" />;
+                      })()}
+                      <span className="text-card-foreground truncate group-hover:text-notice transition-colors">
+                        {q.questTitle}
+                      </span>
                     </span>
                     <span className={`shrink-0 text-xs px-2 py-0.5 rounded-full ${CLAIM_STATUS[q.status]?.cls ?? ""}`}>
                       {CLAIM_STATUS[q.status]?.label ?? q.status}
@@ -297,7 +309,7 @@ export default function GameDashboard({
             </ul>
           )}
           <Link href="/quests" className="inline-flex items-center gap-1.5 text-sm font-semibold text-foreground underline underline-offset-2 hover:text-notice transition-colors">
-            Open the Quest Board <ArrowRight className="w-4 h-4" />
+            {t({ message: "See the open work", context: "profile quests card: the door to the board" })} <ArrowRight className="w-4 h-4" />
           </Link>
         </div>
       </div>

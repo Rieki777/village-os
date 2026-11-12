@@ -10,7 +10,7 @@
  *   - A founder, aligned with the membership letter, seated as the Welcome
  *     Steward: the steward who reads proposals and decides (persona 4).
  *   - The public pages on, with the platform's own words (no village's prose).
- *   - A season with four goals and the next one empty, and "this moon" open
+ *   - A season with four goals (one reached, so the commons shows moss) and the next one empty, and "this moon" open
  *     with a public link, so the open form has something to propose for.
  *   - Three circles and four roles. The Finance Steward carries written terms,
  *     so the counter-offer has something to change. Two seats each on the
@@ -21,6 +21,7 @@
  *   - Two existing members, one per viewport, made through invitations, so the
  *     member's proposal walk (persona 3) starts from a fresh draft each time.
  */
+import { createHash } from "node:crypto";
 import mysql from "mysql2/promise";
 
 const civil = (ms) => new Date(ms).toISOString().slice(0, 10);
@@ -89,6 +90,8 @@ export async function seedVillage({ base, dbUrl, adminPassword, log = () => {} }
   await call("PUT", "/api/admin/brand", { project: { name: "Example Village", tagline: "A small village that grows food and looks after its river" }, theme: { seed: "#1d3a30" } }, F);
   await call("PUT", "/api/admin/brochure-pages", { enabled: true }, F);
   for (const m of ["governance"]) await call("PUT", `/api/admin/modules/${m}/lifecycle`, { lifecycle: "public" }, F);
+  // The moon board (Phase C, lane C2): the holder walks My moon's golden spiral and role beds.
+  await call("PUT", "/api/admin/modules/moon-review/lifecycle", { lifecycle: "members" }, F);
   const cfg = await call("GET", "/api/admin/seasons", undefined, F);
   const now = Date.now();
   await call(
@@ -102,7 +105,7 @@ export async function seedVillage({ base, dbUrl, adminPassword, log = () => {} }
           name: "Season of Roots",
           startsOn: civil(now - 60 * DAY),
           endsOn: civil(now + 60 * DAY),
-          goals: ["A thriving community", "Clean water all year", "Shared meals every week", "Clear and trusted money"].map((text) => ({ text, done: false })),
+          goals: ["A thriving community", "Clean water all year", "Shared meals every week", "Clear and trusted money"].map((text) => ({ text, done: text === "Shared meals every week" })),
         },
         { id: "season-2", name: "", startsOn: civil(now + 61 * DAY), endsOn: civil(now + 150 * DAY), goals: [] },
       ],
@@ -140,6 +143,23 @@ export async function seedVillage({ base, dbUrl, adminPassword, log = () => {} }
     for (const [i, q] of quests.entries()) {
       await db.query("UPDATE quests SET archetypes = ?, archetypes_suggested = 0 WHERE id = ?", [JSON.stringify(cycle[i % cycle.length]), q.id]);
     }
+    // Goal threads (Phase C, decision 5): which season goal each quest grows
+    // and where it happens, the document a founder writes from a quest's own
+    // page. The starter quests are examples, which that route refuses, so the
+    // seed writes it here. A goal's id is the one its words derive
+    // (server/lib/seasonGoals.ts, goalIdFor).
+    const goalId = (text) => `g${createHash("sha1").update(text.trim(), "utf8").digest("hex").slice(0, 11)}`;
+    const threadGoals = ["Clean water all year", "Shared meals every week", "A thriving community"].map(goalId);
+    const places = ["land", "both", "remote"];
+    const threads = {};
+    for (const [i, q] of quests.entries()) {
+      if (i % 4 === 3) continue; // some quests name no goal yet
+      threads[q.id] = { goalId: threadGoals[i % threadGoals.length], place: places[i % places.length] };
+    }
+    await db.query(
+      "INSERT INTO app_config (config_key, value) VALUES ('quest-threads', ?) ON DUPLICATE KEY UPDATE value = VALUES(value)",
+      [JSON.stringify({ v: 1, quests: threads })],
+    );
     await db.query("UPDATE org_roles SET archetypes = ?, archetypes_suggested = 0 WHERE id = ?", [JSON.stringify(["researching", "catalyzing", "building"]), state.roles.finance]);
     await db.query("UPDATE org_roles SET archetypes = ?, archetypes_suggested = 0 WHERE id = ?", [JSON.stringify(["building", "researching"]), state.roles.land]);
   } finally {

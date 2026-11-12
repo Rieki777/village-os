@@ -140,6 +140,13 @@ export async function neighbour(w, ctx) {
     await page.locator("main").waitFor();
   });
   await w.look("roles");
+  // Phase D: the season's goals are the commons, circles with moss for each goal reached. The seed reaches one.
+  await w.step("see the season's goals as the commons", async () => {
+    const drawing = page.getByRole("img", { name: /goals as circles|metas de esta temporada como círculos/i }).first();
+    await drawing.scrollIntoViewIfNeeded();
+    if ((await drawing.locator("[data-state=reached]").count()) !== 1) throw new Error("the commons should show one goal reached, with moss");
+    if ((await drawing.locator("[data-state=seed]").count()) !== 3) throw new Error("the commons should show three goals still seeds");
+  });
   await w.step("pick the Land Steward", async () => {
     await w.goto("/roles/select");
     const pick = page.getByRole("button", { name: /(Select|Elegir|Seleccionar) Land Steward/i }).first();
@@ -506,6 +513,25 @@ export async function holder(w, ctx) {
     await settle(page, 1500);
   });
   await w.look("profile");
+  // The moon garden (Phase C, lane C2): My moon opens on this moon as a golden
+  // spiral of days with its four chapters and one bed per role, and the board
+  // draws no ring or percent.
+  await w.step("see this moon on a spiral, with a bed for the role", async () => {
+    if (w.vp === "phone") await page.getByRole("button", { name: /^Roles$/ }).first().click();
+    const header = page.locator("[data-testid=moon-garden-header]");
+    await header.waitFor({ timeout: 15_000 });
+    await header.scrollIntoViewIfNeeded();
+    const days = await page.locator("[data-testid=moon-spiral] [data-day]").count();
+    if (days < 28 || days > 31) throw new Error(`the spiral draws ${days} days`);
+    if (!(await page.locator("[data-testid=moon-chapter]").innerText()).trim()) throw new Error("the moon board names no chapter");
+    if (!(await page.locator("[data-testid=role-bed]").count())) throw new Error("the role has no garden bed");
+    // The spiral and the beds themselves (a role card's own words may carry a percent, such as a commitment).
+    const drawn = [await header.innerText(), ...(await page.locator("[data-testid=role-bed]").allInnerTexts())].join(" ").replace(/\s+/g, " ");
+    const band = drawn.match(/Task score|Role coverage|\d+%/);
+    if (band) throw new Error(`the moon garden shows a score: "${band[0]}"`);
+    if (await page.getByText("Task score", { exact: true }).count()) throw new Error("the moon board still draws the task score rings");
+  });
+  await w.look("moon-garden", { next: page.locator("[data-testid=moon-act]").first() });
   // The prune (11 Nov 2026): a profile wears no rung and keeps no totals beside a name.
   await w.step("the profile shows no rung, no ladder count and no stat row", async () => {
     const text = (await page.locator("main").innerText()).replace(/\s+/g, " ");
@@ -548,6 +574,24 @@ export async function holder(w, ctx) {
     await sw.click();
   });
   await w.look("quests-by-roots");
+  // The open work board (Phase C, decision 5): a plain list grouped by
+  // circle, each card naming the season goal it grows with a small status
+  // mark, and a goal filter that reads back the village's count of open
+  // quests for that goal (the commons links here as /quests?goal=<id>). The
+  // starter quests are examples, which never lead and never count, so the
+  // "Fits you" card and the count are the board's own tests' to prove.
+  await w.step("filter the open work by a season goal", async () => {
+    await page.getByRole("heading", { name: "Open work" }).waitFor();
+    if (!(await page.locator("[data-circle-group]").count())) throw new Error("the open work is not grouped by circle");
+    if (!(await page.locator("article [data-status]").count())) throw new Error("the cards carry no status mark");
+    const goal = page.locator("[data-goal-filter]:not([data-goal-filter=All])").first();
+    await goal.click();
+    await page.locator("[data-goal-thread]").waitFor();
+    const cards = await page.locator("[data-circle-group] article").count();
+    const growing = await page.locator("[data-circle-group] article [data-goal]").count();
+    if (!cards || cards !== growing) throw new Error(`the goal filter shows ${cards} cards, ${growing} of them growing that goal`);
+  });
+  await w.look("open-work-goal");
   // Two training pages (the lead, 11 Nov 2026): /training chooses, and each
   // path has its own page with its own words. A holder takes the steward one
   // and marks a lesson done; the record is the server's, so it is read back.
