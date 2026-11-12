@@ -67,7 +67,26 @@ import { useReducedMotion } from "@/components/natural/useReducedMotion";
 import { gameFetch } from "@/lib/gameApi";
 import { useModuleOn } from "@/modules/ModuleProvider";
 import type { CalendarItem, LunarSummary } from "@shared/gatherings";
-import { formatMoonWindow, moonCountLabel } from "@shared/villageMoon";
+import { moonCountLabel } from "@shared/villageMoon";
+import { getFormattingLocale } from "@/i18n/i18n";
+
+/**
+ * The moon's window in the reader's language (go-live pass, M10): "9 Nov to
+ * 8 Dec 2026" in English, "9 nov – 8 dic 2026" in Spanish, from Intl's own
+ * range format. The end is the last instant inside the moon, never the next
+ * new moon itself (shared/villageMoon.ts says why).
+ */
+export function moonWindowIn(locale: string, startsAt: string, endsAt: string, timeZone?: string): string {
+  const a = new Date(startsAt).getTime();
+  const b = new Date(endsAt).getTime();
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return "";
+  try {
+    const f = new Intl.DateTimeFormat(locale, { day: "numeric", month: "short", year: "numeric", calendar: "gregory", numberingSystem: "latn", timeZone: timeZone || undefined });
+    return typeof f.formatRange === "function" ? f.formatRange(a, b - 1) : `${f.format(a)} to ${f.format(b - 1)}`;
+  } catch {
+    return "";
+  }
+}
 
 interface EventsAnswer {
   events?: CalendarItem[];
@@ -96,6 +115,7 @@ export default function MoonDock() {
   const button = useRef<HTMLButtonElement | null>(null);
   const panel = useRef<HTMLDivElement | null>(null);
   const reduced = useReducedMotion();
+
   // The dock sits on the profile and the gratitude wall, which render whatever
   // a village has switched on. Events is an optional module, and asking it when
   // it is off got a 404 on every profile load of a fresh fork. See useModuleOn
@@ -147,7 +167,8 @@ export default function MoonDock() {
   if (!lunar) return null;
 
   const count = moonCountLabel(lunar.cycleNumber, answer?.moonOneCycle ?? null);
-  const window_ = formatMoonWindow(lunar.monthStartsAt, lunar.monthEndsAt);
+  const locale = getFormattingLocale();
+  const window_ = moonWindowIn(locale, lunar.monthStartsAt, lunar.monthEndsAt, answer?.timezone);
   const upcoming = thisMoon(answer?.events ?? [], lunar);
   // The number goes first when the village has one, because that is the thing
   // a member is orienting by; the phase carries the rest.
@@ -155,7 +176,7 @@ export default function MoonDock() {
 
   const dateOf = (iso: string) => {
     try {
-      return new Intl.DateTimeFormat(undefined, {
+      return new Intl.DateTimeFormat(locale, {
         day: "numeric",
         month: "short",
         hour: "numeric",
@@ -191,13 +212,13 @@ export default function MoonDock() {
           <div className="mb-3 flex items-start justify-between gap-3">
             <div className="min-w-0">
               <p className="font-display text-lg font-bold text-card-foreground">{count || lunar.phaseName}</p>
-              {window_ && <p className="text-xs text-muted-foreground">{window_}</p>}
+              {window_ && <p className="text-sm text-muted-foreground">{window_}</p>}
             </div>
             <button
               type="button"
               onClick={close}
               aria-label="Close the moon calendar"
-              className="-mr-1 -mt-1 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-card-foreground"
+              className="-mr-2 -mt-2 inline-flex size-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-card-foreground"
             >
               <X className="h-4 w-4" aria-hidden="true" />
             </button>
@@ -218,7 +239,7 @@ export default function MoonDock() {
                   <CalendarDays className="mt-0.5 h-4 w-4 shrink-0 text-notice" aria-hidden="true" />
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium text-card-foreground">{e.title}</p>
-                    <p className="text-xs text-muted-foreground">{dateOf(e.startsAt)}</p>
+                    <p className="text-sm text-muted-foreground">{dateOf(e.startsAt)}</p>
                   </div>
                 </li>
               ))}

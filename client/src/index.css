@@ -559,13 +559,23 @@
      brand colour, which is the header's and footer's own ground, so a full
      ring there is invisible (measured: weak focus rose 63 -> 660 without
      this rule). */
-  :is(nav.bg-teal-deep, footer.bg-teal-deep, #mobile-menu, nav[aria-label="Bottom navigation"]) * {
+  :is(nav.bg-teal-deep, footer.bg-teal-deep, #mobile-menu, nav[data-mobile-tabbar]) * {
     outline-color: #fff;
   }
   /* <main> takes focus programmatically (the skip link, a route change). It is
      a landing point, not a control, so it draws no ring round the whole page. */
   main[tabindex="-1"]:focus {
     outline: none;
+  }
+  /* A visible focus ring everywhere (go-live design pass, D-27): solid, 2px,
+     standing off the control. The browser's own was a thin dotted line that
+     disappeared on the night ground. Colour comes from the rules above (the
+     ring token, white on the shell's dark surfaces); a control that draws its
+     own focus with a utility still wins, since utilities come after base. */
+  :focus-visible {
+    outline-style: solid;
+    outline-width: 2px;
+    outline-offset: 2px;
   }
   body {
     @apply bg-background text-foreground;
@@ -1021,6 +1031,9 @@ button, a, [role="button"], input, textarea, select, summary {
   --tabbar-h: calc(4rem + 1px + env(safe-area-inset-bottom, 0px));
   /* The your-turn bar's height plus a half-rem gap: line, door and padding (YourTurn.tsx). */
   --your-turn-h: 7rem;
+  /* Room at the end of a page for the shortcuts button on a phone: its 3.5rem
+     trigger plus a 1rem gap (Layout's <main>, go-live pass M4). */
+  --fab-clear: 4.5rem;
 }
 /* Tailwind's own `md` (48rem), in its own unit: the bar is `md:hidden`, and a
    rem in a media query reads the browser's default font size, so a px bound

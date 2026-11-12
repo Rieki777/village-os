@@ -101,7 +101,7 @@ describe("the homepage headline", () => {
 
     const h1 = await headline();
     expect(h1).toHaveTextContent("A valley that remembers");
-    expect(h1.querySelector(".text-amber-on-band")).toHaveTextContent("remembers");
+    expect(h1.querySelector(".text-notice")).toHaveTextContent("remembers");
   });
 
   it("never comes out blank when the Tagline is cleared", async () => {
@@ -219,7 +219,7 @@ describe("the homepage hero when the village has added no art", () => {
     // decorative, so it carries aria-hidden and no accessible name.
     renderHome();
     await headline();
-    const band = hero().querySelector(".rounded-3xl.bg-teal-band");
+    const band = hero().querySelector(".rounded-2xl.bg-background");
 
     expect(band).toBeTruthy();
     expect(band).toHaveAttribute("aria-hidden", "true");

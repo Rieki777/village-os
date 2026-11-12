@@ -23,6 +23,17 @@
     -->
     <link rel="preload" href="/api/game/config" as="fetch" crossorigin="anonymous" />
 
+    <!--
+      FIRST PAINT IS THE NIGHT GROUND (go-live pass, M11). A phone used to paint
+      a cream flash, then the night loader, then the page. The colour is the
+      sheet's night ground (--sheet-ground in index.css), on <html> only: the
+      app's own stylesheet paints <body> once it arrives, so a page in the
+      light world still draws light. theme-color tints the phone's own bar.
+      Neutral: the night ground is the platform's, not a village's.
+    -->
+    <meta name="theme-color" content="#0d1411" />
+    <style>html{background-color:#0d1411;color-scheme:dark}</style>
+
     <title>Village</title>
     <meta name="description" content="A coordination platform for a regenerative village: quests, recognition, circles, and shared stewardship." />
 

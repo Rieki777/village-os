@@ -280,12 +280,6 @@ const PAIRING_HELD = {
   // so Amora passes). Its CTA moved to bg-teal-deep; the hero passes only by
   // changing its ground, which restyles a hero, so the call is Rye's.
   "client/src/pages/Opportunities.tsx": 1,
-  // The Home hero paragraph, white/80 on the band: under 4.5 for 7 of 54
-  // seeded themes (4.03 worst; 10.21 unseeded). Full white would fix it and is
-  // one token, but here the /80 is doing design work: it dims the paragraph so
-  // "belong" and "thrive", set in full-white semibold, stand out. Changing the
-  // emphasis is a taste call on the landing page, so it waits for a word.
-  "client/src/pages/Home.tsx": 1,
 };
 
 const SOFT_GROUND = /^bg-(?:teal|ocean)(?:\/\d+)?$/;

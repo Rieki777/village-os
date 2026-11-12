@@ -45,6 +45,14 @@ export const STATEMENT = "font-display text-2xl font-bold leading-snug text-card
 /** A paragraph under a heading (StartHereCard's lines). */
 export const LEDE = "max-w-2xl text-base leading-relaxed text-muted-foreground";
 
+/**
+ * Guidance longer than one line (go-live pass, M12): what a reader needs to do
+ * or know, read at body size. HINT stays for a one-line aside under a field;
+ * anything that runs to a second line on a phone takes NOTE, so no guidance is
+ * set under 16px there.
+ */
+export const NOTE = "text-base leading-relaxed text-muted-foreground";
+
 /** Small supporting copy (QuietSection's sentence, a hint under a field). */
 export const HINT = "text-sm text-muted-foreground";
 
