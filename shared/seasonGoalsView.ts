@@ -10,6 +10,12 @@ export interface SeasonGoalView {
   id: string;
   text: string;
   done: boolean;
+  /**
+   * The goal's own id as the season stores it (0298, `g` and hex), or null for
+   * a goal that came without one. Only a real id may name the goal in a link
+   * such as `/quests?goal=<id>`; `id` above falls back to the goal's place.
+   */
+  goalId?: string | null;
 }
 
 export interface SeasonView {
@@ -43,7 +49,7 @@ export function seasonView(season: unknown, now: Date = new Date()): SeasonView 
   rawGoals.forEach((g, i) => {
     const o = g && typeof g === "object" ? (g as Record<string, unknown>) : null;
     if (!o || typeof o.text !== "string" || !o.text.trim()) return;
-    goals.push({ id: String(o.id ?? i), text: o.text.trim(), done: !!o.done });
+    goals.push({ id: String(o.id ?? i), text: o.text.trim(), done: !!o.done, goalId: typeof o.id === "string" && o.id.trim() ? o.id.trim() : null });
   });
   if (!name && !goals.length) return null;
   const start = civilDay(startsOn);

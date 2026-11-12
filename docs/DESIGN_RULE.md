@@ -15,8 +15,9 @@ the member door of `/propose`, `/love-letter`, `/application-status` and `/role-
 confidentiality and membership align cards), `/register`, `/set-password`, `/verify-email`, the onboarding path on the
 profile, `/approvals`, `/role-measures` and `/quests`, the membership align step inside the proposal form
 (`MembershipAtApplication`), `RoleCardBridge`, the signed-out card (`SignInDoors` in `ModuleGate`, whose two doors now
-take `BTN_PRIMARY` and `BTN_SECONDARY` on every page that shows them), Admin's onboarding path editor and
-`/request-membership`. A page joins by being
+take `BTN_PRIMARY` and `BTN_SECONDARY` on every page that shows them), Admin's onboarding path editor,
+`/request-membership` and `/season-plans/mine`, with the commons it draws (`components/commons`, also on the
+landing and `/roles`). A page joins by being
 added to `JOURNEY` (and `PAGES`, for a page) in the script, once it passes.
 `node scripts/check-design-rule.mjs --report` lists what the rule would flag everywhere else.
 
@@ -135,6 +136,7 @@ through `React.lazy`, and never from the app shell, so none of it reaches the fi
 | `<Vesica met>` for a threshold crossed | a lock icon flipping open | two circles meeting, each still whole |
 | `<MoonPhase date>` | a decorative moon in a fixed phase | the real sky, computed, no network |
 | `useReducedMotion` rendering the still drawing | `animation-duration: 1ms` on a bloom | the member still sees what was celebrated |
+| `<Commons goals>` (`components/commons`): moss in each goal the village reached, a seed in each one not yet | a goals progress bar, or any count beside a person | moss is the village's shared work; the only number is the village's own |
 
 ## Phone and desktop, each at its best (11 Nov 2026)
 

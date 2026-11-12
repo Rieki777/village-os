@@ -73,6 +73,7 @@ const PAGES = [
   "client/src/pages/ApplicationStatus.tsx",
   "client/src/pages/StewardJourney.tsx",
   "client/src/pages/Quests.tsx",
+  "client/src/pages/MySeason.tsx",
   "client/src/pages/RoleMeasures.tsx",
   "client/src/pages/Approvals.tsx",
   "client/src/pages/VerifyEmail.tsx",
@@ -92,6 +93,10 @@ const JOURNEY = [
   "client/src/components/journey/Leaf.tsx",
   "client/src/components/agent/ConnectorSetupPanel.tsx",
   "client/src/components/roleDraft/SeasonGoals.tsx",
+  // The commons (Phase D): the season's goals as circles with moss, on the landing, /roles and Your season.
+  "client/src/components/VillagePulse.tsx",
+  "client/src/components/commons/Commons.tsx",
+  "client/src/components/commons/CommonsPanel.tsx",
   "client/src/components/roleDraft/ArchetypeStep.tsx",
   "client/src/components/roleDraft/IkigaiDoor.tsx",
   "client/src/components/roleDraft/DiscoverStep.tsx",
