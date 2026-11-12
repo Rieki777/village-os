@@ -1,7 +1,7 @@
 /**
  * THE FOUNDING SECTIONS IN THE ROLE EDITOR (phase A, lane A3): Ideal
  * background, Qualities we're looking for, the Digital Companion and its animal, the
- * paid-role line, and How pay works as shares of the whole. Every field the
+ * paid-role line, and How rewards work as shares of the whole. Every field the
  * full card draws (client/src/components/roleCard/FullRoleCard.tsx) is written
  * here, so the full card shows exactly what the editor holds.
  *

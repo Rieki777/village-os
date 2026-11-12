@@ -2643,9 +2643,9 @@ export const VARIABLES: VariableDef[] = [
   {
     key: "org.pay_shape",
     category: "The founding team",
-    label: "How pay works, on every role card",
+    label: "How rewards work, on every role card",
     description:
-      "The shape of the pay every role card shows under \"How pay works\", as shares of the whole, never an amount: write each share's name and percent, separated by commas, like Cash 40, Equity 55, Credits 5. The shares add up to 100 or less. A role whose card writes its own shares shows those instead. Empty, cards show no pay shape.",
+      "The shape of the pay every role card shows under \"How rewards work\", as shares of the whole, never an amount: write each share's name and percent, separated by commas, like Cash 40, Equity 55, Credits 5. The shares add up to 100 or less. A role whose card writes its own shares shows those instead. Empty, cards show no pay shape.",
     type: "text",
     default: "",
   },

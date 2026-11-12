@@ -6,7 +6,7 @@
  *     drawn only once it is written, so no heading sits over blank space;
  *   - the founding sections (shared/roleCardSections.ts): "This is a paid
  *     role", Ideal background, Qualities we're looking for, Digital Companion with its
- *     animal companion, and How pay works as SHARES of the whole, never an
+ *     animal companion, and How rewards work as SHARES of the whole, never an
  *     amount or a range;
  *   - the listing details (track, goals, where, languages, how it is filled,
  *     selection criteria), through the same view model every card host reads
@@ -141,7 +141,7 @@ export default function FullRoleCard({ seat, circleName = null, register = "game
   }, [id]);
 
   const sections = answer?.sections ?? given ?? null;
-  // How pay works: the village's shape on every card, the card's own where it wrote one (lead, 11 Nov).
+  // How rewards work: the village's shape on every card, the card's own where it wrote one (lead, 11 Nov).
   const pay = cardPay(sections, answer?.villagePay ?? givenPay ?? NO_VILLAGE_PAY);
   // RANGES STAY HIDDEN whatever the role data holds: the server leaves the range out while the village
   // keeps it hidden, and the card drops it again here so an older payload can never draw one.

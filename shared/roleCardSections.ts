@@ -86,7 +86,7 @@ export const SECTION_WORDS = {
   aiSupport: "Digital Companion",
   aiCompanionLabel: "Companion",
   paid: "This is a paid role",
-  payShape: "How pay works",
+  payShape: "How rewards work",
   editorHeading: "Who we hope for, and how pay works",
   editorLede: "Shown on the full card to everyone. We're transparent about all compensation and how value in (contributions) equals value out (rewards).",
   paidToggle: "Say on the card that this is a paid role",
@@ -194,7 +194,7 @@ export function splitLine(shape: readonly PayShare[], note: string): string {
 /** The pay shape: shares with a name and a whole percent, adding to no more than 100. */
 export function readPayShape(raw: unknown): { ok: true; value: PayShare[] } | { ok: false; problem: string } {
   if (raw === null || raw === undefined) return { ok: true, value: [] };
-  if (!Array.isArray(raw)) return { ok: false, problem: SECTION_PROBLEMS.notAList("How pay works") };
+  if (!Array.isArray(raw)) return { ok: false, problem: SECTION_PROBLEMS.notAList("How rewards work") };
   if (raw.length > SECTION_LIMITS.shares) return { ok: false, problem: SECTION_PROBLEMS.tooManyShares };
   const out: PayShare[] = [];
   for (const item of raw) {
@@ -354,7 +354,7 @@ export function villagePayFrom(settings: { shape: string; atRisk: string; note: 
 }
 
 /**
- * What a card shows under "How pay works" (lead, 11 Nov evening): up to two lines and the footer.
+ * What a card shows under "How rewards work" (lead, 11 Nov evening): up to two lines and the footer.
  *
  *   ceiling   "Total compensation up to $X a month", from the card's own ceiling; absent when unset.
  *   split     "Default split: ...", from the card's shares, or the village's when the card wrote none,

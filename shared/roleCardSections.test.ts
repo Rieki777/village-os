@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cardPay, EMPTY_SECTIONS, hasSections, newerEdit, payShapeLines, readPayCeiling, readPayShape, readSections, readVillagePayShape, sectionsFromDoc, SECTION_PROBLEMS, villagePayFrom } from "./roleCardSections";
+import { cardPay, EMPTY_SECTIONS, hasSections, newerEdit, payShapeLines, readPayCeiling, readPayShape, readSections, readVillagePayShape, sectionsFromDoc, SECTION_PROBLEMS, SECTION_WORDS, villagePayFrom } from "./roleCardSections";
 
 const FULL = {
   idealBackground: ["Ideally a background in finance", "- Real estate development finance"],
@@ -137,5 +137,13 @@ describe("the two pay lines (lead, 11 Nov evening)", () => {
     ]);
     expect(readVillagePayShape("Cash forty")).toEqual([]);
     expect(readVillagePayShape("Cash 80, Equity 55")).toEqual([]);
+  });
+});
+
+describe("the rewards heading (the lead's wording, batch 158)", () => {
+  it("reads \"How rewards work\" on the card, the rail and the editor, and its problem names it the same way", () => {
+    expect(SECTION_WORDS.payShape).toBe("How rewards work");
+    const bad = readPayShape("not a list" as unknown);
+    expect(JSON.stringify(bad)).toMatch(/How rewards work/);
   });
 });
