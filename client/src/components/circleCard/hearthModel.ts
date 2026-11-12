@@ -66,9 +66,9 @@ export function adoptionOf(card: CircleCard): AdoptionOut | null {
 export const HEARTH_VIEW = 400;
 export const HEARTH_CENTRE = HEARTH_VIEW / 2;
 /** The ring the stones sit on. */
-export const STONE_RING = 112;
+export const STONE_RING = 120;
 /** Where the linked circles hang, past the stones. */
-export const THREAD_RING = 172;
+export const THREAD_RING = 178;
 /** The most stones drawn around one hearth; a larger circle's roles are all still listed in "Who holds what". */
 export const STONES_MAX = 12;
 /** The most linked circles drawn as threads. */
@@ -192,11 +192,11 @@ export function threadsOf(links: readonly LinkedCircle[], stoneCount: number, se
     const path = `M${fx(start.x)} ${fx(start.y)} Q${fx(mid.x)} ${fx(mid.y)} ${fx(end.x)} ${fx(end.y)}`;
     const fork = onRing(angle + (rnd() > 0.5 ? 9 : -9), (STONE_RING + THREAD_RING) / 2 + 14);
     const hypha = `M${fx(mid.x)} ${fx(mid.y)} L${fx(fork.x)} ${fx(fork.y)}`;
-    const dx = end.x - HEARTH_CENTRE;
-    const anchor: ThreadDrawing["anchor"] = Math.abs(dx) < 30 ? "middle" : dx > 0 ? "end" : "start";
+    // The name sits centred under (or over) its node, held inside the field so it is never cut at the edge.
     const below = end.y > HEARTH_CENTRE;
-    const label = { x: anchor === "middle" ? end.x : end.x + (dx > 0 ? 8 : -8), y: below ? end.y + 18 : end.y - 10 };
-    return { ...link, end, path, hypha, anchor: anchor === "middle" ? "middle" : dx > 0 ? "end" : "start", label: clampLabel(label) };
+    const anchor: ThreadDrawing["anchor"] = "middle";
+    const label = { x: Math.min(HEARTH_VIEW - 56, Math.max(56, end.x)), y: below ? end.y + 20 : end.y - 11 };
+    return { ...link, end, path, hypha, anchor, label: clampLabel(label) };
   });
 }
 

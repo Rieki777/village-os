@@ -166,13 +166,13 @@ function HearthPage({
         <div
           data-circle-card=""
           data-hearth-quiet-circle={quiet ? "true" : "false"}
-          className="grid gap-4 sm:gap-6 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)_minmax(0,19rem)] lg:items-start lg:gap-8"
+          className="grid gap-4 sm:gap-6 lg:grid-cols-[minmax(0,24rem)_minmax(0,1fr)_minmax(0,19rem)] lg:items-start lg:gap-8"
         >
           <div className="lg:col-start-2 lg:row-start-1">{header}</div>
 
           {/* The hearth: full-bleed on a phone, held in view on the left on a desktop. */}
           <div className="-mx-4 sm:mx-0 lg:sticky lg:top-24 lg:col-start-1 lg:row-span-2 lg:row-start-1">
-            <div className={`${CARD} rounded-none border-x-0 px-2 py-6 sm:rounded-2xl sm:border-x lg:p-6`}>
+            <div className={`${CARD} rounded-none border-x-0 px-2 py-6 sm:rounded-2xl sm:border-x lg:p-4`}>
               <Hearth circleName={card.header.name} stones={stones} threads={threads} />
               {quiet ? <QuietHearth signedIn={signedIn} /> : null}
             </div>

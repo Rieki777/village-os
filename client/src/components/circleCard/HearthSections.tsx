@@ -54,6 +54,8 @@ function whenWords(iso: string, locale: string, timeZone: string | null): string
       month: "long",
       hour: "2-digit",
       minute: "2-digit",
+      // The village speaks in the 24-hour clock ("Every Friday at 18:00"), so the meeting does too.
+      hourCycle: "h23",
       ...(timeZone ? { timeZone } : {}),
     }).format(new Date(iso));
   } catch {
@@ -188,9 +190,9 @@ export function WeTend({ tend }: { tend: { rows: TendRow[]; more: number } | nul
   };
   return (
     <section aria-labelledby="hearth-tend-h" className={CARD} data-hearth-tend="">
-      <h2 id="hearth-tend-h" className={EYEBROW}>
+      <p id="hearth-tend-h" role="heading" aria-level={2} className={EYEBROW}>
         {t({ message: `What we tend`, context: "circle hearth, what we tend" })}
-      </h2>
+      </p>
       <ul className="mt-4 grid gap-3">
         {tend.rows.map((r) => (
           <li key={r.id}>
@@ -219,7 +221,9 @@ export function WhoHolds({ roles, heading, note }: { roles: RoleRowOut[]; headin
   const { t } = useLingui();
   return (
     <section aria-label={heading} className={CARD} data-hearth-holds="" data-circle-roles="">
-      <h2 className={EYEBROW}>{t({ message: `Who holds what`, context: "circle hearth, who holds what" })}</h2>
+      <p role="heading" aria-level={2} className={EYEBROW}>
+        {t({ message: `Who holds what`, context: "circle hearth, who holds what" })}
+      </p>
       <p className={`${H2} sr-only`}>{heading}</p>
       <ul className="mt-2 divide-y divide-border">
         {roles.map((r) => (
@@ -289,9 +293,9 @@ export function WeDecided({ decisions, adoption }: { decisions: CircleDecision[]
   const consent = t({ message: `Decided by consent`, context: "circle hearth, what we decided" });
   return (
     <section aria-labelledby="hearth-decided-h" className={CARD} data-hearth-decided="">
-      <h2 id="hearth-decided-h" className={EYEBROW}>
+      <p id="hearth-decided-h" role="heading" aria-level={2} className={EYEBROW}>
         {t({ message: `What we decided`, context: "circle hearth, what we decided" })}
-      </h2>
+      </p>
       <ul className="mt-2 divide-y divide-border">
         {shown.map((d) => (
           <li key={`d-${d.entryId}`} className="flex items-start gap-3 py-3" data-decided="session">
@@ -328,9 +332,9 @@ export function LinkedCircles({ links }: { links: readonly LinkedCircle[] }) {
   if (!links.length) return null;
   return (
     <section aria-labelledby="hearth-links-h" className={CARD} data-hearth-links="">
-      <h2 id="hearth-links-h" className={EYEBROW}>
+      <p id="hearth-links-h" role="heading" aria-level={2} className={EYEBROW}>
         {t({ message: `Linked circles`, context: "circle hearth, linked circles" })}
-      </h2>
+      </p>
       <ul className="mt-3 grid gap-2">
         {links.map((l) => (
           <li key={l.id}>

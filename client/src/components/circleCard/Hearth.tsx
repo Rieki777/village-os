@@ -50,7 +50,7 @@ export default function Hearth({
   const seed = emberSeed(22);
 
   return (
-    <figure className={`relative mx-auto w-full max-w-[26rem] ${className}`.trim()} data-hearth="" data-stones={stones.length} data-threads={threads.length}>
+    <figure className={`relative mx-auto w-full max-w-md ${className}`.trim()} data-hearth="" data-stones={stones.length} data-threads={threads.length}>
       <svg viewBox={`0 0 ${HEARTH_VIEW} ${HEARTH_VIEW}`} role="img" aria-label={label} className="block h-auto w-full overflow-visible">
         <defs>
           <radialGradient id="hearth-glow" cx="50%" cy="50%" r="50%">

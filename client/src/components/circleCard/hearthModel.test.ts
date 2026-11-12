@@ -186,6 +186,10 @@ describe("the threads", () => {
     for (const t of a) {
       expect(Math.hypot(t.end.x - HEARTH_CENTRE, t.end.y - HEARTH_CENTRE)).toBeGreaterThan(STONE_RING);
       expect(t.path.startsWith("M")).toBe(true);
+      // A name is centred and held far enough inside the field that it is never cut at its edge.
+      expect(t.anchor).toBe("middle");
+      expect(t.label.x).toBeGreaterThanOrEqual(56);
+      expect(t.label.x).toBeLessThanOrEqual(400 - 56);
     }
     expect(threadsOf([], 5)).toEqual([]);
   });
