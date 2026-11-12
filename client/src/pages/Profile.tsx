@@ -31,7 +31,7 @@ import AlignedSection from "@/components/profile/AlignedSection";
 import YourRolesSection from "@/components/profile/YourRolesSection";
 import PlayerRoleCard from "@/components/playerCard/PlayerRoleCard";
 import { FirstDaysContext } from "@/components/playerCard/CardLower";
-import MyMoonMount from "@/components/myMoon/MyMoonMount";
+import MyMoonMount, { holdsReviewPower } from "@/components/myMoon/MyMoonMount";
 import RolesBand from "@/components/profileDash/RolesBand";
 import ProposeBanner from "@/components/roleProposal/ProposeBanner";
 import ProposeRolesEntry from "@/components/roleProposal/ProposeRolesEntry";
@@ -659,7 +659,7 @@ export default function Profile() {
                   <PlayerRoleCard />
                 </FirstDaysContext.Provider>
               }
-              moon={<MyMoonMount />}
+              moon={<MyMoonMount reviewer={holdsReviewPower(prog?.capabilityCatalogue)} />}
               season={!firstDays ? <SeasonPlanSection /> : null}
             />
             {config && prog ? (
