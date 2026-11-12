@@ -304,7 +304,7 @@ export function CardSideBySide({
     if (asks.length && !valueOnly && !(mine?.moves ?? []).some((m) => asks.includes(m.text))) gaps.push(t`No goal of ${roleName} picked`);
     if (!(mine?.firstMoon ?? []).length) gaps.push(t({ message: `No goal for ${roleName}`, context: "open proposal side by side" }));
   }
-  if (card.terms?.choice === "talk") gaps.push(t`They want to talk about the terms`);
+  // The terms they want to talk about have their own tile below, said once (D-08).
   if (!card.serves.length) gaps.push(t`No season goal served`);
   if (!membershipAligned) gaps.push(t`Not aligned with the membership letter`);
   if (!card.agreed.nda) gaps.push(t`The confidentiality agreement is not promised`);
@@ -312,6 +312,10 @@ export function CardSideBySide({
   const start = card.earliestStart ?? "";
   const windowList = (card.windows ?? []).join(", ");
   const termsNote = card.terms?.note ?? "";
+  const answered = TERM_KEYS.filter((k) => card.terms?.answers?.[k]).map((k) => [k, card.terms!.answers![k]!] as const);
+  const talks = answered.filter(([, a]) => a.choice === "talk");
+  const accepted = answered.filter(([, a]) => a.choice === "accept");
+  const acceptedWords = accepted.map(([k]) => TERM_LABELS[k]).join(", ");
   return (
     <div className="grid gap-4">
       {roles.map((r) => {
@@ -334,7 +338,6 @@ export function CardSideBySide({
                       <li key={a} className={m ? "text-foreground" : "text-muted-foreground"}>
                         {m ? "✓ " : "· "}
                         {a}
-                        {!m && <span className="ml-1 text-xs font-semibold">{t({ message: "(not picked)", context: "open proposal side by side" })}</span>}
                       </li>
                     );
                   })}
@@ -409,28 +412,29 @@ export function CardSideBySide({
         {card.timeZone && <p className="mt-1 text-foreground">{t({ message: `Time zone: ${tz}`, context: "open proposal side by side" })}</p>}
         {card.earliestStart && <p className="mt-1 text-foreground">{t({ message: `Earliest start: ${start}`, context: "open proposal side by side" })}</p>}
         {card.windows && card.windows.length > 0 && <p className="mt-1 text-foreground">{t({ message: `Usual times: ${windowList}`, context: "open proposal side by side" })}</p>}
-        {card.terms?.choice === "talk" ? (
-          <p className="mt-2 rounded-lg bg-muted p-2 font-semibold text-foreground" data-terms-flag="">
-            {t`Wants to talk about the terms: ${termsNote}`}
-          </p>
-        ) : card.terms?.choice === "accept" ? (
+        {/* THE TERMS, said once (D-08): one tile of what they want to talk through, each with their note,
+            then one line naming what they accept. */}
+        {talks.length > 0 || (card.terms?.choice === "talk" && !card.terms.answers) ? (
+          <div className="mt-2 rounded-lg bg-muted p-3 text-foreground" data-terms-flag="">
+            <p className="font-semibold">{t({ message: "Terms to talk through", context: "open proposal side by side" })}</p>
+            <ul className="mt-1 grid gap-1">
+              {talks.length > 0
+                ? talks.map(([k, a]) => (
+                    <li key={k} data-terms-talk={k}>
+                      <span className="font-semibold">{TERM_LABELS[k]}</span>
+                      {a.note ? `: ${a.note}` : ""}
+                    </li>
+                  ))
+                : termsNote && <li>{termsNote}</li>}
+            </ul>
+          </div>
+        ) : card.terms?.choice === "accept" && !accepted.length ? (
           <p className="mt-1 text-foreground">{t`Accepts the terms on offer.`}</p>
         ) : null}
-        {card.terms?.answers && (
-          <ul className="mt-2 grid gap-1 text-foreground" data-terms-answers="">
-            {TERM_KEYS.filter((k) => card.terms?.answers?.[k]).map((k) => {
-              const a = card.terms!.answers![k]!;
-              const label = TERM_LABELS[k];
-              return (
-                <li key={k}>
-                  <span className="font-semibold">{label}</span>
-                  {": "}
-                  {a.choice === "accept" ? t({ message: "Accepts", context: "open proposal side by side answer" }) : t({ message: "Wants to talk", context: "open proposal side by side answer" })}
-                  {a.note ? `: ${a.note}` : ""}
-                </li>
-              );
-            })}
-          </ul>
+        {accepted.length > 0 && (
+          <p className="mt-2 text-foreground" data-terms-answers="">
+            {t({ message: `Accepts: ${acceptedWords}`, context: "open proposal side by side" })}
+          </p>
         )}
         <p className="mt-2 text-foreground">
           {membershipAligned ? t`They aligned with the membership letter when they proposed.` : t`They have not aligned with the membership letter yet.`}{" "}

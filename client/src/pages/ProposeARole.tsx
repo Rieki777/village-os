@@ -60,7 +60,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "wouter";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import { doorBackOf } from "@shared/seatApplyLinks";
-import { BTN_PRIMARY, BTN_SECONDARY, CARD, EYEBROW, FIELD as LOOK_FIELD, HINT, LABEL, TILE, WORLD } from "@/components/journey/look";
+import { BTN_PRIMARY, BTN_SECONDARY, EYEBROW, FIELD as LOOK_FIELD, HINT, LABEL, TILE, WORLD } from "@/components/journey/look";
 import Layout from "@/components/Layout";
 import { Fireflies } from "@/components/journey/nature";
 import { useOptionalAuth } from "@/contexts/AuthContext";
@@ -74,7 +74,7 @@ import { judgeTermsStep, writtenKeys, type TermsWords } from "@shared/termsWords
 import { Practicalities, SeasonServes, browserTimeZone, type Practical } from "@/components/openProposal/RoleCardBridge";
 import { LAST_STONE, STONES, enterWalksOn, onStone, orderByStone, ownsKeys, stoneOfField, swipeStep } from "@/components/fireflyPath/stones";
 import { Notice, SentThreshold, prefersStill, type SentNote } from "@/components/fireflyPath/Thresholds";
-import { CompensationShape, FirstDayFacts, GOLD_RULE, KnowUsStep, OtherRole, RoleChoice, StepMark, ValueItems } from "@/components/fireflyPath/ApplySteps";
+import { ABOUT_PANES, AboutPanes, CompensationShape, EnterHint, ProblemsList, ReviewLines, RoleBeside, FirstDayFacts, GOLD_RULE, KnowUsStep, OtherRole, RewardsBeside, RoleChoice, StepMark, StepTrail, ValueItems, aboutPaneOf } from "@/components/fireflyPath/ApplySteps";
 import { draftKey, fromDraft, toDraft } from "@/components/fireflyPath/applyDraft";
 /** The link in the confirmation email lives with the other threshold; App.tsx and the tests still find it here. */
 export { ConfirmProposal } from "@/components/fireflyPath/Thresholds";
@@ -189,7 +189,7 @@ function Shell({ children, wide = false }: { children: React.ReactNode; wide?: b
   return (
     <Layout>
       <div className={`${WORLD} py-10 sm:py-16`}>
-        <div className={`container ${wide ? "max-w-6xl" : "max-w-2xl"}`}>{children}</div>
+        <div className={`container ${wide ? "max-w-7xl" : "max-w-2xl"}`}>{children}</div>
       </div>
     </Layout>
   );
@@ -249,6 +249,8 @@ export default function ProposeARole() {
   /** THE STEPS: the one you are on, and the furthest reached. */
   const [stone, setStone] = useState(0);
   const [reached, setReached] = useState(0);
+  /** About you comes in three short panes (M7): You, Your story, Who can speak for you. */
+  const [pane, setPane] = useState(0);
   /** The draft for this role has been read back (or there was none), so saving may begin. */
   const [draftFor, setDraftFor] = useState<string | null>(null);
   const [restored, setRestored] = useState(false);
@@ -408,29 +410,48 @@ export default function ProposeARole() {
   };
 
   /** Stand on a step. `keep` leaves the problems listed (a jump from the review to a field). */
-  const goTo = (i: number, opts: { keep?: boolean; target?: string | null } = {}) => {
+  const goTo = (i: number, opts: { keep?: boolean; target?: string | null; pane?: number } = {}) => {
     const s = Math.max(0, Math.min(LAST_STONE, i));
     if (!opts.keep) setProblems([]);
+    // About you opens on its first pane, and on its last when Back walks into it.
+    setPane(opts.pane ?? 0);
     setStone(s);
     setReached((r) => Math.max(r, s));
     setAimAt((a) => ({ n: (a?.n ?? 0) + 1, target: opts.target ?? null }));
   };
 
   /** A problem's own place: its step, then its field. */
-  const show = (p: FormProblem) => goTo(stoneOfField(p.field), { keep: true, target: p.target ?? "#propose-problems" });
+  const show = (p: FormProblem) => goTo(stoneOfField(p.field), { keep: true, target: p.target ?? "#propose-problems", pane: aboutPaneOf(p.field) });
 
   /** Continue: this step is judged on its own, and the application goes on only when it holds. Step 1 never holds anyone. */
   const next = () => {
     if (stone >= LAST_STONE) return;
-    const mine = onStone(findProblems(), stone);
+    const onAbout = stone === STONES.indexOf("about");
+    // On About you, Continue judges the pane you are on and walks to the next pane before the next step.
+    const mine = onStone(findProblems(), stone).filter((p) => !onAbout || aboutPaneOf(p.field) <= pane);
     if (mine.length > 0) {
       setProblems(mine);
+      if (onAbout) setPane(aboutPaneOf(mine[0].field));
       setAimAt((a) => ({ n: (a?.n ?? 0) + 1, target: mine[0].target ?? "#propose-problems" }));
+      return;
+    }
+    if (onAbout && pane < ABOUT_PANES - 1) {
+      setProblems([]);
+      setPane(pane + 1);
+      setAimAt((a) => ({ n: (a?.n ?? 0) + 1, target: null }));
       return;
     }
     goTo(stone + 1);
   };
-  const back = () => goTo(stone - 1);
+  const back = () => {
+    if (stone === STONES.indexOf("about") && pane > 0) {
+      setProblems([]);
+      setPane(pane - 1);
+      setAimAt((a) => ({ n: (a?.n ?? 0) + 1, target: null }));
+      return;
+    }
+    goTo(stone - 1, { pane: ABOUT_PANES - 1 });
+  };
 
   const send = async () => {
     if (sending || !roleId) return;
@@ -664,7 +685,12 @@ export default function ProposeARole() {
   const commitment = termsStep.commitmentPct;
   const stepNumber = stone + 1;
   const stepCount = STONES.length;
-  const nextName = labels[Math.min(stone + 1, LAST_STONE)];
+  const paneNames = [
+    t({ message: "You", context: "founding application about pane" }),
+    t({ message: "Your story", context: "founding application about pane" }),
+    t({ message: "Who can speak for you", context: "founding application about pane" }),
+  ] as const;
+  const nextName = stone === STONES.indexOf("about") && pane < ABOUT_PANES - 1 ? paneNames[pane + 1] : labels[Math.min(stone + 1, LAST_STONE)];
   const ticked = knowUs.length;
   const ways = setup.knowUs.length;
   const valueCount = filledItems.length;
@@ -706,17 +732,6 @@ export default function ProposeARole() {
     </div>
   );
   const pct = role.terms?.commitmentPct;
-  const roleBeside = (
-    <div className={`${CARD} grid gap-3`} data-role-beside="">
-      <p className={EYEBROW}>{role.circle}</p>
-      <p className="font-display text-2xl leading-tight text-card-foreground">{role.name}</p>
-      {role.aim && <p className="text-sm leading-relaxed text-muted-foreground">{role.aim}</p>}
-      {typeof pct === "number" && <p className={`${GOLD_RULE} pt-3 text-sm text-foreground`}>{t({ message: `The role asks ${pct}% of your commitment`, context: "founding application beside" })}</p>}
-      {role.alwaysChecked && <p className="text-sm text-foreground">{t({ message: "A background check happens for this role whatever the references say.", context: "open proposal role" })}</p>}
-      <p className="hidden text-xs text-muted-foreground [@media(hover:hover)]:block">{t({ message: "Enter moves on. When the cursor is not in a field, the arrow keys walk between steps.", context: "founding application keys" })}</p>
-    </div>
-  );
-
   return (
     <Shell wide>
       <header className="mb-8 max-w-3xl">
@@ -747,7 +762,11 @@ export default function ProposeARole() {
       {!form.season ? (
         <p className="text-muted-foreground">{t`The village hasn't set its next season yet, so there's nothing to propose for right now. Check back soon.`}</p>
       ) : (
-        <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start">
+        <div className="grid gap-8 lg:grid-cols-[11rem_minmax(0,1fr)_17rem] lg:items-start">
+          {/* A desk: the path stands in its own column beside the step (D-06). */}
+          <aside className="hidden lg:sticky lg:top-24 lg:block" data-step-trail-beside="">
+            <StepTrail labels={labels} now={stone} reached={reached} onGo={(i) => goTo(i)} />
+          </aside>
           <form
             ref={formRef}
             onSubmit={submit}
@@ -760,36 +779,13 @@ export default function ProposeARole() {
             data-hides-fab=""
             data-hides-tabbar-phone=""
             data-stone-now={STONES[stone]}
+            data-about-pane-now={stone === STONES.indexOf("about") ? pane : undefined}
           >
-            <div className={`mb-8 border-b border-notice/40 pb-6`}>
+            <div className="mb-8 border-b border-notice/40 pb-6 lg:hidden">
               <StepMark labels={labels} now={stone} reached={reached} onGo={(i) => goTo(i)} />
             </div>
 
-            {problems.length > 0 && (
-              <div id="propose-problems" tabIndex={-1} role="alert" className="mb-8 rounded-lg border border-border bg-muted p-4 text-sm text-foreground outline-none" data-problems="">
-                <p className="font-semibold">
-                  {stone === LAST_STONE
-                    ? problems.length === 1
-                      ? t`One thing to fix before we can send this:`
-                      : t`${problems.length} things to fix before we can send this:`
-                    : problems.length === 1
-                      ? t({ message: "One thing to look at before you continue:", context: "founding application check" })
-                      : t({ message: `${problems.length} things to look at before you continue:`, context: "founding application check" })}
-                </p>
-                <ul className="mt-2 grid gap-1">
-                  {problems.map((p, i) => {
-                    const where = labels[stoneOfField(p.field)];
-                    return (
-                      <li key={`${p.field}-${i}`}>
-                        <button type="button" onClick={() => show(p)} className="min-h-11 text-left underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-ring">
-                          {stoneOfField(p.field) !== stone ? `${where}: ${p.message}` : p.message}
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-            )}
+            <ProblemsList problems={problems} labels={labels} stone={stone} onShow={show} />
 
             {/* STEP 1: get to know us. Never locks. */}
             <section {...panel(0)}>
@@ -800,6 +796,8 @@ export default function ProposeARole() {
             {/* STEP 2: about you. Who you are, why you and why now, your work, references, and Human Design or Gene Keys. */}
             <section {...panel(1)}>
               {heading(1)}
+              <AboutPanes names={paneNames} now={pane} />
+              <div hidden={pane !== 0} data-about-pane="0" className="grid gap-8">
               <div className="grid gap-5 sm:grid-cols-2">
                 <div>
                   <label htmlFor="propose-name" className={`mb-2 block ${LABEL}`}>
@@ -831,7 +829,8 @@ export default function ProposeARole() {
                 <textarea id="propose-why" required rows={7} maxLength={OPEN_WHY_MAX} value={why} onChange={(e) => setWhy(e.target.value)} className={FIELD} {...invalid("why")} />
                 <Beside id="propose-problem-why" message={problemOn("why")} />
               </div>
-              <div className="grid scroll-mt-24 gap-6" data-about-you-section="">
+              </div>
+              <div hidden={pane !== 1} data-about-pane="1" className="grid scroll-mt-24 gap-6" data-about-you-section="">
                 <AboutYouFacts
                   value={about}
                   onChange={setAbout}
@@ -858,6 +857,8 @@ export default function ProposeARole() {
                   onFiles={setFiles}
                   invalid={error && (error.field === "links" || error.field === "files") ? { field: error.field, message: error.message } : null}
                 />
+              </div>
+              <div hidden={pane !== 2} data-about-pane="2" className="grid gap-6">
                 <ReferencesBlock value={about} onChange={setAbout} idPrefix="propose-about" alwaysChecked={role.alwaysChecked === true} invalid={problems.some((p) => p.field === "checkConsent" || p.field === "references")} />
               </div>
             </section>
@@ -915,7 +916,10 @@ export default function ProposeARole() {
                   <span className={HINT}>{t({ message: "Partial pay while you build to your full commitment. We agree the steps together.", context: "founding application terms" })}</span>
                 </span>
               </label>
-              <CompensationShape setup={setup} />
+              {/* On a desk the rewards stand in the rail beside every step (D-06). */}
+              <div className="lg:hidden">
+                <CompensationShape setup={setup} />
+              </div>
             </section>
 
             {/* STEP 5: your first day. The first cycle, the first conversations, and when you could begin. */}
@@ -930,19 +934,7 @@ export default function ProposeARole() {
             {/* STEP 6: review & submit. Everything read back, the agreements, then send. */}
             <section {...panel(5)}>
               {heading(5)}
-              <ul className="grid gap-2" data-review="">
-                {review.map(([i, line]) => (
-                  <li key={i} className="flex min-h-11 items-center justify-between gap-3 rounded-xl border border-border/60 px-4 py-3">
-                    <span className="grid min-w-0">
-                      <span className="text-xs uppercase tracking-widest text-muted-foreground">{labels[i]}</span>
-                      <span className="break-words text-sm text-foreground">{line}</span>
-                    </span>
-                    <button type="button" onClick={() => goTo(i)} className="min-h-11 shrink-0 px-2 text-sm font-medium text-notice underline underline-offset-2 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring">
-                      {t({ message: "Change", context: "open proposal review" })}
-                    </button>
-                  </li>
-                ))}
-              </ul>
+              <ReviewLines review={review} labels={labels} onChange={(i) => goTo(i)} />
               <div data-agreements="" className="scroll-mt-24">
                 <SeasonServes goals={form.goals} serves={{}} onServes={() => {}} showGoals={false} agreed={agreed} onAgreed={setAgreed} membership={<MembershipAtApplication signedIn={!!me} choice={membership} onChoice={setMembership} refreshKey={letterRead} />} />
                 <Beside id="propose-problem-agreed" message={problemOn("agreed") ?? problemOn("membership")} />
@@ -963,15 +955,17 @@ export default function ProposeARole() {
             {/*
               THE ONE PRIMARY ACT, within thumb reach. On a phone the tab bar steps out (M2,
               data-hides-tabbar-phone on the form) and this bar rides above the keyboard
-              (--stone-kb, visualViewport). On a desk it rests at the card's foot.
+              (--stone-kb, visualViewport). On a desk (lg) it is not sticky at all: it rests at the
+              card's foot behind a rule, with Enter named beside Continue (D-06).
             */}
             <div style={{ "--stone-kb": `${keyboard}px` } as React.CSSProperties} data-keyboard={keyboard > 0 ? "open" : undefined}
-              className="sticky bottom-[calc(var(--stone-kb,0px)+env(safe-area-inset-bottom,0px)+0.5rem)] z-20 -mx-5 mt-10 flex items-center justify-between gap-3 rounded-2xl border border-border bg-card/95 px-4 py-3 shadow-sm backdrop-blur sm:-mx-10 sm:px-8" data-stone-bar="">
+              className="sticky bottom-[calc(var(--stone-kb,0px)+env(safe-area-inset-bottom,0px)+0.5rem)] z-20 -mx-5 mt-10 flex items-center justify-between gap-3 rounded-2xl border border-border bg-card/95 px-4 py-3 shadow-sm backdrop-blur sm:-mx-10 sm:px-8 lg:static lg:mx-0 lg:rounded-none lg:border-x-0 lg:border-b-0 lg:bg-transparent lg:px-0 lg:pb-0 lg:pt-6 lg:shadow-none lg:backdrop-blur-none" data-stone-bar="">
               <button type="button" onClick={back} disabled={stone === 0} className={`${BTN_SECONDARY} disabled:invisible`} data-stone-back="">
                 <ArrowLeft className="size-4" aria-hidden="true" />
                 {/* On a phone the arrow says it, so Continue has the width; a screen reader still hears "Back". */}
                 <span className="max-sm:sr-only">{t({ message: "Back", context: "open proposal stones" })}</span>
               </button>
+              {stone < LAST_STONE && <EnterHint />}
               {stone < LAST_STONE ? (
                 <Fireflies key={`next-${stone}`} className="min-w-0 flex-1 justify-end sm:flex-none">
                   <button type="button" onClick={next} className={`${BUTTON} w-full sm:w-auto`} data-stone-next="">
@@ -991,7 +985,10 @@ export default function ProposeARole() {
           </form>
 
           {/* A desk has the width: the role stays beside the step. */}
-          <aside className="hidden lg:sticky lg:top-24 lg:grid lg:gap-4">{roleBeside}</aside>
+          <aside className="hidden lg:sticky lg:top-24 lg:grid lg:gap-4">
+            <RoleBeside role={role} pct={pct} />
+            <RewardsBeside setup={setup} />
+          </aside>
         </div>
       )}
     </Shell>

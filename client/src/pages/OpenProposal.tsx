@@ -56,7 +56,7 @@ import { gameFetch } from "@/lib/gameApi";
 import { DECIDE_WORDS, DOOR, type DoorReason } from "@shared/openProposalDecide";
 import { CONSENT_WORDS, type ConsentAnswer } from "@shared/roleProposalConsent";
 import { civilDayWords } from "@shared/seasonPlans";
-import { WORLD } from "@/components/journey/look";
+import { BTN_PRIMARY, BTN_SECONDARY, WORLD } from "@/components/journey/look";
 
 /** One proposal as the page reads it (`GET /api/governance/open-proposals/:id`). */
 export interface ServedOpenProposal {
@@ -180,8 +180,8 @@ async function ask<T>(path: string, method: "GET" | "POST" = "GET", body?: unkno
   }
 }
 
-const PRIMARY =
-  "inline-flex min-h-[44px] items-center gap-2 rounded-lg bg-teal-deep px-5 text-sm font-semibold text-white hover:bg-teal-deep-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50";
+/** The decider's one main act is gold, as on every page in the profile's look (D-08). */
+const PRIMARY = BTN_PRIMARY;
 const SECONDARY =
   "inline-flex min-h-[44px] items-center gap-2 rounded-lg border border-border px-5 text-sm font-semibold text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50";
 
@@ -290,7 +290,10 @@ export default function OpenProposal() {
   // Adopt waits on open talks not yet acknowledged, conversations still open, or a full role not chosen on purpose.
   const adoptWaits = !!p && ((!!p.offer?.openTalks.length && !knowsOpenTalks && !p.agent) || !!p.beforeAdopt?.conversations.length || (!!p.beforeAdopt?.seatsFull.length && !forASeat));
   // On a wide screen the decision sits in a panel beside the proposal, held in view while the steward reads (lead, 11 Nov 2026).
-  const side = state === "ready" && !!p && (p.status === "confirmed" || (p.status === "adopted" && !!p.invitation) || !!said);
+  // After the decision the two columns stay (D-08): the panel then says what was decided.
+  const side = state === "ready" && !!p && (p.status === "confirmed" || p.status === "adopted" || p.status === "declined" || !!said);
+  /** A founding application: our review comes before the conversations, and it applies for one role (Phase A). */
+  const founding = !!p && (!!p.review || !!p.founding);
 
   return (
     <Layout><div className={WORLD}>
@@ -315,11 +318,15 @@ export default function OpenProposal() {
               <h1 className="mt-1 font-display text-3xl font-bold text-foreground">
                 {p.agent
                   ? <AgentHeading name={p.agent.name} roles={p.roles.map((r) => r.name ?? DECIDE_WORDS.roleGone).join(", ")} />
-                  : DECIDE_WORDS.heading(p.proposer, p.roles.map((r) => r.name ?? DECIDE_WORDS.roleGone), !!p.term)}
+                  : founding
+                    ? DECIDE_WORDS.applies(p.proposer, p.roles.map((r) => r.name ?? DECIDE_WORDS.roleGone))
+                    : DECIDE_WORDS.heading(p.proposer, p.roles.map((r) => r.name ?? DECIDE_WORDS.roleGone), !!p.term)}
               </h1>
               <p className="mt-2 leading-relaxed text-muted-foreground">
                 {p.agent ? (
                   t({ message: "An agent, proposed by the member who keeps it. Adopted, it is seated on these roles at once, marked as an agent, with its keeper beside it.", context: "open proposal: an agent's proposal" })
+                ) : founding ? (
+                  DECIDE_WORDS.appliedFromOutside
                 ) : p.term ? (
                   DECIDE_WORDS.fromOutsideMoon(civilDayWords(p.term.startsOn), civilDayWords(p.term.endsOn))
                 ) : (
@@ -558,6 +565,15 @@ export default function OpenProposal() {
               </section>
             )}
 
+            {(p.status === "declined" || (p.status === "adopted" && !p.invitation)) && (
+              <section aria-labelledby="op-outcome" className="rounded-xl border border-border bg-card p-5" data-decision-outcome={p.status}>
+                <h2 id="op-outcome" className="text-lg font-bold text-foreground">
+                  {DECIDE_WORDS.deciderHeading}
+                </h2>
+                <p className="mt-1 text-foreground">{p.statusWords}</p>
+              </section>
+            )}
+
             {p.status === "adopted" && p.invitation && (
               <section aria-labelledby="op-invitation" className="rounded-xl border border-border bg-card p-5" data-invitation={p.invitation.state}>
                 <h2 id="op-invitation" className="text-lg font-bold text-foreground">
@@ -669,11 +685,11 @@ function OurReview({ review, note, onNote, busy, asking, onAsk, onInvite, onNotI
       </div>
       {!asking ? (
         <div className="flex flex-wrap gap-2">
-          <button type="button" disabled={busy} onClick={onInvite} className={PRIMARY} data-review-invite="">
+          <button type="button" disabled={busy} onClick={onInvite} className={BTN_PRIMARY} data-review-invite="">
             <Mail className="h-4 w-4" aria-hidden="true" />
             {DECIDE_WORDS.review.invite}
           </button>
-          <button type="button" disabled={busy} onClick={() => onAsk(true)} className={SECONDARY} data-review-not-invite="">
+          <button type="button" disabled={busy} onClick={() => onAsk(true)} className={BTN_SECONDARY} data-review-not-invite="">
             {DECIDE_WORDS.review.notInvite}
           </button>
         </div>
