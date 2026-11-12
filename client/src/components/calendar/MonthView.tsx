@@ -153,7 +153,6 @@ export default function MonthView(p: MonthViewProps) {
         <StackedHeaders
           top={moonHeading(label)}
           bottom={span}
-          pill={label.isExample ? "example name" : null}
         />
         <div className="flex items-start justify-between gap-2">
           <LayerChips present={present} off={off} toggle={toggle} />
@@ -179,7 +178,6 @@ export default function MonthView(p: MonthViewProps) {
         bottom={cursorLunar && label
           ? `${moonHeading(label)}, day ${cursorLunar.day} of ${cursorLunar.length}`
           : "Outside the lunar table"}
-        pill={label?.isExample ? "example name" : null}
       />
       <div className="flex items-start justify-between gap-2">
         <LayerChips present={present} off={off} toggle={toggle} />

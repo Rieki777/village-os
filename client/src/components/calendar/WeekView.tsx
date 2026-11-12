@@ -61,7 +61,6 @@ export default function WeekView(p: WeekViewProps) {
       <StackedHeaders
         top={top}
         bottom={info && label ? `${moonHeading(label)}, day ${info.day} of ${info.length}` : "Outside the lunar table"}
-        pill={label?.isExample ? "example name" : null}
       />
       <LayerChips present={present} off={off} toggle={toggle} />
       {/* 0088: who is on the land this week, from stays. Renders nothing

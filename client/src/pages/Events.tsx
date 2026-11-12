@@ -402,7 +402,6 @@ export default function Events() {
                     ? t({ message: `Today is day ${lunarDay} of ${moonLength} in ${said}`, context: "calendar page: today's place in the moon, with the moon's name" })
                     : t({ message: `Today is day ${lunarDay} of ${moonLength}`, context: "calendar page: today's place in the moon" });
                 })()}
-                {lunar.name && lunar.isExampleName ? ` ${t({ message: "(example name)", context: "calendar page: the moon's name is an example" })}` : ""}
               </span>
             </p>
           )}
@@ -627,7 +626,6 @@ function MoonRoll({ year, anchor, timezone, monthNames, moonOneCycle, onPick }: 
                     not counting yet reads the name and the dates. */}
                 {label.title && <span className="font-semibold">{label.title}</span>}
                 {label.name && <span className="text-muted-foreground">{label.title ? ", " : ""}{label.name}</span>}
-                {label.isExample && <span className="ml-1 text-xs uppercase tracking-widest text-notice">example</span>}
               </span>
               <span className="text-xs text-muted-foreground shrink-0">{fmt(r.startsAt)} to {fmt(new Date(r.endsAt.getTime() - 60_000))}</span>
             </button>
