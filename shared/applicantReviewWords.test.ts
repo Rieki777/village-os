@@ -81,15 +81,17 @@ describe("the letters", () => {
     expect(es.text).toContain("1. A, 60 minutos");
   });
 
-  it("the not-invited letter thanks, says it is not personal, and points only where the village has a door", () => {
+  it("the not-invited letter thanks the person in two plain sentences, and points only where the village has a door", () => {
     const l = notInvitedLetter({ firstName: "Rowan", village: "V", roleNames: ["Lead Role"], site: "https://v.test/", stayClose: { program: { name: "Seeders", href: "/resident" }, quests: true, events: false }, lang: "en" });
-    expect(l.text).toContain("it is not personal");
+    // The lead's words (12 Nov 2026): no paragraph explaining that it is not personal.
+    expect(l.text).toContain("We have found someone more closely matched to this role. Thank you for your time and interest.");
+    expect(l.text).not.toContain("not personal");
     expect(l.text).toContain("Seeders: https://v.test/resident");
     expect(l.text).toContain("Take a quest: https://v.test/quests");
     expect(l.text).not.toContain("/events");
     const bare = notInvitedLetter({ firstName: null, village: "V", roleNames: [], site: "https://v.test", stayClose: { program: null, quests: false, events: false }, lang: "es" });
     expect(bare.text).not.toContain("caminos abiertos");
-    expect(bare.text).toContain("no es algo personal");
+    expect(bare.text).toContain("Gracias por tu tiempo y tu interés.");
   });
 
   it("a link is made the site's own unless it is https", () => {

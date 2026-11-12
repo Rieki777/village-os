@@ -94,7 +94,9 @@ export type ConversationMode = (typeof CONVERSATION_MODES)[number];
  * the applicant books each conversation at times they choose, in order.
  */
 export function parseConversationMode(raw: unknown): ConversationMode {
-  return raw === "split" ? "split" : "block";
+  // Only a stored "block" stays one block. Empty, "split", the role card's "separate" or anything unknown
+  // reads as booked one at a time, which is the story the applicant is told.
+  return raw === "block" ? "block" : "split";
 }
 
 /**

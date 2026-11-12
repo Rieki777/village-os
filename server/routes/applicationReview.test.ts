@@ -403,7 +403,7 @@ describe.skipIf(!configured)("application review, on a real schema", () => {
       const { id, confirm } = await confirmed("block@example.test");
       const token = new URL(`${ORIGIN}${confirm.statusPath}`).searchParams.get("token");
       const before = await call("GET", `/api/application-status/${id}?token=${token}`, undefined, null);
-      expect(before.body.status.mode).toBe("block");
+      expect(before.body.status.mode, "an empty mode reads as one at a time").toBe("split");
       expect(before.body.status.booking).toMatch(/^After the invitation, you book each conversation at times you choose, in this order: Channel Role first, then /);
       expect(before.body.status.booking).toContain("You may book them back to back if you like.");
       expect(before.body.status.booking).not.toMatch(/one block|split/);

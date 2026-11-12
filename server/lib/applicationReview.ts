@@ -136,7 +136,7 @@ export async function setupFor(db: Db, roleIds: readonly string[]): Promise<Revi
       return { interviewers, criteria: criteria.length ? criteria : [...FALLBACK_CRITERIA], mode: parseConversationMode(s.mode) };
     }
   }
-  return { interviewers: [], criteria: [], mode: "block" };
+  return { interviewers: [], criteria: [], mode: "split" };
 }
 
 // ── Beginning ───────────────────────────────────────────────────────────────
@@ -631,7 +631,7 @@ export async function statusOf(deps: ReviewDeps, ref: string): Promise<(Status &
   });
   const d = await confirmedDetail(pool, ref);
   const roleNames = await repo.roleNamesById(pool, d?.roleIds ?? []);
-  const mode = d?.mode ?? "block";
+  const mode = d?.mode ?? "split";
   const booking = interviews.length ? bookingWords(interviews.map((i) => names.get(i.roleId) ?? i.roleId)) : null;
   const outcome = how === "adopted" || how === "declined" || how === "withdrawn" ? how : decidedStep ? "declined" : null;
   // About you (joining lane PR 2): the applicant sees HOW MANY references they gave, never who, and nobody else reads this page.
