@@ -283,6 +283,21 @@ describe("the two pay lines on the card", () => {
     expect(within(section).queryByTestId("pay-split")).toBeNull();
     expect(within(section).getByTestId("pay-at-risk")).toBeTruthy();
   });
+  it("lead, 12 Nov: the 60/40/0 split draws a 0% tile, the asterisk follows the note, and a long label wraps whole", async () => {
+    const long = "village credits for the shared commons"; // 38 of the 40 a label may hold
+    const village = { shape: [{ label: "cash", pct: 60 }, { label: "equity", pct: 40 }, { label: long, pct: 0 }], atRisk: VILLAGE_PAY.atRisk, note: "*The total shown is the full band available for this role." };
+    roleCard = (id: string) => ({ roleId: id, sections: SECTIONS, lastEdited: null, showPayRanges: false, villagePay: village, mayEdit: false });
+    const section = await open();
+    await waitFor(() => expect(within(section).getByTestId("pay-ceiling").textContent).toBe("Total compensation up to $9,000 a month*"));
+    const tiles = within(section).getByTestId("pay-tiles");
+    expect(Array.from(tiles.querySelectorAll("li")).map((li) => li.textContent)).toEqual(["cash60%", "equity40%", `${long}0%`]);
+    expect(within(section).getByTestId("pay-split").textContent).toBe(`Default split: 60% cash, 40% equity, 0% ${long}. To be decided in the onboarding process.`);
+    // Never cut with an ellipsis: the label wraps, so no truncate and no line clamp on it.
+    for (const label of within(tiles).getAllByTestId("pay-tile-label")) {
+      expect(label.className).not.toMatch(/truncate|line-clamp|text-ellipsis/);
+      expect(label.className).toContain("break-words");
+    }
+  });
 });
 
 describe("the other ways in, and the words", () => {

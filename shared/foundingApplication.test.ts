@@ -47,7 +47,7 @@ describe("the village's words", () => {
     expect(payShapeOf("Cash: 40%")).toEqual([{ label: "Cash", pct: 40 }]);
   });
 
-  it("the first village's seed sets only these settings, each with a value the settings accept, and the 40/55/5 shares", () => {
+  it("the first village's seed sets only these settings, each with a value the settings accept, and the 60/40/0 shares, the 0% drawn", () => {
     const seed = JSON.parse(readFileSync(new URL("../server/seeds/amora/founding-application-seed.json", import.meta.url), "utf8")) as Record<string, string>; // brand-ok: reads the first tenant's own seed folder
     const keys = Object.keys(seed).filter((k) => !k.startsWith("_"));
     expect(keys.sort()).toEqual([...Object.values(FOUNDING_KEYS), ...Object.values(PAY_SHAPE_KEYS)].sort());
@@ -55,7 +55,9 @@ describe("the village's words", () => {
     for (const k of Object.values(FOUNDING_KEYS)) expect(validateVariable(VARIABLES_BY_KEY[k], seed[k]), k).toBeNull();
     for (const k of Object.values(PAY_SHAPE_KEYS)) if (VARIABLES_BY_KEY[k]) expect(validateVariable(VARIABLES_BY_KEY[k], seed[k]), k).toBeNull();
     const s = foundingSetupFrom((k) => seed[k]);
-    expect(s.shares.map((x) => x.pct)).toEqual([40, 55, 5]);
+    expect(s.shares.map((x) => x.pct)).toEqual([60, 40, 0]);
+    expect(s.atRisk).not.toMatch(/discount/);
+    expect(s.footer.startsWith("*")).toBe(true);
     expect(s.atRisk).toMatch(/at risk/);
     expect(s.firstConversations.join(" ")).toMatch(/Technical Operations/);
   });

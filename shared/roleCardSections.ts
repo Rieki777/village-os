@@ -185,7 +185,7 @@ export function ceilingLine(c: PayCeiling, locale = "en-US"): string {
   return `Total compensation up to ${money} a ${c.per}`;
 }
 
-/** "Default split: 40% cash, 55% equity, 5% village credits." with the card's words after it. */
+/** "Default split: 60% cash, 40% equity, 0% credits." with the card's words after it. A 0% share is said, never dropped. */
 export function splitLine(shape: readonly PayShare[], note: string): string {
   const shares = shape.map((s) => `${s.pct}% ${s.label}`).join(", ");
   return `${SECTION_WORDS.splitLead} ${shares}.${note ? ` ${note}` : ""}`;
@@ -357,6 +357,7 @@ export function villagePayFrom(settings: { shape: string; atRisk: string; note: 
  * What a card shows under "How rewards work" (lead, 11 Nov evening): up to two lines and the footer.
  *
  *   ceiling   "Total compensation up to $X a month", from the card's own ceiling; absent when unset.
+ *             It ends in "*" when the footer opens with one, and only then.
  *   split     "Default split: ...", from the card's shares, or the village's when the card wrote none,
  *             with the card's words after it; absent when neither wrote shares.
  *   atRisk    the village's at-risk line, and `note` the footer (the card's own, else the village's).
@@ -369,8 +370,11 @@ export function cardPay(
 ): { ceiling: string | null; split: string | null; shape: PayShare[]; atRisk: string; note: string; fromCard: boolean } | null {
   const own = !!sections && sections.payShape.length > 0;
   const shape = own ? sections!.payShape : village.shape;
-  const ceiling = sections?.payCeiling ? ceilingLine(sections.payCeiling) : null;
+  const note = (sections?.payNote || "") || village.note;
+  // The fine print's asterisk (lead, 12 Nov 2026): a note that opens with "*" marks the ceiling with one,
+  // and no other note does, so the card never carries an asterisk that points at nothing.
+  const ceiling = sections?.payCeiling ? `${ceilingLine(sections.payCeiling)}${note.startsWith("*") ? "*" : ""}` : null;
   const split = shape.length ? splitLine(shape, sections?.paySplitNote ?? "") : null;
   if (!ceiling && !split) return null;
-  return { ceiling, split, shape, atRisk: village.atRisk, note: (sections?.payNote || "") || village.note, fromCard: own };
+  return { ceiling, split, shape, atRisk: village.atRisk, note, fromCard: own };
 }

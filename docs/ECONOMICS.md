@@ -3432,6 +3432,11 @@ and say the village has not written its steps otherwise. Nothing about value,
 settlement or any balance reads it: it decides which words a public page may call
 the village's own.
 
+The same answer carries `conflictIntro` (lead, 12 Nov 2026): the village setting
+`org.conflict_intro`, the paragraph on how the village sees conflict that those pages
+print above the steps, and an empty string when the village emptied it. It is words
+only. Nothing about value, settlement or any balance reads it.
+
 The restorative block also carries the conflict door (2026-09-27): a cover role,
 a promised reply time in hours with no platform default, and a named contact
 outside the village. The launch checklist's `conflict-door` row reads them

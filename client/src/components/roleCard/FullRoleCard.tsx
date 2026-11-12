@@ -203,7 +203,7 @@ export default function FullRoleCard({ seat, circleName = null, register = "game
             <ul className="mt-4 grid grid-cols-3 gap-2" aria-hidden="true" data-testid="pay-tiles">
               {pay.shape.map((sh) => (
                 <li key={sh.label} className="min-w-0 rounded-xl border border-border bg-muted px-3 py-2">
-                  <span className="block truncate text-xs capitalize text-muted-foreground">{sh.label}</span>
+                  <span className="block break-words text-xs capitalize text-muted-foreground" data-testid="pay-tile-label">{sh.label}</span>
                   <span className="block font-display text-2xl text-card-foreground">{sh.pct}%</span>
                 </li>
               ))}

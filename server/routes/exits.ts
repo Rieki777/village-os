@@ -112,6 +112,8 @@ import {
   sameRestorative,
 } from "../lib/conflictAgreement";
 import { readGameStart } from "../lib/gameStart";
+import { stringVar } from "../lib/variables";
+import { CONFLICT_INTRO_KEY, conflictIntroOf } from "../../shared/conflictIntro";
 import { mayReadCanvas } from "./canvas";
 import type { DbDocument } from "../repos/store-db";
 import { markExitSettling } from "../repos/exits";
@@ -408,6 +410,8 @@ export function register(app: Express, deps: ExitDeps): void {
         },
       },
       configured: deps.exitPolicyRepo.exists(), platformWording: platformDefaultTermKeys(policy),
+      // How the village sees conflict, said above its steps (lead, 12 Nov 2026); "" when the village emptied it.
+      conflictIntro: conflictIntroOf(stringVar(CONFLICT_INTRO_KEY)),
     });
   });
 
