@@ -624,7 +624,7 @@ msgstr "Pide ayuda para redactar a {name}, nuestra asistente digital formada en 
 #: client/src/pages/GratitudeWall.tsx
 msgctxt "voice field purpose: the thank-you note on the wall"
 msgid "A short note thanking someone for what they did and what it meant to you."
-msgstr ""
+msgstr "Una nota breve para agradecer a alguien lo que hizo y lo que significó para ti."
 
 #: client/src/components/TreasurySync.tsx
 msgid "Your numbers, from every source"
@@ -4634,7 +4634,7 @@ msgstr ""
 #: client/src/pages/GratitudeWall.tsx
 msgctxt "voice field label: the thank-you note on the wall"
 msgid "Your thank you"
-msgstr ""
+msgstr "Tu agradecimiento"
 
 #: client/src/components/review/SeraDifferences.tsx
 msgctxt "sera changes"
@@ -12646,3 +12646,208 @@ msgstr ""
 #~ msgctxt "open proposal review"
 #~ msgid "1 goal for your first moon"
 #~ msgstr "1 meta para tu primera luna"
+
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks composer: message field"
+msgid "What you saw them do"
+msgstr "Lo que viste que hizo"
+
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks composer: send in flight"
+msgid "Sending..."
+msgstr "Enviando..."
+
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks composer: allowance failed to load"
+msgid "Your allowance didn't load. Reload to see it."
+msgstr "Tu asignación no cargó. Recarga para verla."
+
+#: client/src/components/gratitude/WallEntryCard.tsx
+msgctxt "thanks thread: the two thanked each other"
+msgid "Both ways"
+msgstr "En ambos sentidos"
+
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks composer: recipient placeholder"
+msgid "Their @handle"
+msgstr "Su @usuario"
+
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks send: an unknown failure"
+msgid "Something went wrong"
+msgstr "Algo salió mal"
+
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks composer: tooltip label"
+msgid "How the allowance works"
+msgstr "Cómo funciona la asignación"
+
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks web heading"
+msgid "The web this moon"
+msgstr "La red de esta luna"
+
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks send: the request failed"
+msgid "Something went wrong. Try again."
+msgstr "Algo salió mal. Inténtalo de nuevo."
+
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks composer: allowance spent"
+msgid "You've given your whole allowance this cycle. It refills when the lunar cycle turns."
+msgstr "Ya diste toda tu asignación de este ciclo. Se renueva cuando cambia el ciclo lunar."
+
+#: client/src/components/gratitude/WallEntryCard.tsx
+msgctxt "thanks thread: who thanked whom"
+msgid "{from} thanked {to}"
+msgstr "{from} agradeció a {to}"
+
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks web: nothing this moon yet"
+msgid "No threads yet this moon. The first thanks carried draws one."
+msgstr "Aún no hay hilos esta luna. Las primeras gracias que alguien lleve dibujan uno."
+
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks composer: after the lantern arrived"
+msgid "Carry another thanks"
+msgstr "Llevar otras gracias"
+
+#: client/src/components/gratitude/WallEntryCard.tsx
+msgctxt "thanks thread: a person with no recorded name"
+msgid "A member"
+msgstr "Una persona del pueblo"
+
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks wall: signed out"
+msgid "Sign in to carry a thanks to a fellow member."
+msgstr "Inicia sesión para llevar unas gracias a otra persona del pueblo."
+
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks wall heading"
+msgid "What we saw in each other"
+msgstr "Lo que vimos en cada persona"
+
+#. placeholder {0}: currency.toLowerCase()
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks wall: what a thanks becomes"
+msgid "Every thanks here also carries <0>{0}</0> to the person it names."
+msgstr "Cada gracias aquí también lleva <0>{0}</0> a la persona que nombra."
+
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks web: how to read it"
+msgid "Faces sit in alphabetical order, and nobody sees how many threads anyone holds."
+msgstr "Las caras van en orden alfabético, y nadie ve cuántos hilos tiene otra persona."
+
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks web: how to read it, desktop"
+msgid "Hover a thanks and its thread lights. Faces sit in alphabetical order, and nobody sees how many threads anyone holds."
+msgstr "Pasa el cursor sobre unas gracias y su hilo se enciende. Las caras van en orden alfabético, y nadie ve cuántos hilos tiene otra persona."
+
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks wall: signed out door"
+msgid "Sign in"
+msgstr "Iniciar sesión"
+
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks composer heading"
+msgid "Carry a thanks"
+msgstr "Llevar unas gracias"
+
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks composer: the send button"
+msgid "Send the lantern"
+msgstr "Enviar la linterna"
+
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks composer: no allowance yet"
+msgid "Your allowance to give opens as you walk the {ladder}."
+msgstr "Tu asignación para dar se abre a medida que recorres el {ladder}."
+
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks composer: recipient field"
+msgid "Who you are thanking, by handle"
+msgstr "A quién agradeces, por su usuario"
+
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks wall: the list of threads"
+msgid "The thanks, newest first"
+msgstr "Las gracias, las más nuevas primero"
+
+#. placeholder {0}: currency.toLowerCase()
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks wall: the currency tooltip"
+msgid "Each cycle every member receives an allowance of {0} to send. Sending is thanks for real contributions, never pay, and the wall keeps every word."
+msgstr "Cada ciclo, cada persona recibe una asignación de {0} para enviar. Enviar es agradecer contribuciones reales, nunca un pago, y el muro guarda cada palabra."
+
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks composer: close the sheet"
+msgid "Close"
+msgstr "Cerrar"
+
+#: client/src/components/gratitude/ThreadWeb.tsx
+msgctxt "thanks web: what the drawing shows, read aloud"
+msgid "This moon's threads between people who thanked each other, faces in alphabetical order"
+msgstr "Los hilos de esta luna entre personas que se agradecieron, con las caras en orden alfabético"
+
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks composer: close after sending"
+msgid "Back to the wall"
+msgstr "Volver al muro"
+
+#: client/src/components/gratitude/Lantern.tsx
+msgctxt "lantern: a thanks arrived"
+msgid "Your lantern reached {name}"
+msgstr "Tu linterna llegó a {name}"
+
+#: client/src/components/gratitude/Lantern.tsx
+msgctxt "lantern: a thanks on its way"
+msgid "Carrying your thanks to {name}"
+msgstr "Llevando tus gracias a {name}"
+
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks wall eyebrow"
+msgid "Thanks between us"
+msgstr "Gracias entre nosotros"
+
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks wall: opens the composer on a phone"
+msgid "Carry a thanks"
+msgstr "Llevar unas gracias"
+
+#. placeholder {0}: currency.toLowerCase()
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks composer: amount field"
+msgid "Amount of {0} to send"
+msgstr "Cantidad de {0} para enviar"
+
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "lantern: after it arrived"
+msgid "It is a thread on the web now, and they see it on their profile."
+msgstr "Ahora es un hilo en la red, y lo ve en su perfil."
+
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks wall lede"
+msgid "Each thanks is a thread between two people. The wall keeps the words and never a count."
+msgstr "Cada gracias es un hilo entre dos personas. El muro guarda las palabras y nunca una cuenta."
+
+#: client/src/components/gratitude/WallEntryCard.tsx
+msgctxt "thanks thread: the vesica, read aloud"
+msgid "They thanked each other both ways"
+msgstr "Se agradecieron en ambos sentidos"
+
+#: client/src/components/gratitude/Lantern.tsx
+msgctxt "lantern: the person a thanks is going to, when no name is known"
+msgid "them"
+msgstr "esa persona"
+
+#. placeholder {0}: budget.remaining
+#. placeholder {1}: budget.total
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks composer: the allowance left this cycle"
+msgid "<0>{0}</0> of {1} left to give this cycle"
+msgstr "Te quedan <0>{0}</0> de {1} para dar este ciclo"
+
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks composer: the allowance tooltip"
+msgid "Your allowance refills when the cycle turns. Sending moves it from your allowance to the person you thank; it never costs you anything you earned."
+msgstr "Tu asignación se renueva cuando cambia el ciclo. Enviar la pasa de tu asignación a la persona que agradeces; nunca te cuesta nada de lo que ganaste."

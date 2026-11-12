@@ -1,45 +1,48 @@
 /**
- * THE GRATITUDE WALL.
+ * THE GRATITUDE WALL: threads between people (Phase C, lane C4).
  *
- * The page this replaced opened with a heading, a tooltip, a clock and a form,
- * and the gratitude itself was a list of small quotes underneath all of it. A
- * wall opens with the writing on it. So `VoicesHero` is first and carries no
- * number of any kind, and the send panel is what a member does in RESPONSE to
- * the wall rather than the door into it.
+ * A thanks is a thread between two people. The page opens with what we saw in
+ * each other: the thanks as threads, newest first, and the web this moon
+ * (faces on a ring in alphabetical order, one thread per pair). Sending is a
+ * lantern: it rises while the thanks is on its way, rests when it arrives, and
+ * from then on it is a thread on the web.
  *
- * ── THE NIGHT WORLD, AND WHY THE MIGRATION HAD TO BE IN PAIRS ────────────
+ * ── DECISION 4, AND WHAT IT LEFT ALONE ───────────────────────────────────
  *
- * `sheet-night` (client/src/index.css) redeclares the semantic colour tokens
- * on this element, so every descendant reading `bg-card`, `text-muted-
- * foreground` and `border-border` resolves them against the night world. It is
- * the same class the character sheet uses and it needed no component edits
- * there, because that page had already been migrated to the semantic set.
+ * The lead's ruling: threads never show a count and never order people by how
+ * many thanks they have; the newest thanks come first. So the wall no longer
+ * draws an amount beside a thanks, "Where you stand" (people who thanked you,
+ * totals received and given) left the wall, and Moons past lists people by
+ * name. The ledger, the allowance, the cycles and settlement are untouched:
+ * every send still carries its amount, and the member's own allowance stays
+ * in the composer, because it is what they hold to give, never a count of
+ * what anybody received.
  *
- * This page had not. It paired hardcoded surfaces (`bg-white`, `bg-stone-50`)
- * with hardcoded stone text, and that pairing is exactly what kept it safe:
- * neither half answers to a theme, so both held. `--muted-foreground` IS
- * theme-responsive, so dropping `text-muted-foreground` onto a card still
- * painted white measures 2.76:1 at night, an AA failure invisible to anyone
- * testing in daylight. Every pair on this page therefore moved BOTH halves in
- * one edit, and `index.css` records two earlier shipments of the sibling bug.
+ * ── PHONE AND DESKTOP, EACH AT ITS BEST ──────────────────────────────────
  *
- * ── WHAT IS DELIBERATELY NOT ON THE HERO ─────────────────────────────────
+ * Phone: the web is a full-bleed band above the words, the words follow one
+ * at a time, and "Carry a thanks" waits within thumb reach; it opens a sheet
+ * (pick a face, write, send) where the lantern rises. Desktop: the words in
+ * two columns beside a large web that stays put, hovering a thanks lights its
+ * thread, and the composer sits under the web, so writing never leaves the
+ * page. Ctrl Enter sends on both.
  *
- * Totals, names, amounts, dates and counts. A number beside a piece of
- * gratitude turns a human sentence into a dashboard tile and the reader starts
- * scanning the figure. The meter and the hearts a member genuinely needs in
- * order to play are in the send panel, below, where they are labelled.
+ * ── THE NIGHT WORLD ──────────────────────────────────────────────────────
+ *
+ * `sheet-night` (WORLD) redeclares the semantic tokens on the root, so every
+ * descendant reading `bg-card` and `text-muted-foreground` resolves them in
+ * the night world. Every surface here names the semantic pair together.
  */
 import Layout from "@/components/Layout";
 import VoiceArea from "@/components/voice/VoiceArea";
-import { useLingui } from "@lingui/react/macro";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { useAuth } from "@/contexts/AuthContext";
 import { gameFetch, fetchGameMe, GameMe } from "@/lib/gameApi";
 import { useTokenName } from "@/hooks/useTokenNames";
 import { useLadderTitle } from "@/hooks/useVillagePaths";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "wouter";
-import { Send, Sparkles } from "lucide-react";
+import { Sparkles, X } from "lucide-react";
 import CycleClock from "@/components/CycleClock";
 import { forgetExamplesCache } from "@/components/ExamplesBanner";
 import InfoTip from "@/components/InfoTip";
@@ -48,14 +51,36 @@ import NightMotes from "@/components/profile/NightMotes";
 import VoicesHero from "@/components/gratitude/VoicesHero";
 import HeartsRow from "@/components/gratitude/HeartsRow";
 import WallEntryCard from "@/components/gratitude/WallEntryCard";
-import YourStanding from "@/components/gratitude/YourStanding";
 import MoonsPast from "@/components/gratitude/MoonsPast";
 import SuggestionChips from "@/components/gratitude/SuggestionChips";
+import ThreadWeb from "@/components/gratitude/ThreadWeb";
+import Lantern from "@/components/gratitude/Lantern";
+import { bothWays, newestFirst, pairKey, personKey, sinceMoment } from "@/components/gratitude/threads";
+import Fireflies from "@/components/journey/nature/Fireflies";
+import { BTN_PRIMARY, BTN_SECONDARY, EYEBROW, H1, HINT, LEDE, WORLD } from "@/components/journey/look";
 import type { WallEntry } from "@shared/gratitudeVoices";
 
 interface SentEntry {
   toId?: string | null;
   cycleId?: string | null;
+}
+
+/**
+ * Wide enough for the desktop layout (`lg`), where the composer sits in the
+ * page and is never a sheet. Read once and on change; false until known, so a
+ * phone never flashes a desktop composer.
+ */
+function useWide(): boolean {
+  const [wide, setWide] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
+    const mql = window.matchMedia("(min-width: 1024px)");
+    const on = () => setWide(mql.matches);
+    on();
+    mql.addEventListener?.("change", on);
+    return () => mql.removeEventListener?.("change", on);
+  }, []);
+  return wide;
 }
 
 /** The recipient a link asked for, as typed: `/gratitude?to=@handle`. Empty when none. */
@@ -70,7 +95,9 @@ function prefilledTo(): string {
 export default function GratitudeWall() {
   const { t } = useLingui();
   const { user } = useAuth();
-  const [wall, setWall] = useState<WallEntry[]>([]);
+  const wide = useWide();
+  // Null until the first read lands: an empty array is a claim that the wall is empty.
+  const [wall, setWall] = useState<WallEntry[] | null>(null);
   // undefined = not loaded (or the load failed); null = loaded, no game state.
   // fetchGameMe returns null for BOTH a 500 and a real absence, so without
   // this distinction a failed fetch rendered as a factual claim about the
@@ -79,23 +106,35 @@ export default function GratitudeWall() {
   const [me, setMe] = useState<GameMe | null | undefined>(undefined);
   /**
    * Distinct people this member has thanked this cycle, which is what the
-   * hearts count. Null means UNKNOWN and the row stays away: a zero here would
-   * draw a full set of open hearts at somebody who has already given, which is
-   * a claim about them and not a gap in the render.
+   * hearts in the composer show: their own allowance, never what anybody
+   * received. Null means UNKNOWN and the row stays away.
    */
   const [peopleThanked, setPeopleThanked] = useState<number | null>(null);
+  /** When this moon began, so the web draws this moon's threads. Null until known. */
+  const [moonStart, setMoonStart] = useState<string | null>(null);
   const currency = useTokenName("Recognition");
   const ladder = useLadderTitle();
   // `to` carries whatever the member typed: an @handle, or an address for
   // anyone who still knows one. The server tells the two apart and looks the
-  // handle up; see `recipientFor` in server/index.ts for why a handle is the
-  // one of the two a member can actually obtain.
+  // handle up; see `recipientFor` in server/index.ts.
   // `?to=@handle` fills the field (My moon's Send gratitude). Nothing sends until the member does.
   const [form, setForm] = useState(() => ({ to: prefilledTo(), amount: 10, message: "" }));
   const [sending, setSending] = useState(false);
   const [feedback, setFeedback] = useState<{ ok: boolean; text: string } | null>(null);
+  /** The lantern: on its way while a send is in flight, then arrived. Null shows the form. */
+  const [lantern, setLantern] = useState<{ moment: "carrying" | "arrived"; toName: string } | null>(null);
+  /** The pair whose thread just landed, drawn in once on the web. */
+  const [fresh, setFresh] = useState<string | null>(null);
+  const [lit, setLit] = useState<string | null>(null);
   // Bumped after a send so the chips re-read and the person just thanked leaves.
   const [sentCount, setSentCount] = useState(0);
+  /** The phone's sheet. On a desktop the composer is always in the page. */
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const carryButton = useRef<HTMLButtonElement | null>(null);
+  const sheet = useRef<HTMLDivElement | null>(null);
+  const touchY = useRef<number | null>(null);
+
+  const myKey = user?.handle ? personKey({ name: user.name ?? "", handle: user.handle.replace(/^@/, ""), avatar: null }) : null;
 
   /* The one thing on this form the village decides. See the textarea below. */
   const [requireMessage, setRequireMessage] = useState<boolean | null>(null);
@@ -114,25 +153,28 @@ export default function GratitudeWall() {
     };
   }, []);
 
+  /* The moon's start, from the one public clock route. The web waits for it. */
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/game/cycle")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (alive && d && typeof d.startsAt === "string") setMoonStart(d.startsAt);
+      })
+      .catch(() => {
+        /* no web this visit; the words below still render */
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   /**
-   * The people, counted from this member's own sends.
+   * The people this member has thanked this cycle, for the hearts.
    *
-   * `/api/game/gratitude/me` already returns them and is already
-   * authenticated, so there is no new surface here and nothing anonymous can
-   * reach it. Counted client-side against the budget's own `cycleId`, which is
-   * the same string the server spends against, so the row cannot drift into a
-   * different lunation than the meter beside it.
-   *
-   * ── IT IS A FUNCTION, AND THAT IS THE BUG FIX ────────────────────────────
-   *
-   * This lived in a `useEffect` keyed on `[user, budget.cycleId]`, and a send
-   * does not change either of those: the member is the same member and the
-   * lunation is the same lunation. So the effect never re-ran, and the hearts
-   * row sat at its old count until a full page reload. Found by sending on a
-   * phone and watching the row stay on "0 people thanked this cycle" after the
-   * send had visibly succeeded, on the one surface whose whole job is to show
-   * what you have sent. A count that does not answer to the action it counts
-   * is the displayed-number-versus-actual-behaviour defect again.
+   * A FUNCTION, called after every send: as an effect keyed on the member and
+   * the cycle it never re-ran after a send (neither changes), and the row sat
+   * at its old count until a reload.
    */
   const loadPeopleThanked = (cycleId: string | undefined) => {
     if (!user || !cycleId) return;
@@ -150,26 +192,34 @@ export default function GratitudeWall() {
       .catch(() => { /* the row stays as it was rather than guessing */ });
   };
 
-  const load = () => {
+  const load = (afterSend = false) => {
     fetch("/api/game/gratitude/wall")
       .then((r) => (r.ok ? r.json() : []))
-      .then((d) => setWall(Array.isArray(d) ? d : []))
-      .catch(() => { /* silent */ });
-    // The count is re-read from whatever budget comes BACK, not from the
-    // `me` in scope when this was called, so a send that moves the cycle
-    // boundary still counts against the right lunation.
+      .then((d) => {
+        const rows = newestFirst(Array.isArray(d) ? (d as WallEntry[]) : []);
+        setWall(rows);
+        // The thread the lantern became: the newest thanks, when it is ours.
+        const top = rows[0];
+        if (afterSend && top && myKey && personKey(top.from) === myKey) setFresh(pairKey(top.from, top.to));
+      })
+      .catch(() => setWall((w) => w ?? []));
+    // The count is re-read from whatever budget comes BACK, so a send that
+    // moves the cycle boundary still counts against the right lunation.
     fetchGameMe().then((fresh) => {
       setMe(fresh);
       loadPeopleThanked(fresh?.gratitude.budget?.cycleId);
     });
   };
 
-  useEffect(load, []);
+  useEffect(() => load(), []);
 
   const send = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (sending) return;
     setSending(true);
     setFeedback(null);
+    const typed = form.to.trim();
+    setLantern({ moment: "carrying", toName: typed.replace(/^@/, "") });
     try {
       const res = await gameFetch("/api/game/gratitude/send", {
         method: "POST",
@@ -177,35 +227,84 @@ export default function GratitudeWall() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setFeedback({ ok: false, text: data.message ?? data.error ?? "Something went wrong" });
+        setLantern(null);
+        setFeedback({ ok: false, text: data.message ?? data.error ?? t({ message: "Something went wrong", context: "thanks send: an unknown failure" }) });
       } else {
-        setFeedback({ ok: true, text: "Your appreciation is on the wall." });
+        const toName = String(data?.entry?.toName ?? "").trim().split(/\s+/)[0] || typed.replace(/^@/, "");
+        setLantern({ moment: "arrived", toName });
         setForm({ to: "", amount: 10, message: "" });
-        // A real send is gratitude's retirement trigger server-side. Since the
-        // voices shipped it has something to retire, and it now retires on a
-        // threshold rather than on the first send, so this can drop the banner
-        // one send early. It is a cache hint and the next read corrects it.
+        // A real send is gratitude's retirement trigger server-side; this is a
+        // cache hint and the next read corrects it.
         forgetExamplesCache("gratitude");
         setSentCount((n) => n + 1);
-        load();
+        load(true);
       }
     } catch {
-      setFeedback({ ok: false, text: "Something went wrong. Try again." });
+      setLantern(null);
+      setFeedback({ ok: false, text: t({ message: "Something went wrong. Try again.", context: "thanks send: the request failed" }) });
     }
     setSending(false);
   };
 
+  /** Ctrl Enter (or Cmd Enter) sends from anywhere in the composer. */
+  const onComposerKey = (e: React.KeyboardEvent<HTMLFormElement>) => {
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      e.currentTarget.requestSubmit();
+    }
+  };
+
   const budget = me?.gratitude.budget;
 
+  const openSheet = useCallback(() => setSheetOpen(true), []);
+  const closeSheet = useCallback(() => {
+    setSheetOpen(false);
+    carryButton.current?.focus();
+  }, []);
+
   /*
-   * The gratitude nudge links to `#send`. The form renders only once the
-   * member is known, after the browser has already looked for the anchor and
-   * found nothing, so the scroll is done here when the form arrives.
+   * The gratitude nudge links to `#send`, and My moon's "Send gratitude"
+   * arrives with `?to=`. Either way the member came to carry a thanks: on a
+   * phone the sheet opens, on a desktop the composer scrolls into view.
    */
   useEffect(() => {
-    if (!user || typeof window === "undefined" || window.location.hash !== "#send") return;
-    document.getElementById("send")?.scrollIntoView({ block: "start" });
+    if (!user || typeof window === "undefined") return;
+    const asked = window.location.hash === "#send" || prefilledTo() !== "";
+    if (!asked) return;
+    if (window.matchMedia?.("(min-width: 1024px)").matches) {
+      document.getElementById("send")?.scrollIntoView({ block: "start" });
+    } else {
+      setSheetOpen(true);
+    }
   }, [user]);
+
+  /* The sheet holds focus while it is open, and Escape puts it away. */
+  useEffect(() => {
+    if (!sheetOpen || wide) return;
+    const el = sheet.current;
+    el?.querySelector<HTMLElement>("input, textarea, button")?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeSheet();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [sheetOpen, wide, closeSheet]);
+
+  const mutual = useMemo(() => bothWays(wall ?? []), [wall]);
+  const thisMoon = useMemo(() => sinceMoment(wall ?? [], moonStart), [wall, moonStart]);
+  const asSheet = !wide;
+  const sheetHidden = asSheet && !sheetOpen;
+
+  const web = (className: string) =>
+    thisMoon.length > 0 ? (
+      <ThreadWeb entries={thisMoon} lit={lit} fresh={fresh} me={myKey} className={className} />
+    ) : (
+      <p className={`${HINT} py-6 text-center`}>
+        {t({ message: "No threads yet this moon. The first thanks carried draws one.", context: "thanks web: nothing this moon yet" })}
+      </p>
+    );
+
+  const anotherLabel = t({ message: "Carry another thanks", context: "thanks composer: after the lantern arrived" });
 
   return (
     <Layout>
@@ -214,194 +313,277 @@ export default function GratitudeWall() {
         renders its own fixed layer and is placed last for source order, so a
         keyboard reaches the wall before it reaches an ornament.
       */}
-      <div className="relative sheet-night min-h-screen bg-background py-14">
+      <div className={`${WORLD} py-10 sm:py-14`}>
         <NightMotes />
-        <div className="relative container mx-auto max-w-3xl px-4">
-          <VoicesHero />
-
-          {/*
-            WHAT THIS PAGE IS, said once, AFTER the voices.
-
-            Restored rather than added: the page it replaced opened with this
-            sentence and its tooltip, and moving the gratitude to the top took
-            them out with the heading they were attached to. That went too far.
-            A signed-out stranger was landing on eight unattributed quotes with
-            nothing anywhere telling them what the wall is or that sending is
-            thanks and never pay. Leading with the gratitude means not opening
-            with the explanation; it does not mean deleting it.
-
-            So it sits under the voices, at body size, once. The tooltip is the
-            same one, because what it says is still the thing a newcomer most
-            needs to know about this economy.
-          */}
-          {/* R47: the Trail line first, the Lore line last and quiet. */}
-          <p className="mb-2 max-w-prose text-muted-foreground">
-            Thank someone for something they did. Every thanks on this wall becomes{" "}
-            <InfoTip tip={`Each cycle every member receives a budget of ${currency.toLowerCase()} to send. Sending is thanks for real contributions, never pay, and the wall keeps every word.`}>{currency.toLowerCase()}</InfoTip>{" "}
-            in the hands of the member it names.
-          </p>
-          <p className="mb-10 max-w-prose text-sm italic text-muted-foreground">
-            Naming what is good is how the village grows more of it.
-          </p>
-
-          {/* The clock the economy runs on: lunation, season, the four turnings. */}
-          <div className="mb-10"><CycleClock /></div>
-
-          {/* Where you stand, above the control you act with: it is about the
-              member, and breadth leads it rather than the size of the pile. */}
-          {user && <YourStanding currency={currency} />}
-
-          {user ? (
-            <form id="send" onSubmit={send} className="mb-10 scroll-mt-20 rounded-2xl border border-border bg-card p-6 shadow-sm">
-              {/*
-                `flex-wrap` and a gap, because at 390px these two run into each
-                other. `justify-between` pushes them to the edges only while
-                there is slack; with a heading and "95 / 105 left this cycle" on
-                one line there is none, and the phone rendered
-                "Send gratitude95 / 105 left this cycle" with no space at all.
-                Wrapping drops the budget to its own line where it does not fit.
-              */}
-              <div className="mb-4 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-                <h2 className="font-display text-xl font-bold text-card-foreground">Send {currency.toLowerCase()}</h2>
-                {budget && budget.total > 0 ? (
-                  <span className="text-sm text-muted-foreground">
-                    <span className="font-semibold text-card-foreground">{budget.remaining}</span> / {budget.total} left this cycle
-                    <InfoTip tip="Your sending budget refills when the cycle turns. Sending moves it from your budget to their wall; it never costs you anything you earned." label="How the budget works" />
-                  </span>
-                ) : budget && budget.total <= 0 ? (
-                  <span className="text-xs italic text-muted-foreground">Your sending budget opens as you walk the {ladder}.</span>
-                ) : (
-                  <span className="text-xs italic text-muted-foreground">Your budget didn't load. Reload to see it.</span>
-                )}
-              </div>
-
-              {/* One heart, one person. Both figures come off the budget the
-                  server derived, never recomputed here. */}
-              {budget && budget.total > 0 && peopleThanked !== null && (
-                <HeartsRow people={peopleThanked} fullSends={budget.fullSends} cap={budget.cap} />
-              )}
-
-              {/* One tap fills the field below; the Send button still sends. */}
-              <SuggestionChips selected={form.to} onPick={(to) => setForm({ ...form, to })} refreshKey={sentCount} />
-
-              <div className="mb-3 grid gap-3 md:grid-cols-[1fr_110px]">
-                <input
-                  // type="text", and that IS the fix. `type="email"` made the
-                  // browser refuse a handle before the form could be sent, so
-                  // the field could only take the one thing this site never
-                  // shows anybody.
-                  type="text"
-                  required
-                  autoCapitalize="none"
-                  autoCorrect="off"
-                  spellCheck={false}
-                  value={form.to}
-                  onChange={(e) => setForm({ ...form, to: e.target.value })}
-                  aria-label="Who you are thanking, by handle"
-                  placeholder="Their @handle"
-                  className="min-h-11 rounded-lg border border-border bg-background px-3 py-2 text-foreground outline-none focus:ring-2 focus:ring-ring"
-                />
-                <input
-                  type="number"
-                  min={1}
-                  required
-                  // Derived from the live currency name, not hardcoded: a fork
-                  // that renames its recognition token gets the right label.
-                  aria-label={`Amount of ${currency.toLowerCase()} to send`}
-                  value={form.amount}
-                  onChange={(e) => setForm({ ...form, amount: parseInt(e.target.value) || 1 })}
-                  className="min-h-11 rounded-lg border border-border bg-background px-3 py-2 text-foreground outline-none focus:ring-2 focus:ring-ring"
-                />
-              </div>
-              {/*
-                THE VILLAGE'S OWN SETTING, NOT A HARDCODED TRUE.
-
-                The server gates this on `gratitude.require_message`
-                (server/lib/gratitude.ts, via boolVar), so a village that turned
-                it off still had a form here refusing to submit without a
-                message. A config knob the client ignores is a knob that does
-                not exist. /api/game/rules has carried the real answer all along
-                and nothing read it.
-
-                Null while the rule is in flight means OPTIONAL, which matches
-                the server's own posture: it refuses on the way in, so an
-                optimistic client costs a round trip and a sentence, while a
-                pessimistic one blocks a legitimate send outright.
-              */}
-              <VoiceArea
-                value={form.message}
-                onValue={(v) => setForm((f) => ({ ...f, message: v }))}
-                talk={{
-                  label: t({ message: "Your thank you", context: "voice field label: the thank-you note on the wall" }),
-                  purpose: t({ message: "A short note thanking someone for what they did and what it meant to you.", context: "voice field purpose: the thank-you note on the wall" }),
-                }}
-              >
-              <textarea
-                required={requireMessage === true}
-                value={form.message}
-                onChange={(e) => setForm({ ...form, message: e.target.value })}
-                placeholder="What are you thanking them for?"
-                rows={2}
-                className="mb-3 w-full resize-y rounded-lg border border-border bg-background px-3 py-2 text-foreground outline-none focus:ring-2 focus:ring-ring"
-              />
-              </VoiceArea>
-              {feedback && (
-                <p
-                  // Announced, not merely displayed: the result of a submit is
-                  // the one thing a screen-reader user must not have to go
-                  // hunting for. alert (assertive) for a failure, status for a
-                  // success — never on anything that re-renders per keystroke.
-                  role={feedback.ok ? "status" : "alert"}
-                  className={`mb-3 text-sm ${feedback.ok ? "text-open" : "text-destructive"}`}
-                >
-                  {feedback.text}
+        <div className="relative container mx-auto max-w-3xl px-4 lg:max-w-6xl">
+          <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_26rem] lg:items-start lg:gap-10">
+            <div className="min-w-0">
+              <header className="mb-8">
+                <p className={EYEBROW}>{t({ message: "Thanks between us", context: "thanks wall eyebrow" })}</p>
+                <h1 className={`${H1} mt-2`}>{t({ message: "What we saw in each other", context: "thanks wall heading" })}</h1>
+                <p className={`${LEDE} mt-3`}>
+                  {t({ message: "Each thanks is a thread between two people. The wall keeps the words and never a count.", context: "thanks wall lede" })}
                 </p>
-              )}
-              {/* A spent budget is a real state, not an error to discover
-                  after clicking: say so, and stop offering the button. */}
-              {budget && budget.remaining <= 0 && budget.total > 0 && (
-                <p className="mb-3 text-sm text-notice">
-                  You've given your whole budget this cycle. It refills when the lunar cycle turns.
+                {/* What sending is, said once: thanks, never pay. */}
+                <p className={`${HINT} mt-3 max-w-prose`}>
+                  <Trans context="thanks wall: what a thanks becomes">
+                    Every thanks here also carries <InfoTip tip={t({ message: `Each cycle every member receives an allowance of ${currency.toLowerCase()} to send. Sending is thanks for real contributions, never pay, and the wall keeps every word.`, context: "thanks wall: the currency tooltip" })}>{currency.toLowerCase()}</InfoTip> to the person it names.
+                  </Trans>
                 </p>
+              </header>
+
+              {/* The phone's web: a full-bleed band above the words. */}
+              {wall && wall.length > 0 && (
+                <section aria-labelledby="web-phone-h" className="-mx-4 mb-8 border-y border-border bg-card/40 px-2 py-4 lg:hidden">
+                  <h2 id="web-phone-h" className={`${EYEBROW} px-2 text-open`}>{t({ message: "The web this moon", context: "thanks web heading" })}</h2>
+                  {web("mx-auto mt-2 max-w-sm")}
+                  <p className={`${HINT} px-2 text-center`}>
+                    {t({ message: "Faces sit in alphabetical order, and nobody sees how many threads anyone holds.", context: "thanks web: how to read it" })}
+                  </p>
+                </section>
               )}
-              {/* An UNKNOWN budget no longer disables Send: the server's own
-                  guard is the authority on whether a send is allowed, and
-                  refusing locally on a failed fetch told the member a lie
-                  about their standing. Paired with the explicit "couldn't
-                  load" caption above, so the state is never silent. */}
-              <button
-                type="submit"
-                disabled={sending || (!!budget && (budget.total <= 0 || budget.remaining <= 0))}
-                className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-border bg-teal-deep px-5 py-2.5 font-semibold text-white transition-colors disabled:opacity-50"
-              >
-                <Send className="h-4 w-4" aria-hidden="true" /> {sending ? "Sending..." : "Send"}
-              </button>
-            </form>
-          ) : (
-            <div className="mb-10 rounded-2xl border border-border bg-card p-6 text-center shadow-sm">
-              <p className="mb-4 text-muted-foreground">Sign in to send {currency.toLowerCase()} to a fellow member.</p>
-              <Link href="/login" className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-border bg-teal-deep px-5 py-2.5 font-semibold text-white">
-                Sign In
-              </Link>
-            </div>
-          )}
 
-          {wall.length === 0 ? (
-            <div className="py-14 text-center text-muted-foreground">
-              <Sparkles className="mx-auto mb-3 h-10 w-10 opacity-30" aria-hidden="true" />
-              <p>The wall is waiting for its first appreciation.</p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {wall.map((w) => (
-                <WallEntryCard key={w.id} entry={w} currency={currency} />
-              ))}
-            </div>
-          )}
+              {wall === null ? null : wall.length === 0 ? (
+                <>
+                  {/* An empty wall still opens with words: the hero's labelled examples. */}
+                  <VoicesHero />
+                  <div className="py-14 text-center text-muted-foreground">
+                    <Sparkles className="mx-auto mb-3 h-10 w-10 opacity-30" aria-hidden="true" />
+                    <p>The wall is waiting for its first appreciation.</p>
+                  </div>
+                </>
+              ) : (
+                <section aria-label={t({ message: "The thanks, newest first", context: "thanks wall: the list of threads" })}>
+                  <div className="grid items-start gap-4 xl:grid-cols-2">
+                    {wall.map((w) => {
+                      const key = pairKey(w.from, w.to);
+                      return (
+                        <WallEntryCard
+                          key={w.id}
+                          entry={w}
+                          mutual={mutual.has(key)}
+                          lit={wide && lit === key}
+                          onLight={wide ? (on) => setLit(on ? key : null) : undefined}
+                        />
+                      );
+                    })}
+                  </div>
+                </section>
+              )}
 
-          {/* The chronicle closes the page, under the wall it is the history
-              of: what people said, then what those moons settled to. */}
-          <MoonsPast currency={currency} />
+              {/* The clock the economy runs on, and the chronicle of moons it closed. */}
+              <div className="mt-12"><CycleClock /></div>
+              <MoonsPast currency={currency} />
+            </div>
+
+            {/* The desktop's persistent side: the web, then the composer under it. */}
+            <aside className="contents lg:sticky lg:top-6 lg:block lg:max-h-[calc(100svh-3rem)] lg:space-y-6 lg:overflow-y-auto lg:pb-2">
+              <section aria-labelledby="web-desk-h" className="hidden rounded-2xl border border-border bg-card p-6 shadow-sm lg:block">
+                <h2 id="web-desk-h" className={`${EYEBROW} text-open`}>{t({ message: "The web this moon", context: "thanks web heading" })}</h2>
+                {web("mt-3")}
+                <p className={`${HINT} mt-2`}>
+                  {t({ message: "Hover a thanks and its thread lights. Faces sit in alphabetical order, and nobody sees how many threads anyone holds.", context: "thanks web: how to read it, desktop" })}
+                </p>
+              </section>
+
+              {user ? (
+                <>
+                  {asSheet && sheetOpen && (
+                    <div className="fixed inset-0 z-[65] bg-background/70 lg:hidden" aria-hidden="true" onClick={closeSheet} />
+                  )}
+                  <div
+                    ref={sheet}
+                    role={asSheet ? "dialog" : undefined}
+                    aria-modal={asSheet && sheetOpen ? true : undefined}
+                    aria-labelledby="carry-h"
+                    inert={sheetHidden ? true : undefined}
+                    data-testid="composer"
+                    data-sheet={asSheet ? (sheetOpen ? "open" : "closed") : "page"}
+                    onTouchStart={(e) => { touchY.current = e.touches[0]?.clientY ?? null; }}
+                    onTouchEnd={(e) => {
+                      const start = touchY.current;
+                      const end = e.changedTouches[0]?.clientY;
+                      touchY.current = null;
+                      // A swipe down from near the top of the sheet puts it away.
+                      if (asSheet && start != null && end != null && end - start > 80 && (sheet.current?.scrollTop ?? 0) <= 0) closeSheet();
+                    }}
+                    className={`fixed inset-x-0 bottom-0 z-[70] max-h-[88svh] overflow-y-auto rounded-t-2xl border-t border-border bg-card px-4 pb-8 pt-3 shadow-sm transition-transform duration-500 ease-out motion-reduce:transition-none ${sheetOpen ? "translate-y-0" : "translate-y-full"} lg:static lg:z-auto lg:max-h-none lg:translate-y-0 lg:overflow-visible lg:rounded-2xl lg:border lg:p-6 lg:transition-none`}
+                  >
+                    <div className="mb-3 flex items-center justify-between lg:hidden">
+                      <span aria-hidden="true" className="mx-auto block h-1.5 w-11 rounded-full bg-border" />
+                    </div>
+                    <div className="mb-4 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                      <h2 id="carry-h" className={EYEBROW}>{t({ message: "Carry a thanks", context: "thanks composer heading" })}</h2>
+                      {/*
+                        The allowance: what the member holds to give this cycle.
+                        `flex-wrap` and a gap, because at 390px the heading and
+                        this line ran into each other with no space.
+                      */}
+                      {budget && budget.total > 0 ? (
+                        <span className="text-sm text-muted-foreground">
+                          <Trans context="thanks composer: the allowance left this cycle">
+                            <span className="font-semibold text-card-foreground">{budget.remaining}</span> of {budget.total} left to give this cycle
+                          </Trans>
+                          <InfoTip tip={t({ message: "Your allowance refills when the cycle turns. Sending moves it from your allowance to the person you thank; it never costs you anything you earned.", context: "thanks composer: the allowance tooltip" })} label={t({ message: "How the allowance works", context: "thanks composer: tooltip label" })} />
+                        </span>
+                      ) : budget && budget.total <= 0 ? (
+                        <span className="text-xs italic text-muted-foreground">
+                          {t({ message: `Your allowance to give opens as you walk the ${ladder}.`, context: "thanks composer: no allowance yet" })}
+                        </span>
+                      ) : me === undefined ? null : (
+                        <span className="text-xs italic text-muted-foreground">
+                          {t({ message: "Your allowance didn't load. Reload to see it.", context: "thanks composer: allowance failed to load" })}
+                        </span>
+                      )}
+                      {asSheet && (
+                        <button type="button" onClick={closeSheet} className={`${BTN_SECONDARY} lg:hidden`} aria-label={t({ message: "Close", context: "thanks composer: close the sheet" })}>
+                          <X className="h-4 w-4" aria-hidden="true" />
+                        </button>
+                      )}
+                    </div>
+
+                    {lantern ? (
+                      <div aria-live="polite">
+                        <Lantern
+                          moment={lantern.moment}
+                          toName={lantern.toName}
+                          after={t({ message: "It is a thread on the web now, and they see it on their profile.", context: "lantern: after it arrived" })}
+                        />
+                        {lantern.moment === "arrived" && (
+                          <div className="mt-4 flex flex-wrap justify-center gap-3">
+                            <button type="button" className={BTN_SECONDARY} onClick={() => setLantern(null)}>{anotherLabel}</button>
+                            {asSheet && (
+                              <button type="button" className={BTN_SECONDARY} onClick={() => { setLantern(null); closeSheet(); }}>
+                                {t({ message: "Back to the wall", context: "thanks composer: close after sending" })}
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <form id="send" onSubmit={send} onKeyDown={onComposerKey} className="scroll-mt-20">
+                        {/* One heart, one person: the member's own allowance. */}
+                        {budget && budget.total > 0 && peopleThanked !== null && (
+                          <HeartsRow people={peopleThanked} fullSends={budget.fullSends} cap={budget.cap} />
+                        )}
+
+                        {/* One tap fills the field below; the Send button still sends. */}
+                        <SuggestionChips selected={form.to} onPick={(to) => setForm({ ...form, to })} refreshKey={sentCount} />
+
+                        <div className="mb-3 grid gap-3 sm:grid-cols-[1fr_110px]">
+                          <input
+                            // type="text", and that IS the fix: `type="email"`
+                            // made the browser refuse a handle.
+                            type="text"
+                            required
+                            autoCapitalize="none"
+                            autoCorrect="off"
+                            spellCheck={false}
+                            value={form.to}
+                            onChange={(e) => setForm({ ...form, to: e.target.value })}
+                            aria-label={t({ message: "Who you are thanking, by handle", context: "thanks composer: recipient field" })}
+                            placeholder={t({ message: "Their @handle", context: "thanks composer: recipient placeholder" })}
+                            className="min-h-11 rounded-lg border border-border bg-background px-3 py-2 text-foreground outline-none focus:ring-2 focus:ring-ring"
+                          />
+                          <input
+                            type="number"
+                            min={1}
+                            required
+                            // From the live currency name, so a fork that renames its token gets the right label.
+                            aria-label={t({ message: `Amount of ${currency.toLowerCase()} to send`, context: "thanks composer: amount field" })}
+                            value={form.amount}
+                            onChange={(e) => setForm({ ...form, amount: parseInt(e.target.value) || 1 })}
+                            className="min-h-11 rounded-lg border border-border bg-background px-3 py-2 text-foreground outline-none focus:ring-2 focus:ring-ring"
+                          />
+                        </div>
+                        {/*
+                          THE VILLAGE'S OWN SETTING, NOT A HARDCODED TRUE. The
+                          server gates this on `gratitude.require_message`, and
+                          /api/game/rules carries the answer. Null while in
+                          flight means OPTIONAL, matching the server's posture.
+                        */}
+                        <VoiceArea
+                          value={form.message}
+                          onValue={(v) => setForm((f) => ({ ...f, message: v }))}
+                          talk={{
+                            label: t({ message: "Your thank you", context: "voice field label: the thank-you note on the wall" }),
+                            purpose: t({ message: "A short note thanking someone for what they did and what it meant to you.", context: "voice field purpose: the thank-you note on the wall" }),
+                          }}
+                        >
+                        <textarea
+                          required={requireMessage === true}
+                          value={form.message}
+                          onChange={(e) => setForm({ ...form, message: e.target.value })}
+                          aria-label={t({ message: "What you saw them do", context: "thanks composer: message field" })}
+                          placeholder={t({ message: "What you saw them do", context: "thanks composer: message field" })}
+                          rows={3}
+                          className="mb-3 w-full resize-y rounded-lg border border-border bg-background px-3 py-2 text-foreground outline-none focus:ring-2 focus:ring-ring"
+                        />
+                        </VoiceArea>
+                        {feedback && (
+                          <p
+                            // Announced: alert for a failure, status for a success.
+                            role={feedback.ok ? "status" : "alert"}
+                            className={`mb-3 text-sm ${feedback.ok ? "text-open" : "text-destructive"}`}
+                          >
+                            {feedback.text}
+                          </p>
+                        )}
+                        {/* A spent allowance is a real state: say so, and stop offering the button. */}
+                        {budget && budget.remaining <= 0 && budget.total > 0 && (
+                          <p className="mb-3 text-sm text-notice">
+                            {t({ message: "You've given your whole allowance this cycle. It refills when the lunar cycle turns.", context: "thanks composer: allowance spent" })}
+                          </p>
+                        )}
+                        {/* An UNKNOWN budget does not disable Send: the server's guard is the authority. */}
+                        <div className="flex flex-wrap items-center gap-3">
+                          <Fireflies count={6} block={asSheet}>
+                            <button
+                              type="submit"
+                              disabled={sending || (!!budget && (budget.total <= 0 || budget.remaining <= 0))}
+                              className={`${BTN_PRIMARY} ${asSheet ? "w-full" : ""}`}
+                            >
+                              {sending
+                                ? t({ message: "Sending...", context: "thanks composer: send in flight" })
+                                : t({ message: "Send the lantern", context: "thanks composer: the send button" })}
+                            </button>
+                          </Fireflies>
+                          {/* i18n-ok: key names, the same on every keyboard */}
+                          <kbd className="hidden rounded-lg border border-border px-2 py-0.5 text-xs text-muted-foreground lg:inline">Ctrl Enter</kbd>
+                        </div>
+                      </form>
+                    )}
+                  </div>
+
+                  {/* The phone's one next act, within thumb reach. Gone while the sheet is open. */}
+                  {asSheet && !sheetOpen && (
+                    <div className="fixed inset-x-0 bottom-[calc(var(--tabbar-h)+0.75rem)] z-50 flex justify-center px-24 lg:hidden">
+                      <Fireflies count={5} block>
+                        <button
+                          ref={carryButton}
+                          type="button"
+                          onClick={openSheet}
+                          aria-haspopup="dialog"
+                          className={`${BTN_PRIMARY} w-full shadow-sm`}
+                        >
+                          {t({ message: "Carry a thanks", context: "thanks wall: opens the composer on a phone" })}
+                        </button>
+                      </Fireflies>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="mt-10 rounded-2xl border border-border bg-card p-6 text-center shadow-sm lg:mt-0">
+                  <p className="mb-4 text-muted-foreground">
+                    {t({ message: `Sign in to carry a thanks to a fellow member.`, context: "thanks wall: signed out" })}
+                  </p>
+                  <Link href="/login" className={BTN_PRIMARY}>
+                    {t({ message: "Sign in", context: "thanks wall: signed out door" })}
+                  </Link>
+                </div>
+              )}
+            </aside>
+          </div>
         </div>
         <MoonDock />
       </div>
