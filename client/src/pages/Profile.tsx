@@ -31,6 +31,7 @@ import YourRolesSection from "@/components/profile/YourRolesSection";
 import PlayerRoleCard from "@/components/playerCard/PlayerRoleCard";
 import { FirstDaysContext } from "@/components/playerCard/CardLower";
 import MyMoonMount from "@/components/myMoon/MyMoonMount";
+import RolesBand from "@/components/profileDash/RolesBand";
 import ProposeBanner from "@/components/roleProposal/ProposeBanner";
 import ProposeRolesEntry from "@/components/roleProposal/ProposeRolesEntry";
 import YourMoveCard from "@/components/profile/YourMoveCard";
@@ -640,14 +641,19 @@ export default function Profile() {
                 In the narrow character column the headings wrapped a word at
                 a time and the applications card left a blank field beside it.
                 The proposal door itself stays at the top. */}
-            <div id="roles" className={`scroll-mt-28 flex flex-col gap-6 ${tabOf("roles")}`}>
-              <YourRolesSection />
-              <FirstDaysContext.Provider value={firstDays}>
-                <PlayerRoleCard />
-              </FirstDaysContext.Provider>
-              <MyMoonMount />
-              {!firstDays && <SeasonPlanSection />}
-            </div>
+            {/* On a phone, My moon draws above the player card (RolesBand); a desktop keeps this order. */}
+            <RolesBand
+              id="roles"
+              className={`scroll-mt-28 ${tabOf("roles")}`}
+              roles={<YourRolesSection />}
+              card={
+                <FirstDaysContext.Provider value={firstDays}>
+                  <PlayerRoleCard />
+                </FirstDaysContext.Provider>
+              }
+              moon={<MyMoonMount />}
+              season={!firstDays ? <SeasonPlanSection /> : null}
+            />
             {config && prog ? (
               <div className={tabOf("roles")}>
                 <PowersMap
