@@ -180,6 +180,7 @@ const Profile = lazyPage(() => import("./pages/Profile"));
 const Characters = lazyPage(() => import("./pages/Characters"));
 const GeneKeys = lazyPage(() => import("./pages/GeneKeys"));
 const Mint = lazyPage(() => import("./pages/Mint"));
+const ProposedChanges = lazyPage(() => import("./pages/ProposedChanges"));
 const PublicProfile = lazyPage(() => import("./pages/PublicProfile"));
 const Register = lazyPage(() => import("./pages/Register"));
 const SetPassword = lazyPage(() => import("./pages/SetPassword"));
@@ -379,6 +380,8 @@ function Router() {
       {/* The Mint has its own route rather than a tab inside Admin: that file
           is 5,000 lines and shared, and this surface reads in one screen. */}
       <Route path="/admin/mint" component={Mint} />
+      {/* Every change an agent proposed, reviewed, edited and accepted on one page. */}
+      <Route path="/admin/proposals" component={ProposedChanges} />
       <Route path="/profile" component={Profile} />
       {/* The class select. Under /profile because a party is part of who you
           are here, not a separate account setting. */}

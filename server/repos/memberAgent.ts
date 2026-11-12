@@ -55,6 +55,7 @@
  * this village hold about me", and a table missing from it is invisible to
  * every other check in the repository.
  */
+import { forgetProposedChanges } from "./proposedChanges";
 import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
 
 /** How many rows a sweep step removed, for the record it writes. */
@@ -183,6 +184,8 @@ export async function forgetAgentForMember(pool: Pool, userId: string): Promise<
   );
   // What an agent proposed for a person to act on (role journey L13): seatings and drafted letters, by proposer or about the member.
   await pool.query("DELETE FROM `agent_proposals` WHERE `proposed_by` = ? OR `subject_user_id` = ?", [userId, userId]);
+  // Proposed changes reviewed on /admin/proposals (0379): what they proposed goes, their name comes off what they decided.
+  await forgetProposedChanges(pool, userId);
   // Who pressed an undo is the erased member's trace on somebody else's row: the row stays, the name goes.
   await pool.query("UPDATE `agent_actions` SET `undone_by_user_id` = NULL WHERE `undone_by_user_id` = ?", [userId]);
   return {
