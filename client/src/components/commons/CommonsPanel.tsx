@@ -58,12 +58,14 @@ function GoalMark({ done }: { done: boolean }) {
 
 /**
  * A goal's words: a door to its thread on the Open work board when it has an
- * id, and under it the village's count of open quests that grow it, once known.
+ * id, and under it the village's count of open quests that grow it, once known
+ * and above zero.
  */
 export function GoalWords({ goal, count }: { goal: SeasonGoalView; count: number | null }) {
   const text = goal.text;
+  // No line for a goal with no open quests (batch 158): "0 open quests grow ..." sat under every goal.
   const line =
-    count === null
+    count === null || count <= 0
       ? null
       : plural(count, { one: `# open quest grows ${text}`, other: `# open quests grow ${text}` });
   return (
