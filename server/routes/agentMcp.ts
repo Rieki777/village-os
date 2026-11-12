@@ -113,6 +113,8 @@ async function asHolder(
     headers: {
       authorization: session,
       accept: "application/json",
+      // Says this call came through the connector, so a door that is a person's alone (accepting a proposed change) refuses it.
+      "x-village-connector": "1",
       ...(body === undefined ? {} : { "content-type": "application/json" }),
       ...(forwardedFor ? { "x-forwarded-for": forwardedFor } : {}),
     },

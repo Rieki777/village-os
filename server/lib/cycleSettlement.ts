@@ -56,6 +56,7 @@ import { effectiveLifecycle } from "./modules";
 import { cyclePoolProblem } from "./cyclePool";
 import { GRATITUDE_ONLY_SENT } from "../../shared/workValue";
 import { numberVar, stringVar } from "./variables";
+import { badgeNoticeTitle } from "../../shared/doorsOpened";
 
 /** What the settlement needs that only server/index.ts can hand it. */
 export interface SettlementDeps {
@@ -390,10 +391,8 @@ export async function settleDueCycles(
         await deps.notify({
           userId: t.userId,
           type: "badge",
-          title:
-            t.tier > 1
-              ? `Badge upgraded: ${badge?.name ?? t.badgeId} ×${t.tier}`
-              : `Badge earned: ${badge?.name ?? t.badgeId}`,
+          // A tier is a fuller flower, never "x3" (the prune, C15). Words only.
+          title: badgeNoticeTitle(badge?.name ?? t.badgeId, t.tier),
           link: "/badges",
           dedupeKey: `rule:${t.badgeId}:${t.userId}:tier-${t.tier}`,
         });

@@ -16,6 +16,12 @@
  * label in its accessible name, so a screen reader hears what is loading
  * rather than nothing at all, and the drawing is hidden from it.
  *
+ * DECORATIVE, INSIDE A BUTTON. A busy button already says what it is doing
+ * (it is disabled, and its own words name the act), so a status region inside
+ * it would only add "Loading" to the button's name. `decorative` drops the
+ * role and the label and hides the leaf, which is exactly what the spinning
+ * icon it replaces did (Phase B, lane B3).
+ *
  * REDUCE MOTION. No pulsing at all. The form holds at its resting size and
  * the label carries the news, which is the whole message anyway.
  */
@@ -29,6 +35,8 @@ export interface BreathingLoaderProps {
   /** Print the label under the form. */
   showLabel?: boolean;
   className?: string;
+  /** Inside a busy button: no status role, no label, hidden from a screen reader. */
+  decorative?: boolean;
 }
 
 export default function BreathingLoader({
@@ -36,15 +44,16 @@ export default function BreathingLoader({
   size = 48,
   showLabel = false,
   className,
+  decorative = false,
 }: BreathingLoaderProps) {
   const reduced = useReducedMotion();
 
   return (
     <span
       className={`nat-loader${className ? ` ${className}` : ""}`}
-      role="status"
-      aria-live="polite"
-      aria-label={showLabel ? undefined : label}
+      {...(decorative
+        ? { "aria-hidden": true }
+        : { role: "status", "aria-live": "polite" as const, "aria-label": showLabel ? undefined : label })}
     >
       <svg
         viewBox="0 0 100 100"
@@ -80,7 +89,7 @@ export default function BreathingLoader({
           />
         </g>
       </svg>
-      {showLabel && <span className="nat-loader-label">{label}</span>}
+      {showLabel && !decorative && <span className="nat-loader-label">{label}</span>}
     </span>
   );
 }

@@ -1,9 +1,11 @@
 /**
- * The five made-up people, each walked once at 390 and once at 1280.
+ * The six made-up people, each walked once at 390 and once at 1280.
  *
  *   1. neighbour     A Spanish-speaking neighbour on a phone, sent a link on a
- *                    messaging app. Proposes for the Land Steward, confirms by
- *                    email, reads her status page.
+ *                    messaging app. The first link she taps is an old one and
+ *                    lands on the 404, whose one door takes her home. Then she
+ *                    proposes for the Land Steward, confirms by email, reads
+ *                    her status page.
  *   2. professional  A professional from the newsletter on a desktop. Reads the
  *                    steward page, opens the Finance Steward's full card,
  *                    proposes with two terms to talk about, confirms, reads the
@@ -16,8 +18,13 @@
  *                    application with the warm not-invited letter.
  *   5. holder        Persona 2 again, adopted: registers from the invitation,
  *                    aligns with confidentiality and the terms, and reads the
- *                    profile in their first hour. Finds her light on the map
- *                    off, turns it on, and reads the circles map's today card.
+ *                    profile in their first hour, where our first 14 days
+ *                    show as a strip of days, then opens the steward
+ *                    training from /training and marks a lesson done.
+ *                    Finds her light on the map off, turns it on, and reads
+ *                    the circles map's today card.
+ *   6. reviewer      The founder on the review page: an agent's batch of three
+ *                    proposed changes, one edited in place, accepted together.
  *
  * Each walk is a list of acts. An act that fails stops that walk, and the
  * summary names it. The words typed are invented and plain.
@@ -117,6 +124,19 @@ async function valueItem(page, what, doneWhen, goal) {
 export async function neighbour(w, ctx) {
   const page = await w.open();
   const email = emailFor("neighbour", w.vp);
+  // An old link from the chat lands on the 404: the night world, one lit door
+  // home, inside the first screen on a phone (Phase B, quiet states).
+  await w.step("follow an old link and land off the trail", async () => {
+    await w.goto("/roles/an-old-link-from-the-chat");
+    await page.getByRole("heading", { level: 1, name: /Fuera del sendero|Off the trail/i }).waitFor();
+  });
+  await w.look("off-trail", { next: page.getByRole("link", { name: /Volver a la aldea|Back to the village/i }) });
+  await w.step("take the one door home", async () => {
+    const home = page.getByRole("link", { name: /Volver a la aldea|Back to the village/i });
+    if ((await home.count()) !== 1) throw new Error("the 404 should offer exactly one door home");
+    await home.click();
+    await page.waitForURL((u) => new URL(u).pathname !== "/roles/an-old-link-from-the-chat");
+  });
   await w.step("arrive on the roles page", async () => {
     await w.goto("/roles?utm_source=whatsapp");
     await page.locator("main").waitFor();
@@ -488,6 +508,27 @@ export async function holder(w, ctx) {
     await settle(page, 1500);
   });
   await w.look("profile");
+  // The prune (11 Nov 2026): a profile wears no rung and keeps no totals beside a name.
+  await w.step("the profile shows no rung, no ladder count and no stat row", async () => {
+    const text = (await page.locator("main").innerText()).replace(/\s+/g, " ");
+    const rank = text.match(/Stage \d+|Stage reached|Powers open|Quests done|Paths walked/);
+    if (rank) throw new Error(`the profile still ranks a person: "${rank[0]}"`);
+  });
+  // Phase B: Profile Today shows someone newly seated our first 14 days as a strip
+  // of days (and no week strip beside it). The welcome, which waits on the
+  // Welcome Steward, is named next; a day opens its own steps.
+  await w.step("see our first 14 days on Profile Today", async () => {
+    const strip = page.locator("[data-first-fourteen]").first();
+    await strip.waitFor({ timeout: 15_000 });
+    await strip.scrollIntoViewIfNeeded();
+    const next = await strip.locator("[data-next-step]").getAttribute("data-next-step");
+    if (next !== "welcome") throw new Error(`the next step reads ${next}, not the welcome`);
+    if (await page.locator("[data-week-strip]").count()) throw new Error("the week strip shows beside the first 14 days");
+    await strip.locator('button[data-day="3"]').click();
+    if ((await strip.locator("[data-chosen-day]").getAttribute("data-chosen-day")) !== "3") throw new Error("day 3 did not open");
+    if (!(await strip.locator('[data-step="technical-operations-conversation"]').count())) throw new Error("day 3 does not hold the Technical Operations conversation");
+  });
+  await w.look("first-fourteen");
   // The five archetypes as roots (11 Nov 2026): a new holder picks the roots
   // they grow from, and the quests board shows what grows from them first,
   // with one switch to see everything.
@@ -509,6 +550,34 @@ export async function holder(w, ctx) {
     await sw.click();
   });
   await w.look("quests-by-roots");
+  // Two training pages (the lead, 11 Nov 2026): /training chooses, and each
+  // path has its own page with its own words. A holder takes the steward one
+  // and marks a lesson done; the record is the server's, so it is read back.
+  const doors = page.getByRole("navigation", { name: "Training pages" });
+  await w.step("open the training chooser", async () => {
+    await w.goto("/training");
+    await doors.waitFor();
+  });
+  await w.look("training-chooser", { next: doors.locator('a[href="/training/steward"]') });
+  await w.step("choose the steward training", async () => {
+    await doors.locator('a[href="/training/steward"]').click();
+    await page.waitForURL((u) => u.pathname === "/training/steward", { timeout: 15_000 });
+    await settle(page, 1500);
+  });
+  await w.step("mark the first lesson done", async () => {
+    await page.getByRole("button", { name: /Mark as done/ }).first().click();
+    await page.getByText("Marked done.").waitFor({ timeout: 10_000 });
+    const token = await page.evaluate(() => localStorage.getItem("village-auth-token"));
+    const res = await fetch(`${ctx.base}/api/game/training/completed`, { headers: { authorization: `Bearer ${token}` } });
+    const body = await res.json();
+    if (!Array.isArray(body.completed) || body.completed.length !== 1) throw new Error(`the server holds ${JSON.stringify(body.completed)} after one lesson`);
+  });
+  await w.look("training-steward");
+  await w.step("the resident training reads the same record", async () => {
+    await w.goto("/training/resident");
+    await page.getByText(/^1 of \d+ lessons done$/).waitFor({ timeout: 10_000 });
+  });
+  await w.look("training-resident");
   // The living map (Phase D, D2): her light on the map is off until she
   // chooses it, on her own settings; then the circles map glows as hearths
   // joined by threads, with today's card naming circles and never people.
@@ -539,12 +608,88 @@ export async function holder(w, ctx) {
   await w.look("living-map", { journey: false });
 }
 
+// ── 6. The reviewer ───────────────────────────────────────────────────────
+
+/**
+ * The founder on the review page (/admin/proposals): an agent's batch of three proposed changes waits; the founder
+ * reads each beside what is live, edits the role's aim in place (saved as a draft), selects the batch and accepts it.
+ */
+export async function reviewer(w, ctx) {
+  const auth = { authorization: `Bearer ${ctx.seed.founder}`, "content-type": "application/json" };
+  const call = async (method, route, body) => {
+    const res = await fetch(`${ctx.base}${route}`, { method, headers: auth, body: body === undefined ? undefined : JSON.stringify(body) });
+    return { status: res.status, json: await res.json().catch(() => null) };
+  };
+  let ids = [];
+  await w.step("an agent proposes a batch of three", async () => {
+    const minted = await call("POST", "/api/agent/tokens", { name: `review ${w.vp}`, scopes: ["admin"] });
+    if (minted.status !== 200) throw new Error(`no agent token: ${JSON.stringify(minted.json).slice(0, 200)}`);
+    const res = await fetch(`${ctx.base}/api/agent/v1/mcp`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${minted.json.token}`, "content-type": "application/json", accept: "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "tools/call",
+        params: {
+          name: "propose_changes",
+          arguments: {
+            batch: "Phase A content",
+            items: [
+              { kind: "page_content", target: { section: "page-home" }, body: { hero: { headline: "A village held by the people who live in it" } }, summary: "Reword the homepage headline so it says who holds the village." },
+              { kind: "role_card", target: { roleId: ctx.seed.roles.finance }, body: { words: { aim: "Our money is clear, trusted and shown every moon." } }, summary: "Give the Finance Steward card an aim that says the books are shown each moon." },
+              { kind: "faq_add", target: { pathway: "steward" }, body: { question: "How long does a first reply take?", answer: "We reply within a week, and the status page always says where your proposal stands." }, summary: "Add an FAQ for stewards on how long a first reply takes." },
+            ],
+          },
+        },
+      }),
+    });
+    const out = (await res.json()).result;
+    if (out?.isError) throw new Error(`the proposal was refused: ${JSON.stringify(out.structuredContent).slice(0, 240)}`);
+    ids = out.structuredContent.ids;
+  });
+  const page = await w.open();
+  await w.step("open the review page", async () => {
+    await w.goto("/admin/proposals");
+    await page.locator(`[data-proposal="${ids[1]}"]`).waitFor();
+  });
+  await w.look("review", { next: page.getByTestId("accept-selected") });
+  const edited = w.vp === "phone" ? "Our money is clear and trusted, and the books are open to every member each moon." : "Our money is clear and trusted, and every member can read the books, in plain words, each moon.";
+  await w.step("edit the role's aim in place", async () => {
+    const box = page.locator(`[data-proposal="${ids[1]}"] [data-field="words.aim"] textarea`);
+    await box.scrollIntoViewIfNeeded();
+    await box.fill(edited);
+    await page.getByText(/Edits saved/).first().waitFor({ timeout: 8000 });
+    const back = await call("GET", "/api/admin/proposals");
+    const draft = back.json?.changes?.find((c) => c.id === ids[1])?.draft;
+    if (draft?.words?.aim !== edited) throw new Error("the edit was not saved on the server");
+  });
+  await w.look("edited");
+  await w.step("select the batch and accept", async () => {
+    const all = page.getByLabel(/^Select all$/).first();
+    await all.scrollIntoViewIfNeeded();
+    await all.check();
+    await page.getByTestId("accept-selected").click();
+    await page.getByTestId("accept-outcome").waitFor({ timeout: 15_000 });
+    const said = (await page.getByTestId("accept-outcome").innerText()).trim();
+    if (!/^3 accepted/.test(said)) throw new Error(`not all three landed: ${said.slice(0, 240)}`);
+  });
+  await w.look("accepted");
+  await w.step("the role card says what was accepted", async () => {
+    const card = await call("GET", `/api/org/role-edit/${ctx.seed.roles.finance}`);
+    if (card.json?.state?.words?.aim !== edited) throw new Error(`the card reads: ${card.json?.state?.words?.aim}`);
+    const lessons = await call("GET", "/api/admin/proposals/lessons");
+    if (!JSON.stringify(lessons.json).includes(edited)) throw new Error("the lessons do not show the edit");
+  });
+}
+
 export const PERSONAS = [
   { id: "neighbour", run: neighbour, locale: "es-CR", member: null },
   { id: "professional", run: professional, locale: "en-GB", member: null },
   { id: "member", run: member, locale: "en-GB", member: (seed, vp) => (vp === "phone" ? seed.memberPhone : seed.memberDesktop) },
   { id: "steward", run: steward, locale: "en-GB", member: (seed) => seed.founder },
   { id: "holder", run: holder, locale: "en-GB", member: null },
+  { id: "reviewer", run: reviewer, locale: "en-GB", member: (seed) => seed.founder },
 ];
 
 export { PEOPLE };

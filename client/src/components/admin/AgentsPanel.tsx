@@ -271,6 +271,9 @@ export default function AgentsPanel({ password, players }: { password: string; p
       <ApprovedWritesPanel password={password} />
       <AiAgentsApprovalPanel password={password} />
       <LetterDraftsPanel password={password} />
+      <a href="/admin/proposals" className="inline-flex min-h-11 items-center text-sm text-teal-deep underline">
+        <Trans context="proposed changes">Proposed changes: review, edit and accept what agents propose</Trans>
+      </a>
       <div className="space-y-3 rounded-xl border border-border bg-white p-4">
         <p className="text-sm font-semibold text-foreground"><Trans context="approval inbox">Approval inbox</Trans></p>
         <a href="/approvals" className="inline-flex min-h-9 items-center text-sm text-teal-deep underline"><Trans>Open it on its own page</Trans></a>

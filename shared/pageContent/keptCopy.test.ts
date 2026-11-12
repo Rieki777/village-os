@@ -35,7 +35,7 @@ const HELD = PAGE_SPECS.filter((spec) => !NOT_HELD.includes(pageSectionKey(spec)
  * Sections and fields added after the adoption, which the kept copy does not
  * hold and which read their defaults until the village writes its own. Named
  * here, so a new part of a kept page is a decision somebody sees. The steward
- * page became one flow with two tracks on 2026-11-11 (lane A5); the first
+ * page became one flow with two paths on 2026-11-11 (lane A5); the first
  * village's words for it are drafted in server/seeds/amora/journey-tracks-seed.json.
  */
 const ADDED_SINCE: Readonly<Record<string, { sections: readonly string[]; fields: readonly string[] }>> = {

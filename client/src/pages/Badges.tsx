@@ -203,7 +203,7 @@ export default function Badges() {
                         <span className={`text-[10px] border px-1.5 py-0.5 rounded-full ${meta.cls}`}>{meta.label}</span>
                         {mine && (
                           <span className="text-[10px] bg-teal-deep text-white px-1.5 py-0.5 rounded-full">
-                            yours{mine.count > 1 ? ` ×${mine.count}` : ""}
+                            {mine.count > 1 ? "yours, in fuller bloom" : "yours"}
                           </span>
                         )}
                       </div>
@@ -211,7 +211,7 @@ export default function Badges() {
                       {b.kind === "earned" && b.rule && (
                         <p className="text-xs text-muted-foreground mt-1">
                           Earned at {b.rule.threshold} {String(b.rule.metric).replace(/_/g, " ")}
-                          {b.rule.stackable ? `, stacks to ×${b.rule.maxStack}` : ""}.
+                          {b.rule.stackable ? ", and it grows fuller as you keep going" : ""}.
                         </p>
                       )}
                       {(b.capabilities ?? []).length > 0 && (
