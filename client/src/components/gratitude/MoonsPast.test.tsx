@@ -67,3 +67,31 @@ describe("MoonsPast", () => {
     expect(asked("/api/game/cycle/distributions")).toBe(1);
   });
 });
+
+describe("MoonsPast order (Phase C, decision 4)", () => {
+  it("lists a moon's people by name, never by how much they received", async () => {
+    const { byName } = await import("./MoonsPast");
+    const totals = [
+      { name: "Zoe", received: 90 },
+      { name: "ana", received: 5 },
+      { name: "Bo", received: 40 },
+    ];
+    expect(byName(totals).map((t) => t.name)).toEqual(["ana", "Bo", "Zoe"]);
+  });
+
+  it("draws no per-person count of who thanked them", async () => {
+    (fetch as any).mockImplementation(async (url: any) => ({
+      ok: true,
+      status: 200,
+      json: async () =>
+        String(url).startsWith("/api/events")
+          ? { moonOneCycle: 300 }
+          : [{ id: "c1", cycleNumber: 301, totals: [{ name: "Zoe", received: 90, distinctSenders: 7 }, { name: "Ana", received: 5, distinctSenders: 1 }] }],
+    }));
+    const { container, findByText } = render(<MoonsPast currency="credits" />);
+    await findByText("Ana");
+    const names = Array.from(container.querySelectorAll("li .font-semibold")).map((n) => n.textContent);
+    expect(names).toEqual(["Ana", "Zoe"]);
+    expect(container.textContent).not.toMatch(/from \d+ (person|people)/);
+  });
+});
