@@ -59,6 +59,11 @@ msgctxt "circle standing"
 msgid "Dormant"
 msgstr "Dormant"
 
+#: client/src/components/sessions/GatheringSeed.tsx
+msgctxt "coming up, i'll be there"
+msgid "That did not go through. Try again in a moment."
+msgstr "That did not go through. Try again in a moment."
+
 #: client/src/components/roleEdit/RoleEditor.tsx
 msgctxt "role editor"
 msgid "Door"
@@ -82,6 +87,12 @@ msgstr "Nothing saved yet. Until words are adopted, the launch checklist and /ex
 msgctxt "character card, link to every role"
 msgid "see every role"
 msgstr "see every role"
+
+#: client/src/components/QuestCard.tsx
+#: client/src/pages/QuestDetail.tsx
+msgctxt "open work card: people carrying this quest now"
+msgid "{active} hands on this"
+msgstr "{active} hands on this"
 
 #: client/src/components/review/SeraInDraft.tsx
 msgctxt "sera answers"
@@ -220,6 +231,11 @@ msgstr "That did not save."
 #~ msgctxt "open proposal review"
 #~ msgid "Commitment not chosen yet"
 #~ msgstr "Commitment not chosen yet"
+
+#: client/src/components/openWork/FitsYouCard.tsx
+msgctxt "open work: the lead card for a visitor"
+msgid "A good place to start"
+msgstr "A good place to start"
 
 #: client/src/components/canvas/ConflictAgreementEditor.tsx
 msgid "Add a safety contact"
@@ -477,6 +493,11 @@ msgctxt "sera answers"
 msgid "Withdrawn, and the village's vote on it ended. Each change waits in the list again."
 msgstr "Withdrawn, and the village's vote on it ended. Each change waits in the list again."
 
+#: client/src/pages/Events.tsx
+msgctxt "calendar moon view legend"
+msgid "What the marks mean"
+msgstr "What the marks mean"
+
 #: client/src/components/canvas/DecisionMatrixRows.tsx
 msgid "The village's own rows"
 msgstr "The village's own rows"
@@ -513,6 +534,11 @@ msgstr "Posted, priced by the village's rule"
 #~ msgid "Add a task"
 #~ msgstr "Add a task"
 
+#: client/src/components/CycleClock.tsx
+msgctxt "cycle clock: a village on calendar months, the day the month turns"
+msgid "Allowances refill when this calendar month turns, on {date}."
+msgstr "Allowances refill when this calendar month turns, on {date}."
+
 #: client/src/components/seasonPlans/RoleCarryOn.tsx
 msgid "What you will contribute next moon"
 msgstr "What you will contribute next moon"
@@ -542,10 +568,20 @@ msgctxt "admin quest safety"
 msgid "{a} and older"
 msgstr "{a} and older"
 
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks composer: message field"
+msgid "What you saw them do"
+msgstr "What you saw them do"
+
 #: client/src/components/governance/TermsEight.tsx
 msgctxt "terms setting"
 msgid "Ending"
 msgstr "Ending"
+
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks composer: send in flight"
+msgid "Sending..."
+msgstr "Sending..."
 
 #: client/src/components/openProposal/TermsWeOffer.tsx
 msgctxt "reviewer's terms panel for a proposal"
@@ -603,6 +639,11 @@ msgstr "Loading the frames…"
 #: client/src/pages/Governance.tsx
 msgid "Open the canvas workbook"
 msgstr "Open the canvas workbook"
+
+#: client/src/components/sessions/HarvestPlant.tsx
+msgctxt "friday harvest, the line under the read back"
+msgid "Nothing is marked as failed. What did not grow goes back to Monday's soil."
+msgstr "Nothing is marked as failed. What did not grow goes back to Monday's soil."
 
 #: client/src/components/voice/TalkItOut.tsx
 msgctxt "talk it out: draft heading"
@@ -741,6 +782,11 @@ msgctxt "proposed changes"
 msgid "Nothing set yet"
 msgstr "Nothing set yet"
 
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks composer: allowance failed to load"
+msgid "Your allowance didn't load. Reload to see it."
+msgstr "Your allowance didn't load. Reload to see it."
+
 #: client/src/pages/CanvasWorkbook.tsx
 msgctxt "a button that prints the workbook"
 msgid "Print"
@@ -825,10 +871,20 @@ msgstr "A word, a path or GET"
 msgid "They aligned with the membership letter when they proposed."
 msgstr "They aligned with the membership letter when they proposed."
 
+#: client/src/pages/Events.tsx
+msgctxt "calendar page: tip about moons"
+msgid "About the moons"
+msgstr "About the moons"
+
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "send a note"
 msgid "Send"
 msgstr "Send"
+
+#: client/src/components/commons/CommonsPanel.tsx
+msgctxt "the commons: what the moss means"
+msgid "The moss shows the village's work, never one person's."
+msgstr "The moss shows the village's work, never one person's."
 
 #: client/src/components/modules/BuilderJourney.tsx
 msgctxt "module library, builder step number"
@@ -1029,9 +1085,19 @@ msgctxt "proposed changes"
 msgid "Remove"
 msgstr "Remove"
 
+#: client/src/components/gratitude/WallEntryCard.tsx
+msgctxt "thanks thread: the two thanked each other"
+msgid "Both ways"
+msgstr "Both ways"
+
 #: client/src/components/review/SeraDifferences.tsx
 msgid "Could not reach the server."
 msgstr "Could not reach the server."
+
+#: client/src/components/calendar/DayStrip.tsx
+msgctxt "calendar day strip"
+msgid "The days of this moon"
+msgstr "The days of this moon"
 
 #: client/src/pages/Roles.tsx
 msgctxt "roles page, role state"
@@ -1082,6 +1148,11 @@ msgstr "Pricing desk"
 #: client/src/components/governance/ExportByVote.tsx
 msgid "The vote is open. <0>Read it and vote</0>."
 msgstr "The vote is open. <0>Read it and vote</0>."
+
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks composer: recipient placeholder"
+msgid "Their @handle"
+msgstr "Their @handle"
 
 #: client/src/components/canvas/ConflictAgreementPublic.tsx
 msgid "Nobody holds the {careName} role today, so a private intake would reach nobody."
@@ -1209,6 +1280,11 @@ msgstr "That could not be withdrawn"
 msgid "This quest has a new price."
 msgstr "This quest has a new price."
 
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks send: an unknown failure"
+msgid "Something went wrong"
+msgstr "Something went wrong"
+
 #. placeholder {0}: batch.by
 #. placeholder {1}: day(batch.at)
 #: client/src/pages/ProposedChanges.tsx
@@ -1271,6 +1347,11 @@ msgstr "Until the Game starts, the founders write this agreement. You can read e
 #: client/src/pages/RoleDraft.tsx
 msgid "No goals are set for this season yet."
 msgstr "No goals are set for this season yet."
+
+#: client/src/pages/Quests.tsx
+msgctxt "open work: clear the season goal filter"
+msgid "Show every goal"
+msgstr "Show every goal"
 
 #: client/src/components/canvas/CanvasBaseline.tsx
 msgid "Each block of the governance canvas asks how one part of this village is governed. A reading gives the block a level, from Absent to Thriving, and one sentence saying why. Every reading is kept, so the village can see where each block has moved."
@@ -1464,6 +1545,11 @@ msgctxt "founding team section lede"
 msgid "We are hiring the people who will lead each domain of the village from the foundation through to completion. These are paid, multi-year roles, filled by application and conversation."
 msgstr "We are hiring the people who will lead each domain of the village from the foundation through to completion. These are paid, multi-year roles, filled by application and conversation."
 
+#: client/src/components/openWork/FitsYouCard.tsx
+msgctxt "open work: why the lead quest was chosen"
+msgid "A gentle place to begin."
+msgstr "A gentle place to begin."
+
 #: client/src/components/canvas/ConflictAgreementPublic.tsx
 msgid "The {careShown} role, and the {coverShown} role when they cannot."
 msgstr "The {careShown} role, and the {coverShown} role when they cannot."
@@ -1584,6 +1670,11 @@ msgstr "{who} pledged {much}, firm"
 msgid "Start again from this choice's words"
 msgstr "Start again from this choice's words"
 
+#: client/src/components/calendar/MoonSpiral.tsx
+msgctxt "calendar spiral: label beside today's seed"
+msgid "Today"
+msgstr "Today"
+
 #: client/src/components/roleEdit/RoleEditor.tsx
 msgctxt "role editor"
 msgid "How the conversations are held"
@@ -1621,10 +1712,20 @@ msgstr "Turn modules on in <0>the Module Library</0>."
 msgid "Each role's circle is asked to consent. A holder of the power to place people in roles adopts or declines your proposal, and never their own."
 msgstr "Each role's circle is asked to consent. A holder of the power to place people in roles adopts or declines your proposal, and never their own."
 
+#: client/src/pages/Events.tsx
+msgctxt "calendar day panel eyebrow"
+msgid "Today"
+msgstr "Today"
+
 #: client/src/components/roleEdit/RoleEditor.tsx
 msgctxt "role editor"
 msgid "Saved. The role is updated."
 msgstr "Saved. The role is updated."
+
+#: client/src/pages/Quests.tsx
+msgctxt "open work: the goal thread, one"
+msgid "1 open quest grows {goalName}"
+msgstr "1 open quest grows {goalName}"
 
 #: client/src/components/roleDraft/HumanDesignStep.tsx
 msgctxt "role draft discover"
@@ -1634,6 +1735,11 @@ msgstr "Birth time"
 #: client/src/components/roleDraft/DraftCarry.tsx
 msgid "The characters you picked. Show one, then choose Play this character to keep it."
 msgstr "The characters you picked. Show one, then choose Play this character to keep it."
+
+#: client/src/components/openWork/statusWords.ts
+msgctxt "open work board: status mark, an open quest"
+msgid "Open: nobody carries it yet"
+msgstr "Open: nobody carries it yet"
 
 #: client/src/components/ClosingPolicyCard.tsx
 msgid "Your suggestion is with the village. It waits on the canvas Team block, where whoever may adopt it decides."
@@ -1784,6 +1890,11 @@ msgstr "The rings run from {0} at the centre to {1} at the edge. A block with no
 msgid "Editing a change starts the review again."
 msgstr "Editing a change starts the review again."
 
+#: client/src/pages/Events.tsx
+msgctxt "calendar view tab"
+msgid "Month"
+msgstr "Month"
+
 #: client/src/components/canvas/CanvasFrameSay.tsx
 msgctxt "heading in the Say frame of the conflict block"
 msgid "The restorative steps"
@@ -1868,6 +1979,11 @@ msgctxt "open proposal attachments"
 msgid "Link {0}: web address"
 msgstr "Link {0}: web address"
 
+#: client/src/pages/Quests.tsx
+msgctxt "open work filter row"
+msgid "Season goal"
+msgstr "Season goal"
+
 #: client/src/pages/RoleDraft.tsx
 msgid "Your role runs from adoption to the next new moon, {moonEnds}. Each moon you lay out what you will contribute."
 msgstr "Your role runs from adoption to the next new moon, {moonEnds}. Each moon you lay out what you will contribute."
@@ -1876,6 +1992,11 @@ msgstr "Your role runs from adoption to the next new moon, {moonEnds}. Each moon
 msgctxt "terms commitment"
 msgid "Choose your commitment"
 msgstr "Choose your commitment"
+
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks composer: tooltip label"
+msgid "How the allowance works"
+msgstr "How the allowance works"
 
 #: client/src/components/valuation/ValuationReceipt.tsx
 msgid "Hide how this was worked out"
@@ -1944,6 +2065,11 @@ msgctxt "founding application compensation"
 msgid "Cash"
 msgstr "Cash"
 
+#: client/src/components/sessions/GatheringSeed.tsx
+msgctxt "coming up, the seed drawing"
+msgid "{filled, plural, one {Seed of Life, # of seven circles filled} other {Seed of Life, # of seven circles filled}}"
+msgstr "{filled, plural, one {Seed of Life, # of seven circles filled} other {Seed of Life, # of seven circles filled}}"
+
 #: client/src/components/governance/ExportByVote.tsx
 msgid "Ask the village for one copy of its database"
 msgstr "Ask the village for one copy of its database"
@@ -1988,6 +2114,11 @@ msgstr "Write the public line"
 #: client/src/pages/RoleDraft.tsx
 msgid "This browser won't keep your selection (private mode or site data blocked). It stays until you leave the page."
 msgstr "This browser won't keep your selection (private mode or site data blocked). It stays until you leave the page."
+
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks web heading"
+msgid "The web this moon"
+msgstr "The web this moon"
 
 #: client/src/pages/ProposeARole.tsx
 msgid "Not open right now"
@@ -2055,6 +2186,11 @@ msgctxt "new role from a card"
 msgid "Link to a Google Doc shared with anyone who has the link"
 msgstr "Link to a Google Doc shared with anyone who has the link"
 
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks send: the request failed"
+msgid "Something went wrong. Try again."
+msgstr "Something went wrong. Try again."
+
 #: client/src/pages/ChangeRequests.tsx
 msgid "A worry you cannot point to yet."
 msgstr "A worry you cannot point to yet."
@@ -2082,6 +2218,11 @@ msgstr "You asked: {askedList}. Only you see this list."
 #: client/src/components/notebook/NotebookAdd.tsx
 msgid "Added. It is private: only you can read it."
 msgstr "Added. It is private: only you can read it."
+
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks composer: allowance spent"
+msgid "You've given your whole allowance this cycle. It refills when the lunar cycle turns."
+msgstr "You've given your whole allowance this cycle. It refills when the lunar cycle turns."
 
 #: client/src/components/valuation/QuestEnginePrice.tsx
 msgctxt "quest editor"
@@ -2172,6 +2313,11 @@ msgstr "Key moments"
 msgid "That did not save. Your changes are still here."
 msgstr "That did not save. Your changes are still here."
 
+#: client/src/components/VillagePulse.tsx
+msgctxt "landing commons lede"
+msgid "This season's goals, held by the whole village. Each circle is one goal, and moss spreads into it when we reach it together."
+msgstr "This season's goals, held by the whole village. Each circle is one goal, and moss spreads into it when we reach it together."
+
 #: client/src/components/canvas/CanvasMoon.tsx
 msgid "It goes on the calendar's list as a draft that recurs every new moon. Nothing is published until you publish it."
 msgstr "It goes on the calendar's list as a draft that recurs every new moon. Nothing is published until you publish it."
@@ -2257,6 +2403,11 @@ msgstr "By {day}"
 msgctxt "next step box, when the quest starts"
 msgid "Starts {at}"
 msgstr "Starts {at}"
+
+#: client/src/components/gratitude/WallEntryCard.tsx
+msgctxt "thanks thread: who thanked whom"
+msgid "{from} thanked {to}"
+msgstr "{from} thanked {to}"
 
 #: client/src/components/governance/GoalsField.tsx
 msgctxt "proposal goals list"
@@ -2475,6 +2626,11 @@ msgctxt "member door choice"
 msgid "{count} roles are open now, from {from} to the next new moon on {to}."
 msgstr "{count} roles are open now, from {from} to the next new moon on {to}."
 
+#: client/src/components/commons/CommonsPanel.tsx
+msgctxt "the commons: fold the list"
+msgid "Show fewer goals"
+msgstr "Show fewer goals"
+
 #: client/src/components/admin/QuestSafetyEditor.tsx
 msgctxt "admin quest safety"
 msgid "Badges a member needs"
@@ -2508,6 +2664,11 @@ msgstr "Add a practice"
 #: client/src/pages/ProposeARole.tsx
 #~ msgid "Pick a role on the first stone, and its goals are asked here."
 #~ msgstr "Pick a role on the first stone, and its goals are asked here."
+
+#: client/src/components/sessions/HarvestPlant.tsx
+msgctxt "friday harvest, a priority with no answer yet"
+msgid "A seed, not read back yet"
+msgstr "A seed, not read back yet"
 
 #: client/src/pages/RoleDraft.tsx
 #~ msgctxt "role draft steps"
@@ -2612,6 +2773,11 @@ msgctxt "founding application check"
 msgid "One thing to look at before you continue:"
 msgstr "One thing to look at before you continue:"
 
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks web: nothing this moon yet"
+msgid "No threads yet this moon. The first thanks carried draws one."
+msgstr "No threads yet this moon. The first thanks carried draws one."
+
 #: client/src/components/NextStepBox.tsx
 msgctxt "next step box, no date on the quest"
 msgid "No date yet. Agree one when you talk."
@@ -2714,6 +2880,17 @@ msgstr "Sending..."
 #: client/src/pages/StructureReview.tsx
 msgid "When this is published: {updateSays}"
 msgstr "When this is published: {updateSays}"
+
+#: client/src/components/calendar/DayStrip.tsx
+msgctxt "calendar day strip: this day is today"
+msgid "today"
+msgstr "today"
+
+#: client/src/components/QuestCard.tsx
+#: client/src/pages/QuestDetail.tsx
+msgctxt "open work card: one person carries this quest now"
+msgid "1 hand on this"
+msgstr "1 hand on this"
 
 #: client/src/pages/ExitPolicy.tsx
 msgctxt "the circle that decides an involuntary exit"
@@ -2834,6 +3011,11 @@ msgctxt "open proposal side by side"
 msgid "I'll move: {text}"
 msgstr "I'll move: {text}"
 
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks composer: after the lantern arrived"
+msgid "Carry another thanks"
+msgstr "Carry another thanks"
+
 #: client/src/pages/ProposeQuest.tsx
 msgctxt "voice field purpose: propose quest description"
 msgid "The quest you want to do: what you would create, and what it brings to the village."
@@ -2842,6 +3024,11 @@ msgstr "The quest you want to do: what you would create, and what it brings to t
 #: client/src/pages/Roles.tsx
 msgid "Working groups with real authority. Each circle has an aim (what it works toward) and a domain (what it decides on)."
 msgstr "Working groups with real authority. Each circle has an aim (what it works toward) and a domain (what it decides on)."
+
+#: client/src/components/calendar/MoonSpiral.tsx
+msgctxt "calendar spiral: label beside the full moon"
+msgid "Full moon, {date}"
+msgstr "Full moon, {date}"
 
 #: client/src/pages/RoleDraft.tsx
 #~ msgctxt "role draft step"
@@ -2855,6 +3042,16 @@ msgstr "Each role's circle is asked to consent, and a holder of the power to pla
 #: client/src/components/review/SeraMember.tsx
 msgid "Nothing from {agent} waits for the chart"
 msgstr "Nothing from {agent} waits for the chart"
+
+#: client/src/components/openWork/QuestThreadPicker.tsx
+msgctxt "quest goal thread editor"
+msgid "This season has no goals yet. Add them in Admin, Season."
+msgstr "This season has no goals yet. Add them in Admin, Season."
+
+#: client/src/components/calendar/MoonTurnings.tsx
+msgctxt "calendar turnings heading"
+msgid "This moon's turnings"
+msgstr "This moon's turnings"
 
 #: client/src/components/admin/AdminHelperPanel.tsx
 msgctxt "admin helper, proposal: new value"
@@ -2993,6 +3190,11 @@ msgstr "Recently decided"
 msgctxt "notebook document kind and date"
 msgid "{0}, added {1}."
 msgstr "{0}, added {1}."
+
+#: client/src/components/CycleClock.tsx
+msgctxt "cycle clock: the clock has not answered yet"
+msgid "Reading when allowances refill"
+msgstr "Reading when allowances refill"
 
 #: client/src/components/governance/SeatPicksField.tsx
 msgctxt "role application: link from the roles step to the role picker"
@@ -3181,6 +3383,11 @@ msgstr "No round is open yet. When the pot's holder opens one, ideas are welcome
 msgid "Optional. Plain text. They read it on their status page and in our email. It is part of their own application, and nobody else sees it."
 msgstr "Optional. Plain text. They read it on their status page and in our email. It is part of their own application, and nobody else sees it."
 
+#: client/src/pages/Events.tsx
+msgctxt "calendar page title"
+msgid "Village calendar"
+msgstr "Village calendar"
+
 #: client/src/components/Layout.tsx
 msgctxt "site footer"
 msgid "Village OS source"
@@ -3190,6 +3397,11 @@ msgstr "Village OS source"
 msgctxt "role editor"
 msgid "Funded from"
 msgstr "Funded from"
+
+#: client/src/components/openWork/FitsYouCard.tsx
+msgctxt "open work: the one act on the lead card"
+msgid "Take this on"
+msgstr "Take this on"
 
 #: client/src/pages/Forum.tsx
 msgctxt "voice field label: new forum post"
@@ -3290,6 +3502,11 @@ msgstr "Take {owner} for {n}"
 msgctxt "button: the story's holder sets aside a canvas suggestion"
 msgid "Set it aside"
 msgstr "Set it aside"
+
+#: client/src/components/calendar/MoonSpiral.tsx
+msgctxt "calendar spiral: a turning"
+msgid "new moon"
+msgstr "new moon"
 
 #: client/src/components/canvas/ConflictAgreementEditor.tsx
 msgid "Sign in to read the conflict agreement."
@@ -3478,6 +3695,11 @@ msgctxt "open proposal attachments"
 msgid "Links to your work (optional)"
 msgstr "Links to your work (optional)"
 
+#: client/src/pages/Events.tsx
+msgctxt "calendar page eyebrow"
+msgid "Calendar"
+msgstr "Calendar"
+
 #. placeholder {0}: i + 1
 #: client/src/components/openProposal/AboutYou.tsx
 msgctxt "about you"
@@ -3505,6 +3727,11 @@ msgstr "Week {0}, {1}: {2}"
 #: client/src/components/fundingRounds/RoundParts.tsx
 msgid "A rough idea is enough. Each member may share {allowance} in this round."
 msgstr "A rough idea is enough. Each member may share {allowance} in this round."
+
+#: client/src/components/openWork/FitsYouCard.tsx
+msgctxt "open work: the one card chosen for the reader"
+msgid "Fits you"
+msgstr "Fits you"
 
 #: client/src/pages/RoleDraft.tsx
 #~ msgid "Propose with my {pickCount} picks"
@@ -3669,6 +3896,11 @@ msgctxt "role editor"
 msgid "No pay on offer"
 msgstr "No pay on offer"
 
+#: client/src/components/openWork/placeWords.ts
+msgctxt "open work: where a quest happens"
+msgid "On the land or remote"
+msgstr "On the land or remote"
+
 #. placeholder {0}: d.day
 #: client/src/components/today/FirstFourteenDays.tsx
 msgctxt "first fourteen days strip, a day's number in its name"
@@ -3731,6 +3963,11 @@ msgctxt "reviewer's terms panel for a proposal"
 msgid "We'd agree {0}%"
 msgstr "We'd agree {0}%"
 
+#: client/src/components/gratitude/WallEntryCard.tsx
+msgctxt "thanks thread: a person with no recorded name"
+msgid "A member"
+msgstr "A member"
+
 #: client/src/components/review/SeraBulk.tsx
 msgctxt "sera answers"
 msgid "Each one leaves the list until {agent} changes it again."
@@ -3745,6 +3982,11 @@ msgstr "Adds"
 msgctxt "funding round stage"
 msgid "This round is closed"
 msgstr "This round is closed"
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar page: today's place in the moon, with the moon's name"
+msgid "Today is day {lunarDay} of {moonLength} in {said}"
+msgstr "Today is day {lunarDay} of {moonLength} in {said}"
 
 #: client/src/components/openProposal/AboutYou.tsx
 msgctxt "about you"
@@ -3848,6 +4090,11 @@ msgstr "Commitment: {commitment}%"
 msgid "Every member reads this line beside the vote, and it stays on the record."
 msgstr "Every member reads this line beside the vote, and it stays on the record."
 
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks wall: signed out"
+msgid "Sign in to carry a thanks to a fellow member."
+msgstr "Sign in to carry a thanks to a fellow member."
+
 #: client/src/components/canvas/CanvasSeason.tsx
 msgid "Load a season file"
 msgstr "Load a season file"
@@ -3938,6 +4185,11 @@ msgctxt "agent paths, a read"
 msgid "Read"
 msgstr "Read"
 
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks wall heading"
+msgid "What we saw in each other"
+msgstr "What we saw in each other"
+
 #. placeholder {0}: outcome.landed.length
 #: client/src/pages/ProposedChanges.tsx
 msgctxt "proposed changes"
@@ -3954,9 +4206,20 @@ msgctxt "agent proposal"
 msgid "Role"
 msgstr "Role"
 
+#. placeholder {0}: currency.toLowerCase()
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks wall: what a thanks becomes"
+msgid "Every thanks here also carries <0>{0}</0> to the person it names."
+msgstr "Every thanks here also carries <0>{0}</0> to the person it names."
+
 #: client/src/pages/StructureReview.tsx
 msgid "It moves into {theirCircle}."
 msgstr "It moves into {theirCircle}."
+
+#: client/src/components/openWork/QuestThreadPicker.tsx
+msgctxt "quest goal thread editor: field"
+msgid "Season goal"
+msgstr "Season goal"
 
 #: client/src/pages/RoleDraft.tsx
 #~ msgid "What happens after you propose"
@@ -3979,6 +4242,11 @@ msgctxt "founding application about"
 msgid "Your Human Design or Gene Keys (optional)"
 msgstr "Your Human Design or Gene Keys (optional)"
 
+#: client/src/components/openWork/FitsYouCard.tsx
+msgctxt "open work: why the lead quest was chosen"
+msgid "It grows from your roots."
+msgstr "It grows from your roots."
+
 #: client/src/pages/ChangeRequests.tsx
 msgid "Counts for this version. An edit asks again."
 msgstr "Counts for this version. An edit asks again."
@@ -3995,6 +4263,11 @@ msgstr "{agent} suggests {n} small changes for the chart"
 #: client/src/components/governance/SeasonGoalField.tsx
 msgid "Loading the season's goals…"
 msgstr "Loading the season's goals…"
+
+#: client/src/components/sessions/GatheringSeed.tsx
+msgctxt "coming up, i'll be there, said once it lands"
+msgid "Thank you. The {circle} will see you there."
+msgstr "Thank you. The {circle} will see you there."
 
 #: client/src/components/ClosingPolicyCard.tsx
 msgctxt "button that closes the closing policy suggestion"
@@ -4066,6 +4339,11 @@ msgstr "Your note (optional to adopt, needed to decline)"
 msgctxt "funding rounds"
 msgid "Yours"
 msgstr "Yours"
+
+#: client/src/pages/Quests.tsx
+msgctxt "open work filter: every place"
+msgid "Anywhere"
+msgstr "Anywhere"
 
 #: client/src/components/review/SeraMember.tsx
 msgid "{agent} suggests {nChanges} for the chart"
@@ -4190,6 +4468,11 @@ msgstr "Work out this role's pay with the valuation engine"
 msgid "No document attached yet."
 msgstr "No document attached yet."
 
+#: client/src/components/openWork/statusWords.ts
+msgctxt "open work board: status mark, a carried quest"
+msgid "Underway: someone carries it"
+msgstr "Underway: someone carries it"
+
 #: client/src/components/openProposal/RoleCardBridge.tsx
 #~ msgid "For {roleName}, if the village takes your proposal forward:"
 #~ msgstr "For {roleName}, if the village takes your proposal forward:"
@@ -4218,10 +4501,20 @@ msgctxt "role editor"
 msgid "Sera has sent no figures for this role to go on."
 msgstr "Sera has sent no figures for this role to go on."
 
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks web: how to read it"
+msgid "Faces sit in alphabetical order, and nobody sees how many threads anyone holds."
+msgstr "Faces sit in alphabetical order, and nobody sees how many threads anyone holds."
+
 #: client/src/pages/Approvals.tsx
 msgctxt "approval inbox"
 msgid "Sign in to see it"
 msgstr "Sign in to see it"
+
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks web: how to read it, desktop"
+msgid "Hover a thanks and its thread lights. Faces sit in alphabetical order, and nobody sees how many threads anyone holds."
+msgstr "Hover a thanks and its thread lights. Faces sit in alphabetical order, and nobody sees how many threads anyone holds."
 
 #: client/src/components/fundingRounds/RoundParts.tsx
 msgctxt "funding rounds"
@@ -4300,6 +4593,11 @@ msgctxt "character card, role ideas the village does not have yet"
 msgid "Roles this character could open. Propose one and the village decides:"
 msgstr "Roles this character could open. Propose one and the village decides:"
 
+#: client/src/pages/Quests.tsx
+msgctxt "open work filter: all season goals"
+msgid "Every goal"
+msgstr "Every goal"
+
 #: client/src/components/ClosingPolicyCard.tsx
 msgctxt "button that proposes a change to what closing means"
 msgid "Propose a change"
@@ -4314,6 +4612,11 @@ msgstr "Withdraw it"
 msgctxt "character card, open roles tagged for no character"
 msgid "Also open in the village, for anyone:"
 msgstr "Also open in the village, for anyone:"
+
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks wall: signed out door"
+msgid "Sign in"
+msgstr "Sign in"
 
 #: client/src/components/journey/TestRun.tsx
 msgctxt "test run button, busy"
@@ -4343,6 +4646,11 @@ msgstr "The canvas asks"
 msgctxt "sera answers"
 msgid "Changed since it was taken"
 msgstr "Changed since it was taken"
+
+#: client/src/components/VillagePulse.tsx
+msgctxt "landing commons door"
+msgid "See the roles that tend these goals"
+msgstr "See the roles that tend these goals"
 
 #: client/src/components/openProposal/ProposalAttachments.tsx
 msgid "Each file has to be {mb} MB or less."
@@ -4558,10 +4866,20 @@ msgctxt "approval inbox"
 msgid "Proposed by {0}."
 msgstr "Proposed by {0}."
 
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks composer heading"
+msgid "Carry a thanks"
+msgstr "Carry a thanks"
+
 #: client/src/components/admin/AgreementDocumentUpload.tsx
 msgctxt "admin confidentiality section"
 msgid "The PDF"
 msgstr "The PDF"
+
+#: client/src/pages/Quests.tsx
+msgctxt "open work board eyebrow"
+msgid "Quests"
+msgstr "Quests"
 
 #: client/src/components/governance/TermsEight.tsx
 msgid "A note, if you like"
@@ -4673,6 +4991,12 @@ msgstr "Talk it out"
 msgctxt "founding application check"
 msgid "{0} things to look at before you continue:"
 msgstr "{0} things to look at before you continue:"
+
+#. placeholder {0}: g.going
+#: client/src/components/sessions/GatheringSeed.tsx
+msgctxt "coming up, i'll be there, how many said so"
+msgid "{0, plural, one {# of us said we will be there.} other {# of us said we will be there.}}"
+msgstr "{0, plural, one {# of us said we will be there.} other {# of us said we will be there.}}"
 
 #: client/src/components/roots/RootPicker.tsx
 msgctxt "root picker coverage summary"
@@ -4883,6 +5207,11 @@ msgctxt "connector proposals"
 msgid "Published"
 msgstr "Published"
 
+#: client/src/components/sessions/GatheringSeed.tsx
+msgctxt "coming up, i'll be there, said once it is taken back"
+msgid "Thank you for saying. Your circle in the seed is open again."
+msgstr "Thank you for saying. Your circle in the seed is open again."
+
 #: client/src/components/journey/EconomicsView.tsx
 msgctxt "vendor support link"
 msgid "Support"
@@ -5014,6 +5343,11 @@ msgstr "In a draft, not live yet: 1 change"
 msgctxt "canvas block picker, empty choice"
 msgid "Choose a block"
 msgstr "Choose a block"
+
+#: client/src/components/calendar/MoonTurnings.tsx
+msgctxt "calendar turnings"
+msgid "New moon, the next moon opens"
+msgstr "New moon, the next moon opens"
 
 #: client/src/components/canvas/ConflictAgreementPublic.tsx
 msgid "The people outside the village it names"
@@ -5308,6 +5642,11 @@ msgstr "Your walk so far"
 msgid "Nothing counts as removed because of a check that failed. A role leaves the list only when {agent} archives it, or when it is missing from two full checks in a row."
 msgstr "Nothing counts as removed because of a check that failed. A role leaves the list only when {agent} archives it, or when it is missing from two full checks in a row."
 
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks composer: the send button"
+msgid "Send the lantern"
+msgstr "Send the lantern"
+
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "the value of a setting today"
 msgid "Now"
@@ -5391,6 +5730,11 @@ msgstr "Three to five is the usual."
 msgid "Each link has to be a full web address starting with https://."
 msgstr "Each link has to be a full web address starting with https://."
 
+#: client/src/components/sessions/GatheringSeed.tsx
+msgctxt "coming up, i'll be there, the names of who said so"
+msgid "{named, plural, one {{names} said they will be there.} other {{names} said they will be there.}}"
+msgstr "{named, plural, one {{names} said they will be there.} other {{names} said they will be there.}}"
+
 #: client/src/components/admin/AgentsPanel.tsx
 msgctxt "approval inbox"
 msgid "Approval inbox"
@@ -5400,6 +5744,11 @@ msgstr "Approval inbox"
 msgctxt "next step box"
 msgid "Talk to {label}"
 msgstr "Talk to {label}"
+
+#: client/src/components/VillagePulse.tsx
+msgctxt "landing commons heading"
+msgid "The commons"
+msgstr "The commons"
 
 #: client/src/components/fireflyPath/ApplySteps.tsx
 msgctxt "founding application compensation"
@@ -5435,6 +5784,11 @@ msgstr "{open} waiting"
 #~ msgctxt "character card, propose for one open role"
 #~ msgid "Propose for {name}"
 #~ msgstr "Propose for {name}"
+
+#: client/src/components/calendar/DayStrip.tsx
+msgctxt "calendar day strip: a turning"
+msgid "full moon"
+msgstr "full moon"
 
 #: client/src/components/admin/ConflictDoorFields.tsx
 msgctxt "an outside contact's organisation"
@@ -5595,6 +5949,11 @@ msgstr "Live now"
 msgid "Sign in to see what your village is weighing."
 msgstr "Sign in to see what your village is weighing."
 
+#: client/src/components/sessions/HarvestPlant.tsx
+msgctxt "friday harvest, a priority that was done"
+msgid "Flowered"
+msgstr "Flowered"
+
 #: client/src/components/fundingRounds/common.tsx
 msgctxt "funding round stage"
 msgid "Closed"
@@ -5750,6 +6109,11 @@ msgstr "<0><1/>Print the canvas workbook</0> to talk {name} through on paper. Th
 msgctxt "button that opens the conflict agreement editor"
 msgid "Edit the agreement"
 msgstr "Edit the agreement"
+
+#: client/src/components/commons/CommonsPanel.tsx
+msgctxt "the commons: unfold the list"
+msgid "Show all {total} goals"
+msgstr "Show all {total} goals"
 
 #: client/src/components/admin/AiAgentsApprovalPanel.tsx
 msgid "Until the Anchor approves, an AI agent cannot draft letters to applicants or list the applicants waiting on a holder. It never scores, ranks or summarises a candidate, and a person always sends."
@@ -5971,6 +6335,12 @@ msgctxt "signing key"
 msgid "Make a new key"
 msgstr "Make a new key"
 
+#: client/src/components/commons/CommonsPanel.tsx
+#: client/src/components/roleDraft/SeasonGoals.tsx
+msgctxt "the commons drawing: what a screen reader hears"
+msgid "This season's {total} goals as circles. Moss has spread into the {reached} we have reached together. Each goal not reached yet holds a seed."
+msgstr "This season's {total} goals as circles. Moss has spread into the {reached} we have reached together. Each goal not reached yet holds a seed."
+
 #: client/src/components/roleEdit/BringInCard.tsx
 msgctxt "role editor card"
 msgid "The card's words"
@@ -6013,6 +6383,11 @@ msgstr "No invoice has been sent yet."
 msgid "The village organizes itself the way a forest does:"
 msgstr "The village organizes itself the way a forest does:"
 
+#: client/src/pages/Quests.tsx
+msgctxt "open work: gated quests explained once"
+msgid "Some of this work opens as you walk the {ladder} or step into a role. Each card says what opens it."
+msgstr "Some of this work opens as you walk the {ladder} or step into a role. Each card says what opens it."
+
 #: client/src/pages/ProposeARole.tsx
 #~ msgctxt "open proposal"
 #~ msgid "Opening the form"
@@ -6021,6 +6396,11 @@ msgstr "The village organizes itself the way a forest does:"
 #: client/src/components/admin/AgentsPanel.tsx
 msgid "Paste the paths as JSON, in the shape the list saves: a paths list of method, path, confirm and label. Paths already on the list stay; a pasted one that is there already takes the pasted confirm and words."
 msgstr "Paste the paths as JSON, in the shape the list saves: a paths list of method, path, confirm and label. Paths already on the list stay; a pasted one that is there already takes the pasted confirm and words."
+
+#: client/src/pages/Quests.tsx
+msgctxt "open work: the goal thread, none"
+msgid "No open quests grow {goalName} yet"
+msgstr "No open quests grow {goalName} yet"
 
 #: client/src/components/admin/QuestSafetyEditor.tsx
 #~ msgctxt "admin quest safety"
@@ -6055,6 +6435,11 @@ msgstr "Role {name}"
 msgctxt "voice field purpose: objection ruling note"
 msgid "Why you ruled this objection the way you did, for the record."
 msgstr "Why you ruled this objection the way you did, for the record."
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar view tab"
+msgid "Year"
+msgstr "Year"
 
 #: client/src/components/admin/ConflictDoorFields.tsx
 #: client/src/components/canvas/ConflictAgreementEditor.tsx
@@ -6114,6 +6499,11 @@ msgstr "Nobody has read {name} yet."
 msgid "You are signed in, so a block can also open the words the village keeps for its members. Visitors read the public lines only."
 msgstr "You are signed in, so a block can also open the words the village keeps for its members. Visitors read the public lines only."
 
+#: client/src/pages/QuestDetail.tsx
+msgctxt "quest page: link to the board filtered to one season goal"
+msgid "See all the open work for this goal"
+msgstr "See all the open work for this goal"
+
 #: client/src/pages/Roles.tsx
 msgctxt "roles page"
 msgid "Loading roles…"
@@ -6130,6 +6520,11 @@ msgstr "The Game has started, so this path, the care and cover roles, the reply 
 #: client/src/components/fundingRounds/RoundParts.tsx
 msgid "Tick every quest you would fund. Nobody sees your ticks until choosing closes; then they are shown with your name."
 msgstr "Tick every quest you would fund. Nobody sees your ticks until choosing closes; then they are shown with your name."
+
+#: client/src/components/sessions/GatheringSeed.tsx
+msgctxt "coming up, taking back i'll be there"
+msgid "I can't come after all"
+msgstr "I can't come after all"
 
 #: client/src/components/roleEdit/RoleEditor.tsx
 msgctxt "role editor"
@@ -6182,6 +6577,10 @@ msgctxt "agent paths, a group"
 msgid "Events"
 msgstr "Events"
 
+#: client/src/components/commons/CommonsPanel.tsx
+msgid "{count, plural, one {# open quest grows {text}} other {# open quests grow {text}}}"
+msgstr "{count, plural, one {# open quest grows {text}} other {# open quests grow {text}}}"
+
 #: client/src/components/review/SeraOnReview.tsx
 msgid "What each of these holds is in the list above, so none of it is offered here a second time."
 msgstr "What each of these holds is in the list above, so none of it is offered here a second time."
@@ -6190,6 +6589,11 @@ msgstr "What each of these holds is in the list above, so none of it is offered 
 msgctxt "label of a practice's name"
 msgid "The practice"
 msgstr "The practice"
+
+#: client/src/components/openWork/statusWords.ts
+msgctxt "open work board: status mark, a quest done this moon"
+msgid "Done this moon"
+msgstr "Done this moon"
 
 #: client/src/components/canvas/ConflictAgreementEditor.tsx
 msgctxt "a safety contact's name"
@@ -6309,6 +6713,11 @@ msgstr "Approved by {0}"
 msgid "Keep ours means {owner} version stays out of the list until {agent} changes it again. Undo brings it back."
 msgstr "Keep ours means {owner} version stays out of the list until {agent} changes it again. Undo brings it back."
 
+#: client/src/pages/Events.tsx
+msgctxt "calendar day panel: empty day"
+msgid "Nothing is on this day yet."
+msgstr "Nothing is on this day yet."
+
 #: client/src/pages/FundingRounds.tsx
 msgctxt "funding rounds"
 msgid "A pot"
@@ -6373,6 +6782,11 @@ msgctxt "role editor history"
 msgid "put back"
 msgstr "put back"
 
+#: client/src/pages/Events.tsx
+msgctxt "calendar view tab"
+msgid "Week"
+msgstr "Week"
+
 #: client/src/components/roots/RootPicker.tsx
 msgctxt "coverage row button"
 msgid "Use these"
@@ -6387,6 +6801,11 @@ msgstr "Your value"
 #~ msgctxt "open proposal why starter"
 #~ msgid "What I have tended before:"
 #~ msgstr "What I have tended before:"
+
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks composer: no allowance yet"
+msgid "Your allowance to give opens as you walk the {ladder}."
+msgstr "Your allowance to give opens as you walk the {ladder}."
 
 #: client/src/components/governance/GoalsList.tsx
 msgid "Plant the first three beds"
@@ -6576,6 +6995,11 @@ msgctxt "signing key"
 msgid "{asker} asked for a new key at {askedAt}. Your co-sign replaces it now. If you did not expect this, decline it: an admin account may be in the wrong hands."
 msgstr "{asker} asked for a new key at {askedAt}. Your co-sign replaces it now. If you did not expect this, decline it: an admin account may be in the wrong hands."
 
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks composer: recipient field"
+msgid "Who you are thanking, by handle"
+msgstr "Who you are thanking, by handle"
+
 #: client/src/components/notebook/NotebookDocument.tsx
 msgctxt "keep the document, do not delete"
 msgid "Keep it"
@@ -6725,6 +7149,11 @@ msgstr "Open the link in that email by {until}. Until you do, nothing reaches us
 msgctxt "sera answers"
 msgid "The village is voting on it until {closes}."
 msgstr "The village is voting on it until {closes}."
+
+#: client/src/components/calendar/CalendarNotes.tsx
+msgctxt "calendar page: the door to the Seasonal Festivals page"
+msgid "The turnings that shape this year are on the <0>Seasonal Festivals</0> page."
+msgstr "The turnings that shape this year are on the <0>Seasonal Festivals</0> page."
 
 #: client/src/components/approvals/ApprovalInbox.tsx
 msgctxt "approval inbox"
@@ -6907,6 +7336,11 @@ msgctxt "applicant's application status, terms"
 msgid "Our wording now"
 msgstr "Our wording now"
 
+#: client/src/components/sessions/GatheringSeed.tsx
+msgctxt "coming up, i'll be there"
+msgid "Nobody has said yet. The seed fills as we say we will come."
+msgstr "Nobody has said yet. The seed fills as we say we will come."
+
 #. placeholder {0}: CARD_LIMITS.serves
 #: client/src/components/openProposal/RoleCardBridge.tsx
 msgid "Which of the village's goals for the season does your work in {roleName} serve? Pick up to {0}, and say how."
@@ -6983,6 +7417,11 @@ msgctxt "role editor card"
 msgid "Bring in a card written in the role card v1 format. The words are read and not kept. Nothing changes until you save."
 msgstr "Bring in a card written in the role card v1 format. The words are read and not kept. Nothing changes until you save."
 
+#: client/src/components/openWork/QuestThreadPicker.tsx
+msgctxt "quest goal thread editor: empty choice"
+msgid "Not said yet"
+msgstr "Not said yet"
+
 #: client/src/components/canvas/ConflictAgreementPublic.tsx
 msgid "Voting closes on {closesOn}. <0>Read the vote and cast yours</0>. The vote's page holds back anything that names a person, and the members-only parts. All of what it would adopt is here."
 msgstr "Voting closes on {closesOn}. <0>Read the vote and cast yours</0>. The vote's page holds back anything that names a person, and the members-only parts. All of what it would adopt is here."
@@ -7029,6 +7468,11 @@ msgctxt "voice field purpose: work with us reciprocity"
 msgid "The exchange you are proposing: amounts, structure, percentages, a blend, or something else."
 msgstr "The exchange you are proposing: amounts, structure, percentages, a blend, or something else."
 
+#: client/src/pages/Events.tsx
+msgctxt "calendar day panel heading"
+msgid "What is on this day"
+msgstr "What is on this day"
+
 #: client/src/components/fundingRounds/RoundParts.tsx
 msgid "{title} is fully backed by pledges, so it goes ahead without the pot."
 msgstr "{title} is fully backed by pledges, so it goes ahead without the pot."
@@ -7037,6 +7481,11 @@ msgstr "{title} is fully backed by pledges, so it goes ahead without the pot."
 msgctxt "proposed changes"
 msgid "Working"
 msgstr "Working"
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar page: today's place in the moon"
+msgid "Today is day {lunarDay} of {moonLength}"
+msgstr "Today is day {lunarDay} of {moonLength}"
 
 #: client/src/components/roleDraft/DraftCarry.tsx
 #~ msgctxt "role draft carry"
@@ -7349,6 +7798,11 @@ msgstr "Start it"
 msgid "They have not aligned with the membership letter yet."
 msgstr "They have not aligned with the membership letter yet."
 
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks wall: the list of threads"
+msgid "The thanks, newest first"
+msgstr "The thanks, newest first"
+
 #: client/src/components/admin/AiAgentsApprovalPanel.tsx
 msgid "Not approved. Both tools are closed."
 msgstr "Not approved. Both tools are closed."
@@ -7357,6 +7811,11 @@ msgstr "Not approved. Both tools are closed."
 msgctxt "reviewer's terms panel for a proposal"
 msgid "I accept"
 msgstr "I accept"
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar moon view heading, a village with no moon count or names"
+msgid "This moon"
+msgstr "This moon"
 
 #: client/src/pages/ApplicationStatus.tsx
 msgid "You did not answer this one."
@@ -7405,6 +7864,11 @@ msgctxt "tag on the canvas block a season starts with"
 msgid "First up"
 msgstr "First up"
 
+#: client/src/pages/Quests.tsx
+msgctxt "open work filter row"
+msgid "Where it happens"
+msgstr "Where it happens"
+
 #: client/src/pages/OpenProposal.tsx
 msgctxt "open proposal: the floating decision row on a phone"
 msgid "Something waits before you can adopt. It is in the card further down."
@@ -7428,6 +7892,11 @@ msgstr "Remove this practice"
 #: client/src/pages/ExitPolicy.tsx
 msgid "Anything you want the stewards to know (optional)"
 msgstr "Anything you want the stewards to know (optional)"
+
+#: client/src/components/GameDashboard.tsx
+msgctxt "profile quests card: the door to the board"
+msgid "See the open work"
+msgstr "See the open work"
 
 #: client/src/pages/ExitPolicy.tsx
 msgctxt "exit policy page title"
@@ -7632,6 +8101,11 @@ msgctxt "admin quest safety"
 msgid "Open to every age"
 msgstr "Open to every age"
 
+#: client/src/components/sessions/GatheringSeed.tsx
+msgctxt "coming up, i'll be there"
+msgid "You said you will be there."
+msgstr "You said you will be there."
+
 #: client/src/components/admin/OrgChartTab.tsx
 msgid "Roles in no circle"
 msgstr "Roles in no circle"
@@ -7756,6 +8230,11 @@ msgctxt "button that removes a contact from the agreement"
 msgid "Remove this contact"
 msgstr "Remove this contact"
 
+#: client/src/components/openWork/QuestThreadPicker.tsx
+msgctxt "quest goal thread editor"
+msgid "The goal this quest grows"
+msgstr "The goal this quest grows"
+
 #: client/src/pages/ProposedChanges.tsx
 msgctxt "proposed changes"
 msgid "This page is for admins and for the people who hold the powers these changes need."
@@ -7778,6 +8257,16 @@ msgstr "Roles"
 #: client/src/components/canvas/ConflictAgreementEditor.tsx
 msgid "The date it comes back for review"
 msgstr "The date it comes back for review"
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar day panel: place in the moon"
+msgid "day {lunarDay} of {moonLength}"
+msgstr "day {lunarDay} of {moonLength}"
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar legend"
+msgid "today"
+msgstr "today"
 
 #: client/src/components/tracks/FirstSteps.tsx
 msgid "{title}: mark as not done"
@@ -7875,6 +8364,11 @@ msgctxt "your path, the next act"
 msgid "Sign in"
 msgstr "Sign in"
 
+#: client/src/components/calendar/MoonSpiral.tsx
+msgctxt "calendar spiral: what is on a day"
+msgid "something on the calendar"
+msgstr "something on the calendar"
+
 #: client/src/components/review/SeraInDraft.tsx
 msgctxt "sera answers"
 msgid "this role"
@@ -7898,6 +8392,11 @@ msgstr "Your next step"
 #: client/src/components/openProposal/RoleCardBridge.tsx
 msgid "They will align with the confidentiality agreement once approved."
 msgstr "They will align with the confidentiality agreement once approved."
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar legend"
+msgid "days walked"
+msgstr "days walked"
 
 #: client/src/components/review/SeraInDraft.tsx
 msgctxt "sera answers"
@@ -7926,6 +8425,16 @@ msgstr "You"
 #: client/src/components/roleDraft/DraftCarry.tsx
 #~ msgid "Apply with your draft"
 #~ msgstr "Apply with your draft"
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar loading"
+msgid "Opening the calendar"
+msgstr "Opening the calendar"
+
+#: client/src/components/openWork/placeWords.ts
+msgctxt "open work: where a quest happens"
+msgid "On the land"
+msgstr "On the land"
 
 #: client/src/pages/RoleProposal.tsx
 msgctxt "member door choice"
@@ -7976,6 +8485,11 @@ msgstr "No season is loaded, so the blocks below are in canvas order. A season f
 msgctxt "pricing desk"
 msgid "{0} waiting for a signer"
 msgstr "{0} waiting for a signer"
+
+#: client/src/components/openWork/QuestThreadPicker.tsx
+msgctxt "quest goal thread editor: field"
+msgid "Where it happens"
+msgstr "Where it happens"
 
 #: client/src/components/roleEdit/RoleEditor.tsx
 msgctxt "role editor: who can hold a role"
@@ -8186,6 +8700,11 @@ msgstr "Add an interviewer"
 msgctxt "characters rail, a root already picked"
 msgid "One of your roots"
 msgstr "One of your roots"
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar: step back one moon"
+msgid "The moon before"
+msgstr "The moon before"
 
 #: client/src/components/canvas/ConflictAgreementPublic.tsx
 msgctxt "button that opens the conflict agreement editor to read"
@@ -8461,6 +8980,11 @@ msgstr "Say what you would bring, which of the village's goals it serves, and wh
 msgid "Suggest a change to what closing means"
 msgstr "Suggest a change to what closing means"
 
+#: client/src/components/commons/CommonsPanel.tsx
+msgctxt "the commons: a goal the village has reached"
+msgid "Reached"
+msgstr "Reached"
+
 #: client/src/pages/Roles.tsx
 msgid "Decisions move forward when no one has a reasoned objection that the proposal would cause harm or block the aim. Everyone loving them is not the bar."
 msgstr "Decisions move forward when no one has a reasoned objection that the proposal would cause harm or block the aim. Everyone loving them is not the bar."
@@ -8534,6 +9058,11 @@ msgstr "Discard"
 #: client/src/pages/Roles.tsx
 msgid "A role is a named responsibility inside a circle, with an aim, a domain, and accountabilities. The role belongs to the circle, and a person steps into it."
 msgstr "A role is a named responsibility inside a circle, with an aim, a domain, and accountabilities. The role belongs to the circle, and a person steps into it."
+
+#: client/src/components/openWork/QuestThreadPicker.tsx
+msgctxt "quest goal thread editor: button while saving"
+msgid "Saving"
+msgstr "Saving"
 
 #: client/src/components/admin/AdminHeader.tsx
 msgctxt "admin header, menu button"
@@ -8641,6 +9170,11 @@ msgstr "Adopt it"
 msgid "Change it in the agreement"
 msgstr "Change it in the agreement"
 
+#: client/src/components/calendar/MoonSpiral.tsx
+msgctxt "calendar spiral: what the drawing is"
+msgid "This moon's {n} days on a golden spiral, the new moon at the centre"
+msgstr "This moon's {n} days on a golden spiral, the new moon at the centre"
+
 #: client/src/pages/RoleDraft.tsx
 #~ msgid "Propose with my pick"
 #~ msgstr "Propose with my pick"
@@ -8735,6 +9269,11 @@ msgctxt "sera answers"
 msgid "Check first"
 msgstr "Check first"
 
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks composer: close the sheet"
+msgid "Close"
+msgstr "Close"
+
 #: client/src/pages/Governance.tsx
 msgid "Twelve blocks, from purpose to impact, that a group can talk through together: who decides, how conflict is held, how resources move. The workbook prints each block on its own page with room to write, and it can be saved as a Markdown file too."
 msgstr "Twelve blocks, from purpose to impact, that a group can talk through together: who decides, how conflict is held, how resources move. The workbook prints each block on its own page with room to write, and it can be saved as a Markdown file too."
@@ -8801,6 +9340,11 @@ msgctxt "sera changes"
 msgid "Asking now."
 msgstr "Asking now."
 
+#: client/src/components/calendar/MoonTurnings.tsx
+msgctxt "calendar turnings"
+msgid "Full moon"
+msgstr "Full moon"
+
 #: client/src/pages/Roles.tsx
 msgctxt "roles page, how it works"
 msgid "Circles"
@@ -8809,6 +9353,11 @@ msgstr "Circles"
 #: client/src/components/canvas/CanvasRadar.tsx
 msgid "The canvas radar, one axis per block"
 msgstr "The canvas radar, one axis per block"
+
+#: client/src/components/gratitude/ThreadWeb.tsx
+msgctxt "thanks web: what the drawing shows, read aloud"
+msgid "This moon's threads between people who thanked each other, faces in alphabetical order"
+msgstr "This moon's threads between people who thanked each other, faces in alphabetical order"
 
 #: client/src/pages/Propose.tsx
 msgid "Propose for a role"
@@ -8876,6 +9425,11 @@ msgstr "Take this season off? The canvas goes back to canvas order, and every re
 #: client/src/components/canvas/ConflictAgreementEditor.tsx
 msgid "A vote on changing the agreement is open until {openUntil}. <0>Read it and vote</0>."
 msgstr "A vote on changing the agreement is open until {openUntil}. <0>Read it and vote</0>."
+
+#: client/src/components/openWork/placeWords.ts
+msgctxt "open work: where a quest happens"
+msgid "Remote"
+msgstr "Remote"
 
 #: client/src/components/path/NextAct.tsx
 msgctxt "your path, the next act"
@@ -8974,6 +9528,11 @@ msgstr "The card's words"
 msgid "The season, week by week"
 msgstr "The season, week by week"
 
+#: client/src/components/openWork/QuestThreadPicker.tsx
+msgctxt "quest goal thread editor"
+msgid "That did not save. Try again."
+msgstr "That did not save. Try again."
+
 #: client/src/components/TimeZoneField.tsx
 msgctxt "time zone field"
 msgid "Your time zone"
@@ -9042,6 +9601,11 @@ msgstr "Read it through once, then send. Nothing reaches us until you confirm yo
 msgctxt "open a notebook document"
 msgid "Open {0}"
 msgstr "Open {0}"
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar page lede"
+msgid "Pick a day to see what is on. The village keeps two clocks: the twelve months everyone shares, and the moons the land turns by."
+msgstr "Pick a day to see what is on. The village keeps two clocks: the twelve months everyone shares, and the moons the land turns by."
 
 #: client/src/components/openProposal/RoleCardBridge.tsx
 #~ msgid "This role lists no outcomes yet."
@@ -9120,6 +9684,11 @@ msgstr "What will be done when it is finished?"
 #~ msgid "Kept in this browser only. Nothing is sent until you apply."
 #~ msgstr "Kept in this browser only. Nothing is sent until you apply."
 
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks composer: close after sending"
+msgid "Back to the wall"
+msgstr "Back to the wall"
+
 #: client/src/pages/ChangeRequests.tsx
 msgid "No changes yet. Open any setting with a Suggest button, such as those in <0>Game Mechanics</0>, and add it here."
 msgstr "No changes yet. Open any setting with a Suggest button, such as those in <0>Game Mechanics</0>, and add it here."
@@ -9178,6 +9747,11 @@ msgctxt "next step box, nobody named on the quest"
 msgid "Ask in the quest chat below"
 msgstr "Ask in the quest chat below"
 
+#: client/src/components/gratitude/Lantern.tsx
+msgctxt "lantern: a thanks arrived"
+msgid "Your lantern reached {name}"
+msgstr "Your lantern reached {name}"
+
 #: client/src/components/roleEdit/SectionsFields.tsx
 msgctxt "role editor"
 msgid "a moon"
@@ -9205,6 +9779,11 @@ msgstr "Sign in to review proposed changes"
 #: client/src/components/ClosingPolicyCard.tsx
 msgid "Putting a change to the whole village opens a vote every member is rung about, and this account does not open those yet. Say what you would change to whoever keeps the exit policy."
 msgstr "Putting a change to the whole village opens a vote every member is rung about, and this account does not open those yet. Say what you would change to whoever keeps the exit policy."
+
+#: client/src/components/commons/CommonsPanel.tsx
+msgctxt "the commons: the village's own count of goals reached"
+msgid "We have reached {reached} of {total} goals so far."
+msgstr "We have reached {reached} of {total} goals so far."
 
 #: client/src/components/canvas/CanvasPublicLines.tsx
 msgid "This block's public line is hidden for now."
@@ -9565,6 +10144,11 @@ msgstr "Why (optional)"
 msgid "Outside the village: {outsideList}."
 msgstr "Outside the village: {outsideList}."
 
+#: client/src/components/calendar/MoonSpiral.tsx
+msgctxt "calendar spiral: this day is today"
+msgid "today"
+msgstr "today"
+
 #: client/src/components/modules/SuggestDial.tsx
 msgctxt "send one suggestion to a vote alone"
 msgid "Send it on its own"
@@ -9651,6 +10235,11 @@ msgctxt "pricing desk"
 msgid "Earned Equity meaning"
 msgstr "Earned Equity meaning"
 
+#: client/src/pages/Events.tsx
+msgctxt "calendar view tabs"
+msgid "Calendar views"
+msgstr "Calendar views"
+
 #. placeholder {0}: short(aim) || notYet
 #: client/src/pages/ProposeARole.tsx
 msgctxt "founding application review"
@@ -9703,6 +10292,11 @@ msgstr "Your question"
 msgctxt "role editor sera"
 msgid "Here now:"
 msgstr "Here now:"
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar: step on one moon"
+msgid "The moon after"
+msgstr "The moon after"
 
 #: client/src/pages/ProposeARole.tsx
 msgid "This page didn't load. Check your connection and try again."
@@ -10034,10 +10628,22 @@ msgstr "Reading the invoice tracks."
 msgid "The line holds the name of someone in this village, so the public page hides it. The word that matched is \"{matched}\". Write it again with the role in place of the name."
 msgstr "The line holds the name of someone in this village, so the public page hides it. The word that matched is \"{matched}\". Write it again with the role in place of the name."
 
+#: client/src/components/openWork/FitsYouCard.tsx
+#: client/src/components/QuestCard.tsx
+#: client/src/pages/QuestDetail.tsx
+msgctxt "open work card: the season goal this quest grows"
+msgid "Grows: {goalText}"
+msgstr "Grows: {goalText}"
+
 #: client/src/components/admin/AdminHelperPanel.tsx
 msgctxt "admin helper, provider choice"
 msgid "Who answers"
 msgstr "Who answers"
+
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks wall: the currency tooltip"
+msgid "Each cycle every member receives an allowance to send. Sending is thanks for real contributions, never pay, and the wall keeps every word."
+msgstr "Each cycle every member receives an allowance to send. Sending is thanks for real contributions, never pay, and the wall keeps every word."
 
 #. placeholder {0}: path.walked.length
 #. placeholder {0}: seed.walked
@@ -10139,9 +10745,19 @@ msgctxt "role editor"
 msgid "Use Sera's range"
 msgstr "Use Sera's range"
 
+#: client/src/components/sessions/HarvestPlant.tsx
+msgctxt "friday harvest, a priority not started, carried to monday"
+msgid "Seed kept"
+msgstr "Seed kept"
+
 #: client/src/components/admin/ClosingPolicyEditor.tsx
 msgid "Saved as a draft. It counts once the village adopts it."
 msgstr "Saved as a draft. It counts once the village adopts it."
+
+#: client/src/components/gratitude/Lantern.tsx
+msgctxt "lantern: a thanks on its way"
+msgid "Carrying your thanks to {name}"
+msgstr "Carrying your thanks to {name}"
 
 #: client/src/components/SaveBar.tsx
 msgctxt "save bar"
@@ -10192,6 +10808,11 @@ msgstr "{who} pledged {much}"
 #~ msgctxt "roles page archetypes"
 #~ msgid "You might pick this if"
 #~ msgstr "You might pick this if"
+
+#: client/src/components/CycleClock.tsx
+msgctxt "cycle clock: the moon that turns and the day it turns"
+msgid "Allowances refill when the {month} Moon turns, on {date}."
+msgstr "Allowances refill when the {month} Moon turns, on {date}."
 
 #: client/src/components/canvas/CanvasFrameAdopt.tsx
 msgctxt "a suggestion is being withdrawn"
@@ -10456,6 +11077,11 @@ msgctxt "role access action"
 msgid "Not needed"
 msgstr "Not needed"
 
+#: client/src/pages/Quests.tsx
+msgctxt "open work: the goal thread, several"
+msgid "{goalCount} open quests grow {goalName}"
+msgstr "{goalCount} open quests grow {goalName}"
+
 #: client/src/pages/RoleDraft.tsx
 msgctxt "role draft tray"
 msgid "Playing as {playing}."
@@ -10541,9 +11167,19 @@ msgctxt "admin helper panel"
 msgid "{guide}, your Admin helper"
 msgstr "{guide}, your Admin helper"
 
+#: client/src/pages/Events.tsx
+msgctxt "calendar moon view: keyboard hint, desktop"
+msgid "The arrow keys walk the days. Home and End go to the first and last day of the moon."
+msgstr "The arrow keys walk the days. Home and End go to the first and last day of the moon."
+
 #: client/src/pages/RoleDraft.tsx
 #~ msgid "Remove {rn} from your draft"
 #~ msgstr "Remove {rn} from your draft"
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar legend"
+msgid "something else on"
+msgstr "something else on"
 
 #: client/src/components/journey/EconomicsView.tsx
 msgctxt "settlement table column"
@@ -10564,6 +11200,11 @@ msgstr "Close"
 msgctxt "founding application check"
 msgid "Tick that you will align with the village's confidentiality agreement once you are approved."
 msgstr "Tick that you will align with the village's confidentiality agreement once you are approved."
+
+#: client/src/components/openWork/QuestThreadPicker.tsx
+msgctxt "quest goal thread editor: button"
+msgid "Save the thread"
+msgstr "Save the thread"
 
 #: client/src/components/Layout.tsx
 #~ msgid "Sign out everywhere"
@@ -10586,6 +11227,11 @@ msgstr "The blocks below are in canvas order. Take the stored season off below, 
 msgctxt "founding application know us"
 msgid "Tick the ones you have done"
 msgstr "Tick the ones you have done"
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar view tab"
+msgid "List"
+msgstr "List"
 
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgctxt "role pay"
@@ -10762,6 +11408,11 @@ msgctxt "founding application step"
 msgid "Your first day"
 msgstr "Your first day"
 
+#: client/src/components/calendar/MoonSpiral.tsx
+msgctxt "calendar spiral: label beside the first day"
+msgid "New moon, {date}"
+msgstr "New moon, {date}"
+
 #: client/src/components/review/SeraOnReview.tsx
 msgid "Arrived {at}, with 1 proposal."
 msgstr "Arrived {at}, with 1 proposal."
@@ -10871,6 +11522,11 @@ msgctxt "admin helper panel"
 msgid "Connect Claude to turn on your helper"
 msgstr "Connect Claude to turn on your helper"
 
+#: client/src/components/calendar/MoonSpiral.tsx
+msgctxt "calendar spiral: what is on a day"
+msgid "a gathering"
+msgstr "a gathering"
+
 #: client/src/components/canvas/CanvasSuggestionForm.tsx
 #: client/src/components/canvas/DecisionMatrixRows.tsx
 msgid "How it is decided (optional)"
@@ -10957,10 +11613,20 @@ msgctxt "a canvas moon gathering is being offered"
 msgid "Offering"
 msgstr "Offering"
 
+#: client/src/components/calendar/MoonTurnings.tsx
+msgctxt "calendar turnings"
+msgid "New moon, this moon opens"
+msgstr "New moon, this moon opens"
+
 #: client/src/pages/Approvals.tsx
 msgctxt "approval inbox"
 msgid "Approvals"
 msgstr "Approvals"
+
+#: client/src/components/sessions/SharedBreath.tsx
+msgctxt "live room, the gathering flower"
+msgid "{here, plural, one {# of us is here.} other {# of us are here.}}"
+msgstr "{here, plural, one {# of us is here.} other {# of us are here.}}"
 
 #: client/src/components/canvas/ConflictAgreementEditor.tsx
 msgctxt "an outside contact's name"
@@ -11138,10 +11804,20 @@ msgstr "We'll only write to you about this application."
 #~ msgid "Then the circle reads it, and we write to you by {replyWords}."
 #~ msgstr "Then the circle reads it, and we write to you by {replyWords}."
 
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks wall eyebrow"
+msgid "Thanks between us"
+msgstr "Thanks between us"
+
 #: client/src/components/roleEdit/RoleEditor.tsx
 msgctxt "role editor"
 msgid "Lowest amount"
 msgstr "Lowest amount"
+
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks wall: opens the composer on a phone"
+msgid "Carry a thanks"
+msgstr "Carry a thanks"
 
 #: client/src/components/Layout.tsx
 #~ msgid "Close menu"
@@ -11258,6 +11934,17 @@ msgstr "I have read this and I agree to the background check."
 #~ msgid "Follow where your proposal is"
 #~ msgstr "Follow where your proposal is"
 
+#: client/src/components/openWork/FitsYouCard.tsx
+msgctxt "open work: why the lead quest was chosen"
+msgid "It grows {goalText}, and that goal needs hands this season."
+msgstr "It grows {goalText}, and that goal needs hands this season."
+
+#. placeholder {0}: currency.toLowerCase()
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks composer: amount field"
+msgid "Amount of {0} to send"
+msgstr "Amount of {0} to send"
+
 #: client/src/components/canvas/CanvasSuggestionForm.tsx
 #: client/src/components/canvas/DecisionMatrixRows.tsx
 msgctxt "Decision Matrix column"
@@ -11311,6 +11998,11 @@ msgstr "None picked."
 #: client/src/components/canvas/CanvasSeason.tsx
 msgid "Download this season file"
 msgstr "Download this season file"
+
+#: client/src/components/calendar/MoonSpiral.tsx
+msgctxt "calendar spiral: a day's place in the moon"
+msgid "day {lunarDay} of {n}"
+msgstr "day {lunarDay} of {n}"
 
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "a suggested edit that changes a value"
@@ -11485,6 +12177,11 @@ msgctxt "sera changes"
 msgid "Earlier {agent} arrivals, now listed above"
 msgstr "Earlier {agent} arrivals, now listed above"
 
+#: client/src/pages/Quests.tsx
+msgctxt "open work: the group for quests with no circle"
+msgid "Open to every circle"
+msgstr "Open to every circle"
+
 #: client/src/components/admin/ConflictDoorFields.tsx
 msgctxt "no intake role chosen"
 msgid "none configured"
@@ -11513,6 +12210,11 @@ msgstr "Why this role:"
 #: client/src/components/admin/AiAgentsApprovalPanel.tsx
 msgid "Where the Anchor decided this (the thread, the meeting or the date)"
 msgstr "Where the Anchor decided this (the thread, the meeting or the date)"
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar moon view: the moon's window"
+msgid "{firstDay} to {lastDay}. The new moon is at the centre, and each day is a seed further out."
+msgstr "{firstDay} to {lastDay}. The new moon is at the centre, and each day is a seed further out."
 
 #: client/src/components/admin/LetterDraftsPanel.tsx
 msgctxt "drafted letters"
@@ -11629,6 +12331,11 @@ msgstr "your guide"
 msgid "Most people list three to five goals for a moon. You can send fewer, and we will read what you give us."
 msgstr "Most people list three to five goals for a moon. You can send fewer, and we will read what you give us."
 
+#: client/src/pages/Events.tsx
+msgctxt "calendar view tab"
+msgid "Moon"
+msgstr "Moon"
+
 #: client/src/pages/ProposedChanges.tsx
 msgctxt "proposed changes"
 msgid "The check could not run. Reload and try again."
@@ -11690,6 +12397,11 @@ msgstr "{name} purpose"
 #~ msgid "Your moon"
 #~ msgstr "Your moon"
 
+#: client/src/components/calendar/MoonSpiral.tsx
+msgctxt "calendar spiral: a turning"
+msgid "full moon"
+msgstr "full moon"
+
 #: client/src/pages/StewardJourney.tsx
 #~ msgid "New here and ready for a role"
 #~ msgstr "New here and ready for a role"
@@ -11702,6 +12414,11 @@ msgstr "Proposals are for:"
 #: client/src/pages/RoleDraft.tsx
 msgid "Once you are approved into a role, you align with the village's confidentiality agreement (NDA), before you see any confidential records."
 msgstr "Once you are approved into a role, you align with the village's confidentiality agreement (NDA), before you see any confidential records."
+
+#: client/src/components/VillagePulse.tsx
+msgctxt "landing commons eyebrow"
+msgid "What we tend together"
+msgstr "What we tend together"
 
 #: client/src/components/openProposal/ProposalAttachments.tsx
 msgid "Only the people who decide this proposal see these. Open links with care: they lead off this site."
@@ -11816,6 +12533,11 @@ msgstr "The village has not set its rates yet, so there is no suggested price. S
 msgid "{error}. There may be changes waiting; this is not an empty list."
 msgstr "{error}. There may be changes waiting; this is not an empty list."
 
+#: client/src/pages/Events.tsx
+msgctxt "calendar legend"
+msgid "a gathering"
+msgstr "a gathering"
+
 #: client/src/pages/ProposeARole.tsx
 msgctxt "founding application intro"
 msgid "What your first month with us would look like, and when you could begin."
@@ -11854,6 +12576,11 @@ msgstr "Nothing to tick"
 msgid "Agreements the village adopted by its own vote, exactly as written, and the ones at a vote now."
 msgstr "Agreements the village adopted by its own vote, exactly as written, and the ones at a vote now."
 
+#: client/src/components/calendar/DayStrip.tsx
+msgctxt "calendar day strip: what is on a day"
+msgid "a gathering"
+msgstr "a gathering"
+
 #: client/src/pages/ProposeARole.tsx
 #~ msgid "Pick up to {maxRoles} roles"
 #~ msgstr "Pick up to {maxRoles} roles"
@@ -11870,6 +12597,11 @@ msgstr "Show {cn}"
 #: client/src/components/proposalDrafts/AskSera.tsx
 msgid "Edit it or keep it. We cannot send your proposal until you have done one or the other."
 msgstr "Edit it or keep it. We cannot send your proposal until you have done one or the other."
+
+#: client/src/components/openWork/QuestThreadPicker.tsx
+msgctxt "quest goal thread editor"
+msgid "Saved."
+msgstr "Saved."
 
 #: client/src/components/ClosingPolicyCard.tsx
 msgid "That suggestion was not kept."
@@ -11995,6 +12727,11 @@ msgstr "{cash} in cash, per the role agreement."
 msgctxt "sera answers"
 msgid "Nothing was undone."
 msgstr "Nothing was undone."
+
+#: client/src/components/openWork/QuestThreadPicker.tsx
+msgctxt "quest goal thread editor: empty choice"
+msgid "No goal yet"
+msgstr "No goal yet"
 
 #: client/src/pages/RoleDraft.tsx
 #~ msgctxt "role draft steps"
@@ -12293,6 +13030,11 @@ msgstr "Appeal: {appealShown}"
 #~ msgid "What you bring to this role"
 #~ msgstr "What you bring to this role"
 
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "lantern: after it arrived"
+msgid "It is a thread on the web now, and they see it on their profile."
+msgstr "It is a thread on the web now, and they see it on their profile."
+
 #: client/src/pages/ProposedChanges.tsx
 msgctxt "proposed changes"
 msgid "Add one"
@@ -12396,6 +13138,11 @@ msgctxt "role editor"
 msgid "a year"
 msgstr "a year"
 
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks wall lede"
+msgid "Each thanks is a thread between two people. The wall keeps the words and never a count."
+msgstr "Each thanks is a thread between two people. The wall keeps the words and never a count."
+
 #: client/src/components/canvas/CanvasPublicLines.tsx
 msgid "Anyone can read this line, signed in or not. Name the role that does the work, never a person. Leave it empty and save to take the line down."
 msgstr "Anyone can read this line, signed in or not. Name the role that does the work, never a person. Leave it empty and save to take the line down."
@@ -12432,6 +13179,11 @@ msgstr "Terms"
 msgctxt "admin age band"
 msgid "That did not save. Try again."
 msgstr "That did not save. Try again."
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar moon view eyebrow"
+msgid "This moon"
+msgstr "This moon"
 
 #: client/src/components/openProposal/MembershipAtApplication.tsx
 msgid "The membership letter didn't load. Reload the page to read it and align."
@@ -12812,6 +13564,11 @@ msgstr "The five levels"
 msgid "Publish the canvas moon"
 msgstr "Publish the canvas moon"
 
+#: client/src/components/sessions/HarvestPlant.tsx
+msgctxt "friday harvest, a priority partly done, carried to monday"
+msgid "In bud"
+msgstr "In bud"
+
 #: client/src/components/fundingRounds/RoundParts.tsx
 msgctxt "funding rounds"
 msgid "Round stages"
@@ -12872,9 +13629,19 @@ msgctxt "roles page archetypes"
 msgid "Start as {0}"
 msgstr "Start as {0}"
 
+#: client/src/components/gratitude/WallEntryCard.tsx
+msgctxt "thanks thread: the vesica, read aloud"
+msgid "They thanked each other both ways"
+msgstr "They thanked each other both ways"
+
 #: client/src/pages/Quests.tsx
 msgid "The Quest Board didn't load. Reload to try again."
 msgstr "The Quest Board didn't load. Reload to try again."
+
+#: client/src/components/gratitude/Lantern.tsx
+msgctxt "lantern: the person a thanks is going to, when no name is known"
+msgid "them"
+msgstr "them"
 
 #: client/src/components/openProposal/RoleCardBridge.tsx
 msgctxt "open proposal conversations"
@@ -12914,6 +13681,11 @@ msgstr "Ceiling amount"
 msgctxt "sera changes"
 msgid "To decide {nDecide}"
 msgstr "To decide {nDecide}"
+
+#: client/src/components/sessions/GatheringSeed.tsx
+msgctxt "coming up, the answer to a meeting"
+msgid "I'll be there"
+msgstr "I'll be there"
 
 #: client/src/components/profile/YourMoveCard.tsx
 msgctxt "profile, what waits on you"
@@ -12959,9 +13731,21 @@ msgctxt "next step box"
 msgid "Ask in {circle}"
 msgstr "Ask in {circle}"
 
+#. placeholder {0}: budget.remaining
+#. placeholder {1}: budget.total
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks composer: the allowance left this cycle"
+msgid "<0>{0}</0> of {1} left to give this cycle"
+msgstr "<0>{0}</0> of {1} left to give this cycle"
+
 #: client/src/components/admin/QuestSafetyEditor.tsx
 msgid "{refused, plural, one {# open claim on this quest no longer meets these rules. Talk with whoever holds it.} other {# open claims on this quest no longer meet these rules. Talk with whoever holds them.}}"
 msgstr "{refused, plural, one {# open claim on this quest no longer meets these rules. Talk with whoever holds it.} other {# open claims on this quest no longer meet these rules. Talk with whoever holds them.}}"
+
+#: client/src/pages/Quests.tsx
+msgctxt "open work filters"
+msgid "Filter by season goal and place"
+msgstr "Filter by season goal and place"
 
 #: client/src/components/admin/AgentsPanel.tsx
 msgctxt "agent paths, the box a list is pasted into"
@@ -13008,6 +13792,11 @@ msgstr "{0} ready, {1} flagged"
 msgid "If anyone is in danger now, the first call is to local emergency services. These contacts come after that, and nothing here contacts anyone on its own."
 msgstr "If anyone is in danger now, the first call is to local emergency services. These contacts come after that, and nothing here contacts anyone on its own."
 
+#: client/src/pages/Quests.tsx
+msgctxt "open work board heading"
+msgid "Open work"
+msgstr "Open work"
+
 #: client/src/components/fireflyPath/Thresholds.tsx
 msgctxt "while you wait"
 msgid "Meet the other roles"
@@ -13031,6 +13820,11 @@ msgstr "this moon (from its new moon to the next)"
 #: client/src/pages/ProposeARole.tsx
 #~ msgid "Pick up to {maxRoles} roles for this moon, from {moonFrom} to the next new moon on {moonTo}, say what you bring, and send it. Your name and email come from your account."
 #~ msgstr "Pick up to {maxRoles} roles for this moon, from {moonFrom} to the next new moon on {moonTo}, say what you bring, and send it. Your name and email come from your account."
+
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks composer: the allowance tooltip"
+msgid "Your allowance refills when the cycle turns. Sending moves it from your allowance to the person you thank; it never costs you anything you earned."
+msgstr "Your allowance refills when the cycle turns. Sending moves it from your allowance to the person you thank; it never costs you anything you earned."
 
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "edit one change"
@@ -13056,6 +13850,11 @@ msgstr "Your selection"
 msgctxt "admin header"
 msgid "Sign out"
 msgstr "Sign out"
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar: go to today"
+msgid "Today"
+msgstr "Today"
 
 #: client/src/pages/ProposeARole.tsx
 #~ msgctxt "open proposal stone"
