@@ -61,6 +61,7 @@ import { useModuleOn } from "@/modules/ModuleProvider";
 import { taskIdFromLink } from "@shared/sessionTasks";
 import { waitsOnYou } from "@shared/notificationKinds";
 import { bellLabel, bellLook, newlyWaiting, waitingIds } from "@/lib/bellLight";
+import { usePageLight } from "@/lib/pageLight";
 import {
   getNotifyState,
   markNotificationsRead,
@@ -147,6 +148,8 @@ export default function NotificationBell({ memberId = null }: NotificationBellPr
   // that only clears by pretending to have read things is a number that
   // teaches people to stop opening the bell.
   const unseen = state.unseen;
+  // One light per screen: while the page shows its own lit act, the bell keeps a single still light, no swarm.
+  const pageLit = usePageLight();
   const look = bellLook(state);
 
   // One flight per waiting notice that arrives while the page is open. The
@@ -229,7 +232,14 @@ export default function NotificationBell({ memberId = null }: NotificationBellPr
         className="relative p-2 rounded-lg hover:bg-white/10 transition-colors inline-flex items-center justify-center pointer-coarse:min-h-11 pointer-coarse:min-w-11 pointer-coarse:-m-1 max-md:min-h-11 max-md:min-w-11 max-md:-m-1"
       >
         <Bell aria-hidden="true" className="w-5 h-5" />
-        {look === "lit" && (
+        {look === "lit" && pageLit && (
+          <span
+            aria-hidden="true"
+            data-testid="bell-still-light"
+            className="absolute top-1.5 right-1.5 size-1.5 rounded-full bg-notice"
+          />
+        )}
+        {look === "lit" && !pageLit && (
           <Suspense fallback={null}>
             <BellFireflies arrival={arrival} />
           </Suspense>
