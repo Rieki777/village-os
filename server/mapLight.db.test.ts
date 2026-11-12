@@ -36,6 +36,7 @@ const NAMES: Record<string, string> = {
   "u-cy": "Cy Moreno",
   "u-dee": "Dee Ward",
   "u-eli": "Eli Shore",
+  "u-fay": "Fay Example",
 };
 
 async function q(sql: string, params: unknown[] = []): Promise<any[]> {
@@ -45,9 +46,9 @@ async function q(sql: string, params: unknown[] = []): Promise<any[]> {
 
 const prefsOf = (on: boolean) => JSON.stringify(on ? { mapLight: true } : {});
 
-async function seedPerson(id: string, on: boolean, no: number): Promise<void> {
-  await q("INSERT INTO users (id, name, email, password_hash, prefs) VALUES (?,?,?,?,?)", [
-    id, NAMES[id], `${id}@example.test`, "hash", prefsOf(on),
+async function seedPerson(id: string, on: boolean, no: number, example = false): Promise<void> {
+  await q("INSERT INTO users (id, name, email, password_hash, prefs, is_example) VALUES (?,?,?,?,?,?)", [
+    id, NAMES[id], `${id}@example.test`, "hash", prefsOf(on), example ? 1 : 0,
   ]);
   await q("INSERT INTO live_session_members (no, user_id) VALUES (?,?)", [no, id]);
 }
@@ -125,6 +126,8 @@ describe.skipIf(!configured)("the map's lights", () => {
     await seedPerson("u-cy", false, 3);
     await seedPerson("u-dee", true, 4);
     await seedPerson("u-eli", false, 5);
+    // Fay is a standing example: her setting says on, and she is no person.
+    await seedPerson("u-fay", true, 6, true);
   });
 
   it("lights only opted-in members who joined today, and shows none below the floor", async () => {
@@ -133,6 +136,7 @@ describe.skipIf(!configured)("the map's lights", () => {
     await seedSession(11, "c-kitchen", now);
     await join(11, 4, now); // Dee alone: one light is below the floor
     await join(11, 5, now); // Eli is off
+    await join(11, 6, now); // Fay is an example, never a light
     await seedSession(12, "c-water", yesterday);
     for (const no of [1, 2, 4]) await join(12, no, yesterday); // yesterday counts for nothing
     await seedSession(13, null, now);
