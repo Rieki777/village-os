@@ -58,11 +58,11 @@ export function BulkBar({ acts, agent }: { acts: SeraActs; agent: string }) {
           <Trans context="sera answers">Keep or untick</Trans>
         </button>
         {more && (
-          <div id={`${id}-more`} className="absolute right-0 bottom-full mb-2 w-56 bg-card border border-border rounded-lg shadow-md p-1 flex flex-col">
-            <button type="button" data-bulk="keep" onClick={() => { setMore(false); acts.openSheet("keep", moreButton.current); }} className="min-h-[44px] px-3 text-left text-sm rounded-md hover:bg-muted">
+          <div id={`${id}-more`} className="absolute right-0 bottom-full mb-2 w-56 bg-card border border-border rounded-lg shadow-sm p-1 flex flex-col">
+            <button type="button" data-bulk="keep" onClick={() => { setMore(false); acts.openSheet("keep", moreButton.current); }} className="min-h-[44px] px-3 text-left text-sm rounded-lg hover:bg-muted">
               {t({ message: `Keep ours for ${n}`, context: "sera answers" })}
             </button>
-            <button type="button" onClick={() => { setMore(false); acts.untickAll(); }} className="min-h-[44px] px-3 text-left text-sm rounded-md hover:bg-muted">
+            <button type="button" onClick={() => { setMore(false); acts.untickAll(); }} className="min-h-[44px] px-3 text-left text-sm rounded-lg hover:bg-muted">
               <Trans context="sera answers">Untick all</Trans>
             </button>
           </div>

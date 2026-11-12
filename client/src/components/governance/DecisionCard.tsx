@@ -20,9 +20,9 @@ import VoteClock from "./VoteClock";
 import type { BallotCard as BallotCardData } from "./governanceApi";
 
 const MINE: Record<VoteChoice, { label: string; icon: typeof CircleCheck; tone: string }> = {
-  yes: { label: "You voted yes", icon: CircleCheck, tone: "text-sage" },
-  abstain: { label: "You abstained", icon: CircleMinus, tone: "text-stone-600" },
-  no: { label: "You voted no", icon: CircleX, tone: "text-coral" },
+  yes: { label: "You voted yes", icon: CircleCheck, tone: "text-open" },
+  abstain: { label: "You abstained", icon: CircleMinus, tone: "text-muted-foreground" },
+  no: { label: "You voted no", icon: CircleX, tone: "text-destructive" },
 };
 
 const CLOSED_WORD: Record<string, string> = {
@@ -47,30 +47,30 @@ export default function DecisionCard({ ballot }: { ballot: BallotCardData }) {
   const expired = open && Date.parse(ballot.closesAt) <= Date.now();
 
   return (
-    <article className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm transition-shadow hover:shadow-md">
+    <article className="rounded-xl border border-border bg-card p-4 shadow-sm transition-shadow hover:shadow-sm">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="rounded-full bg-stone-100 px-2.5 py-0.5 text-xs font-medium text-stone-700">
+        <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
           {subjectNoun(ballot.subjectType)}
         </span>
         {open ? (
           expired ? (
-            <span className="rounded-full bg-amber-light px-2.5 py-0.5 text-xs font-semibold text-gold">
+            <span className="rounded-full bg-notice/10 px-2.5 py-0.5 text-xs font-semibold text-notice">
               Waiting to be closed
             </span>
           ) : (
-            <span className="rounded-full bg-sage-light px-2.5 py-0.5 text-xs font-semibold text-sage">Voting now</span>
+            <span className="rounded-full bg-open/10 px-2.5 py-0.5 text-xs font-semibold text-open">Voting now</span>
           )
         ) : (
-          <span className="rounded-full bg-stone-200 px-2.5 py-0.5 text-xs font-semibold text-stone-800">
+          <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs font-semibold text-foreground">
             {CLOSED_WORD[ballot.status] ?? "Closed"}
           </span>
         )}
       </div>
 
-      <h3 className="mt-2 text-lg font-bold leading-snug text-stone-900">
+      <h3 className="mt-2 text-lg font-bold leading-snug text-foreground">
         <Link
           href={`/decisions/${ballot.id}`}
-          className="rounded-sm hover:text-teal-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
+          className="rounded-lg hover:text-notice focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {ballot.title}
         </Link>
@@ -83,7 +83,7 @@ export default function DecisionCard({ ballot }: { ballot: BallotCardData }) {
           close route's own subject table, so the card cannot be wrong about
           it. */}
       {!ballot.binding && (
-        <p className="mt-1.5 text-sm text-stone-600 leading-relaxed">
+        <p className="mt-1.5 text-sm text-muted-foreground leading-relaxed">
           {open
             ? "This one asks what the village thinks. Nothing changes by itself when it closes."
             : "This one asked what the village thinks. Nothing changed by itself."}
@@ -91,7 +91,7 @@ export default function DecisionCard({ ballot }: { ballot: BallotCardData }) {
       )}
 
       {!open && ballot.outcomeNote && (
-        <p className="mt-1.5 text-sm italic text-stone-700 leading-relaxed">{ballot.outcomeNote}</p>
+        <p className="mt-1.5 text-sm italic text-muted-foreground leading-relaxed">{ballot.outcomeNote}</p>
       )}
 
       <div className="mt-3">
@@ -105,21 +105,21 @@ export default function DecisionCard({ ballot }: { ballot: BallotCardData }) {
         />
       </div>
 
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-stone-100 pt-3">
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3">
         <span className="flex items-center gap-3">
-          {open && <VoteClock closesAt={ballot.closesAt} />}
+          {open && <VoteClock calm closesAt={ballot.closesAt} />}
           {mine && MineIcon ? (
             <span className={`inline-flex items-center gap-1.5 text-sm font-medium ${mine.tone}`}>
               <MineIcon className="w-4 h-4" aria-hidden="true" />
               {mine.label}
             </span>
           ) : cast ? (
-            <span className="inline-flex items-center gap-1.5 text-sm font-medium text-stone-600">
+            <span className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
               <CircleMinus className="w-4 h-4" aria-hidden="true" />
               {ballot.myVote?.sentence ?? "Cast"}
             </span>
           ) : open && inRoll && !expired ? (
-            <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-teal-deep">
+            <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-notice">
               Waiting on you
             </span>
           ) : null}
@@ -127,7 +127,7 @@ export default function DecisionCard({ ballot }: { ballot: BallotCardData }) {
 
         <Link
           href={`/decisions/${ballot.id}`}
-          className="inline-flex min-h-[44px] items-center gap-1.5 rounded-lg px-3 text-sm font-semibold text-teal-deep hover:bg-stone-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
+          className="inline-flex min-h-[44px] items-center gap-1.5 rounded-lg px-3 text-sm font-semibold text-notice hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {open && inRoll && !cast && !expired ? "Vote on this" : "Open it"}
           <ArrowRight className="w-4 h-4" aria-hidden="true" />

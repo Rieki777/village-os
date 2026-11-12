@@ -16,18 +16,27 @@
  */
 import { useEffect, useState } from "react";
 import { Clock } from "lucide-react";
+import { Trans } from "@lingui/react/macro";
 import { countdown, tickMsFor } from "./voteBars";
 
 export default function VoteClock({
   closesAt,
   className = "",
+  calm = false,
 }: {
   closesAt: string;
   className?: string;
+  /**
+   * Decider calm (Phase D): a date and no countdown. The pages where people
+   * decide say when a vote closes and never tick toward it; nothing here hurries
+   * a decision. The band on the home page keeps its clock.
+   */
+  calm?: boolean;
 }) {
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
+    if (calm) return;
     let timer: ReturnType<typeof setTimeout>;
     const schedule = () => {
       const { remainingMs } = countdown(closesAt, Date.now());
@@ -38,7 +47,7 @@ export default function VoteClock({
     };
     schedule();
     return () => clearTimeout(timer);
-  }, [closesAt]);
+  }, [closesAt, calm]);
 
   const c = countdown(closesAt, now);
   const closedOn = new Date(closesAt).toLocaleDateString(undefined, {
@@ -49,15 +58,24 @@ export default function VoteClock({
 
   if (c.ended) {
     return (
-      <span className={`inline-flex items-center gap-1.5 text-sm text-stone-600 ${className}`}>
+      <span className={`inline-flex items-center gap-1.5 text-sm text-muted-foreground ${className}`}>
         <Clock className="w-4 h-4" aria-hidden="true" />
         <span>Voting ended {closedOn}</span>
       </span>
     );
   }
 
+  if (calm) {
+    return (
+      <span className={`inline-flex items-center gap-1.5 text-sm text-muted-foreground ${className}`} data-vote-clock="calm">
+        <Clock className="w-4 h-4" aria-hidden="true" />
+        <span><Trans context="decision: when a vote closes">Open until {closedOn}</Trans></span>
+      </span>
+    );
+  }
+
   return (
-    <span className={`inline-flex items-center gap-1.5 text-sm text-stone-700 ${className}`}>
+    <span className={`inline-flex items-center gap-1.5 text-sm text-muted-foreground ${className}`}>
       <Clock className="w-4 h-4" aria-hidden="true" />
       <span className="sr-only">{c.reading}</span>
       <span aria-hidden="true" className="tabular-nums font-medium">

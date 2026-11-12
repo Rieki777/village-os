@@ -42,6 +42,14 @@ import { useModule, useModules } from "@/modules/ModuleProvider";
 import { useAuth } from "@/contexts/AuthContext";
 import { BreathingLoader } from "@/components/natural";
 import CircleConsent from "@/components/roleProposal/CircleConsent";
+import YourTurn from "@/components/governance/YourTurn";
+import ConsentSeal from "@/components/governance/ConsentSeal";
+
+/** Decider calm: the one lit door, when the circle asked the reader and the answer is still open. */
+const TURN_WORDS = {
+  consent: "Go to the circle's answer",
+  consentLine: "The circle asked you, and your answer is still open.",
+} as const;
 import ReviewPanel from "@/components/review/ReviewPanel";
 import type { ConsentAnswerOut, ConsentOut } from "@/components/roleProposal/proposalApi";
 import { gameFetch } from "@/lib/gameApi";
@@ -394,7 +402,13 @@ export default function OpenProposal() {
             <AboutYouView about={p.aboutYou} />
 
             {/* The circle's answer while it waits and once adopted. A declined one has no adoption to record, and its line says so above. */}
+            {/* Decider calm: the one lit door, for a holder the circle asked who has not answered.
+                It leads to the round and chooses nothing in it. */}
+            {p.status === "confirmed" && p.consent.you.mayAnswer && (
+              <YourTurn shape="sticky" to="#op-round" label={TURN_WORDS.consent} line={TURN_WORDS.consentLine} />
+            )}
             {(p.status === "confirmed" || p.status === "adopted") && (
+              <div id="op-round" className="scroll-mt-24 rounded-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
               <CircleConsent
                 applicationId={p.id}
                 consent={p.consent}
@@ -402,7 +416,9 @@ export default function OpenProposal() {
                 waiting={p.status === "confirmed"}
                 onAnswered={() => void load()}
                 answer={answerConsent}
+                seal={ConsentSeal}
               />
+              </div>
             )}
 
             {p.status === "confirmed" && (

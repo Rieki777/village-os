@@ -74,6 +74,8 @@ import { CHANGE_LIMIT_HREF, countWithEdits, limitSentence, readWithdrawRefusal }
 import { STRUCTURE_KINDS } from "@shared/structurePlan";
 import { PROPOSE_QUEST_MODULE } from "@shared/questIdeas";
 import { SeraFold, SeraMemberPage, SeraTop, useSeraOnReview } from "@/components/review/SeraOnReview";
+import { BTN_NOTICE, BTN_PRIMARY, BTN_SECONDARY, EYEBROW, FIELD, H1, LABEL, LEDE, LINK, TILE, WORLD } from "@/components/journey/look";
+import { byArrival } from "@/components/governance/deciderOrder";
 
 /** The kinds that change the chart, as the structure review reads them. */
 const CHART_KINDS: readonly string[] = STRUCTURE_KINDS;
@@ -534,15 +536,18 @@ export default function Review() {
     }
   };
 
-  const card = "bg-card border border-border rounded-xl p-5";
+  // Decider calm: the sheet's panel, in the night world like every page a decider reads.
+  const card = "rounded-2xl border border-border bg-card p-5 shadow-sm sm:p-6";
   const nothingReadYet =
     queue === null && consent.claims === null && !forbidden && !consent.refused && !loadError && !consent.error;
 
   if (loading && nothingReadYet) {
     return (
       <Layout>
+        <div className={WORLD}>
         <div className="max-w-4xl mx-auto px-4 py-10">
           <p className="text-sm text-muted-foreground">Reading what is waiting.</p>
+        </div>
         </div>
       </Layout>
     );
@@ -554,14 +559,16 @@ export default function Review() {
   if (forbidden && consent.refused) {
     return (
       <Layout>
+        <div className={WORLD}>
         <div className="max-w-4xl mx-auto px-4 py-10 space-y-6">
           {sera.read.phase === "member" ? <SeraMemberPage sera={sera} /> : <div className={card}>
-            <h1 className="text-xl font-bold text-foreground">This queue is not open to you yet</h1>
+            <h1 className="font-display text-2xl text-foreground">This queue is not open to you yet</h1>
             <p className="text-sm text-muted-foreground mt-2">
               Reviewing what an outside service proposes, and witnessing finished quests, are jobs this
               village hands to somebody. Ask whoever looks after the village queues, and they can pass one on.
             </p>
           </div>}
+        </div>
         </div>
       </Layout>
     );
@@ -575,14 +582,16 @@ export default function Review() {
 
   return (
     <Layout>
-      <div className="max-w-4xl xl:max-w-[1200px] mx-auto px-4 py-10 space-y-6">
+      <div className={WORLD}>
+      <div className="max-w-4xl xl:max-w-[1200px] mx-auto px-4 py-8 sm:py-12 space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-            <Inbox className="w-6 h-6" aria-hidden="true" />
-            Review
-          </h1>
+          <p className={`${EYEBROW} flex items-center gap-2`}>
+            <Inbox className="size-4" aria-hidden="true" />
+            <Trans context="review: eyebrow">Waiting on the village</Trans>
+          </p>
+          <h1 className={`${H1} mt-1`}>Review</h1>
           {!forbidden && (
-            <p className="text-sm text-muted-foreground mt-2 max-w-2xl">
+            <p className={`${LEDE} mt-2`}>
               What an outside service has proposed about this village. Nothing here is true yet. Read it,
               change anything you want, and accept what the village agrees with. What you accept goes into
               a draft you preview before it goes live.
@@ -594,7 +603,7 @@ export default function Review() {
         {/* Everything below keeps the page's own measure; only the Sera list widens at 1280. */}
         <div className="max-w-4xl space-y-6">
         <AgentProposalsCard headers={headers} />
-        <Link href="/approvals" className="inline-flex items-center min-h-[44px] text-sm text-teal-deep underline"><Trans>Open the approval inbox</Trans></Link>
+        <Link href="/approvals" className={`${LINK} inline-flex min-h-11 items-center text-sm`}><Trans>Open the approval inbox</Trans></Link>
 
         {/* Finished work, the summary line's other jump. Consent is the one step that
             releases value, and a claim sitting here is somebody's work going unpaid. */}
@@ -612,13 +621,13 @@ export default function Review() {
             whole page, which was right while the queue was all the page held. */}
         {loadError && (
           <div className={card}>
-            <h2 className="text-xl font-bold text-foreground">The queue did not load</h2>
+            <h2 className="font-display text-xl text-foreground">The queue did not load</h2>
             <p className="text-sm text-muted-foreground mt-2">
               {loadError}. There may be proposals waiting; this is not an empty queue.
             </p>
             <button
               onClick={() => void load()}
-              className="text-xs border border-border rounded-lg px-3 py-2 mt-4 min-h-[44px]"
+              className={`${BTN_SECONDARY} mt-4`}
             >
               Try again
             </button>
@@ -640,7 +649,7 @@ export default function Review() {
               is safe to repeat, so pressing this twice costs nothing.
             </p>
             <button
-              className="mt-3 text-sm bg-teal-deep text-white rounded-lg px-3 py-2 font-medium disabled:opacity-40"
+              className={`${BTN_PRIMARY} mt-3`}
               disabled={asking}
               onClick={() => void askAgain()}
             >
@@ -667,7 +676,7 @@ export default function Review() {
               this concerns have already left.
             </p>
             <button
-              className="mt-3 text-sm bg-teal-deep text-white rounded-lg px-3 py-2 font-medium disabled:opacity-40"
+              className={`${BTN_PRIMARY} mt-3`}
               disabled={asking}
               onClick={() => void askAgain()}
             >
@@ -722,7 +731,7 @@ export default function Review() {
             <button
               disabled={busy === draftId}
               onClick={() => void withdraw(draftId)}
-              className="text-sm border border-border rounded-lg px-4 py-2 mt-3 min-h-[44px] font-medium"
+              className={`${BTN_SECONDARY} mt-3`}
             >
               Withdraw that draft
             </button>
@@ -742,7 +751,7 @@ export default function Review() {
               </p>
               <Link
                 href={`/review/structure/${encodeURIComponent(String(d.batchId))}`}
-                className="inline-flex items-center text-sm bg-teal-deep text-white rounded-lg px-4 py-2 mt-3 min-h-[44px] font-medium"
+                className={`${BTN_PRIMARY} mt-3`}
               >
                 Open the draft
               </Link>
@@ -773,7 +782,7 @@ export default function Review() {
               <button
                 disabled={busy === notRead.draftId}
                 onClick={() => void withdraw(String(notRead.draftId))}
-                className="text-sm border border-border rounded-lg px-4 py-2 mt-3 min-h-[44px] font-medium"
+                className={`${BTN_SECONDARY} mt-3`}
               >
                 Withdraw that draft
               </button>
@@ -793,10 +802,10 @@ export default function Review() {
         )}
 
         <SeraFold sera={sera} batches={queue?.batches ?? []} when={when} />
-        {(queue?.batches ?? []).filter((b) => !sera.folds(b)).map((batch) => (
+        {byArrival((queue?.batches ?? []).filter((b) => !sera.folds(b)), (b) => b.receivedAt).map((batch) => (
           <div key={batch.batchId} className={card}>
             <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <h2 className="font-semibold text-foreground">
+              <h2 className="font-display text-xl text-foreground">
                 {batch.items.length} proposal(s) from {batch.moduleId ?? "an integration"}
               </h2>
               <p className="text-xs text-muted-foreground">Arrived {when(batch.receivedAt)}</p>
@@ -807,7 +816,7 @@ export default function Review() {
             {batch.items.some((i) => CHART_KINDS.includes(i.kind)) && (
               <Link
                 href={`/review/structure/${encodeURIComponent(batch.batchId)}`}
-                className="inline-flex items-center text-sm bg-teal-deep text-white rounded-lg px-4 py-2 mt-3 min-h-[44px] font-medium"
+                className={`${BTN_PRIMARY} mt-3`}
               >
                 Review it as one structure change
               </Link>
@@ -825,7 +834,7 @@ export default function Review() {
                 {queue.mayChangeProposalLimit === true && (
                   <Link
                     href={CHANGE_LIMIT_HREF}
-                    className="inline-flex items-center text-sm border border-border rounded-lg px-4 py-2 mt-3 min-h-[44px] font-medium"
+                    className={`${BTN_SECONDARY} mt-3`}
                   >
                     Change the limit
                   </Link>
@@ -835,7 +844,7 @@ export default function Review() {
 
             <div className="mt-4 space-y-4">
               {batch.items.map((item) => (
-                <div key={item.id} className="border border-border rounded-lg p-4">
+                <div key={item.id} className={TILE}>
                   <div className="flex flex-wrap items-baseline justify-between gap-2">
                     <p className="text-sm font-medium text-foreground">{item.kind}</p>
                     <p className="text-xs text-muted-foreground">
@@ -862,7 +871,7 @@ export default function Review() {
 
                   {/* The textarea. This is the redaction path and the reason
                       the page exists. */}
-                  <label className="block text-xs font-medium text-foreground mt-3" htmlFor={`edit-${item.id}`}>
+                  <label className={`${LABEL} mt-3 block`} htmlFor={`edit-${item.id}`}>
                     What it proposes. Change anything before you accept it.
                   </label>
                   <textarea
@@ -871,21 +880,21 @@ export default function Review() {
                     onChange={(e) => setEdits((s) => ({ ...s, [item.id]: e.target.value }))}
                     rows={8}
                     spellCheck={false}
-                    className="w-full mt-1 border border-border rounded-lg p-2 text-xs font-mono bg-background text-foreground"
+                    className={`${FIELD} mt-1 text-xs font-mono`} // design-ok: the proposal is JSON, and a steward redacts it character by character
                   />
 
-                  <div className="flex gap-2 mt-3">
+                  <div className="flex flex-wrap gap-2 mt-3">
                     <button
                       disabled={busy === item.id}
                       onClick={() => void acceptOne(item)}
-                      className="text-xs border border-border rounded-lg px-3 py-2 min-h-[44px] font-medium"
+                      className={BTN_NOTICE}
                     >
                       Accept this one
                     </button>
                     <button
                       disabled={busy === item.id}
                       onClick={() => void rejectOne(item)}
-                      className="text-xs border border-border rounded-lg px-3 py-2 min-h-[44px]"
+                      className={BTN_SECONDARY}
                     >
                       Reject
                     </button>
@@ -897,14 +906,14 @@ export default function Review() {
             <button
               disabled={busy === batch.batchId}
               onClick={() => void acceptBatch(batch)}
-              className="text-sm border border-border rounded-lg px-4 py-2 mt-4 min-h-[44px] font-medium"
+              className={`${BTN_PRIMARY} mt-4`}
             >
               Accept all {batch.items.length}, with my edits
             </button>
           </div>
         ))}
 
-        {(queue?.quests ?? []).map((q) => (
+        {byArrival(queue?.quests ?? [], (q) => q.receivedAt).map((q) => (
           <QuestProposalCard
             key={q.id}
             q={q}
@@ -915,6 +924,7 @@ export default function Review() {
           />
         ))}
         </div>
+      </div>
       </div>
     </Layout>
   );

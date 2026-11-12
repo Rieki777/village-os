@@ -36,7 +36,7 @@ export function RowTick({ d, acts, compact }: { d: ListedDifference; acts: SeraA
         checked={acts.ticked.has(d.key)}
         onChange={(e) => acts.tick(d.key, e.target.checked)}
         aria-label={t({ message: `Tick: ${sentence}`, context: "sera answers" })}
-        className={`${compact ? "w-5 h-5" : "w-[22px] h-[22px]"} accent-teal-deep`}
+        className={`${compact ? "w-5 h-5" : "w-[22px] h-[22px]"} accent-notice`}
       />
     </label>
   );
@@ -75,7 +75,7 @@ export function DecisionNote({ d }: { d: ListedDifference }) {
 export function SetAsideChip({ d }: { d: ListedDifference }) {
   if (!d.setAside) return null;
   return (
-    <p className="self-start rounded-md bg-muted text-foreground px-2 py-1 text-[13px] font-semibold">
+    <p className="self-start rounded-lg bg-muted text-foreground px-2 py-1 text-[13px] font-semibold">
       <Trans context="sera answers">Set aside: kept by someone who does not decide these</Trans>
     </p>
   );
@@ -194,7 +194,7 @@ export function EditPanel({ d, acts, agent }: { d: ListedDifference; acts: SeraA
           acts.stopEdit();
         }
       }}
-      className={`${card} border-teal-deep p-3.5 flex flex-col gap-2`}
+      className={`${card} border-notice p-3.5 flex flex-col gap-2`}
     >
       <h3 id={`${id}-h`} className="text-[15px] font-bold text-foreground">
         <Trans context="sera answers">Write your own</Trans>
@@ -252,7 +252,7 @@ export function StatusStrip({ acts }: { acts: SeraActs }) {
   if (!s) return null;
   return (
     <div data-sera-strip-on="" className="sticky top-24 z-30 rounded-[10px] bg-card shadow-sm">
-      <div data-sera-strip="" tabIndex={-1} className="bg-teal-deep/10 border border-teal-deep rounded-[10px] px-3 py-1.5 text-sm leading-snug text-foreground [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-teal-deep">
+      <div data-sera-strip="" tabIndex={-1} className="bg-notice/10 border border-notice rounded-[10px] px-3 py-1.5 text-sm leading-snug text-foreground [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-ring">
         <span className="inline-block py-1.5">{s.words}</span>
         {s.undo && (
           <>

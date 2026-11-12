@@ -59,15 +59,15 @@ export default function LandingClock({ landsAt, sentence }: { landsAt: string; s
   });
 
   return (
-    <div className="mt-3 rounded-lg border border-stone-900/10 bg-white/70 px-3 py-2">
-      <p className="inline-flex items-center gap-1.5 text-sm font-semibold text-stone-900">
+    <div className="mt-3 rounded-lg border border-border bg-card/70 px-3 py-2">
+      <p className="inline-flex items-center gap-1.5 text-sm font-semibold text-foreground">
         <Clock className="w-4 h-4" aria-hidden="true" />
         <span className="sr-only">{r.reading}</span>
         <span aria-hidden="true" className="tabular-nums">
           {r.text}
         </span>
       </p>
-      <p className="mt-1 text-sm text-stone-700">
+      <p className="mt-1 text-sm text-muted-foreground">
         {sentence} It takes effect {on}.
       </p>
     </div>

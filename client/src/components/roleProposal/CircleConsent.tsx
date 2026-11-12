@@ -26,12 +26,22 @@
  * proposals part B): its page hands in `answer`, which posts to the
  * proposal's own consent route, and everything else here is the same.
  */
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useState, type ComponentType } from "react";
 import { Check, MessageSquareWarning } from "lucide-react";
 import { CONSENT_WORDS, OBJECTION_MAX, TALLY_WORDS, tallyWords, type ConsentAnswer } from "@shared/roleProposalConsent";
 import { answerConsent, type ConsentAnswerOut, type ConsentOut } from "./proposalApi";
 import { ADOPTED_HEADING, STATE_HEADINGS } from "./proposalWords";
 import { H2, INPUT, LEDE, PANEL, PRIMARY, SECONDARY } from "./parts";
+
+/** What a screen reader hears for the two circles meeting. */
+export const CONSENT_SEAL = "The circle consented";
+
+/**
+ * The drawing for a consent reached, handed in by the page (decider calm). It is
+ * a prop and never an import here: this file also feeds the applicant's status
+ * page, and importing the nature kit from it moved modules onto the first page.
+ */
+export type ConsentSealDrawing = ComponentType<{ label: string }>;
 
 const NO_ROLES = { asked: [] as string[], consented: [] as string[], objected: [] as string[] };
 
@@ -58,19 +68,38 @@ export function ConsentTally({ consent }: { consent: ConsentOut }) {
 }
 
 /** Where it stands, for any reader: the heading, the sentence (or the decision record), the tally and the reasons. */
-export function ConsentSummary({ consent, decided, headingId }: { consent: ConsentOut; decided: string | null; headingId?: string }) {
+export function ConsentSummary({
+  consent,
+  decided,
+  headingId,
+  seal,
+}: {
+  consent: ConsentOut;
+  decided: string | null;
+  headingId?: string;
+  /**
+   * Decider calm: draw two circles meeting once the whole circle has consented.
+   * Off by default, so a page that only reports where it stands draws nothing new.
+   */
+  seal?: ConsentSealDrawing;
+}) {
   const own = useId();
   const id = headingId ?? `${own}-consent`;
+  // The vesica means a consent reached (sitewide plan): only the state where the circle consented, never one still open.
+  const Seal = consent.state === "consented" ? seal : undefined;
   return (
     <section aria-labelledby={id} className={`${PANEL} grid gap-3`} data-consent-summary={decided ? "adopted" : consent.state}>
       <h2 id={id} className={H2}>
         {CONSENT_WORDS.heading}
       </h2>
-      <div className="grid gap-1">
-        <p className="font-semibold text-foreground" data-state-heading="">
-          {decided ? ADOPTED_HEADING : STATE_HEADINGS[consent.state]}
-        </p>
-        <p className="text-foreground">{decided ?? consent.words}</p>
+      <div className={Seal ? "flex items-start gap-4" : "grid gap-1"}>
+        {Seal && <Seal label={CONSENT_SEAL} />}
+        <div className="grid gap-1">
+          <p className="font-semibold text-foreground" data-state-heading="">
+            {decided ? ADOPTED_HEADING : STATE_HEADINGS[consent.state]}
+          </p>
+          <p className="text-foreground">{decided ?? consent.words}</p>
+        </div>
       </div>
       <ConsentTally consent={consent} />
       {consent.objections.length > 0 && (
@@ -96,10 +125,12 @@ export interface CircleConsentProps {
   onAnswered?: () => void;
   /** Where the answer goes, when it is not an application's consent route. */
   answer?: (answer: ConsentAnswer, reason?: string) => Promise<{ ok: true; data: ConsentAnswerOut } | { ok: false; error: string }>;
+  /** Decider calm: two circles meeting, drawn once the circle has consented. */
+  seal?: ConsentSealDrawing;
 }
 
 /** The summary, and the asked holder's Consent and Object. */
-export default function CircleConsent({ applicationId, consent: given, decided, waiting, onAnswered, answer: answerWith }: CircleConsentProps) {
+export default function CircleConsent({ applicationId, consent: given, decided, waiting, onAnswered, answer: answerWith, seal }: CircleConsentProps) {
   const [consent, setConsent] = useState(given);
   const [objecting, setObjecting] = useState(false);
   const [reason, setReason] = useState("");
@@ -144,7 +175,7 @@ export default function CircleConsent({ applicationId, consent: given, decided, 
 
   return (
     <div className="grid gap-3" data-circle-consent={decided ? "adopted" : consent.state}>
-      <ConsentSummary consent={consent} decided={decided} />
+      <ConsentSummary consent={consent} decided={decided} seal={seal} />
 
       {mayAnswer && !objecting && (
         <div className={`${PANEL} grid gap-3`} data-consent-ask="">
@@ -203,7 +234,7 @@ export default function CircleConsent({ applicationId, consent: given, decided, 
           </p>
           {/* The refusal sits under the box it is about. */}
           {error && (
-            <p id={errorId} role="alert" className="text-sm font-medium text-coral">
+            <p id={errorId} role="alert" className="text-sm font-medium text-destructive">
               {error}
             </p>
           )}
@@ -235,7 +266,7 @@ export default function CircleConsent({ applicationId, consent: given, decided, 
       )}
 
       {error && !(mayAnswer && objecting) && (
-        <p role="alert" className="text-sm font-medium text-coral">
+        <p role="alert" className="text-sm font-medium text-destructive">
           {error}
         </p>
       )}
