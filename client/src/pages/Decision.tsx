@@ -55,6 +55,7 @@ import { weightText } from "@/components/governance/voteBars";
 import YourTurn from "@/components/governance/YourTurn";
 import { Vesica } from "@/components/journey/nature";
 import { BTN_NOTICE, H1, H2, WORLD } from "@/components/journey/look";
+import { Trans, useLingui } from "@lingui/react/macro";
 import {
   answerNomination,
   castVote,
@@ -146,6 +147,7 @@ export default function Decision() {
   // nothing on this page gates on it, and who may close still comes from
   // standing exactly as it did before.
   const catalyst = useCatalyst();
+  const { t } = useLingui();
   const modules = useModules();
   const governance = useModule("governance");
 
@@ -444,8 +446,8 @@ export default function Decision() {
 
             {consented && (
               <div className="flex items-center gap-4 rounded-2xl border border-border bg-card p-4 shadow-sm" data-consent-reached="">
-                <Vesica met label="The village consented" size="sm" />
-                <p className="text-sm text-foreground">The village consented. Nobody named a reason to stop it.</p>
+                <Vesica met label={t({ message: "The village consented", context: "decision: a consent reached" })} size="sm" />
+                <p className="text-sm text-foreground"><Trans context="decision: a consent reached">The village consented. Nobody named a reason to stop it.</Trans></p>
               </div>
             )}
 
@@ -751,8 +753,8 @@ export default function Decision() {
               <YourTurn
                 shape="sticky"
                 to="#your-answer"
-                line="You are on the roll and have not voted yet."
-                label="Give my answer"
+                line={t({ message: "You are on the roll and have not voted yet.", context: "decision: your turn" })}
+                label={t({ message: "Give my answer", context: "decision: your turn" })}
               />
             )}
             {standing && <MyStanding standing={standing} />}

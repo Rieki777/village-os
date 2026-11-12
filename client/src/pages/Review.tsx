@@ -587,7 +587,7 @@ export default function Review() {
         <div>
           <p className={`${EYEBROW} flex items-center gap-2`}>
             <Inbox className="size-4" aria-hidden="true" />
-            Waiting on the village
+            <Trans context="review: eyebrow">Waiting on the village</Trans>
           </p>
           <h1 className={`${H1} mt-1`}>Review</h1>
           {!forbidden && (

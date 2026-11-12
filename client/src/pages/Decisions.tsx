@@ -57,6 +57,7 @@ import {
 import { quorumPctOf } from "@shared/governanceEngine";
 import { BTN_NOTICE, BTN_SECONDARY, EYEBROW, H1, LEDE, WORLD } from "@/components/journey/look";
 import YourTurn from "@/components/governance/YourTurn";
+import { useLingui } from "@lingui/react/macro";
 import { byArrival } from "@/components/governance/deciderOrder";
 
 /**
@@ -69,6 +70,7 @@ export default function Decisions() {
   const { user } = useAuth();
   const modules = useModules();
   const governance = useModule("governance");
+  const { t } = useLingui();
 
   const [ballots, setBallots] = useState<BallotCard[] | null>(null);
   /**
@@ -227,7 +229,7 @@ export default function Decisions() {
                 emptyNote={ballots.length > 0 ? "You have voted in everything that is open to you." : null}
                 turn={
                   groups.mine[0] ? (
-                    <YourTurn to={`/decisions/${groups.mine[0].id}`} label="Open the one that has waited longest" />
+                    <YourTurn to={`/decisions/${groups.mine[0].id}`} label={t({ message: "Open the one that has waited longest", context: "decisions: your turn" })} />
                   ) : null
                 }
               />

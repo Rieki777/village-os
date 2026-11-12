@@ -146,14 +146,14 @@ and pay are exactly as they were.
 
 - **The night world and almost nothing else.** No growth, moss, meadow or bloom beside an applicant
   or a vote, nothing that could read as a grade.
-- **One light: your turn.** `YourTurn` (`components/governance/YourTurn.tsx`) draws the fireflies on
+- **One light: your turn.** `YourTurn` (`client/src/components/governance/YourTurn.tsx`) draws the fireflies on
   a door that leads to the vote or the round, shown only when the server says the reader is asked
   and has not answered. **Never on an answer:** a light on Yes, Consent or Accept leans the reader
   toward it. On a phone the door is a bar under the thumb; from `lg` up it sits beside the words.
 - **Two circles meet once, for a consent reached.** A `Vesica` on a decision the village made by
   consent and on a circle that consented, never on a vote still open or a majority count.
 - **Arrival order only.** What waits on a decider reads oldest first (`byArrival`,
-  `components/governance/deciderOrder.ts`), never by a count, a score or a guess at importance.
+  `client/src/components/governance/deciderOrder.ts`), never by a count, a score or a guess at importance.
 - **Phone and desktop.** A desktop shows the person's words at reading width beside the round, so
   nobody decides without the words in view; a phone reads them one after the other.
 
