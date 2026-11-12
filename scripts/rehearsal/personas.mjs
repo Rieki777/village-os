@@ -487,6 +487,23 @@ export async function holder(w, ctx) {
     await settle(page, 1500);
   });
   await w.look("profile");
+  // The moon garden (Phase C, lane C2): My moon opens on this moon as a golden
+  // spiral of days with its four chapters and one bed per role, and the board
+  // draws no ring or percent.
+  await w.step("see this moon on a spiral, with a bed for the role", async () => {
+    if (w.vp === "phone") await page.getByRole("button", { name: /^Roles$/ }).first().click();
+    const header = page.locator("[data-testid=moon-garden-header]");
+    await header.waitFor({ timeout: 15_000 });
+    await header.scrollIntoViewIfNeeded();
+    const days = await page.locator("[data-testid=moon-spiral] [data-day]").count();
+    if (days < 28 || days > 31) throw new Error(`the spiral draws ${days} days`);
+    if (!(await page.locator("[data-testid=moon-chapter]").innerText()).trim()) throw new Error("the moon board names no chapter");
+    if (!(await page.locator("[data-testid=role-bed]").count())) throw new Error("the role has no garden bed");
+    const text = (await page.locator("[data-testid=my-moon]").innerText()).replace(/\s+/g, " ");
+    const band = text.match(/Task score|Role coverage|\d+%/);
+    if (band) throw new Error(`the moon board shows a score: "${band[0]}"`);
+  });
+  await w.look("moon-garden", { next: page.locator("[data-testid=moon-act]").first() });
   // The prune (11 Nov 2026): a profile wears no rung and keeps no totals beside a name.
   await w.step("the profile shows no rung, no ladder count and no stat row", async () => {
     const text = (await page.locator("main").innerText()).replace(/\s+/g, " ");

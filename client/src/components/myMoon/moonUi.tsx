@@ -45,7 +45,7 @@ export function MemberOnly({ children }: { children: ReactNode }) {
 /** A section of My moon: a heading and its body, phone-first in one column. */
 export function Section({ title, kicker, children, id }: { title: string; kicker?: string; children: ReactNode; id?: string }) {
   return (
-    <section aria-label={title} id={id} className="flex flex-col gap-3 rounded-[18px] border border-dash-edge bg-dash-raised p-4 sm:p-5">
+    <section aria-label={title} id={id} className="flex scroll-mt-28 flex-col gap-3 rounded-[18px] border border-dash-edge bg-dash-raised p-4 sm:p-5">
       {kicker ? <p className="m-0 text-xs uppercase tracking-[0.17em] text-dash-gold-lit">{kicker}</p> : null}
       <h3 className={H3}>{title}</h3>
       {children}

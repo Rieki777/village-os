@@ -2,7 +2,8 @@
  * AGAINST MY ROLE CARDS, and THE SCORE.
  *
  * The role cards block reads `coverage` exactly as the server computed it:
- * one block per role held, each accountability and deliverable with the kept
+ * one garden bed per role held (Phase C, lane C2: the work as plants, member
+ * only, and each line tended or resting soil), each accountability and deliverable with the kept
  * items under it, the quiet ones marked, then the season goals as chips with
  * their counts and the Outside my roles list with the role each item belongs
  * to (check 23).
@@ -20,39 +21,60 @@ import {
   type RecapItem,
 } from "@shared/moonRecap";
 import { CHIP, MemberOnly, MUTED, Section } from "./moonUi";
+import RoleBed from "./RoleBed";
+import { MOON_GARDEN_WORDS, bedFor } from "./moonGarden";
 
 export function RoleCardsBlock({ coverage, items, outsideRoles }: { coverage: Coverage; items: readonly RecapItem[]; outsideRoles: MyMoonResponse["outsideRoles"] }) {
   const textOf = (id: string) => items.find((i) => i.id === id)?.text ?? "";
+  const many = coverage.roles.length > 1;
   return (
-    <Section title={MOON_WORDS.againstMyCards}>
-      {coverage.roles.map((r) => (
-        <div key={r.roleId} className="flex flex-col gap-2" data-testid="coverage-role">
-          <h4 className="m-0 text-base font-semibold text-foreground">{r.name}</h4>
-          {r.lines.length === 0 ? <p className={MUTED}>{MY_MOON_WORDS.noLines}</p> : null}
-          <ul className="m-0 flex list-none flex-col gap-2 p-0">
-            {r.lines.map((l) => (
-              <li key={`${l.kind}:${l.words}`} className="rounded-lg border border-border p-2">
-                <p className="m-0 text-sm font-medium text-foreground">{l.words}</p>
-                {l.itemIds.length === 0 ? (
-                  <p className="m-0 text-xs text-muted-foreground">{MY_MOON_WORDS.quiet}</p>
-                ) : (
+    <Section title={MOON_WORDS.againstMyCards} id="moon-beds">
+      {/* One bed per role (Phase C, lane C2). A phone swipes between beds; a desktop sets them side by side. */}
+      <div
+        className={many ? "-mx-1 flex snap-x snap-mandatory gap-3 overflow-x-auto px-1 pb-2 lg:mx-0 lg:grid lg:grid-cols-2 lg:overflow-visible lg:px-0" : "flex flex-col gap-3"}
+        data-testid="role-beds-row"
+      >
+        {coverage.roles.map((r) => (
+          <div
+            key={r.roleId}
+            className={`flex flex-col gap-3 rounded-xl border border-border bg-muted p-3 sm:p-4 ${many ? "w-[85%] shrink-0 snap-start lg:w-auto" : ""}`}
+            data-testid="coverage-role"
+          >
+            <h4 className="m-0 font-display text-lg text-foreground">{r.name}</h4>
+            <MemberOnly>
+              <RoleBed role={r.name} plants={bedFor(r.roleId, items)} />
+            </MemberOnly>
+            <p className="m-0 text-xs font-semibold uppercase tracking-widest text-muted-foreground">{MOON_GARDEN_WORDS.lookAfter}</p>
+            {r.lines.length === 0 ? <p className={MUTED}>{MY_MOON_WORDS.noLines}</p> : null}
+            <ul className="m-0 flex list-none flex-col gap-2 p-0">
+              {r.lines.map((l) => (
+                <li key={`${l.kind}:${l.words}`} className="rounded-lg border border-border bg-card p-2">
+                  <p className="m-0 text-sm font-medium text-foreground">{l.words}</p>
+                  {l.itemIds.length === 0 ? (
+                    <p className="m-0 text-xs text-muted-foreground" data-testid="resting-line">{MOON_GARDEN_WORDS.resting}</p>
+                  ) : (
+                    <>
+                      <p className="m-0 text-xs text-open">{MOON_GARDEN_WORDS.growing(l.itemIds.length)}</p>
+                      <ul className="m-0 list-disc pl-5 text-sm text-foreground">
+                        {l.itemIds.map((id) => <li key={id}>{textOf(id)}</li>)}
+                      </ul>
+                    </>
+                  )}
+                </li>
+              ))}
+              {r.untagged.length > 0 ? (
+                <li className="rounded-lg border border-dashed border-border p-2">
+                  <p className="m-0 text-sm font-medium text-foreground">{MY_MOON_WORDS.none}</p>
                   <ul className="m-0 list-disc pl-5 text-sm text-foreground">
-                    {l.itemIds.map((id) => <li key={id}>{textOf(id)}</li>)}
+                    {r.untagged.map((id) => <li key={id}>{textOf(id)}</li>)}
                   </ul>
-                )}
-              </li>
-            ))}
-            {r.untagged.length > 0 ? (
-              <li className="rounded-lg border border-dashed border-border p-2">
-                <p className="m-0 text-sm font-medium text-foreground">{MY_MOON_WORDS.none}</p>
-                <ul className="m-0 list-disc pl-5 text-sm text-foreground">
-                  {r.untagged.map((id) => <li key={id}>{textOf(id)}</li>)}
-                </ul>
-              </li>
-            ) : null}
-          </ul>
-        </div>
-      ))}
+                </li>
+              ) : null}
+            </ul>
+          </div>
+        ))}
+      </div>
+      {coverage.roles.some((r) => r.lines.some((l) => l.itemIds.length === 0)) ? <p className={MUTED}>{MOON_GARDEN_WORDS.restingNote}</p> : null}
 
       {coverage.seasonGoals.length > 0 ? (
         <div className="flex flex-col gap-2">
