@@ -230,3 +230,10 @@ describe("the circle hearth", () => {
     expect(document.querySelectorAll('[data-testid="fireflies"]')).toHaveLength(0);
   });
 });
+
+describe("the hearth's own spelling of the Sessions door", () => {
+  it("is the card model's", async () => {
+    const [{ SESSIONS_HREF: mine }, { SESSIONS_HREF: model }] = await Promise.all([import("@/components/circleCard/HearthSections"), import("@shared/circleCard")]);
+    expect(mine).toBe(model);
+  });
+});

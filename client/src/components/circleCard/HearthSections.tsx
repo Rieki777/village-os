@@ -28,12 +28,18 @@ import { BTN_PRIMARY, BTN_SECONDARY, CARD, CARD_FEATURED, DOOR, EYEBROW, HINT, L
 import WorkPayBlock from "@/components/WorkPayBlock";
 import type { AdoptionOut, FactsOut, RoleRowOut } from "@shared/circleCard";
 import type { CircleDecision } from "@shared/sessionDecisions";
-import { SESSIONS_HREF } from "@shared/circleCard";
 import { CIRCLE_CARD_WORDS as W } from "@shared/circleCardWords";
 import { SEED_CIRCLES, seedFill, type LinkedCircle, type PlantState, type TendRow } from "./hearthModel";
 import type { MeetState } from "./useHearth";
 import { roleRowId } from "./Hearth";
 import Plant from "./Plant";
+
+/**
+ * Where Live Sessions lives (shared/circleCard.ts `SESSIONS_HREF`). Spelled here
+ * because a value import of that module pulls the card's whole server-side model
+ * into this chunk, and the build then folded its imports onto the first page.
+ */
+export const SESSIONS_HREF = "/sessions";
 
 const H2 = "font-display text-xl font-bold text-card-foreground sm:text-2xl";
 
