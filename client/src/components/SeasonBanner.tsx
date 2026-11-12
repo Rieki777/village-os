@@ -43,9 +43,7 @@ export default function SeasonBanner() {
           </span>
           {next.focus && <span className="text-white text-sm">{next.focus}</span>}
           <span className="text-white text-xs">
-            {season.daysUntilStart > 0
-              ? `begins in ${season.daysUntilStart} day${season.daysUntilStart === 1 ? "" : "s"}`
-              : "begins today"}
+            {season.daysUntilStart > 0 && next.startsOn ? `begins on ${civilDayWords(next.startsOn)}` : "begins today"}
           </span>
           {plan}
         </div>
@@ -78,9 +76,10 @@ export default function SeasonBanner() {
             {met} of {goals.length} season goal{goals.length === 1 ? "" : "s"} met
           </span>
         )}
-        {daysLeft != null && daysLeft > 0 && (
-          <span className="text-white text-xs">
-            {daysLeft} day{daysLeft === 1 ? "" : "s"} until the season turns
+        {/* A date, never a countdown (the art rules, batch 158): it once read "49 days until the season turns". */}
+        {!season.openEnded && active.endsOn && daysLeft != null && daysLeft >= 0 && (
+          <span className="text-white text-xs" data-season-closes="">
+            {active.name} closes on {civilDayWords(active.endsOn)}.
           </span>
         )}
         {turningSoon && (
