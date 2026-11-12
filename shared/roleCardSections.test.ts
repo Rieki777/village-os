@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { cardPay, EMPTY_SECTIONS, hasSections, newerEdit, payShapeLines, readPayCeiling, readPayShape, readSections, readVillagePayShape, sectionsFromDoc, SECTION_PROBLEMS, SECTION_WORDS, villagePayFrom } from "./roleCardSections";
+import { cardPay, EMPTY_SECTIONS, hasSections, newerEdit, payShapeLines, readPayCeiling, readPayShape, readSections, readVillagePayShape, sectionsFromDoc, SECTION_PROBLEMS, SECTION_WORDS, splitLine, villagePayFrom } from "./roleCardSections";
+import { payShapeOf } from "./foundingApplication";
 
 const FULL = {
   idealBackground: ["Ideally a background in finance", "- Real estate development finance"],
@@ -82,6 +83,41 @@ describe("the stored document", () => {
     expect(newerEdit(old, fresh)).toBe(fresh);
     expect(newerEdit(fresh, old)).toBe(fresh);
     expect(newerEdit(null, old)).toBe(old);
+  });
+});
+
+describe("the 60/40/0 split and the fine print's asterisk (lead, 12 to 13 Nov)", () => {
+  const card = (over: Record<string, unknown> = {}) => {
+    const r = readSections({ paid: true, ...over });
+    if (!r.ok) throw new Error(r.problem);
+    return r.value;
+  };
+  const ceiling = { amount: 13000, currency: "USD", per: "month" };
+
+  it("a share of 0 is read and said, never dropped, by both readers", () => {
+    const setting = "cash 60, equity 40, village credits 0";
+    expect(readVillagePayShape(setting)).toEqual([{ label: "cash", pct: 60 }, { label: "equity", pct: 40 }, { label: "village credits", pct: 0 }]);
+    expect(payShapeOf(setting)).toEqual([{ label: "cash", pct: 60 }, { label: "equity", pct: 40 }, { label: "village credits", pct: 0 }]);
+    expect(splitLine(readVillagePayShape(setting), "")).toBe("Default split: 60% cash, 40% equity, 0% village credits.");
+    expect(cardPay(card(), villagePayFrom({ shape: "cash 60, equity 40, credits 0", atRisk: "", note: "" }))?.split).toBe("Default split: 60% cash, 40% equity, 0% credits.");
+  });
+
+  it("the shares still total no more than 100: a zero does not open the door to 101", () => {
+    expect(readVillagePayShape("cash 61, equity 40, credits 0")).toEqual([]);
+    expect(payShapeOf("cash 61, equity 40, credits 0")).toEqual([]);
+    expect(readPayShape([{ label: "cash", pct: 61 }, { label: "equity", pct: 40 }, { label: "credits", pct: 0 }]).ok).toBe(false);
+    expect(readPayShape([{ label: "cash", pct: 60 }, { label: "equity", pct: 40 }, { label: "credits", pct: "0" }])).toEqual({ ok: true, value: [{ label: "cash", pct: 60 }, { label: "equity", pct: 40 }, { label: "credits", pct: 0 }] });
+  });
+
+  it("the ceiling carries an asterisk only when the note opens with one", () => {
+    const shape = "cash 60, equity 40, credits 0";
+    const starred = cardPay(card({ payCeiling: ceiling }), villagePayFrom({ shape, atRisk: "", note: "*The total shown is the full band available for this role." }));
+    expect(starred?.ceiling).toBe("Total compensation up to $13,000 a month*");
+    const plain = cardPay(card({ payCeiling: ceiling }), villagePayFrom({ shape, atRisk: "", note: "Indicative only." }));
+    expect(plain?.ceiling).toBe("Total compensation up to $13,000 a month");
+    expect(cardPay(card({ payCeiling: ceiling }), villagePayFrom({ shape, atRisk: "", note: "" }))?.ceiling).toBe("Total compensation up to $13,000 a month");
+    // The card's own note wins over the village's, and so does its asterisk, either way.
+    expect(cardPay(card({ payCeiling: ceiling, payNote: "This role's own note." }), villagePayFrom({ shape, atRisk: "", note: "*Village note." }))?.ceiling).toBe("Total compensation up to $13,000 a month");
   });
 });
 

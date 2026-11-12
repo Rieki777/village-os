@@ -174,9 +174,9 @@ export async function seedVillage({ base, dbUrl, adminPassword, log = () => {} }
   for (const [k, v] of [
     ["org.founding_team", true],
     ["org.founding_team_roles", `${state.roles.finance}, ${state.roles.land}`],
-    ["org.pay_shape", "cash 40, equity 55, village credits 5"],
+    ["org.pay_shape", "cash 60, equity 40, credits 0"],
     ["org.pay_shape_at_risk", "Part of the pay grows with what the village raises."],
-    ["org.pay_shape_note", "Indicative only. Terms are still being defined and are subject to legal review."],
+    ["org.pay_shape_note", "*The total shown is the full band available for this role. It starts lower for the first month, as it is tied to deliverables. Indicative only."],
   ]) await call("PUT", `/api/admin/variables/${k}`, { value: v }, F);
   await call(
     "POST",

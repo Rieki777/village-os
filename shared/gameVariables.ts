@@ -27,6 +27,7 @@ import { MINT_RULE, SUBJECT_THRESHOLDS, VILLAGE_LAUNCH } from "./ballotSubjects"
 import { isAnchorDateAcceptable } from "./villageMoon";
 import { villageSeasonsProblem } from "./villageSeasons";
 import { CHANGE_SET_CAP_DEFAULT, CHANGE_SET_CAP_KEY, CHANGE_SET_CAP_MAX, CHANGE_SET_CAP_MIN } from "./changeSetCap";
+import { CONFLICT_INTRO_DEFAULT, CONFLICT_INTRO_KEY } from "./conflictIntro";
 import { GATHERING_LIMIT_DEFAULT, GATHERING_LIMIT_KEY, REVIEW_DAYS_DEFAULT, REVIEW_DAYS_KEY } from "./changeRequestLimits";
 
 export type VariableType = "integer" | "decimal" | "percentage" | "boolean" | "choice" | "text" | "longtext";
@@ -2614,6 +2615,15 @@ export const VARIABLES: VariableDef[] = [
     default: "true",
   },
   {
+    key: CONFLICT_INTRO_KEY,
+    category: "The village's people",
+    label: "How we see conflict, before the conflict steps",
+    description:
+      "The paragraph above the conflict steps on /roles and /governance, under How we evolve through conflict: how this village sees conflict, in its own words. Empty, the steps show with no paragraph above them.",
+    type: "longtext",
+    default: CONFLICT_INTRO_DEFAULT,
+  },
+  {
     key: "org.founding_team",
     category: "The village's people",
     label: "Feature the founding team on the Roles page",
@@ -2645,7 +2655,7 @@ export const VARIABLES: VariableDef[] = [
     category: "The founding team",
     label: "How rewards work, on every role card",
     description:
-      "The shape of the pay every role card shows under \"How rewards work\", as shares of the whole, never an amount: write each share's name and percent, separated by commas, like Cash 40, Equity 55, Credits 5. The shares add up to 100 or less. A role whose card writes its own shares shows those instead. Empty, cards show no pay shape.",
+      "The shape of the pay every role card shows under \"How rewards work\", as shares of the whole, never an amount: write each share's name and percent, separated by commas, like Cash 60, Equity 40, Credits 0. The shares add up to 100 or less, and a share at 0 still shows, as 0%. A role whose card writes its own shares shows those instead. Empty, cards show no pay shape.",
     type: "text",
     default: "",
   },
@@ -2663,7 +2673,7 @@ export const VARIABLES: VariableDef[] = [
     category: "The founding team",
     label: "The note under the pay shape",
     description:
-      "The last line under the pay shape on every role card, like Indicative only. Terms are still being defined and are subject to legal review. No amounts. A role's card may write its own. Empty, no note.",
+      "The last line under the pay shape on every role card, like Indicative only. Terms are still being defined and are subject to legal review. No amounts. A role's card may write its own. A note that starts with * puts a matching * after the card's total compensation line, so it reads as that line's fine print. Empty, no note.",
     type: "text",
     default: "",
   },
