@@ -16,6 +16,7 @@
  */
 import { useEffect, useState } from "react";
 import { Clock } from "lucide-react";
+import { Trans } from "@lingui/react/macro";
 import { countdown, tickMsFor } from "./voteBars";
 
 export default function VoteClock({
@@ -68,7 +69,7 @@ export default function VoteClock({
     return (
       <span className={`inline-flex items-center gap-1.5 text-sm text-muted-foreground ${className}`} data-vote-clock="calm">
         <Clock className="w-4 h-4" aria-hidden="true" />
-        <span>Open until {closedOn}</span>
+        <span><Trans context="decision: when a vote closes">Open until {closedOn}</Trans></span>
       </span>
     );
   }
