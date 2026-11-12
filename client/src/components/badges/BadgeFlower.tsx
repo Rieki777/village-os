@@ -25,7 +25,7 @@
  * sacred-geometry figures) plugs into.
  */
 import { useReducedMotion, m } from "framer-motion";
-import { PORTRAIT_R, VIEW_R, capPetals, flowerLayout, petalPath } from "@shared/badgeFlower";
+import { PORTRAIT_R, VIEW_R, capPetals, flowerLayout, petalFullness, petalPath } from "@shared/badgeFlower";
 
 export interface FlowerBadge {
   id: string;
@@ -33,6 +33,8 @@ export interface FlowerBadge {
   kind: string;
   description?: string | null;
   featured?: boolean;
+  /** How many times it is held. A tier draws as a fuller petal, never a number. */
+  count?: number;
 }
 
 /** One even ring on a phone. */
@@ -74,7 +76,8 @@ function Petals({ badges, cap, className }: { badges: FlowerBadge[]; cap: number
             transition={{ duration: 0.35, delay: still ? 0 : Math.min(p.index, 40) * 0.015 }}
           >
             <path
-              d={petalPath(p.length, p.width)}
+              d={petalPath(p.length, p.width * petalFullness(p.item.count))}
+              data-fullness={petalFullness(p.item.count)}
               transform={`translate(${p.x} ${p.y}) rotate(${p.angle})`}
               fill={petalColour(p.item.kind)}
               stroke={p.item.featured ? "var(--color-dash-gold-lit)" : "var(--color-dash-gold-edge)"}

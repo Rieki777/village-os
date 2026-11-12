@@ -1,49 +1,35 @@
 /**
- * The soft 404. Copy pass R5, group 5: the one page that had no village
- * voice (census 2.12, worst offender 9) now speaks it - plainly first, the
- * land metaphor second, and a short way home. The semantics are unchanged:
- * this renders wherever an unknown route lands, no redirect, no server 404.
+ * The soft 404. It renders wherever an unknown route lands, no redirect, no
+ * server 404, and every module-off route lands here too.
+ *
+ * Since Phase B (lane B3) it stands in the night world: a root that frays off
+ * the trail, stepping stones, and one lit door home, the scene in
+ * components/quiet/OffTheTrail. This file stays small because the app shell
+ * imports it: it draws the main landmark and the language bar at once, and
+ * the scene (with the nature kit's fireflies) arrives in its own chunk, so the
+ * kit never reaches the first page. The words are the copy pass R5 wrote:
+ * plainly first, the land second, and a short way home.
  */
-import { Compass, Home } from "lucide-react";
-import { useLocation } from "wouter";
+import { lazy, Suspense } from "react";
+import { useLingui } from "@lingui/react/macro";
+import { WORLD } from "@/components/journey/look";
+import QuietLoading from "@/components/natural/QuietLoading";
 import { PageLanguageBar } from "@/i18n/PageLanguageBar";
 
+const OffTheTrail = lazy(() => import("@/components/quiet/OffTheTrail"));
+
 export default function NotFound() {
-  const [, setLocation] = useLocation();
-
+  const { t } = useLingui();
   // <main>, because this page renders without the shell: it was the one page
-  // with no main landmark at all, and every module-off route lands here.
+  // with no main landmark at all.
   return (
-    <main className="min-h-screen w-full flex flex-col bg-gradient-to-b from-teal-deep/10 to-background px-4">
+    <main className={`${WORLD} flex w-full flex-col px-4 pb-10`}>
       {/* The language selector (spec i18n US2): this page renders without the shell. */}
-      <PageLanguageBar className="pt-3" />
-      <div className="flex flex-1 items-center justify-center py-6">
-      <div className="w-full max-w-lg bg-card border border-border rounded-2xl shadow-lg p-8 text-center">
-        <div className="flex justify-center mb-6">
-          <div className="w-16 h-16 rounded-full bg-amber/15 flex items-center justify-center">
-            <Compass className="w-8 h-8 text-teal-deep" aria-hidden="true" />
-          </div>
-        </div>
-
-        <p className="text-sm font-semibold tracking-widest text-muted-foreground mb-2">404</p>
-
-        <h1 className="font-display text-3xl font-bold text-foreground mb-4">
-          Off the trail
-        </h1>
-
-        <p className="text-muted-foreground mb-8 leading-relaxed">
-          There is no page at this address. It may have moved, or it may never
-          have existed. The land is still here, and the way home is short.
-        </p>
-
-        <button
-          onClick={() => setLocation("/")}
-          className="inline-flex items-center gap-2 min-h-[44px] px-6 rounded-lg bg-teal-deep text-white font-semibold hover:bg-teal-deep-dark"
-        >
-          <Home className="w-4 h-4" aria-hidden="true" />
-          Back to the village
-        </button>
-      </div>
+      <PageLanguageBar tone="onSheet" className="pt-3" />
+      <div className="flex flex-1 items-center justify-center py-4 sm:py-10">
+        <Suspense fallback={<QuietLoading label={t({ message: "Gathering your page", context: "loading: a page is on its way" })} shape={false} className="min-h-[50vh]" />}>
+          <OffTheTrail />
+        </Suspense>
       </div>
     </main>
   );

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_PHASES, cardItems, checkinDays, checkinsDue, dayOfPath, lastDayOf, mayFileCheckin, mayReadCheckins, mayTick, mergePath, openItems, ownerRoleNames, pathEnabled,
-  readCheckin, readLink, readVillageDoc, visibleItems, LINK_HREF_MAX, LINK_LABEL_MAX,
+  isSitePath, readCheckin, readLink, readVillageDoc, visibleItems, LINK_HREF_MAX, LINK_LABEL_MAX,
 } from "./onboardingPath";
 
 const village = {
@@ -155,6 +155,17 @@ describe("a step's link", () => {
     expect(readLink(null)).toBeNull();
     expect(readLink([good])).toBeNull();
     expect(readLink({ label: "Go" })).toBeNull();
+  });
+  it("accepts a page of this site, so a step can open the steward training", () => {
+    expect(readLink({ label: "Open the steward training", href: "/training/steward" })).toEqual({ label: "Open the steward training", href: "/training/steward" });
+    expect(readLink({ label: "Go", href: "/" })).toEqual({ label: "Go", href: "/" });
+    expect(isSitePath("/training/resident#start")).toBe(true);
+  });
+  it("refuses a path that leaves the site or hides a scheme", () => {
+    for (const href of ["//evil.example", "/\\evil.example", "/\\/evil.example", "/a b", "/a\tb", "\\evil.example", "training/steward"]) {
+      expect(readLink({ label: "Go", href }), href).toBeNull();
+      expect(isSitePath(href), href).toBe(false);
+    }
   });
   it("cuts a long label at its cap", () => {
     expect(readLink({ label: "x".repeat(200), href: good.href })?.label).toHaveLength(LINK_LABEL_MAX);

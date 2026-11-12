@@ -1901,7 +1901,10 @@ function TrainingModulesTab({ password }: { password: string }) {
         <div>
           <h2 className="text-xl font-bold text-gray-900">Training Modules</h2>
           <p className="text-sm text-gray-500 mt-1">
-            Manage what shows on the /training page.
+            The lessons both training pages show, on{" "}
+            <a href="/training/steward" target="_blank" rel="noopener noreferrer" className="text-teal-deep underline">/training/steward</a> and{" "}
+            <a href="/training/resident" target="_blank" rel="noopener noreferrer" className="text-teal-deep underline">/training/resident</a>.
+            Each page's own words are in Pages, under Training: steward and Training: resident.
           </p>
         </div>
         {editingId === null && (

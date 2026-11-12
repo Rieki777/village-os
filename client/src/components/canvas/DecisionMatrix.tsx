@@ -41,11 +41,12 @@
  * the other eleven blocks costs the server nothing.
  */
 import { useCallback, useState, type ReactNode } from "react";
-import { ChevronRight, ExternalLink, Loader2 } from "lucide-react";
+import { ChevronRight, ExternalLink } from "lucide-react";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { authToken } from "@/lib/gameApi";
 import { CANVAS_CREDIT, CANVAS_DECISION_MATRIX_COLUMNS } from "@shared/governanceCanvasText";
 import type { DecisionMatrix as Matrix, DecisionMatrixRow } from "@shared/decisionMatrix";
+import BreathingLoader from "@/components/natural/BreathingLoader";
 
 const headers = (): Record<string, string> => {
   const t = authToken();
@@ -201,7 +202,7 @@ export default function DecisionMatrix({
             </div>
           ) : !matrix ? (
             <p className="text-sm text-stone-600 py-4 text-center">
-              <Loader2 className="w-4 h-4 animate-spin inline mr-2" />
+              <BreathingLoader decorative size={16} className="mr-2 align-middle" />
               <Trans context="loading the Decision Matrix">Reading the matrix</Trans>
             </p>
           ) : (

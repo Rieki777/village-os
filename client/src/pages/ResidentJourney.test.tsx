@@ -228,6 +228,12 @@ describe("the tenure ladder is honorary and says so", () => {
     expect(document.body.textContent ?? "").not.toMatch(/\d+ years\+/);
   });
 
+  it("draws each title for time here as tree rings, one more ring per title, never a crown (the prune)", async () => {
+    await waitFor(() => expect(screen.queryByText(lastTitle)).toBeTruthy());
+    const rings = Array.from(document.querySelectorAll("svg[data-rings]")).map((r) => r.getAttribute("data-rings"));
+    expect(rings).toEqual(TITLES.map((_, i) => String(i + 1)));
+  });
+
   it("says plainly that the titles carry no voice and no rights today", async () => {
     await waitFor(() => expect(screen.queryByText(lastTitle)).toBeTruthy());
     const said = document.body.textContent ?? "";

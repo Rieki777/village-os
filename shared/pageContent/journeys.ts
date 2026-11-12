@@ -457,15 +457,15 @@ export const INVESTOR_JOURNEY: PageSpec = buildJourney({
 // ── /steward ─────────────────────────────────────────────────────────────
 
 /**
- * ONE FLOW, TWO TRACKS (build list section 8, 11 Nov 2026). The page used to
+ * ONE FLOW, TWO PATHS (build list section 8, 11 Nov 2026). The page used to
  * carry "Getting to know us" and an eleven-step journey that overlapped. It is
  * now one flow: the first steps everyone takes, then the path divides into
- * the steward track (hold a role) and the resident track (live here), and the
- * steward track ends by inviting a role holder onto the resident track too.
+ * the steward path (hold a role) and the resident path (live here), and the
+ * steward path ends by inviting a role holder onto the resident path too.
  *
  * EXPAND ONLY. The section ids a village has already saved keep their meaning
  * and are still read: `getToKnow` is the shared first steps (with a new
- * `exceptions` line), `steps` is the steward track. The new sections (`tracks`,
+ * `exceptions` line), `steps` is the steward path. The new sections (`tracks`,
  * `crossover`, `foundingTeam`, `extras`) start from their defaults,
  * so a village that saved the old page keeps its words and gains the new parts.
  *
@@ -473,7 +473,7 @@ export const INVESTOR_JOURNEY: PageSpec = buildJourney({
  * as well, so the first steps and the fork are written once, here.
  */
 
-/** The stage labels the steward track uses, so the page can tell whose move a step is. */
+/** The stage labels the steward path uses, so the page can tell whose move a step is. */
 export const STEWARD_STAGE_YOURS = "Your move";
 export const STEWARD_STAGE_CIRCLE = "The circle's move";
 export const STEWARD_STAGE_TOGETHER = "Together";
@@ -554,7 +554,7 @@ function knowRow(r: { stage: string; title: string; mark: string; description: s
 }
 
 /**
- * The first steps, shared by both tracks: optional to visit, asked of anyone
+ * The first steps, shared by both paths: optional to visit, asked of anyone
  * applying for a role, with the exceptions line beside them (build list 8.2
  * and 1.12). They never lock an application. Platform defaults name no
  * village's own gathering; a village writes its own in Admin, Pages.
@@ -632,7 +632,7 @@ function getToKnowSection(): SectionSpec {
   };
 }
 
-/** The fork after the first steps: the two tracks, side by side. Read by both pages. */
+/** The fork after the first steps: the two paths, side by side. Read by both pages. */
 function tracksSection(): SectionSpec {
   return {
     id: "tracks",
@@ -651,11 +651,11 @@ function tracksSection(): SectionSpec {
 }
 
 /**
- * The end of the steward track: an optional step onto the resident track too.
+ * The end of the steward path: an optional step onto the resident path too.
  * THE LEAD'S RULING (11 Nov, final): the role path carries this one optional
- * step, which links across to the resident track. A village's early
+ * step, which links across to the resident path. A village's early
  * supporters programme (the first village calls it Founding Seeders) sits
- * inside the resident track only, as a step in that page's own list, and is
+ * inside the resident path only, as a step in that page's own list, and is
  * never its own step here.
  */
 function crossoverSection(): SectionSpec {
@@ -723,7 +723,7 @@ function extrasSection(): SectionSpec {
         default: [
           { title: "Other events", when: "", description: "Gatherings, workshops and celebrations on the land.", actionLabel: "See upcoming events", actionTarget: JOURNEY_TARGETS.events },
           { title: "Village immersion", when: "", description: "Spend unhurried time in the village and see how it lives day to day.", actionLabel: "", actionTarget: "" },
-          { title: "Community training", when: "Later", description: "The village's own practices for living and deciding together, once you have joined.", actionLabel: "Learn about training", actionTarget: "/training" },
+          { title: "Community training", when: "Later", description: "The village's own practices for living and deciding together, once you have joined.", actionLabel: "Learn about training", actionTarget: "/training/steward" },
         ],
       },
     ],
@@ -781,7 +781,8 @@ const RESIDENT_STEPS: StepDefault[] = [
     description: "Complete {village}'s community training, or show that you already live its practices.",
     bullets: ["Do the training, or show you already live it", "How the village communicates", "How conflict is handled", "How decisions are made"],
     label: "Learn About Training",
-    target: "/training",
+    // Each path's training step points at its own training page (the lead, 11 Nov 2026).
+    target: "/training/resident",
   },
   {
     legacyId: "love-letter",

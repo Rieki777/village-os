@@ -8,7 +8,7 @@
  * who is answering and can switch.
  */
 import { useState, type FormEvent } from "react";
-import { Loader2, Send, X } from "lucide-react";
+import { Send, X } from "lucide-react";
 import { useLingui } from "@lingui/react/macro";
 import type { FieldGuideAnswer } from "@shared/fieldGuide";
 import MicButton from "@/components/MicButton";
@@ -16,6 +16,7 @@ import { appendSpoken } from "@/components/journal/GrowingTextarea";
 import MyGuide, { useGuideState } from "@/components/guide/MyGuide";
 import { gameFetch } from "@/lib/gameApi";
 import type { TalkTarget } from "./VoiceArea";
+import BreathingLoader from "@/components/natural/BreathingLoader";
 
 type Line = { role: "user" | "assistant"; content: string };
 
@@ -119,7 +120,7 @@ export default function TalkItOut({
         ))}
         {busy && (
           <p className="flex items-center text-muted-foreground">
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+            <BreathingLoader decorative size={16} className="mr-2" />
             {t({ message: `${answering} is thinking`, context: "talk it out: waiting" })}
           </p>
         )}

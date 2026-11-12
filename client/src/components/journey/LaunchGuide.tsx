@@ -10,10 +10,11 @@
  */
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
-import { Loader2, Send } from "lucide-react";
+import { Send } from "lucide-react";
 import MicButton from "@/components/MicButton";
 import { authToken } from "@/lib/gameApi";
 import { Trans, useLingui } from "@lingui/react/macro";
+import BreathingLoader from "@/components/natural/BreathingLoader";
 
 const headers = (): Record<string, string> => {
   const t = authToken();
@@ -136,7 +137,7 @@ export function LaunchGuide({ open, onClose, launched = false }: { open: boolean
             </div>
           ))
         )}
-        {busy && <Loader2 className="w-4 h-4 animate-spin text-stone-400" />}
+        {busy && <BreathingLoader decorative size={16} />}
       </div>
       {!gone && (
         <div className="p-3 border-t border-stone-100 flex gap-2">

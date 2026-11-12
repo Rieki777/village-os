@@ -16,7 +16,7 @@
  */
 import { useEffect, useState } from "react";
 import { TOKEN_KEY, useCatalyst } from "@/lib/gameApi";
-import { internalPath } from "@/lib/internalPath";
+import { afterSignIn } from "@/lib/internalPath";
 import { writeStored } from "@/lib/safeStorage";
 import { SIGN_IN_STORAGE_BLOCKED, sessionWriteRefused } from "@/lib/signInStorage";
 
@@ -120,7 +120,7 @@ export function useGoogleSignInReturn(): GoogleReturnState {
         }
         // Checked again here, because this value came back through a URL a
         // member could edit, and this line loads whatever it is given.
-        window.location.replace(internalPath(params.get("next")) ?? "/profile");
+        window.location.replace(afterSignIn(params.get("next")));
       } catch {
         if (alive) {
           setState({ status: "failed", message: "Could not reach the village to finish signing in. Try again." });

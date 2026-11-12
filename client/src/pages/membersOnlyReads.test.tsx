@@ -283,10 +283,10 @@ describe("/review", () => {
   });
 });
 
-describe("/training", () => {
+describe("/training/steward", () => {
   it("signed out, reads the public modules and never asks for a record", async () => {
     signOut();
-    inRouter(<Training />);
+    inRouter(<Training track="steward" />);
     await waitFor(() => expect(asked).toContain("/api/training-modules"));
     await waitFor(() => expect(screen.getAllByText(/Water/).length).toBeGreaterThan(0));
     expect(asked.filter((u) => u.startsWith("/api/game/training/completed"))).toEqual([]);
@@ -294,7 +294,7 @@ describe("/training", () => {
 
   it("signed in, still reads the member's own record", async () => {
     signIn();
-    inRouter(<Training />);
+    inRouter(<Training track="steward" />);
     await waitFor(() => expect(asked).toContain("/api/game/training/completed"));
   });
 });

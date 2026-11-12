@@ -2,8 +2,10 @@
  * The six made-up people, each walked once at 390 and once at 1280.
  *
  *   1. neighbour     A Spanish-speaking neighbour on a phone, sent a link on a
- *                    messaging app. Proposes for the Land Steward, confirms by
- *                    email, reads her status page.
+ *                    messaging app. The first link she taps is an old one and
+ *                    lands on the 404, whose one door takes her home. Then she
+ *                    proposes for the Land Steward, confirms by email, reads
+ *                    her status page.
  *   2. professional  A professional from the newsletter on a desktop. Reads the
  *                    steward page, opens the Finance Steward's full card,
  *                    proposes with two terms to talk about, confirms, reads the
@@ -16,7 +18,9 @@
  *                    application with the warm not-invited letter.
  *   5. holder        Persona 2 again, adopted: registers from the invitation,
  *                    aligns with confidentiality and the terms, and reads the
- *                    profile in their first hour.
+ *                    profile in their first hour, where our first 14 days
+ *                    show as a strip of days, then opens the steward
+ *                    training from /training and marks a lesson done.
  *   6. reviewer      The founder on the review page: an agent's batch of three
  *                    proposed changes, one edited in place, accepted together.
  *
@@ -118,6 +122,19 @@ async function valueItem(page, what, doneWhen, goal) {
 export async function neighbour(w, ctx) {
   const page = await w.open();
   const email = emailFor("neighbour", w.vp);
+  // An old link from the chat lands on the 404: the night world, one lit door
+  // home, inside the first screen on a phone (Phase B, quiet states).
+  await w.step("follow an old link and land off the trail", async () => {
+    await w.goto("/roles/an-old-link-from-the-chat");
+    await page.getByRole("heading", { level: 1, name: /Fuera del sendero|Off the trail/i }).waitFor();
+  });
+  await w.look("off-trail", { next: page.getByRole("link", { name: /Volver a la aldea|Back to the village/i }) });
+  await w.step("take the one door home", async () => {
+    const home = page.getByRole("link", { name: /Volver a la aldea|Back to the village/i });
+    if ((await home.count()) !== 1) throw new Error("the 404 should offer exactly one door home");
+    await home.click();
+    await page.waitForURL((u) => new URL(u).pathname !== "/roles/an-old-link-from-the-chat");
+  });
   await w.step("arrive on the roles page", async () => {
     await w.goto("/roles?utm_source=whatsapp");
     await page.locator("main").waitFor();
@@ -489,6 +506,27 @@ export async function holder(w, ctx) {
     await settle(page, 1500);
   });
   await w.look("profile");
+  // The prune (11 Nov 2026): a profile wears no rung and keeps no totals beside a name.
+  await w.step("the profile shows no rung, no ladder count and no stat row", async () => {
+    const text = (await page.locator("main").innerText()).replace(/\s+/g, " ");
+    const rank = text.match(/Stage \d+|Stage reached|Powers open|Quests done|Paths walked/);
+    if (rank) throw new Error(`the profile still ranks a person: "${rank[0]}"`);
+  });
+  // Phase B: Profile Today shows someone newly seated our first 14 days as a strip
+  // of days (and no week strip beside it). The welcome, which waits on the
+  // Welcome Steward, is named next; a day opens its own steps.
+  await w.step("see our first 14 days on Profile Today", async () => {
+    const strip = page.locator("[data-first-fourteen]").first();
+    await strip.waitFor({ timeout: 15_000 });
+    await strip.scrollIntoViewIfNeeded();
+    const next = await strip.locator("[data-next-step]").getAttribute("data-next-step");
+    if (next !== "welcome") throw new Error(`the next step reads ${next}, not the welcome`);
+    if (await page.locator("[data-week-strip]").count()) throw new Error("the week strip shows beside the first 14 days");
+    await strip.locator('button[data-day="3"]').click();
+    if ((await strip.locator("[data-chosen-day]").getAttribute("data-chosen-day")) !== "3") throw new Error("day 3 did not open");
+    if (!(await strip.locator('[data-step="technical-operations-conversation"]').count())) throw new Error("day 3 does not hold the Technical Operations conversation");
+  });
+  await w.look("first-fourteen");
   // The five archetypes as roots (11 Nov 2026): a new holder picks the roots
   // they grow from, and the quests board shows what grows from them first,
   // with one switch to see everything.
@@ -510,6 +548,34 @@ export async function holder(w, ctx) {
     await sw.click();
   });
   await w.look("quests-by-roots");
+  // Two training pages (the lead, 11 Nov 2026): /training chooses, and each
+  // path has its own page with its own words. A holder takes the steward one
+  // and marks a lesson done; the record is the server's, so it is read back.
+  const doors = page.getByRole("navigation", { name: "Training pages" });
+  await w.step("open the training chooser", async () => {
+    await w.goto("/training");
+    await doors.waitFor();
+  });
+  await w.look("training-chooser", { next: doors.locator('a[href="/training/steward"]') });
+  await w.step("choose the steward training", async () => {
+    await doors.locator('a[href="/training/steward"]').click();
+    await page.waitForURL((u) => u.pathname === "/training/steward", { timeout: 15_000 });
+    await settle(page, 1500);
+  });
+  await w.step("mark the first lesson done", async () => {
+    await page.getByRole("button", { name: /Mark as done/ }).first().click();
+    await page.getByText("Marked done.").waitFor({ timeout: 10_000 });
+    const token = await page.evaluate(() => localStorage.getItem("village-auth-token"));
+    const res = await fetch(`${ctx.base}/api/game/training/completed`, { headers: { authorization: `Bearer ${token}` } });
+    const body = await res.json();
+    if (!Array.isArray(body.completed) || body.completed.length !== 1) throw new Error(`the server holds ${JSON.stringify(body.completed)} after one lesson`);
+  });
+  await w.look("training-steward");
+  await w.step("the resident training reads the same record", async () => {
+    await w.goto("/training/resident");
+    await page.getByText(/^1 of \d+ lessons done$/).waitFor({ timeout: 10_000 });
+  });
+  await w.look("training-resident");
 }
 
 // ── 6. The reviewer ───────────────────────────────────────────────────────
