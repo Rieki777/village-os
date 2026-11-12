@@ -467,3 +467,36 @@ export function buildCircleCard(input: CircleCardIn): CircleCard {
     proposals: (input.proposals ?? []).map((p) => proposalOut(p, timeZone)),
   };
 }
+
+// ── What a reader who cannot propose words sees ─────────────────────────────
+
+/**
+ * THE CARD WITH ONLY ITS WRITTEN WORDS (QA2-06, 12 Nov 2026): a visitor, or a
+ * member who cannot propose words for this circle, sees only the headings that
+ * have words. Each of the circle's own words that is "read, and empty" (the
+ * charter lists, the values, the purpose and "This circle exists while") is
+ * turned into "unread", which draws nothing, so the public page never reads
+ * "Not written yet" under heading after heading. Those who may propose words
+ * keep the empty slots, because that is where "Propose new words" sits.
+ *
+ * Facts the village reads for itself (the roles, the signs, the meetings, the
+ * review and the adoption record) are left as they are: their empty words
+ * say something true, such as "No roles yet".
+ *
+ * The purpose section stays while "This circle exists while" is written, since
+ * the header draws that line inside it.
+ */
+export function writtenOnly(card: CircleCard): CircleCard {
+  const quiet = <T>(slot: Slot<T>): Slot<T> => (slot.kind === "empty" ? UNREAD : slot);
+  const existsWhile = quiet(card.header.existsWhile);
+  const sections: CircleSection[] = [];
+  for (const s of card.sections) {
+    if (s.kind === "text") {
+      if (s.slot.kind === "empty" && existsWhile.kind !== "shown") continue;
+      sections.push({ ...s, slot: quiet(s.slot) });
+    } else if (s.kind === "list") sections.push({ ...s, slot: quiet(s.slot) });
+    else if (s.kind === "values") sections.push({ ...s, slot: quiet(s.slot) });
+    else sections.push(s);
+  }
+  return { ...card, header: { ...card.header, existsWhile }, sections };
+}

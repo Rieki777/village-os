@@ -889,8 +889,8 @@ msgid "Paid {paidOn}"
 msgstr ""
 
 #: client/src/pages/RoleDraft.tsx
-msgid "Select your roles at {villageName}"
-msgstr "Elige tus roles en {villageName}"
+#~ msgid "Select your roles at {villageName}"
+#~ msgstr "Elige tus roles en {villageName}"
 
 #: client/src/components/SaveBar.tsx
 msgctxt "save bar"
@@ -1007,6 +1007,12 @@ msgstr ""
 #: client/src/components/roleDraft/DraftCarry.tsx
 msgid "Apply with your selection"
 msgstr "Postula con tu selección"
+
+# needs-native-review: new words, 12 Nov 2026
+#: client/src/pages/Roles.tsx
+msgctxt "roles page, other ways to join"
+msgid "Offer your gifts"
+msgstr "Ofrece tus dones"
 
 #: client/src/pages/RoleDraft.tsx
 msgid "See the places and their open roles on the Living Map"
@@ -1299,6 +1305,12 @@ msgstr ""
 msgctxt "admin quest safety"
 msgid "Safety saved"
 msgstr ""
+
+# needs-native-review: new words, 12 Nov 2026
+#: client/src/components/roleEdit/SectionsFields.tsx
+msgctxt "role editor"
+msgid "What the Digital Companion does for this role"
+msgstr "Lo que el Compañero Digital hace por este rol"
 
 #: client/src/pages/OpenProposal.tsx
 msgctxt "open proposal: the keeper reads their own agent's proposal"
@@ -3532,6 +3544,11 @@ msgstr ""
 #~ msgid "Draft"
 #~ msgstr ""
 
+# needs-native-review: new words, 12 Nov 2026
+#: client/src/pages/Propose.tsx
+msgid "Apply for a role"
+msgstr "Postúlate a un rol"
+
 #: client/src/components/fundingRounds/RoundParts.tsx
 msgctxt "funding rounds"
 msgid "Funded"
@@ -4436,6 +4453,12 @@ msgctxt "sera answers"
 msgid "What happens to each ticked change before anything is written."
 msgstr ""
 
+# needs-native-review: new words, 12 Nov 2026
+#: client/src/components/roleCard/FullRoleCard.tsx
+msgctxt "full role card, under the one act"
+msgid "Six steps. No account needed."
+msgstr "Seis pasos. No necesitas cuenta."
+
 #: client/src/components/canvas/CanvasSuggestionForm.tsx
 msgctxt "who adopts a canvas suggestion"
 msgid "Who decides: {penSentence}"
@@ -4629,9 +4652,9 @@ msgid "That link has run out or was already used. Send your application again, a
 msgstr "Ese enlace venció o ya se usó. Envía tu solicitud de nuevo y abre el enlace nuevo dentro de {OPEN_CONFIRM_HOURS} horas."
 
 #: client/src/components/roleEdit/SectionsFields.tsx
-msgctxt "role editor"
-msgid "What the AI companion does for this role"
-msgstr ""
+#~ msgctxt "role editor"
+#~ msgid "What the AI companion does for this role"
+#~ msgstr ""
 
 #: client/src/pages/RoleDraft.tsx
 msgid "Apply with my {pickCount} picks"
@@ -4709,6 +4732,12 @@ msgstr ""
 msgctxt "sera answers"
 msgid "{n} go into a draft. They go live when the draft is published."
 msgstr ""
+
+# needs-native-review: new words, 12 Nov 2026
+#: client/src/pages/Roles.tsx
+msgctxt "roles page, other ways to join"
+msgid "Volunteer or work-trade: tell us what you would like to give."
+msgstr "Voluntariado o intercambio de trabajo: cuéntanos qué te gustaría dar."
 
 #: client/src/components/admin/LetterDraftsPanel.tsx
 msgid "That could not be sent"
@@ -6428,6 +6457,12 @@ msgstr ""
 #: client/src/components/canvas/DecisionMatrixRows.tsx
 msgid "Last written by {0} on {1}"
 msgstr ""
+
+# needs-native-review: new words, 12 Nov 2026
+#: client/src/pages/RoleDraft.tsx
+msgctxt "role draft, founding roles live on /roles"
+msgid "Looking for a founding role?"
+msgstr "¿Buscas un rol fundador?"
 
 #: client/src/components/admin/AgentPathTree.tsx
 msgctxt "agent paths, open a path's editor"
@@ -8203,6 +8238,12 @@ msgctxt "button that opens the conflict agreement editor to read"
 msgid "Read every frame"
 msgstr ""
 
+# needs-native-review: new words, 12 Nov 2026
+#: client/src/pages/Roles.tsx
+msgctxt "roles page, other ways to join"
+msgid "Find your place in the game"
+msgstr "Encuentra tu lugar en el juego"
+
 #: client/src/components/roleCard/FoundingTeam.tsx
 msgctxt "founding team section heading"
 msgid "Join the founding team"
@@ -8357,9 +8398,9 @@ msgid "Last try did not land: {0}"
 msgstr ""
 
 #: client/src/components/roleCard/FullRoleCard.tsx
-msgctxt "full role card chip"
-msgid "Paid role"
-msgstr ""
+#~ msgctxt "full role card chip"
+#~ msgid "Paid role"
+#~ msgstr ""
 
 #: client/src/components/notebook/NotebookDocument.tsx
 msgid "The block it speaks to"
@@ -8513,6 +8554,12 @@ msgstr ""
 #~ msgctxt "open proposal section"
 #~ msgid "The terms"
 #~ msgstr "Las condiciones"
+
+# needs-native-review: new words, 12 Nov 2026
+#: client/src/pages/RoleDraft.tsx
+msgctxt "role draft, founding roles live on /roles"
+msgid "See the founding team."
+msgstr "Mira el equipo fundador."
 
 #: client/src/components/approvals/ApprovalInbox.tsx
 msgctxt "approval inbox"
@@ -8822,8 +8869,8 @@ msgid "The canvas radar, one axis per block"
 msgstr ""
 
 #: client/src/pages/Propose.tsx
-msgid "Propose for a role"
-msgstr ""
+#~ msgid "Propose for a role"
+#~ msgstr ""
 
 #. placeholder {0}: money(s.range.lowTotalMinor)
 #. placeholder {1}: money(s.range.highTotalMinor)
@@ -9426,6 +9473,12 @@ msgstr ""
 msgctxt "roles page season: how far into the season today is"
 msgid "Day {day} of {of}"
 msgstr "Día {day} de {of}"
+
+# needs-native-review: new words, 12 Nov 2026
+#: client/src/pages/Roles.tsx
+msgctxt "roles page, other ways to join"
+msgid "Live here one day? Start on the resident path."
+msgstr "¿Vivir aquí algún día? Empieza por el camino de residente."
 
 #. placeholder {0}: row.credited
 #. placeholder {1}: cycle.poolToken ?? ""
@@ -10170,6 +10223,12 @@ msgstr ""
 msgctxt "sera changes"
 msgid "Which changes"
 msgstr ""
+
+# needs-native-review: new words, 12 Nov 2026
+#: client/src/pages/RequestMembership.tsx
+msgctxt "join page link"
+msgid "Find your roles"
+msgstr "Encuentra tus roles"
 
 #: client/src/pages/RoleMeasures.tsx
 msgid "Nothing has been stamped yet."
@@ -11179,9 +11238,9 @@ msgstr ""
 #~ msgstr ""
 
 #: client/src/pages/ProposeARole.tsx
-msgctxt "founding application lede"
-msgid "This application is for the cycle from {termFrom} to {termTo}."
-msgstr "Esta solicitud es para el ciclo del {termFrom} al {termTo}."
+#~ msgctxt "founding application lede"
+#~ msgid "This application is for the cycle from {termFrom} to {termTo}."
+#~ msgstr "Esta solicitud es para el ciclo del {termFrom} al {termTo}."
 
 #: client/src/components/openProposal/RoleCardBridge.tsx
 #~ msgid "Once approved into a role, I will sign the village's confidentiality agreement (NDA) before I see any confidential records."
@@ -11384,9 +11443,9 @@ msgid "Nothing changed: this is what the village already has on record."
 msgstr ""
 
 #: client/src/pages/RequestMembership.tsx
-msgctxt "join page link"
-msgid "Select your roles"
-msgstr "Elige tus roles"
+#~ msgctxt "join page link"
+#~ msgid "Select your roles"
+#~ msgstr "Elige tus roles"
 
 #. placeholder {0}: i + 1
 #: client/src/components/openProposal/AboutYou.tsx
@@ -11979,6 +12038,11 @@ msgstr "Su nota: {0}"
 msgctxt "a saved choice the picker no longer offers"
 msgid "No longer in the list. Choose another, or none"
 msgstr ""
+
+# needs-native-review: new words, 12 Nov 2026
+#: client/src/pages/RoleDraft.tsx
+msgid "Find your roles at {villageName}"
+msgstr "Encuentra tus roles en {villageName}"
 
 #: client/src/components/valuation/PricingDesk.tsx
 msgctxt "pricing desk"
@@ -12576,6 +12640,11 @@ msgctxt "terms setting"
 msgid "Allowance"
 msgstr "Asignación"
 
+# needs-native-review: new words, 12 Nov 2026
+#: client/src/pages/Propose.tsx
+msgid "Apply for these roles"
+msgstr "Postúlate a estos roles"
+
 #: client/src/components/admin/AgentPathTree.tsx
 msgctxt "agent paths, a group"
 msgid "Connector and settings"
@@ -12887,8 +12956,8 @@ msgid "Choose the season goal value {n} serves."
 msgstr "Elige la meta de la temporada a la que sirve el aporte {n}."
 
 #: client/src/pages/Propose.tsx
-msgid "Propose for these roles"
-msgstr ""
+#~ msgid "Propose for these roles"
+#~ msgstr ""
 
 #. placeholder {0}: c.name
 #: client/src/components/roleDraft/ArchetypeStep.tsx
@@ -13100,3 +13169,9 @@ msgstr ""
 #~ msgctxt "open proposal review"
 #~ msgid "1 goal for your first moon"
 #~ msgstr "1 meta para tu primera luna"
+
+# needs-native-review: new words, 12 Nov 2026
+#: client/src/pages/Roles.tsx
+msgctxt "roles page, other ways to join"
+msgid "Become a Founding Seeder"
+msgstr "Hazte Sembrador Fundador"

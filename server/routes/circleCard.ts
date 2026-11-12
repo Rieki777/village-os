@@ -39,6 +39,7 @@
 import type { Express } from "express";
 import { hasCapability } from "../../shared/capabilities";
 import { CIRCLE_WORD_REFUSALS as R } from "../../shared/circleCardWords";
+import { writtenOnly } from "../../shared/circleCard";
 import { parseCircleWords } from "../../shared/circleCharterParse";
 import type { ModuleLifecycle } from "../../shared/modules";
 import type { CycleClock } from "../../shared/cycleClock";
@@ -127,10 +128,12 @@ export function register(app: Express, deps: Deps): void {
       sessionsDeps: { circles: () => deps.circles().map((c) => ({ id: c.id, name: c.name })), lapseContext: deps.lapse },
       dormantBadges: deps.dormantBadgeIds ? await deps.dormantBadgeIds().catch(() => []) : [],
     });
+    const proposes = await mayPropose(deps, req, viewer, circle);
     res.json({
       circleId: circle.id,
-      card,
-      viewer: { signedIn: !!viewer, mayPropose: await mayPropose(deps, req, viewer, circle), sessionsOn },
+      // A reader who cannot propose words sees only the headings that have words (QA2-06).
+      card: proposes ? card : writtenOnly(card),
+      viewer: { signedIn: !!viewer, mayPropose: proposes, sessionsOn },
     });
   });
 

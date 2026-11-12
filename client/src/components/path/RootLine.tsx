@@ -59,7 +59,8 @@ export default function RootLine({ quiet }: { quiet: (path: string, stepHref?: s
       <div className="hidden sm:block" data-root-desktop="">
         <RootStrip
           seed={glyph}
-          detail={[said.after, line?.line].filter(Boolean).join(" ") || undefined}
+          // A visitor reads how to take the step before what follows it (QA2-03): "Read a few roles slowly", then "Then tell us...".
+          detail={(path.visitor ? [line?.line, said.after] : [said.after, line?.line]).filter(Boolean).join(" ") || undefined}
           aside={
             <>
               <ol className="hidden items-center gap-3 xl:flex" aria-label={t({ message: `The chapters of your path`, context: "your path, the strip under the header" })}>

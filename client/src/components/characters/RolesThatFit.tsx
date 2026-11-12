@@ -57,7 +57,7 @@ export const ROLES_FIT_WORDS = {
   picked: (n: number) => `${n} of at most ${MAX_SEATS} picked.`,
   propose: "Propose these",
   pickFirst: "Pick a role to propose it.",
-  membersOnly: "Proposing for a role opens at the member rung. Once you reach it, you can propose here.",
+  membersOnly: "Applying for a role opens at the member rung. Once you reach it, you can apply here.",
   every: "See every role",
   places: (n: number) => (n === 1 ? "1 place open" : `${n} places open`),
   /** Every suggestion says why (Rye, 2026-10-23): the character always, and a line the circle lacks when the member carries one. */

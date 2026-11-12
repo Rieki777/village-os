@@ -856,7 +856,7 @@ function VillageSummary({
         )}
       </div>
       <p className="text-xs text-muted-foreground">
-        Tap a circle to step inside it. Tap a role to meet whoever holds it, or to raise your hand.
+        Tap a circle to step inside it. Tap a role to meet whoever holds it, or to apply for it.
       </p>
       {isAdmin && (
         <button

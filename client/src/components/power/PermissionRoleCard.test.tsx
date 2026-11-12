@@ -72,7 +72,7 @@ describe("PermissionRoleCard", () => {
     expect(screen.getAllByText("A vote fills this place")).toHaveLength(2);
     expect(screen.getByText("Seated")).toBeTruthy();
     expect(screen.queryByText("Held now")).toBeNull();
-    expect(screen.queryByRole("button", { name: /Raise your hand/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Apply for this role/ })).toBeNull();
   });
 
   it("sets its figures two by two below a 420px container and four up above", () => {

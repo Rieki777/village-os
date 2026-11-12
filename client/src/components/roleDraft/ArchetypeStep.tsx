@@ -29,9 +29,14 @@ function lower(s: string): string {
   return /^[A-Z][a-z]/.test(s) ? s.charAt(0).toLowerCase() + s.slice(1) : s;
 }
 
-export default function ArchetypeStep({ onSeeAll, allShown }: { onSeeAll: () => void; allShown: boolean }) {
+/**
+ * `nested`: drawn inside "Other ways to join" while the founding team is featured (QA2-02), under
+ * its own "Find your place in the game" heading, so it carries no "Step one" and a lower heading.
+ */
+export default function ArchetypeStep({ onSeeAll, allShown, nested = false }: { onSeeAll: () => void; allShown: boolean; nested?: boolean }) {
   const { t } = useLingui();
   const [cast, setCast] = useState<Archetype[]>([]);
+  const Heading = nested ? "h4" : "h2";
   useEffect(() => {
     let live = true;
     fetch("/api/archetypes")
@@ -57,11 +62,11 @@ export default function ArchetypeStep({ onSeeAll, allShown }: { onSeeAll: () => 
   }, []);
 
   return (
-    <section aria-labelledby="roles-step-one-h" className="mx-auto mb-12 max-w-5xl text-left">
-      <p className={EYEBROW}>{t({ message: "Step one", context: "roles page archetypes" })}</p>
-      <h2 id="roles-step-one-h" className="mt-2 font-display text-3xl leading-tight text-foreground text-balance">
+    <section aria-labelledby="roles-step-one-h" className={nested ? "mt-3 text-left" : "mx-auto mb-12 max-w-5xl text-left"} data-archetype-step={nested ? "nested" : "step"}>
+      {!nested && <p className={EYEBROW}>{t({ message: "Step one", context: "roles page archetypes" })}</p>}
+      <Heading id="roles-step-one-h" className={nested ? "font-display text-xl leading-tight text-foreground text-balance" : "mt-2 font-display text-3xl leading-tight text-foreground text-balance"}>
         {t({ message: "Choose the root you grow from", context: "roles page archetypes" })}
-      </h2>
+      </Heading>
       <p className={`mt-2 ${LEDE}`}>
         {t({ message: "The five archetypes are the roots, and every role grows from one or more of them. Choose the one that fits you most, and you can add more on the next page. Many people grow from two or three, and you may choose all five.", context: "roles page archetypes" })}
       </p>

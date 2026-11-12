@@ -52,8 +52,8 @@ import { BLANK_GOAL, GOAL_LIMITS } from "@shared/proposalGoals";
 import { CARD_LIMITS } from "@shared/openProposalCard";
 import { BreathingLoader } from "@/components/natural";
 import { AboutYouFacts, ReferencesBlock, EMPTY_ABOUT_YOU, aboutYouBody, aboutYouProblem, type AboutYouValue } from "@/components/openProposal/AboutYou";
-import { termOf, type OpenProposalTerm } from "@shared/openProposalTerm";
 import { civilDayWords } from "@shared/seasonPlans";
+import { termOf, type OpenProposalTerm } from "@shared/openProposalTerm";
 import { useLingui } from "@lingui/react/macro";
 import { i18n } from "@/i18n/i18n";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -666,7 +666,8 @@ export default function ProposeARole() {
   const missingTag = form.goals.length > 0 ? items.map((g, i) => (g.title.trim() && !g.serves ? i + 1 : 0)).filter(Boolean) : [];
   const short = (s: string) => (s.trim().length > 90 ? `${s.trim().slice(0, 90)}…` : s.trim());
   const notYet = t({ message: "Not written yet", context: "founding application review" });
-  const startDay = practical.earliestStart;
+  // The review reads the earliest start in plain words ("1 December 2026"), as the rest of the page says a day.
+  const startDay = practical.earliestStart ? civilDayWords(practical.earliestStart) : "";
   /** Review & submit: each step in a line, with a way back to it. */
   const review: Array<[number, string]> = [
     [0, ways === 0 ? t({ message: "Nothing to tick", context: "founding application review" }) : t({ message: `${ticked} of ${ways} done`, context: "founding application review" })],
@@ -700,8 +701,6 @@ export default function ProposeARole() {
     </div>
   );
   const pct = role.terms?.commitmentPct;
-  const termFrom = form.term ? civilDayWords(form.term.startsOn) : "";
-  const termTo = form.term ? civilDayWords(form.term.endsOn) : "";
   const roleBeside = (
     <div className={`${CARD} grid gap-3`} data-role-beside="">
       <p className={EYEBROW}>{role.circle}</p>
@@ -724,10 +723,12 @@ export default function ProposeARole() {
             ? t({ message: "Six steps. Your name and email come from your account, and your answers are saved on this device as you go.", context: "founding application lede" })
             : t({ message: "Six steps, and no account needed. Your answers are saved on this device as you go.", context: "founding application lede" })}
         </p>
-        {/* A village whose applications are for one lunar cycle names its days (Rye, 9 Nov 2026), in plain words. */}
-        {form.term && (
-          <p className="mt-1 text-sm text-muted-foreground" data-term-days="">
-            {t({ message: `This application is for the cycle from ${termFrom} to ${termTo}.`, context: "founding application lede" })}
+        {/* The cycle's dates are not named here (QA2-05): a founding role's first cycle is one paid month from
+            the day it starts, said on the Your first day step, and an internal moon has no plain meaning here. */}
+        {/* The village's note when the application changes (QA2-14, org.founding_updated_note): empty, no note. */}
+        {setup.updatedNote && (
+          <p className="mt-2 text-sm text-foreground" data-updated-note="">
+            {setup.updatedNote}
           </p>
         )}
         {restored && (

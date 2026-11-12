@@ -102,7 +102,7 @@ describe("MapSeatCard", () => {
     expect(screen.getByText("Mara Quill")).toBeTruthy();
     expect(document.querySelector("article[data-power-card]")).toBeTruthy();
     // Nobody is signed in here, so the door is the sign-in link, back to this page.
-    expect(screen.getByRole("link", { name: /Sign in to raise your hand/ }).getAttribute("href")).toMatch(/^\/login\?next=/);
+    expect(screen.getByRole("link", { name: /Sign in to apply for this role/ }).getAttribute("href")).toMatch(/^\/login\?next=/);
   });
 
   it("filters the map to a holder when their row is tapped", () => {

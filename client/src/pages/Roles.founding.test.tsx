@@ -179,7 +179,9 @@ describe("Join the founding team", () => {
     expect(within(card).getByTestId("paid-role-line").textContent).toBe("This is a paid role");
     expect(within(card).getByRole("heading", { name: "Ideal background" })).toBeTruthy();
     expect(within(card).getByRole("heading", { name: "Qualities we're looking for" })).toBeTruthy();
-    expect(within(card).getByRole("heading", { name: "AI support" })).toBeTruthy();
+    // QA2-09: "Digital Companion" (capitalised) replaces the AI wording.
+    expect(within(card).getByRole("heading", { name: "Digital Companion" })).toBeTruthy();
+    expect(card.textContent).not.toMatch(/AI support/);
     expect(card.textContent).toContain("Heron");
     // Everything the editor holds: the words under the editor's own headings.
     for (const h of ["Why it matters", "What I look after", "What I can decide on my own", "What you can count on me for", "What I do regularly", "Bring me", "Not mine to hold", "Holding this role well"]) {
@@ -220,6 +222,36 @@ describe("Join the founding team", () => {
   });
 });
 
+describe("QA2-16: each concept once on the founding card", () => {
+  const open = async () => {
+    renderRoles();
+    const section = await screen.findByRole("region", { name: "Join the founding team" });
+    fireEvent.click(within(section).getByRole("button", { name: /Lead Finance Steward/ }));
+    return waitFor(() => {
+      const el = section.querySelector('[data-full-role-card="finance"]') as HTMLElement | null;
+      if (!el) throw new Error("no card yet");
+      return el;
+    });
+  };
+  it("says paid once: the circle alone in the eyebrow, then This is a paid role", async () => {
+    const card = await open();
+    await waitFor(() => expect(within(card).getByTestId("paid-role-line").textContent).toBe("This is a paid role"));
+    expect(card.textContent).not.toMatch(/Paid role/);
+    expect(card.querySelector("header p")?.textContent).toBe("Anchor Circle");
+  });
+  it("says the commitment once when the role's terms name a percent", async () => {
+    org.roles[0] = seat("finance", "Lead Finance Steward", { timeCommitment: "Full commitment", card: { ...seat("x", "x").card, commitmentPct: 100 } });
+    const card = await open();
+    await waitFor(() => expect(card.textContent).toContain("100%"));
+    expect(card.textContent).not.toContain("Full commitment");
+  });
+  it("keeps the written commitment on a card whose terms name no percent (control)", async () => {
+    org.roles[0] = seat("finance", "Lead Finance Steward", { timeCommitment: "Full commitment" });
+    const card = await open();
+    await waitFor(() => expect(card.textContent).toContain("Full commitment"));
+  });
+});
+
 describe("the two pay lines on the card", () => {
   const open = async () => {
     renderRoles();
@@ -249,6 +281,96 @@ describe("the other ways in, and the words", () => {
     expect(within(other).getByRole("link", { name: /Propose a new role/ }).getAttribute("href")).toBe("/role-proposals/new");
     expect(screen.getByRole("heading", { name: "How we evolve through conflict" })).toBeTruthy();
     expect(screen.queryByText(/When a Tension Is Between People/)).toBeNull();
+  });
+});
+
+describe("QA2-07: Founding Seeders and volunteering are named among the other ways in", () => {
+  it("offers the resident path and the gifts tile in the platform's words, to the way to stay close and the work-with-us door", async () => {
+    renderRoles();
+    await screen.findByRole("region", { name: "Join the founding team" });
+    const other = screen.getByRole("region", { name: "Other ways to join" });
+    expect(within(other).getByRole("link", { name: /Become a Founding Seeder/ }).getAttribute("href")).toBe("/resident");
+    expect(within(other).getByText("Live here one day? Start on the resident path.")).toBeTruthy();
+    expect(within(other).getByRole("link", { name: /Offer your gifts/ }).getAttribute("href")).toBe("/work-with-us");
+    expect(within(other).getByText("Volunteer or work-trade: tell us what you would like to give.")).toBeTruthy();
+  });
+  it("shows the village's own words and link when it wrote them", async () => {
+    founding = { ...founding, otherWays: { seeder: { title: "Join the Friends", line: "Come close first.", href: "/friends" }, gifts: { title: "Give a day", line: "Saturdays in the garden.", href: "/work-with-us" } } };
+    renderRoles();
+    await screen.findByRole("region", { name: "Join the founding team" });
+    const other = screen.getByRole("region", { name: "Other ways to join" });
+    expect(within(other).getByRole("link", { name: /Join the Friends/ }).getAttribute("href")).toBe("/friends");
+    expect(within(other).getByText("Saturdays in the garden.")).toBeTruthy();
+    expect(within(other).queryByText(/Become a Founding Seeder/)).toBeNull();
+  });
+});
+
+describe("QA2-02: no second step one under the founding team", () => {
+  it("puts the roots inside Other ways to join, under Find your place in the game, with no Step one", async () => {
+    renderRoles();
+    await screen.findByRole("region", { name: "Join the founding team" });
+    const other = screen.getByRole("region", { name: "Other ways to join" });
+    expect(within(other).getByRole("heading", { name: "Find your place in the game" })).toBeTruthy();
+    const roots = document.querySelector("[data-archetype-step]") as HTMLElement;
+    expect(roots.getAttribute("data-archetype-step")).toBe("nested");
+    expect(other.contains(roots)).toBe(true);
+    expect(document.body.textContent).not.toMatch(/Step one/i);
+  });
+  it("keeps Step one as the page's first step while the founding team is off (control)", async () => {
+    founding = { on: false, roleIds: [], sections: {}, showPayRanges: false, villagePay: VILLAGE_PAY };
+    renderRoles();
+    await screen.findByRole("link", { name: /Browse the open roles/ });
+    const roots = document.querySelector("[data-archetype-step]") as HTMLElement;
+    expect(roots.getAttribute("data-archetype-step")).toBe("step");
+    expect(screen.getByRole("region", { name: "Other ways to join" }).contains(roots)).toBe(false);
+    expect(screen.queryByRole("heading", { name: "Find your place in the game" })).toBeNull();
+  });
+});
+
+describe("design pass M1: the founding team leads the page", () => {
+  it("opens on the founding team as the page's h1, then Other ways to join, with the page's own header below them", async () => {
+    renderRoles();
+    const h1 = await screen.findByRole("heading", { level: 1, name: "Join the founding team" });
+    expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
+    // Nothing of the game sits between the founding section and Other ways to join.
+    expect(h1.closest("[data-founding-team]")?.nextElementSibling?.matches("[data-other-ways]")).toBe(true);
+    const other = screen.getByRole("region", { name: "Other ways to join" });
+    const header = await screen.findByRole("heading", { level: 2, name: "Roles and Circles" });
+    expect(other.compareDocumentPosition(header) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+  it("keeps the page's own header first while the founding team is off (control)", async () => {
+    founding = { on: false, roleIds: [], sections: {}, showPayRanges: false, villagePay: VILLAGE_PAY };
+    renderRoles();
+    const h1 = await screen.findByRole("heading", { level: 1, name: "Roles and Circles" });
+    const other = screen.getByRole("region", { name: "Other ways to join" });
+    expect(h1.compareDocumentPosition(other) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+});
+
+describe("design pass D-03: the offer rail on the founding card", () => {
+  const open = async () => {
+    renderRoles();
+    const section = await screen.findByRole("region", { name: "Join the founding team" });
+    fireEvent.click(within(section).getByRole("button", { name: /Lead Finance Steward/ }));
+    return waitFor(() => {
+      const el = section.querySelector('[data-testid="offer-rail"]') as HTMLElement | null;
+      if (!el) throw new Error("no rail yet");
+      return el;
+    });
+  };
+  it("holds the ceiling, the shares as tiles, the split line and the commitment together", async () => {
+    org.roles[0] = seat("finance", "Lead Finance Steward", { card: { ...seat("x", "x").card, commitmentPct: 100 } });
+    const rail = await open();
+    await waitFor(() => expect(within(rail).getByTestId("pay-ceiling").textContent).toBe("Total compensation up to $9,000 a month"));
+    expect(Array.from(within(rail).getByTestId("pay-tiles").querySelectorAll("li")).map((li) => li.textContent)).toEqual(["cash40%", "equity55%", "village credits5%"]);
+    expect(within(rail).getByTestId("pay-split").textContent).toContain("To be decided in the onboarding process.");
+    expect(rail.textContent).toContain("100%");
+  });
+  it("shows only the split when no ceiling is written", async () => {
+    roleCard = (id: string) => ({ roleId: id, sections: { ...SECTIONS, payCeiling: null }, lastEdited: null, showPayRanges: false, villagePay: VILLAGE_PAY, mayEdit: false });
+    const rail = await open();
+    await waitFor(() => expect(within(rail).getByTestId("pay-split")).toBeTruthy());
+    expect(within(rail).queryByTestId("pay-ceiling")).toBeNull();
   });
 });
 

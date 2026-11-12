@@ -107,7 +107,7 @@ export default function StagePanel({
             </Link>{" "}
             ·{" "}
             <Link href="/roles" className={LINK}>
-              Raise your hand for an open role
+              Apply for a role
             </Link>
           </p>
         </div>

@@ -258,7 +258,7 @@ export const CAPABILITY_CONSEQUENCE: Record<Capability, string> = {
   "operator.config": "change the village's general settings, tools, training, setup assistant and imported pages, accept or reject drafts, and close a gratitude cycle",
   "operator.secrets": "write the provider keys and the email sender the village runs on, which nobody can ever read back",
   "operator.recover": "reconcile the ledger, remove uploads nothing uses, and land the decisions that are due",
-  "companion.use": "keep AI companions on their profile, answer what they ask, and say yes or no to what they draft, each yes going through that draft's own door",
+  "companion.use": "keep digital companions on their profile, answer what they ask, and say yes or no to what they draft, each yes going through that draft's own door",
   "comms.manage":
     "run the village's email: turn automations on and off, change their words, send letters to people who agreed to get them, and see the village's address book and every email the village still keeps: who it went to, its subject, whether it arrived, and its words",
 };

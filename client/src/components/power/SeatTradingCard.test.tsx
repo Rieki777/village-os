@@ -186,7 +186,7 @@ describe("the brief's sample at the member tier", () => {
     const held = Array.from(narrow.querySelectorAll("div")).find((d) => d.querySelector("dt")?.textContent === "Held now")!;
     expect(held.querySelector("dd")!.textContent).toBe("1");
     expect(screen.getByText("1 of 2 seated is ready to be re-chosen.")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Raise your hand for Water Keeper" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Apply for this role: Water Keeper" })).toBeTruthy();
     expect(screen.queryByText(/^Contact/)).toBeNull();
   });
 
@@ -210,7 +210,7 @@ describe("the empty seat, the way every fork starts", () => {
     expect(within(screen.getByRole("region", { name: "Holding it now" })).getByText("Open place")).toBeTruthy();
     expect(screen.getAllByText("Open place").length).toBeGreaterThan(1);
     expect(screen.getByText("Nobody holds this yet")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Raise your hand for Seed Keeper" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Apply for this role: Seed Keeper" })).toBeTruthy();
     expect(screen.getAllByText("Days left in the season").length).toBeGreaterThan(0);
     expect(screen.getByText("Season of Foundations ends 21 Mar 2027")).toBeTruthy();
     expect(
@@ -296,7 +296,7 @@ describe("a stranger on the map", () => {
     show(SAMPLE, { viewPeople: false, signedIn: false });
     expect(screen.getAllByText("Seated").filter((el) => el.closest("li"))).toHaveLength(2);
     expect(screen.getByText("Sign in to see who holds it.")).toBeTruthy();
-    const signIn = screen.getByRole("link", { name: /Sign in to raise your hand/ });
+    const signIn = screen.getByRole("link", { name: /Sign in to apply for this role/ });
     expect(signIn.getAttribute("href")).toMatch(/^\/login\?next=/);
     expect(document.body.textContent).not.toContain("Mara");
     // The card itself reads nothing: no route at all, members-only or not.
@@ -308,10 +308,10 @@ describe("an example seat", () => {
   it("wears the example chip and offers no action", () => {
     show({ ...EMPTY_SEAT, isExample: true });
     expect(screen.getByText("example")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: /Raise your hand/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Apply for this role/ })).toBeNull();
     // Control: the same seat, not an example, offers one.
     show(EMPTY_SEAT);
-    expect(screen.getByRole("button", { name: "Raise your hand for Seed Keeper" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Apply for this role: Seed Keeper" })).toBeTruthy();
   });
 });
 
@@ -357,10 +357,10 @@ describe("turning the card over", () => {
     );
     const live = () => card().querySelector("[aria-live]")!;
     const { rerender } = render(cardFor(EMPTY_SEAT));
-    fireEvent.click(screen.getByRole("button", { name: "Raise your hand for Seed Keeper" }));
-    fireEvent.click(screen.getByRole("button", { name: "Raise my hand" }));
+    fireEvent.click(screen.getByRole("button", { name: "Apply for this role: Seed Keeper" }));
+    fireEvent.click(screen.getByRole("button", { name: "Send my application" }));
     // Known positive: the region said it, for this seat.
-    await waitFor(() => expect(live().textContent).toBe("Hand raised. The founding team will be in touch."));
+    await waitFor(() => expect(live().textContent).toBe("Application sent. The founding team will be in touch."));
 
     rerender(cardFor(FILLED));
     expect(screen.getByRole("heading", { level: 3, name: "Bridge Keeper" })).toBeTruthy();
@@ -380,7 +380,7 @@ describe("turning the card over", () => {
     expect(card().getAttribute("data-face")).toBe("back");
     // The footer's shortcut is named by its words alone; the front's door names the seat.
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Raise your hand" }));
+      fireEvent.click(screen.getByRole("button", { name: "Apply for this role" }));
     });
     expect(card().getAttribute("data-face")).toBe("front");
     const note = await screen.findByLabelText("Why this role calls to you (optional)");
@@ -474,3 +474,4 @@ describe("the map's print rule", () => {
     expect(card().tagName).toBe("ARTICLE");
   });
 });
+

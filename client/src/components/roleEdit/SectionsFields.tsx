@@ -1,6 +1,6 @@
 /**
  * THE FOUNDING SECTIONS IN THE ROLE EDITOR (phase A, lane A3): Ideal
- * background, Qualities we're looking for, AI support and its companion, the
+ * background, Qualities we're looking for, the Digital Companion and its animal, the
  * paid-role line, and How pay works as shares of the whole. Every field the
  * full card draws (client/src/components/roleCard/FullRoleCard.tsx) is written
  * here, so the full card shows exactly what the editor holds.
@@ -127,7 +127,8 @@ export default function SectionsFields({ value, start, onChange }: { value: Sect
           value={value.aiSupport}
           maxLength={SECTION_LIMITS.aiSupportChars}
           onChange={(e) => set("aiSupport", e.target.value)}
-          aria-label={t({ message: "What the AI companion does for this role", context: "role editor" })}
+          aria-label={t({ message: "What the Digital Companion does for this role", context: "role editor" })}
+          placeholder={t({ message: "What the Digital Companion does for this role", context: "role editor" })}
         />
       </Field>
 

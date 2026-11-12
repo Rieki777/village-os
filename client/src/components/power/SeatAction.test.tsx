@@ -98,7 +98,7 @@ const cardFor = (seat: object) => (
 
 async function openTheForm() {
   render(cardFor(OPEN));
-  fireEvent.click(screen.getByRole("button", { name: "Raise your hand for Water Keeper" }));
+  fireEvent.click(screen.getByRole("button", { name: "Apply for this role: Water Keeper" }));
   expect(await screen.findByText(new RegExp(`Ends with the season on ${SEASON_END}\\.`))).toBeTruthy();
 }
 
@@ -107,15 +107,15 @@ describe("raising a hand", () => {
     await openTheForm();
     fireEvent.change(screen.getByLabelText("End date for your role (optional)"), { target: { value: ASKED } });
     expect(await screen.findByText(new RegExp(`Ends on ${ASKED}\\.`))).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Raise my hand" }));
+    fireEvent.click(screen.getByRole("button", { name: "Send my application" }));
     await waitFor(() => expect(posted).toHaveLength(1));
     expect(posted[0]).toEqual({ url: "/api/map/roles/seat-water/raise-hand", body: { note: "", termEndsOn: ASKED } });
-    expect(await screen.findByText("Hand raised. The founding team will be in touch.", { selector: "p:not(.sr-only)" })).toBeTruthy();
+    expect(await screen.findByText("Application sent. The founding team will be in touch.", { selector: "p:not(.sr-only)" })).toBeTruthy();
   });
 
   it("sends no date when none was picked, so the seat ends with the season", async () => {
     await openTheForm();
-    fireEvent.click(screen.getByRole("button", { name: "Raise my hand" }));
+    fireEvent.click(screen.getByRole("button", { name: "Send my application" }));
     await waitFor(() => expect(posted).toHaveLength(1));
     expect(posted[0].body).toEqual({ note: "" });
   });
@@ -126,7 +126,7 @@ describe("raising a hand", () => {
       body: { error: "That end date has already passed. Pick a date after today.", code: "already_over" },
     };
     await openTheForm();
-    fireEvent.click(screen.getByRole("button", { name: "Raise my hand" }));
+    fireEvent.click(screen.getByRole("button", { name: "Send my application" }));
     const refusal = "That end date has already passed. Pick a date after today.";
     expect(await screen.findByText(refusal, { selector: "p:not(.sr-only)" })).toBeTruthy();
     // The card's own region, a child of the article. (The term field keeps its
@@ -136,7 +136,7 @@ describe("raising a hand", () => {
 
   it("says who a raised hand reaches before it goes up", () => {
     render(cardFor(OPEN));
-    expect(screen.getByText("A raised hand reaches the founding team, who will be in touch.")).toBeTruthy();
+    expect(screen.getByText("Your application reaches the founding team, who will be in touch.")).toBeTruthy();
   });
 });
 
@@ -168,19 +168,19 @@ describe("reaching a holder", () => {
 describe("a different seat", () => {
   it("clears a half-written note, so it never lands under another name", async () => {
     const { rerender } = render(cardFor(OPEN));
-    fireEvent.click(screen.getByRole("button", { name: "Raise your hand for Water Keeper" }));
+    fireEvent.click(screen.getByRole("button", { name: "Apply for this role: Water Keeper" }));
     fireEvent.change(screen.getByLabelText("Why this role calls to you (optional)"), { target: { value: "I keep bees" } });
     expect((screen.getByLabelText("Why this role calls to you (optional)") as HTMLTextAreaElement).value).toBe("I keep bees");
 
     rerender(cardFor({ ...OPEN, id: "seat-seed", name: "Seed Keeper" }));
     expect(screen.queryByLabelText("Why this role calls to you (optional)")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Raise your hand for Seed Keeper" }));
+    fireEvent.click(screen.getByRole("button", { name: "Apply for this role: Seed Keeper" }));
     expect((screen.getByLabelText("Why this role calls to you (optional)") as HTMLTextAreaElement).value).toBe("");
   });
 
   it("control: the same seat keeps the note across a re-render", () => {
     const { rerender } = render(cardFor(OPEN));
-    fireEvent.click(screen.getByRole("button", { name: "Raise your hand for Water Keeper" }));
+    fireEvent.click(screen.getByRole("button", { name: "Apply for this role: Water Keeper" }));
     fireEvent.change(screen.getByLabelText("Why this role calls to you (optional)"), { target: { value: "I keep bees" } });
     rerender(cardFor({ ...OPEN }));
     expect((screen.getByLabelText("Why this role calls to you (optional)") as HTMLTextAreaElement).value).toBe("I keep bees");
@@ -207,7 +207,7 @@ describe("a member who reads terms", () => {
     const href = applyHrefFor({ ...OPEN, termsOffer: null });
     expect(href).toBe("/propose?type=role_application&seat=seat-water&from=%2Froles%3Fseat%3Dseat-water");
     render(<SeatTradingCard input={fromMapSeat(OPEN, DATA, { signedIn: true })} ctx={CTX} action={<SeatAction circleId="land" applyHref={href} />} />);
-    const door = screen.getByRole("link", { name: "Raise your hand for Water Keeper" });
+    const door = screen.getByRole("link", { name: "Apply for this role: Water Keeper" });
     expect(door.getAttribute("href")).toBe("/propose?type=role_application&seat=seat-water&from=%2Froles%3Fseat%3Dseat-water");
     expect(screen.getByText("Opens your proposal for this role and its terms. A role holder or the village adopts it.")).toBeTruthy();
     fireEvent.click(door);
@@ -219,8 +219,8 @@ describe("a member who reads terms", () => {
     expect(applyHrefFor(OPEN)).toBeNull();
     expect(applyHrefFor({ ...OPEN, termsOffer: null, isExample: true })).toBeNull();
     render(cardFor(OPEN));
-    expect(screen.getByRole("button", { name: "Raise your hand for Water Keeper" })).toBeTruthy();
-    expect(screen.queryByRole("link", { name: "Raise your hand for Water Keeper" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Apply for this role: Water Keeper" })).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Apply for this role: Water Keeper" })).toBeNull();
   });
 });
 
@@ -241,7 +241,7 @@ describe("a signed-out reader on an open role", () => {
     const apply = screen.getByRole("link", { name: "Propose for Water Keeper" });
     expect(apply.getAttribute("href")).toBe("/propose-a-role?role=seat-water&from=%2Froles%3Fseat%3Dseat-water");
     // A member who has an account still has the way to sign in, back here.
-    expect(screen.getByRole("link", { name: /Sign in to raise your hand/ }).getAttribute("href")).toMatch(/^\/login\?next=/);
+    expect(screen.getByRole("link", { name: /Sign in to apply for this role/ }).getAttribute("href")).toMatch(/^\/login\?next=/);
   });
 
   it("offers nothing to apply for on a role somebody holds", () => {

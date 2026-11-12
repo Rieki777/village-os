@@ -87,7 +87,7 @@ describe("StartHereCard: a signed-in guest who has not asked yet", () => {
     // A quest idea is open to anybody, so a guest has that door too, smaller.
     expect(link("Propose a quest")).toHaveAttribute("href", "/propose-quest");
     // The member doors are not offered to somebody who is not in yet.
-    expect(within(card()).queryByRole("link", { name: /Raise your hand/ })).toBeNull();
+    expect(within(card()).queryByRole("link", { name: /Apply for a role/ })).toBeNull();
   });
 
   it("names the step in the village's own word for a member", () => {
@@ -148,7 +148,7 @@ describe("StartHereCard: a member", () => {
 
     expect(within(card()).getAllByRole("heading")).toHaveLength(1);
     expect(link(/Propose a quest/)).toHaveAttribute("href", "/propose-quest");
-    expect(link("Raise your hand for an open role")).toHaveAttribute("href", "/roles");
+    expect(link("Apply for a role")).toHaveAttribute("href", "/roles");
     // Every door says what happens after it.
     expect(within(card()).getByText(/A steward reads it, and if it goes on the board/)).toBeInTheDocument();
     expect(within(card()).getByText(/read your offer and answer\. You get a notice when they do\./)).toBeInTheDocument();
@@ -170,7 +170,7 @@ describe("StartHereCard: a member", () => {
   it("leaves the seat door out while the map module is off, because /roles then offers no hand", () => {
     session.modulesOn = new Set();
     render(<StartHereCard ownerId="u1" me={me({ membership: true, stageIndex: 4 })} signing={null} config={config()} />);
-    expect(within(card()).queryByRole("link", { name: /Raise your hand/ })).toBeNull();
+    expect(within(card()).queryByRole("link", { name: /Apply for a role/ })).toBeNull();
     expect(link(/Propose a quest/)).toBeInTheDocument();
   });
 });

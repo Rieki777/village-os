@@ -9,7 +9,7 @@
  *
  *   idealBackground   "Ideal background": lines, written openly ("ideally...")
  *   qualities         "Qualities we're looking for": lines
- *   aiSupport         "AI support": one or two sentences on the companion that
+ *   aiSupport         "Digital Companion": one or two sentences on the companion that
  *                     saves the role time
  *   aiCompanion       the companion's animal, one or two words ("Heron")
  *   paid              true draws "This is a paid role" at the top of the card
@@ -82,7 +82,8 @@ export type SectionKey = (typeof SECTION_KEYS)[number];
 export const SECTION_WORDS = {
   idealBackground: "Ideal background",
   qualities: "Qualities we're looking for",
-  aiSupport: "AI support",
+  // The lead, 12 Nov 2026: "'Digital Companion' (capitalised) replaces AI wording" (QA2-09).
+  aiSupport: "Digital Companion",
   aiCompanionLabel: "Companion",
   paid: "This is a paid role",
   payShape: "How pay works",

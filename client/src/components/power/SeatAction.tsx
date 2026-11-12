@@ -145,7 +145,7 @@ export default function SeatAction({
     })
       .then(async (r) => {
         const d = await r.json();
-        if (!r.ok) throw new Error(d.message ?? d.error ?? "Could not raise your hand");
+        if (!r.ok) throw new Error(d.message ?? d.error ?? "Could not send your application");
         setStatus(SHEET_WORDS.raised);
         setRaising(false);
         setNote("");

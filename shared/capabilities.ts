@@ -370,7 +370,7 @@ export const CAPABILITY_LABELS: Record<Capability, string> = {
   "steward.veto": "Stop a carried decision inside its window, and say why",
   "comms.manage": "Run the village's email: its automations, their words, and letters",
   "session.template": "Keep the village's meeting templates",
-  "companion.use": "Keep AI companions, answer their questions and decide their drafts",
+  "companion.use": "Keep digital companions, answer their questions and decide their drafts",
   "moon.approve": "Approve the work in a member's end-of-moon recap",
   "moon.approve_alone": "Give both approvals of a member's end-of-moon recap by yourself",
   "moon.approve_own": "Approve your own end-of-moon recap and invoice, marked for review",

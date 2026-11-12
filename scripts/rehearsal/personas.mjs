@@ -140,17 +140,35 @@ export async function neighbour(w, ctx) {
     await page.locator("main").waitFor();
   });
   await w.look("roles");
-  await w.step("pick the Land Steward", async () => {
-    await w.goto("/roles/select");
-    const pick = page.getByRole("button", { name: /(Select|Elegir|Seleccionar) Land Steward/i }).first();
-    await pick.scrollIntoViewIfNeeded();
-    await pick.click();
-    await page.waitForTimeout(400);
+  // QA2-02: the founding team leads /roles, and the game's roots sit inside "Other ways to join"
+  // with no second "Step one" under it.
+  await w.step("one step one only: the roots sit inside Other ways to join", async () => {
+    await page.locator("[data-founding-team]").waitFor();
+    await page.locator("[data-other-ways] [data-archetype-step=nested]").waitFor({ state: "attached" });
+    if (await page.locator("[data-archetype-step=step]").count()) throw new Error("a second Step one sits under the founding team");
   });
-  // Phase A: a listed role is applied for ("Apply", or the Spanish "Postular"/"Aplicar"/"Solicitar").
-  await w.look("select-picked", { next: page.getByRole("link", { name: /aplic|postul|solicit|apply|propon|propose/i }).last() });
+  // QA2-01: the founding roles are applied for from their own card, never picked on the game's board.
+  await w.step("the game's board leaves the founding roles off", async () => {
+    await w.goto("/roles/select");
+    await page.locator("[data-founding-elsewhere]").waitFor();
+    for (const name of [/Land Steward/, /Finance Steward/]) {
+      if (await page.getByRole("heading", { level: 3, name }).count()) throw new Error(`a founding role is on the game's board: ${name}`);
+    }
+  });
+  await w.look("select-founding-line", { next: page.locator("[data-founding-elsewhere] a") });
+  await w.step("follow the line back to the founding team", async () => {
+    await page.locator("[data-founding-elsewhere] a").click();
+    await page.waitForURL((u) => new URL(u).pathname === "/roles");
+    const section = page.locator("[data-founding-team]");
+    await section.waitFor();
+    const row = section.getByRole("button", { name: /Land Steward/ }).first();
+    if ((await row.getAttribute("aria-expanded")) !== "true") await row.click();
+    await page.locator(`[data-apply-role="${ctx.seed.roles.land}"]`).first().waitFor();
+    await settle(page);
+  });
+  await w.look("founding-land", { next: page.locator(`[data-apply-role="${ctx.seed.roles.land}"]`).first() });
   await w.step("open the application", async () => {
-    const link = page.getByRole("link", { name: /aplic|postul|solicit|apply|propon|propose/i }).last();
+    const link = page.locator(`[data-apply-role="${ctx.seed.roles.land}"]`).first();
     if (await link.count()) await link.click();
     else await w.goto(`/propose-a-role?role=${ctx.seed.roles.land}`);
     await page.locator("form[data-open-proposal]").waitFor();
@@ -228,14 +246,20 @@ export async function professional(w, ctx) {
     await settle(page);
   });
   await w.look("founding-card", { next: page.getByRole("link", { name: /Apply for this role/ }).first() });
-  await w.step("open the Finance Steward's full card", async () => {
-    await w.goto("/roles/select");
-    const card = page.getByRole("button", { name: /Full card for Finance Steward/i }).first();
-    await card.scrollIntoViewIfNeeded();
-    await card.click();
-    await page.getByRole("region", { name: /The full card for Finance Steward/i }).waitFor();
+  // QA2-02: no second "Step one" under the founding team; the roots sit inside "Other ways to join".
+  await w.step("one step one only: the roots sit inside Other ways to join", async () => {
+    await page.locator("[data-other-ways] [data-archetype-step=nested]").waitFor({ state: "attached" });
+    if (await page.locator("[data-archetype-step=step]").count()) throw new Error("a second Step one sits under the founding team");
+    if (await page.getByText(/^Step one$/i).count()) throw new Error("the page still reads Step one");
   });
-  await w.look("full-card");
+  // QA2-01: the Finance Steward is not on the game's board; one line points back to the founding team.
+  await w.step("the game's board leaves the Finance Steward off", async () => {
+    await w.goto("/roles/select");
+    await page.locator("[data-founding-elsewhere]").waitFor();
+    if (await page.getByRole("button", { name: /Full card for Finance Steward/i }).count()) throw new Error("the Finance Steward is on the game's board");
+    if (await page.getByRole("heading", { level: 3, name: /Finance Steward/ }).count()) throw new Error("the Finance Steward is on the game's board");
+  });
+  await w.look("select-founding-line", { next: page.locator("[data-founding-elsewhere] a") });
   await w.step("open the application", async () => {
     await w.goto(`/propose-a-role?role=${ctx.seed.roles.finance}`);
     await page.locator("form[data-open-proposal]").waitFor();

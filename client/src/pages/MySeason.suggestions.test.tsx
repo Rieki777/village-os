@@ -174,8 +174,8 @@ describe("measures from your roles", () => {
     mine = () => json({ ...MINE, heldSeats: [], applications: [], suggestions: { quests: { min: 3, max: 5, from: "default", source: [] }, measures: [] } });
     render(<MySeason />);
     const box = await screen.findByTestId("role-measures");
-    expect(box.textContent).toContain("Propose for a role to see measures from its role.");
-    expect(within(box).getByRole("link", { name: "Propose for a role" }).getAttribute("href")).toBe("/propose?type=role_application&season=s-next");
+    expect(box.textContent).toContain("Apply for a role to see measures from its role.");
+    expect(within(box).getByRole("link", { name: "Apply for a role" }).getAttribute("href")).toBe("/propose?type=role_application&season=s-next");
     await waitFor(() => expect(within(box).queryAllByRole("button").length).toBe(0));
   });
 });
