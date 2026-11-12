@@ -31,8 +31,11 @@ function formPatch(key: string, after: unknown): Record<string, unknown> {
   switch (key) {
     case "listed":
     case "alwaysChecked":
+    case "commitmentRequired":
     case "recruiting":
       return { [key]: after === true };
+    case "commitmentPct":
+      return { commitmentPct: typeof after === "number" ? String(after) : "" };
     case "track":
     case "heldBy":
     case "conversationMode":

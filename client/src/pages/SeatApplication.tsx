@@ -75,6 +75,8 @@ import { call as alignCall } from "@/components/alignment/alignmentsApi";
 import { ApplicantGeneKeys } from "@/components/geneKeys/ProfileGeneKeys";
 import CircleConsent from "@/components/roleProposal/CircleConsent";
 import { CONSENT_WORDS } from "@shared/roleProposalConsent";
+import YourTurn from "@/components/governance/YourTurn";
+import ConsentSeal from "@/components/governance/ConsentSeal";
 
 export const APPLICATION_WORDS = {
   membersOnly: "Members read role proposals.",
@@ -106,6 +108,12 @@ export const APPLICATION_WORDS = {
   readTheVote: "Read the vote",
   laterLine: "Adopted. The roles are taken up on the first day it names.",
   packageTerms: "One set of terms covers every role above.",
+  /** Decider calm: the side that holds the round, and the one door lit when it is the reader's turn. */
+  roundLabel: "The circle's answer",
+  turnConsent: "Go to the circle's answer",
+  turnConsentLine: "The circle asked you, and your answer is still open.",
+  turnAdopt: "Go to the village's card",
+  turnAdoptLine: "You hold the power to adopt this for the village.",
 } as const;
 
 /**
@@ -283,6 +291,21 @@ export default function SeatApplication() {
   // "Record the adoption", once the circle has consented to a role proposal (role proposals PR D).
   const record = app?.proposal?.consent?.record ?? null;
 
+  /*
+   * THE READER'S TURN (decider calm): the one place a light goes on this page.
+   * Asked by the circle and not yet answered comes first; then a holder of the
+   * power who may adopt. Each is the server's own answer (`you.mayAnswer`,
+   * `you.mayAdopt`), read here and never decided here, and the door leads to
+   * the round or the holder's card without choosing anything in it.
+   */
+  const waitsOnHolder = app?.status === "awaiting-holder";
+  const askedToConsent = !!(waitsOnHolder && !app?.proposal?.decided && app?.proposal?.consent?.you.mayAnswer);
+  const turn: { to: string; label: string; line: string } | null = askedToConsent
+    ? { to: "#the-round", label: APPLICATION_WORDS.turnConsent, line: APPLICATION_WORDS.turnConsentLine }
+    : waitsOnHolder && app?.you?.holdsThePower && app.you.mayAdopt && !app.you.isCandidate
+      ? { to: "#sa-holder-card", label: APPLICATION_WORDS.turnAdopt, line: APPLICATION_WORDS.turnAdoptLine }
+      : null;
+
   const back = (
     <Link
       href="/decisions"
@@ -317,7 +340,10 @@ export default function SeatApplication() {
   return (
     <Layout>
       <div className={WORLD}>
-      <div className="container max-w-3xl px-4 py-8">
+      {/* Decider calm: from lg up, the person's words at reading width on the left
+          and the round beside them, so nobody decides without the words in view.
+          A phone reads them one after the other, with the turn under the thumb. */}
+      <div className={`container max-w-3xl px-4 py-8 lg:max-w-6xl${turn ? " pb-32 lg:pb-8" : ""}`}>
         {back}
         {state === "loading" && (
           <div className="flex justify-center py-16">
@@ -331,7 +357,8 @@ export default function SeatApplication() {
           </p>
         )}
         {state === "ready" && app && (
-          <article className="mt-3 space-y-8">
+          <article className="mt-3 space-y-8 lg:grid lg:grid-cols-[minmax(0,1fr)_24rem] lg:items-start lg:gap-10 lg:space-y-0">
+            <div className="min-w-0 max-w-3xl space-y-8">
             <header>
               <p className={EYEBROW}>{app.statusWords}</p>
               <h1 className={`${H1} mt-1`}>
@@ -413,15 +440,23 @@ export default function SeatApplication() {
               </p>
             )}
 
+            </div>
+
+            <aside className="space-y-6 lg:sticky lg:top-24" aria-label={APPLICATION_WORDS.roundLabel} data-the-round-side="">
+            {turn && <YourTurn shape="sticky" to={turn.to} label={turn.label} line={turn.line} />}
+
             {/* A role proposal: where the circle's consent stands, and an asked holder's Consent or Object (PR D). */}
             {app.proposal?.consent && (
+              <div id="the-round" className="scroll-mt-24 rounded-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
               <CircleConsent
                 applicationId={app.id}
                 consent={app.proposal.consent}
                 decided={app.proposal.decided}
                 waiting={app.status === "awaiting-holder"}
                 onAnswered={() => void load()}
+                seal={ConsentSeal}
               />
+              </div>
             )}
 
             {/* Who adopts it in this village, read on the server from who holds the power (E8). */}
@@ -445,7 +480,7 @@ export default function SeatApplication() {
             {app.status === "adopted" && app.startsOn && <p className="text-foreground">{APPLICATION_WORDS.laterLine}</p>}
 
             {app.you && app.status === "awaiting-holder" && app.you.holdsThePower && (
-              <section aria-labelledby="sa-holder" className={CARD_FEATURED}>
+              <section id="sa-holder-card" aria-labelledby="sa-holder" className={`${CARD_FEATURED} scroll-mt-24 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring`}>
                 <h2 id="sa-holder" className="text-lg font-bold text-foreground">
                   {APPLICATION_WORDS.holderHeading}
                 </h2>
@@ -531,6 +566,7 @@ export default function SeatApplication() {
                 {said.text}
               </p>
             )}
+            </aside>
           </article>
         )}
       </div>

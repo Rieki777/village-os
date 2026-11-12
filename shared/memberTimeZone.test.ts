@@ -39,7 +39,7 @@ describe("booking links", () => {
   it("says we'll write when there is no usable link", () => {
     expect(bookingOffer(null)).toEqual({ kind: "write", text: NO_BOOKING_COPY });
     expect(bookingOffer("http://cal.example/x").kind).toBe("write");
-    expect(NO_BOOKING_COPY).toBe("We'll write to you to find a time");
+    expect(NO_BOOKING_COPY).toBe("We'll write to you with times");
   });
   it("orders the first conversation, interviews, then the access session", () => {
     const steps = bookingSteps([

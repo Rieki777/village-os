@@ -9,7 +9,7 @@
  *
  *   idealBackground   "Ideal background": lines, written openly ("ideally...")
  *   qualities         "Qualities we're looking for": lines
- *   aiSupport         "AI support": one or two sentences on the companion that
+ *   aiSupport         "Digital Companion": one or two sentences on the companion that
  *                     saves the role time
  *   aiCompanion       the companion's animal, one or two words ("Heron")
  *   paid              true draws "This is a paid role" at the top of the card
@@ -82,12 +82,13 @@ export type SectionKey = (typeof SECTION_KEYS)[number];
 export const SECTION_WORDS = {
   idealBackground: "Ideal background",
   qualities: "Qualities we're looking for",
-  aiSupport: "AI support",
+  // The lead, 12 Nov 2026: "'Digital Companion' (capitalised) replaces AI wording" (QA2-09).
+  aiSupport: "Digital Companion",
   aiCompanionLabel: "Companion",
   paid: "This is a paid role",
-  payShape: "How pay works",
+  payShape: "How rewards work",
   editorHeading: "Who we hope for, and how pay works",
-  editorLede: "Shown on the full card to everyone. A card shows its ceiling when you write one, and the village's split unless you write this role's own shares. Ranges and minimums stay off every card.",
+  editorLede: "Shown on the full card to everyone. We're transparent about all compensation and how value in (contributions) equals value out (rewards).",
   paidToggle: "Say on the card that this is a paid role",
   shareLabel: "Share",
   sharePct: "Percent",
@@ -109,7 +110,7 @@ export const SECTION_PROBLEMS = {
   total: "The shares add up to more than 100 percent.",
   shareLabel: "Each share has a short name, like Cash.",
   tooManyShares: `At most ${SECTION_LIMITS.shares} shares.`,
-  ceiling: "The ceiling is one whole figure above zero, a three-letter currency like USD, and month, moon or year. Never a range.",
+  ceiling: "Write one amount above zero, a currency like USD, and month, moon or year.",
   notSections: "The founding sections arrive as a set of fields.",
 } as const;
 
@@ -193,7 +194,7 @@ export function splitLine(shape: readonly PayShare[], note: string): string {
 /** The pay shape: shares with a name and a whole percent, adding to no more than 100. */
 export function readPayShape(raw: unknown): { ok: true; value: PayShare[] } | { ok: false; problem: string } {
   if (raw === null || raw === undefined) return { ok: true, value: [] };
-  if (!Array.isArray(raw)) return { ok: false, problem: SECTION_PROBLEMS.notAList("How pay works") };
+  if (!Array.isArray(raw)) return { ok: false, problem: SECTION_PROBLEMS.notAList("How rewards work") };
   if (raw.length > SECTION_LIMITS.shares) return { ok: false, problem: SECTION_PROBLEMS.tooManyShares };
   const out: PayShare[] = [];
   for (const item of raw) {
@@ -353,7 +354,7 @@ export function villagePayFrom(settings: { shape: string; atRisk: string; note: 
 }
 
 /**
- * What a card shows under "How pay works" (lead, 11 Nov evening): up to two lines and the footer.
+ * What a card shows under "How rewards work" (lead, 11 Nov evening): up to two lines and the footer.
  *
  *   ceiling   "Total compensation up to $X a month", from the card's own ceiling; absent when unset.
  *   split     "Default split: ...", from the card's shares, or the village's when the card wrote none,

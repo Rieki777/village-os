@@ -200,6 +200,19 @@ export function openRolesFrom(org: unknown): DraftRole[] {
 }
 
 /**
+ * The board without the founding team's roles (QA2-01, 12 Nov 2026). While the
+ * village features its founding team, those roles are applied for one at a
+ * time from their own card on /roles, in the founding register, so the game's
+ * board never offers them among its picks of three. `foundingIds` is the
+ * founding team's answer (`/api/org/founding-team`): empty while it is off.
+ */
+export function withoutFounding<R extends { id: string }>(roles: readonly R[], foundingIds: readonly string[]): R[] {
+  if (!foundingIds.length) return [...roles];
+  const founding = new Set(foundingIds);
+  return roles.filter((r) => !founding.has(r.id));
+}
+
+/**
  * The board's order: roles that fit more of the picked characters first,
  * then by name. Nothing is hidden by a pick; the board filters only when the
  * visitor asks it to.

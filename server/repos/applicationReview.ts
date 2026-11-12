@@ -15,6 +15,7 @@
  */
 import type { Pool, PoolConnection, ResultSetHeader, RowDataPacket } from "mysql2/promise";
 import type { InterviewState, ScoreEntry, ScoreLevel, StepKind } from "../../shared/applicationReview";
+import { parseBookingUrl } from "../../shared/roleBooking";
 
 type Db = Pool | PoolConnection;
 
@@ -324,6 +325,16 @@ export async function agentRoleNamesInCircles(db: Db, circleIds: readonly string
     [[...circleIds]],
   );
   return rows.map((r: any) => String(r.name));
+}
+
+/**
+ * Each role's booking link (`org_roles.booking_url`, 0362), read as `parseBookingUrl` allows it: an https
+ * link or nothing. The applicant books a conversation through the link of the role that holds it.
+ */
+export async function bookingUrlsById(db: Db, ids: readonly string[]): Promise<Map<string, string | null>> {
+  if (!ids.length) return new Map();
+  const [rows] = await db.query<RowDataPacket[]>("SELECT id, booking_url FROM org_roles WHERE id IN (?)", [[...ids]]);
+  return new Map(rows.map((r: any) => [String(r.id), parseBookingUrl(r.booking_url)]));
 }
 
 export async function roleNamesById(db: Db, ids: readonly string[]): Promise<Map<string, string>> {

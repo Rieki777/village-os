@@ -11,6 +11,8 @@ import TwoTracks from "@/components/tracks/TwoTracks";
 import { useJourneyContent } from "@/hooks/useJourneyContent";
 import { buttonAction, stepPoints, type TargetContext } from "@/lib/journeyPage";
 import { STEWARD_JOURNEY, STEWARD_STAGE_CIRCLE, STEWARD_STAGE_YOURS } from "@shared/pageContent/journeys";
+import { FOUNDING_ROLES_WORD, withFoundingRoles } from "@shared/foundingTeam";
+import { readFoundingTeam, type FoundingTeamAnswer } from "@/components/roleCard/roleCardApi";
 import { useIsAdmin } from "@/contexts/AuthContext";
 import { Link } from "wouter";
 import { Trans } from "@lingui/react/macro";
@@ -53,6 +55,11 @@ export default function StewardJourney() {
 
   const bandRef = useRef<HTMLElement | null>(null);
   const thumbAct = useThumbAct(bandRef, !!foundingAct);
+  // The open founding roles, live, from the read behind the Roles page's founding section.
+  const openRoles = useOpenFoundingRoles();
+  const foundingBody = founding ? founding.fields.body : "";
+  // Until the roles arrive, a paragraph that names them keeps its space and stays invisible.
+  const bodyWaits = openRoles === null && foundingBody.includes(FOUNDING_ROLES_WORD);
 
   return (
     <Layout>
@@ -216,9 +223,21 @@ export default function StewardJourney() {
                 <h2 id="founding-team-heading" className="mt-4 font-display text-4xl md:text-6xl font-semibold leading-tight text-foreground break-words">
                   {founding.fields.heading}
                 </h2>
-                <p className="mt-6 max-w-2xl text-lg leading-relaxed text-muted-foreground">
-                  <Emphasized text={founding.fields.body} />
+                <p className={`mt-6 max-w-2xl text-lg leading-relaxed text-muted-foreground${bodyWaits ? " invisible" : ""}`}>
+                  <Emphasized text={bodyWaits ? foundingBody.split(FOUNDING_ROLES_WORD).join("") : withFoundingRoles(foundingBody, (openRoles ?? []).map((r) => r.name))} />
                 </p>
+                {openRoles && openRoles.length > 0 && (
+                  <ul className="mt-6 flex flex-col gap-1 sm:flex-row sm:flex-wrap sm:gap-x-6" aria-label={founding.fields.eyebrow} data-testid="founding-roles">
+                    {openRoles.map((r) => (
+                      <li key={r.id} className="min-w-0">
+                        <Link href={`/roles?seat=${encodeURIComponent(r.id)}`} className={`inline-flex min-h-11 items-center gap-2 break-words ${LINK}`}>
+                          {r.name}
+                          <ArrowRight className="h-4 w-4 shrink-0" aria-hidden="true" />
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                )}
                 {foundingAct && (
                   <div className="mt-10">
                     <Fireflies count={6}>
@@ -347,6 +366,26 @@ function TrackTile({ section, targets }: { section: ResolvedSection; targets: Ta
       </div>
     </li>
   );
+}
+
+/**
+ * The founding roles open today, in the village's order, from the same read
+ * as the Roles page's founding section (`/api/org/founding-team`). Null until
+ * it answers; empty when the section is off, every named role is closed, or
+ * the read fails, so the band then names nobody.
+ */
+function useOpenFoundingRoles(): Array<{ id: string; name: string }> | null {
+  const [answer, setAnswer] = useState<FoundingTeamAnswer | null>(null);
+  useEffect(() => {
+    let live = true;
+    void readFoundingTeam().then((a) => live && setAnswer(a));
+    return () => {
+      live = false;
+    };
+  }, []);
+  if (!answer) return null;
+  if (!answer.on) return [];
+  return answer.roleIds.filter((id) => !!answer.names[id]).map((id) => ({ id, name: answer.names[id] }));
 }
 
 /**

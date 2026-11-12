@@ -326,7 +326,7 @@ export default function SearchBar({
               >
                 {askAnswer.match.name}
               </button>
-              {askAnswer.vacant && <span className="text-amber-700">, and nobody holds this yet. Raise your hand!</span>}
+              {askAnswer.vacant && <span className="text-amber-700">, and nobody holds this yet. Apply for this role.</span>}
               {askAnswer.contact && <span>, talk to {askAnswer.contact.name}.</span>}
             </p>
           )}

@@ -59,25 +59,25 @@ const STATUS: Record<
   open: {
     label: "Standing",
     blurb: "This is unruled, and while it stands the decision cannot carry.",
-    chip: "bg-amber-light text-gold",
+    chip: "bg-notice/10 text-notice",
     icon: Hand,
   },
   integrated: {
     label: "Upheld",
     blurb: "The village accepted this. The proposal has to change and come back.",
-    chip: "bg-red-50 text-coral",
+    chip: "bg-destructive/10 text-destructive",
     icon: MessageSquareWarning,
   },
   concern: {
     label: "Recorded as a concern",
     blurb: "Heard and kept. It does not block, and it travels with the decision to its review.",
-    chip: "bg-stone-100 text-stone-700",
+    chip: "bg-muted text-muted-foreground",
     icon: CheckCircle2,
   },
   withdrawn: {
     label: "Withdrawn",
     blurb: "The person who raised it took it back.",
-    chip: "bg-stone-100 text-stone-600",
+    chip: "bg-muted text-muted-foreground",
     icon: CircleMinus,
   },
 };
@@ -86,7 +86,7 @@ const STATUS: Record<
 const UNKNOWN_STATUS = {
   label: "Recorded",
   blurb: "This objection is in a state this page has not been taught to read. Its ruling is on the decision's record.",
-  chip: "bg-stone-100 text-stone-600",
+  chip: "bg-muted text-muted-foreground",
   icon: CircleMinus,
 };
 
@@ -186,16 +186,16 @@ export default function ObjectionPanel({
   };
 
   return (
-    <section className="rounded-xl border border-stone-200 bg-white p-4">
-      <h3 className="flex items-center gap-2 text-base font-bold text-stone-900">
-        <Hand className="w-4 h-4 text-teal-deep" aria-hidden="true" />
+    <section className="rounded-xl border border-border bg-card p-4">
+      <h3 className="flex items-center gap-2 text-base font-bold text-foreground">
+        <Hand className="w-4 h-4 text-notice" aria-hidden="true" />
         Objections
         <InfoTip
           tip="An objection names a consequence the village should avoid. Only an objection blocks a consent decision. A worry without reasoning behind it is recorded as a concern instead."
           label="What an objection is"
         />
       </h3>
-      <p className="mt-1 text-sm text-stone-600 leading-relaxed">
+      <p className="mt-1 text-sm text-muted-foreground leading-relaxed">
         {standing === 0
           ? "Nothing stands in the way of this decision right now."
           : `${standing} ${standing === 1 ? "objection stands" : "objections stand"}, and this cannot carry while ${standing === 1 ? "it does" : "they do"}.`}
@@ -207,24 +207,24 @@ export default function ObjectionPanel({
             const s = STATUS[o.status] ?? UNKNOWN_STATUS;
             const Icon = s.icon;
             return (
-              <li key={o.id} className="rounded-lg border border-stone-200 p-3">
+              <li key={o.id} className="rounded-lg border border-border p-3">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-sm font-semibold text-stone-900">{o.by}</span>
+                  <span className="text-sm font-semibold text-foreground">{o.by}</span>
                   <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${s.chip}`}>
                     <Icon className="w-3 h-3" aria-hidden="true" />
                     {s.label}
                   </span>
-                  <span className="text-xs text-stone-500">
+                  <span className="text-xs text-muted-foreground">
                     {new Date(o.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
                   </span>
                 </div>
-                <p className="mt-2 whitespace-pre-wrap text-sm text-stone-800 leading-relaxed">{o.text}</p>
-                <p className="mt-1.5 text-xs text-stone-500">{s.blurb}</p>
+                <p className="mt-2 whitespace-pre-wrap text-sm text-foreground leading-relaxed">{o.text}</p>
+                <p className="mt-1.5 text-xs text-muted-foreground">{s.blurb}</p>
 
                 {o.rulingNote && (
-                  <div className="mt-2 border-l-2 border-stone-300 pl-3">
-                    <p className="text-xs font-semibold text-stone-700">Why it was ruled that way</p>
-                    <p className="text-sm text-stone-700 leading-relaxed">{o.rulingNote}</p>
+                  <div className="mt-2 border-l-2 border-border pl-3">
+                    <p className="text-xs font-semibold text-muted-foreground">Why it was ruled that way</p>
+                    <p className="text-sm text-muted-foreground leading-relaxed">{o.rulingNote}</p>
                   </div>
                 )}
 
@@ -233,12 +233,12 @@ export default function ObjectionPanel({
                     because somebody spoke up is the thing worth saying, and it
                     is said about the proposal. */}
                 {lineage[o.id] && (
-                  <p className="mt-2 flex flex-wrap items-center gap-1.5 text-sm text-teal-deep">
+                  <p className="mt-2 flex flex-wrap items-center gap-1.5 text-sm text-notice">
                     <GitBranch className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
-                    <span className="text-stone-700">The proposal changed after this. The version that came next:</span>
+                    <span className="text-muted-foreground">The proposal changed after this. The version that came next:</span>
                     <Link
                       href={`/decisions/${lineage[o.id].ballotId}`}
-                      className="rounded font-semibold underline underline-offset-2 hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
+                      className="rounded font-semibold underline underline-offset-2 hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
                       {lineage[o.id].title}
                     </Link>
@@ -254,10 +254,10 @@ export default function ObjectionPanel({
                     {rulingFor === o.id ? (
                       <div className="space-y-2">
                         <fieldset>
-                          <legend className="text-sm font-medium text-stone-800">How does this land?</legend>
+                          <legend className="text-sm font-medium text-foreground">How does this land?</legend>
                           <div className="mt-1.5 space-y-1.5">
                             {(canRule ? RULINGS : RULINGS.filter((r) => r.id === "withdrawn")).map((r) => (
-                              <label key={r.id} className="flex min-h-[44px] items-start gap-2 rounded-lg border border-stone-200 p-2 has-[:checked]:border-teal-deep">
+                              <label key={r.id} className="flex min-h-[44px] items-start gap-2 rounded-lg border border-border p-2 has-[:checked]:border-notice">
                                 {/* The ruling names the option; what the ruling
                                     does to the proposal is a description. A
                                     wrapping <label> read both as one name, so
@@ -271,17 +271,17 @@ export default function ObjectionPanel({
                                   onChange={() => setRuling(r.id)}
                                   aria-label={r.label}
                                   aria-describedby={`ruling-${o.id}-${r.id}-help`}
-                                  className="mt-1 accent-teal-deep"
+                                  className="mt-1 accent-notice"
                                 />
                                 <span>
-                                  <span className="block text-sm font-medium text-stone-900">{r.label}</span>
-                                  <span id={`ruling-${o.id}-${r.id}-help`} className="block text-xs text-stone-600 leading-relaxed">{r.help}</span>
+                                  <span className="block text-sm font-medium text-foreground">{r.label}</span>
+                                  <span id={`ruling-${o.id}-${r.id}-help`} className="block text-xs text-muted-foreground leading-relaxed">{r.help}</span>
                                 </span>
                               </label>
                             ))}
                           </div>
                         </fieldset>
-                        <label htmlFor={`note-${o.id}`} className="block text-sm font-medium text-stone-800">
+                        <label htmlFor={`note-${o.id}`} className="block text-sm font-medium text-foreground">
                           Your reasoning, for the record
                         </label>
                         <VoiceArea value={note} onValue={setNote}
@@ -296,7 +296,7 @@ export default function ObjectionPanel({
                           value={note}
                           maxLength={2000}
                           onChange={(e) => setNote(e.target.value)}
-                          className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
+                          className="w-full rounded-lg border border-border px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                         />
                         </VoiceArea>
                         <div className="flex gap-2">
@@ -304,14 +304,14 @@ export default function ObjectionPanel({
                             type="button"
                             disabled={busy}
                             onClick={() => rule(o.id)}
-                            className="min-h-[44px] rounded-lg bg-teal-deep px-4 text-sm font-semibold text-white hover:bg-teal-deep-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep focus-visible:ring-offset-2 disabled:opacity-60"
+                            className="min-h-[44px] rounded-lg bg-teal-deep px-4 text-sm font-semibold text-white hover:bg-teal-deep-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
                           >
                             Record the ruling
                           </button>
                           <button
                             type="button"
                             onClick={() => setRulingFor(null)}
-                            className="min-h-[44px] rounded-lg border border-stone-300 px-4 text-sm font-medium text-stone-700 hover:bg-stone-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
+                            className="min-h-[44px] rounded-lg border border-border px-4 text-sm font-medium text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                           >
                             Not now
                           </button>
@@ -325,7 +325,7 @@ export default function ObjectionPanel({
                           setRuling(canRule ? "concern" : "withdrawn");
                           setNote("");
                         }}
-                        className="min-h-[44px] rounded-lg border border-stone-300 px-4 text-sm font-medium text-stone-700 hover:bg-stone-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
+                        className="min-h-[44px] rounded-lg border border-border px-4 text-sm font-medium text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       >
                         {canRule ? "Test this objection" : "Take this back"}
                       </button>
@@ -339,11 +339,11 @@ export default function ObjectionPanel({
       )}
 
       {canFile && (
-        <div className="mt-4 border-t border-stone-100 pt-4">
-          <label htmlFor="new-objection" className="block text-sm font-semibold text-stone-900">
+        <div className="mt-4 border-t border-border pt-4">
+          <label htmlFor="new-objection" className="block text-sm font-semibold text-foreground">
             Say what you see
           </label>
-          <p className="mt-0.5 text-xs text-stone-600 leading-relaxed">
+          <p className="mt-0.5 text-xs text-muted-foreground leading-relaxed">
             Naming a risk early is one of the more useful things anyone does here. You do not have to vote no to raise
             one, and raising one is not a vote.
           </p>
@@ -360,14 +360,14 @@ export default function ObjectionPanel({
             maxLength={2000}
             onChange={(e) => setText(e.target.value)}
             placeholder="If we do this in the wet season the track will not carry the load, and we lose the deliveries."
-            className="mt-2 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
+            className="mt-2 w-full rounded-lg border border-border px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           />
           </VoiceArea>
           <button
             type="button"
             disabled={busy}
             onClick={file}
-            className="mt-2 min-h-[44px] rounded-lg bg-teal-deep px-5 text-sm font-semibold text-white hover:bg-teal-deep-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep focus-visible:ring-offset-2 disabled:opacity-60"
+            className="mt-2 min-h-[44px] rounded-lg bg-teal-deep px-5 text-sm font-semibold text-white hover:bg-teal-deep-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
           >
             Raise it
           </button>
@@ -375,7 +375,7 @@ export default function ObjectionPanel({
       )}
 
       {problem && (
-        <p role="alert" className="mt-2 text-sm font-medium text-coral">
+        <p role="alert" className="mt-2 text-sm font-medium text-destructive">
           {problem}
         </p>
       )}

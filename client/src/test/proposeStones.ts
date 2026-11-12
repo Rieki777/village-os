@@ -58,4 +58,5 @@ export const SETUP = {
   footer: "Indicative only. Equity, land credit, token and credit terms are still being defined and are subject to legal review.",
   firstCycle: "Your first cycle is one month. At its end, either side may choose to stop there, with thanks.",
   firstConversations: ["Technical Operations: your accounts and tools"],
+  updatedNote: "",
 };

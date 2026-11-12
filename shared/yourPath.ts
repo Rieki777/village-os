@@ -762,11 +762,11 @@ type PathTable = Record<PathKey, string>;
 const EN: PathTable = {
   "path.founderSetup.step": "Set up your village",
   "path.leaving.step": "Your leaving is with us. Read how it goes",
-  "path.leaving.after": "We write to you when it is settled.",
+  "path.leaving.after": "We'll write to you when it is settled.",
   "path.sessionLive.step": "Join the {circle} session now",
   "path.sessionLive.after": "What you carry out of the room lands on your task board.",
   "path.termsToAnswer.step": "Read the terms we changed and answer",
-  "path.termsToAnswer.after": "We read your answer, then adopt or talk again.",
+  "path.termsToAnswer.after": "We'll read your answer, then adopt or talk again.",
   "path.agreements.confidentiality": "Align with the confidentiality agreement",
   "path.agreements.membership": "Align with the membership letter",
   "path.agreements.terms": "Align with your role's terms",
@@ -821,11 +821,11 @@ const EN: PathTable = {
 const ES: PathTable = {
   "path.founderSetup.step": "Prepara tu aldea",
   "path.leaving.step": "Tu salida está con nosotros. Lee cómo sigue",
-  "path.leaving.after": "Te escribimos cuando quede resuelta.",
+  "path.leaving.after": "Te escribiremos cuando quede resuelta.", // needs-native-review: new words, 12 Nov 2026
   "path.sessionLive.step": "Únete ahora a la sesión de {circle}",
   "path.sessionLive.after": "Lo que te llevas de la sala queda en tu tablero de tareas.",
   "path.termsToAnswer.step": "Lee los términos que cambiamos y responde",
-  "path.termsToAnswer.after": "Leemos tu respuesta y luego adoptamos o volvemos a conversar.",
+  "path.termsToAnswer.after": "Leeremos tu respuesta y luego adoptamos o volvemos a conversar.", // needs-native-review: new words, 12 Nov 2026
   "path.agreements.confidentiality": "Alinéate con el acuerdo de confidencialidad",
   "path.agreements.membership": "Alinéate con la carta de membresía",
   "path.agreements.terms": "Alinéate con los términos de tu rol",

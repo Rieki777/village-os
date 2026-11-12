@@ -21,6 +21,8 @@
  *                    profile in their first hour, where our first 14 days
  *                    show as a strip of days, then opens the steward
  *                    training from /training and marks a lesson done.
+ *                    Finds her light on the map off, turns it on, and reads
+ *                    the circles map's today card.
  *   6. reviewer      The founder on the review page: an agent's batch of three
  *                    proposed changes, one edited in place, accepted together.
  *
@@ -147,17 +149,35 @@ export async function neighbour(w, ctx) {
     if ((await drawing.locator("[data-state=reached]").count()) !== 1) throw new Error("the commons should show one goal reached, with moss");
     if ((await drawing.locator("[data-state=seed]").count()) !== 3) throw new Error("the commons should show three goals still seeds");
   });
-  await w.step("pick the Land Steward", async () => {
-    await w.goto("/roles/select");
-    const pick = page.getByRole("button", { name: /(Select|Elegir|Seleccionar) Land Steward/i }).first();
-    await pick.scrollIntoViewIfNeeded();
-    await pick.click();
-    await page.waitForTimeout(400);
+  // QA2-02: the founding team leads /roles, and the game's roots sit inside "Other ways to join"
+  // with no second "Step one" under it.
+  await w.step("one step one only: the roots sit inside Other ways to join", async () => {
+    await page.locator("[data-founding-team]").waitFor();
+    await page.locator("[data-other-ways] [data-archetype-step=nested]").waitFor({ state: "attached" });
+    if (await page.locator("[data-archetype-step=step]").count()) throw new Error("a second Step one sits under the founding team");
   });
-  // Phase A: a listed role is applied for ("Apply", or the Spanish "Postular"/"Aplicar"/"Solicitar").
-  await w.look("select-picked", { next: page.getByRole("link", { name: /aplic|postul|solicit|apply|propon|propose/i }).last() });
+  // QA2-01: the founding roles are applied for from their own card, never picked on the game's board.
+  await w.step("the game's board leaves the founding roles off", async () => {
+    await w.goto("/roles/select");
+    await page.locator("[data-founding-elsewhere]").waitFor();
+    for (const name of [/Land Steward/, /Finance Steward/]) {
+      if (await page.getByRole("heading", { level: 3, name }).count()) throw new Error(`a founding role is on the game's board: ${name}`);
+    }
+  });
+  await w.look("select-founding-line", { next: page.locator("[data-founding-elsewhere] a") });
+  await w.step("follow the line back to the founding team", async () => {
+    await page.locator("[data-founding-elsewhere] a").click();
+    await page.waitForURL((u) => new URL(u).pathname === "/roles");
+    const section = page.locator("[data-founding-team]");
+    await section.waitFor();
+    const row = section.getByRole("button", { name: /Land Steward/ }).first();
+    if ((await row.getAttribute("aria-expanded")) !== "true") await row.click();
+    await page.locator(`[data-apply-role="${ctx.seed.roles.land}"]`).first().waitFor();
+    await settle(page);
+  });
+  await w.look("founding-land", { next: page.locator(`[data-apply-role="${ctx.seed.roles.land}"]`).first() });
   await w.step("open the application", async () => {
-    const link = page.getByRole("link", { name: /aplic|postul|solicit|apply|propon|propose/i }).last();
+    const link = page.locator(`[data-apply-role="${ctx.seed.roles.land}"]`).first();
     if (await link.count()) await link.click();
     else await w.goto(`/propose-a-role?role=${ctx.seed.roles.land}`);
     await page.locator("form[data-open-proposal]").waitFor();
@@ -235,14 +255,20 @@ export async function professional(w, ctx) {
     await settle(page);
   });
   await w.look("founding-card", { next: page.getByRole("link", { name: /Apply for this role/ }).first() });
-  await w.step("open the Finance Steward's full card", async () => {
-    await w.goto("/roles/select");
-    const card = page.getByRole("button", { name: /Full card for Finance Steward/i }).first();
-    await card.scrollIntoViewIfNeeded();
-    await card.click();
-    await page.getByRole("region", { name: /The full card for Finance Steward/i }).waitFor();
+  // QA2-02: no second "Step one" under the founding team; the roots sit inside "Other ways to join".
+  await w.step("one step one only: the roots sit inside Other ways to join", async () => {
+    await page.locator("[data-other-ways] [data-archetype-step=nested]").waitFor({ state: "attached" });
+    if (await page.locator("[data-archetype-step=step]").count()) throw new Error("a second Step one sits under the founding team");
+    if (await page.getByText(/^Step one$/i).count()) throw new Error("the page still reads Step one");
   });
-  await w.look("full-card");
+  // QA2-01: the Finance Steward is not on the game's board; one line points back to the founding team.
+  await w.step("the game's board leaves the Finance Steward off", async () => {
+    await w.goto("/roles/select");
+    await page.locator("[data-founding-elsewhere]").waitFor();
+    if (await page.getByRole("button", { name: /Full card for Finance Steward/i }).count()) throw new Error("the Finance Steward is on the game's board");
+    if (await page.getByRole("heading", { level: 3, name: /Finance Steward/ }).count()) throw new Error("the Finance Steward is on the game's board");
+  });
+  await w.look("select-founding-line", { next: page.locator("[data-founding-elsewhere] a") });
   await w.step("open the application", async () => {
     await w.goto(`/propose-a-role?role=${ctx.seed.roles.finance}`);
     await page.locator("form[data-open-proposal]").waitFor();
@@ -620,6 +646,41 @@ export async function holder(w, ctx) {
     await page.getByText(/^1 of \d+ lessons done$/).waitFor({ timeout: 10_000 });
   });
   await w.look("training-resident");
+  // The living map (Phase D, D2): her light on the map is off until she
+  // chooses it, on her own settings; then the circles map glows as hearths
+  // joined by threads, with today's card naming circles and never people.
+  await w.step("find her light on the map off, and turn it on", async () => {
+    await w.goto("/profile#map-light");
+    const box = page.getByRole("checkbox", { name: "Show my light on the map" });
+    await box.waitFor();
+    if (await box.isChecked()) throw new Error("a new member's light on the map should be off until they choose it");
+    await box.scrollIntoViewIfNeeded();
+    // A click, then wait: the switch follows the server's answer, so it turns
+    // on only once the save lands (check() wants the state to change at once).
+    await box.click();
+    await page.waitForFunction(
+      () => (document.querySelector("[data-map-light-setting] input[type=checkbox]"))?.checked === true,
+      null,
+      { timeout: 10_000 },
+    );
+    // Asked of the server as the holder, so a switch that only looked on cannot pass.
+    const token = await page.evaluate(() => localStorage.getItem("village-auth-token"));
+    for (let i = 0; i < 10; i++) {
+      const res = await fetch(`${ctx.base}/api/map/my-light`, { headers: { authorization: `Bearer ${token}` } });
+      if ((await res.json()).on === true) return;
+      await page.waitForTimeout(300);
+    }
+    throw new Error("the server does not say her light is on");
+  });
+  await w.look("map-light", { journey: false, full: false });
+  await w.step("open the circles map and read today", async () => {
+    await w.goto("/map/circles");
+    await page.locator("[data-hearths]").first().waitFor({ state: "attached" });
+    const card = page.locator("[data-today-on-map]:visible").first();
+    await card.waitFor();
+    if ((await card.locator("[data-my-light]").getAttribute("data-my-light")) !== "on") throw new Error("today's card does not say her light is on");
+  });
+  await w.look("living-map", { journey: false });
 }
 
 // ── 6. The reviewer ───────────────────────────────────────────────────────

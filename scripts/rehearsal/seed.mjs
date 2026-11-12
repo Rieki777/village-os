@@ -92,6 +92,8 @@ export async function seedVillage({ base, dbUrl, adminPassword, log = () => {} }
   for (const m of ["governance"]) await call("PUT", `/api/admin/modules/${m}/lifecycle`, { lifecycle: "public" }, F);
   // The moon board (Phase C, lane C2): the holder walks My moon's golden spiral and role beds.
   await call("PUT", "/api/admin/modules/moon-review/lifecycle", { lifecycle: "members" }, F);
+  // The circles map, for members: the holder finds her light on it off until she chooses it (Phase D, D2).
+  await call("PUT", "/api/admin/modules/map/lifecycle", { lifecycle: "members" }, F);
   const cfg = await call("GET", "/api/admin/seasons", undefined, F);
   const now = Date.now();
   await call(

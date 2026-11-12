@@ -1,5 +1,10 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+/* Three small component sheets ride the main stylesheet: each was its own sub-1 KB file costing a whole
+   4 KB block of the block-charged dist budget (batch 158). Their rules are scoped to their own classes. */
+@import "./components/commons/commons.css";
+@import "./components/calendar/print.css";
+@import "./components/map/hearths.css";
 /* Tests are not shipped, so a class only a test names is not generated. */
 @source not "./**/*.test.ts";
 @source not "./**/*.test.tsx";
@@ -1014,6 +1019,8 @@ button, a, [role="button"], input, textarea, select, summary {
  */
 :root {
   --tabbar-h: calc(4rem + 1px + env(safe-area-inset-bottom, 0px));
+  /* The your-turn bar's height plus a half-rem gap: line, door and padding (YourTurn.tsx). */
+  --your-turn-h: 7rem;
 }
 /* Tailwind's own `md` (48rem), in its own unit: the bar is `md:hidden`, and a
    rem in a media query reads the browser's default font size, so a px bound
@@ -1141,6 +1148,13 @@ html:has(#sera-changes [data-sera-strip-on]) {
   }
   :root:has(:is(input:not([type="checkbox"], [type="radio"], [type="button"], [type="submit"]), textarea, select, [contenteditable="true"]):focus) [data-mobile-fab] {
     visibility: hidden;
+  }
+}
+/* A decider's "your turn" bar (components/governance/YourTurn.tsx) sits fixed at the bottom until
+   `lg`: the shortcuts button rides up clear of it, so the guide never covers the door (batch 158). */
+@media (width < 64rem) {
+  :root:has([data-your-turn="sticky"]) [data-mobile-fab] {
+    translate: 0 calc(-1 * var(--your-turn-h));
   }
 }
 /* A role proposal's sticky Back/Next bar owns the bottom edge: at any width

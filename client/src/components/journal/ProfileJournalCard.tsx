@@ -44,7 +44,7 @@ export default function ProfileJournalCard() {
   return (
     <section id="journal" aria-labelledby="journal-card-h" className={CARD}>
       <h2 id="journal-card-h" className="flex items-center gap-2 font-display text-lg font-bold text-card-foreground">
-        <NotebookPen className="h-5 w-5 text-teal-deep" aria-hidden="true" />
+        <NotebookPen className="h-5 w-5 text-notice" aria-hidden="true" />
         Your journal
       </h2>
       <p className="mt-1 text-sm text-foreground">

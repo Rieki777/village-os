@@ -13,6 +13,7 @@ import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { BTN_PRIMARY, BTN_SECONDARY, CARD, HINT, TILE } from "@/components/journey/look";
+import { byArrival } from "@/components/governance/deciderOrder";
 
 interface Card {
   id: string;
@@ -48,7 +49,8 @@ export default function ApprovalInbox({ headers }: { headers: () => Record<strin
       }
       if (!r.ok) throw new Error("read failed");
       const d = (await r.json()) as { waiting: Card[]; decided: Card[] };
-      setWaiting(d.waiting);
+      // Decider calm: oldest first, by arrival and nothing else (governance/deciderOrder.ts).
+      setWaiting(byArrival(d.waiting, (c) => c.at));
       setDecided(d.decided);
       setPicked({});
       setState("ok");

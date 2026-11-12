@@ -9,7 +9,7 @@ import ApprovalInbox from "@/components/approvals/ApprovalInbox";
 import { authToken } from "@/lib/gameApi";
 import { useOptionalAuth } from "@/contexts/AuthContext";
 import { Link } from "wouter";
-import { H1, LINK, HINT, WORLD } from "@/components/journey/look";
+import { EYEBROW, H1, HINT, LEDE, LINK, WORLD } from "@/components/journey/look";
 
 export default function Approvals() {
   const headers = useCallback((): Record<string, string> => {
@@ -25,9 +25,16 @@ export default function Approvals() {
     <Layout>
       <div className={`${WORLD} py-8 sm:py-12`}>
       <div className="mx-auto max-w-xl space-y-4 px-4">
+        {/* Decider calm: the same quiet header as every page where people decide. */}
+        <p className={EYEBROW}>
+          <Trans context="approval inbox">Waiting on a person</Trans>
+        </p>
         <h1 className={H1}>
           <Trans context="approval inbox">Approvals</Trans>
         </h1>
+        <p className={LEDE}>
+          <Trans context="approval inbox">What a connector proposed and only a person may do. Read each one before you answer it.</Trans>
+        </p>
         {signedOut ? (
           <p className={HINT}>
             <Trans context="approval inbox">The approval inbox is for people who steward roles here.</Trans>{" "}

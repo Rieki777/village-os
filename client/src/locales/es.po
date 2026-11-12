@@ -945,8 +945,8 @@ msgid "Paid {paidOn}"
 msgstr ""
 
 #: client/src/pages/RoleDraft.tsx
-msgid "Select your roles at {villageName}"
-msgstr "Elige tus roles en {villageName}"
+#~ msgid "Select your roles at {villageName}"
+#~ msgstr "Elige tus roles en {villageName}"
 
 #: client/src/components/SaveBar.tsx
 msgctxt "save bar"
@@ -1063,6 +1063,12 @@ msgstr ""
 #: client/src/components/roleDraft/DraftCarry.tsx
 msgid "Apply with your selection"
 msgstr "Postula con tu selección"
+
+# needs-native-review: new words, 12 Nov 2026
+#: client/src/pages/Roles.tsx
+msgctxt "roles page, other ways to join"
+msgid "Offer your gifts"
+msgstr "Ofrece tus dones"
 
 #: client/src/pages/RoleDraft.tsx
 msgid "See the places and their open roles on the Living Map"
@@ -1381,6 +1387,12 @@ msgctxt "admin quest safety"
 msgid "Safety saved"
 msgstr ""
 
+# needs-native-review: new words, 12 Nov 2026
+#: client/src/components/roleEdit/SectionsFields.tsx
+msgctxt "role editor"
+msgid "What the Digital Companion does for this role"
+msgstr "Lo que el Compañero Digital hace por este rol"
+
 #: client/src/pages/OpenProposal.tsx
 msgctxt "open proposal: the keeper reads their own agent's proposal"
 msgid "You keep this agent, so another holder of the power to place people in roles decides it."
@@ -1464,9 +1476,10 @@ msgctxt "your path, the profile card"
 msgid "After that"
 msgstr ""
 
+# needs-native-review: new words, 12 Nov 2026
 #: client/src/pages/RoleDraft.tsx
-msgid "If it is adopted, an invitation to make your account comes to your email."
-msgstr "Si se adopta, te llega a tu correo una invitación para crear tu cuenta."
+msgid "If it is adopted, a formal invitation to make your account comes to your email."
+msgstr "Si se adopta, te llega a tu correo una invitación formal para crear tu cuenta."
 
 #: client/src/components/admin/AgentPathTree.tsx
 msgctxt "agent paths"
@@ -1543,7 +1556,7 @@ msgstr "Meta {n}"
 
 #: client/src/components/roleCard/FoundingTeam.tsx
 msgctxt "founding team section lede"
-msgid "We are hiring the people who will lead each domain of the village from the foundation through to completion. These are paid, multi-year roles, filled by application and conversation."
+msgid "We are building our team of people who will lead each domain of the village from the foundation through to completion."
 msgstr ""
 
 #: client/src/components/openWork/FitsYouCard.tsx
@@ -1711,9 +1724,10 @@ msgstr ""
 #~ msgid "Sign in"
 #~ msgstr "Iniciar sesión"
 
+# needs-native-review: new words, 12 Nov 2026
 #: client/src/pages/RoleDraft.tsx
-msgid "Each role's circle is asked to consent. A holder of the power to place people in roles adopts or declines your proposal, and never their own."
-msgstr "A cada círculo de los roles se le pide su consentimiento. Quien tiene el poder de colocar personas en roles adopta o declina tu propuesta, y nunca la suya."
+msgid "Each role's circle is asked to consent and pick who they'll co-create with."
+msgstr "A cada círculo de los roles se le pide su consentimiento y que elija con quién va a co-crear."
 
 #: client/src/pages/Events.tsx
 msgctxt "calendar day panel eyebrow"
@@ -1983,14 +1997,16 @@ msgctxt "open proposal attachments"
 msgid "Link {0}: web address"
 msgstr "Enlace {0}: dirección web"
 
+# needs-native-review: new words, 12 Nov 2026
+
 #: client/src/pages/Quests.tsx
 msgctxt "open work filter row"
 msgid "Season goal"
 msgstr "Meta de la temporada"
 
 #: client/src/pages/RoleDraft.tsx
-msgid "Your role runs from adoption to the next new moon, {moonEnds}. Each moon you lay out what you will contribute."
-msgstr "Tu rol va desde la adopción hasta la próxima luna nueva, {moonEnds}. Cada luna presentas lo que vas a aportar."
+msgid "Your role runs from adoption to the next new moon, {moonEnds}. Each new moon you lay out what you will contribute the next moon."
+msgstr "Tu rol va desde la adopción hasta la próxima luna nueva, {moonEnds}. En cada luna nueva presentas lo que vas a aportar la luna siguiente."
 
 #: client/src/components/governance/TermsEight.tsx
 msgctxt "terms commitment"
@@ -2606,10 +2622,11 @@ msgctxt "sera answers"
 msgid "A decision. It goes into a draft before it is live."
 msgstr ""
 
+# needs-native-review: new words, 12 Nov 2026
 #: client/src/pages/ProposeARole.tsx
 msgctxt "founding application intro"
-msgid "The value you would bring in your first months, item by item, each tagged to the season goal it serves."
-msgstr "El valor que aportarías en tus primeros meses, uno por uno, cada aporte vinculado a la meta de la temporada a la que sirve."
+msgid "The value you would bring in your first months, item by item, each tagged to the seasonal goal it serves."
+msgstr "El valor que aportarías en tus primeros meses, uno por uno, cada aporte vinculado a la meta estacional a la que sirve."
 
 #: client/src/components/canvas/ConflictAgreementEditor.tsx
 msgctxt "an outside contact's organisation"
@@ -3759,6 +3776,11 @@ msgstr ""
 #~ msgid "Draft"
 #~ msgstr ""
 
+# needs-native-review: new words, 12 Nov 2026
+#: client/src/pages/Propose.tsx
+msgid "Apply for a role"
+msgstr "Postúlate a un rol"
+
 #: client/src/components/fundingRounds/RoundParts.tsx
 msgctxt "funding rounds"
 msgid "Funded"
@@ -3791,9 +3813,10 @@ msgstr ""
 msgid "The public page names them by organisation or role. Members see the name and how to reach them, and can ask them to talk."
 msgstr ""
 
+# needs-native-review: new words, 12 Nov 2026
 #: client/src/pages/RoleDraft.tsx
-msgid "A role card shows the work the village needs done. Your proposal is the other half: what you would like to contribute each moon and this season, and how it serves these goals."
-msgstr "Una ficha de rol muestra el trabajo que la aldea necesita. Tu propuesta es la otra mitad: lo que te gustaría aportar cada luna y esta temporada, y cómo sirve a estas metas."
+msgid "A role card shows the work the village needs done. Your proposal is the other half: what you would like to contribute each moon and this season, and how it serves our goals."
+msgstr "Una ficha de rol muestra el trabajo que la aldea necesita. Tu propuesta es la otra mitad: lo que te gustaría aportar cada luna y esta temporada, y cómo sirve a nuestras metas."
 
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "when the review time ends"
@@ -4229,9 +4252,10 @@ msgstr "Meta de la temporada"
 msgid " (leave it empty to use the file's name)"
 msgstr ""
 
+# needs-native-review: new words, 12 Nov 2026
 #: client/src/components/roleDraft/DraftCarry.tsx
-msgid "Your R-Ikigai answers are saved in this browser, and the open form copies them into Why you."
-msgstr "Tus respuestas de R-Ikigai se guardan en este navegador, y el formulario abierto las copia en Por qué tú."
+msgid "Your Ikigai answers are saved in this browser, and the open form copies them into Why you."
+msgstr "Tus respuestas de Ikigai se guardan en este navegador, y el formulario abierto las copia en Por qué tú."
 
 #: client/src/components/seasonPlans/RoleCarryOn.tsx
 msgid "Update what I will contribute"
@@ -4749,6 +4773,12 @@ msgctxt "sera answers"
 msgid "What happens to each ticked change before anything is written."
 msgstr ""
 
+# needs-native-review: new words, 12 Nov 2026
+#: client/src/components/roleCard/FullRoleCard.tsx
+msgctxt "full role card, under the one act"
+msgid "Six steps. No account needed."
+msgstr "Seis pasos. No necesitas cuenta."
+
 #: client/src/components/canvas/CanvasSuggestionForm.tsx
 msgctxt "who adopts a canvas suggestion"
 msgid "Who decides: {penSentence}"
@@ -4951,10 +4981,9 @@ msgctxt "founding application confirm"
 msgid "That link has run out or was already used. Send your application again, and open the new link within {OPEN_CONFIRM_HOURS} hours."
 msgstr "Ese enlace venció o ya se usó. Envía tu solicitud de nuevo y abre el enlace nuevo dentro de {OPEN_CONFIRM_HOURS} horas."
 
-#: client/src/components/roleEdit/SectionsFields.tsx
-msgctxt "role editor"
-msgid "What the AI companion does for this role"
-msgstr ""
+#~ msgctxt "role editor"
+#~ msgid "What the AI companion does for this role"
+#~ msgstr ""
 
 #: client/src/pages/RoleDraft.tsx
 msgid "Apply with my {pickCount} picks"
@@ -5038,6 +5067,12 @@ msgstr ""
 msgctxt "sera answers"
 msgid "{n} go into a draft. They go live when the draft is published."
 msgstr ""
+
+# needs-native-review: new words, 12 Nov 2026
+#: client/src/pages/Roles.tsx
+msgctxt "roles page, other ways to join"
+msgid "Volunteer or work-trade: tell us what you would like to give."
+msgstr "Voluntariado o intercambio de trabajo: cuéntanos qué te gustaría dar."
 
 #: client/src/components/admin/LetterDraftsPanel.tsx
 msgid "That could not be sent"
@@ -6853,6 +6888,12 @@ msgstr ""
 msgid "Last written by {0} on {1}"
 msgstr ""
 
+# needs-native-review: new words, 12 Nov 2026
+#: client/src/pages/RoleDraft.tsx
+msgctxt "role draft, founding roles live on /roles"
+msgid "Looking for a founding role?"
+msgstr "¿Buscas un rol fundador?"
+
 #: client/src/components/admin/AgentPathTree.tsx
 msgctxt "agent paths, open a path's editor"
 msgid "Change"
@@ -7864,10 +7905,11 @@ msgstr ""
 msgid "Start a private intake. It reaches only the people holding the {intakeRoleLabel}, who read your name and your words in their notifications here. If they get an email, it says only that an intake is waiting: your words and your name are never emailed."
 msgstr ""
 
+# needs-native-review: new words, 12 Nov 2026
 #: client/src/pages/RoleDraft.tsx
 msgctxt "role draft step"
-msgid "Your R-Ikigai and your characters"
-msgstr "Tu R-Ikigai y tus personajes"
+msgid "Your Ikigai (look it up) and your characters"
+msgstr "Tu Ikigai (búscalo) y tus personajes"
 
 #: client/src/components/ClosingPolicyCard.tsx
 msgid "Putting a change to the whole village opens a vote every member is rung about, and this account does not open those yet. Say what you would change to whoever keeps the exit policy, or in the forum."
@@ -8727,6 +8769,12 @@ msgctxt "button that opens the conflict agreement editor to read"
 msgid "Read every frame"
 msgstr ""
 
+# needs-native-review: new words, 12 Nov 2026
+#: client/src/pages/Roles.tsx
+msgctxt "roles page, other ways to join"
+msgid "Find your place in the game"
+msgstr "Encuentra tu lugar en el juego"
+
 #: client/src/components/roleCard/FoundingTeam.tsx
 msgctxt "founding team section heading"
 msgid "Join the founding team"
@@ -8881,9 +8929,9 @@ msgid "Last try did not land: {0}"
 msgstr ""
 
 #: client/src/components/roleCard/FullRoleCard.tsx
-msgctxt "full role card chip"
-msgid "Paid role"
-msgstr ""
+#~ msgctxt "full role card chip"
+#~ msgid "Paid role"
+#~ msgstr ""
 
 #: client/src/components/notebook/NotebookDocument.tsx
 msgid "The block it speaks to"
@@ -9043,6 +9091,12 @@ msgstr ""
 #~ msgid "The terms"
 #~ msgstr "Las condiciones"
 
+# needs-native-review: new words, 12 Nov 2026
+#: client/src/pages/RoleDraft.tsx
+msgctxt "role draft, founding roles live on /roles"
+msgid "See the founding team."
+msgstr "Mira el equipo fundador."
+
 #: client/src/components/approvals/ApprovalInbox.tsx
 msgctxt "approval inbox"
 msgid "Approved"
@@ -9071,9 +9125,10 @@ msgctxt "proposed changes"
 msgid "Discard"
 msgstr ""
 
+# needs-native-review: new words, 12 Nov 2026
 #: client/src/pages/Roles.tsx
-msgid "A role is a named responsibility inside a circle, with an aim, a domain, and accountabilities. The role belongs to the circle, and a person steps into it."
-msgstr "Un rol es una responsabilidad con nombre dentro de un círculo, con un propósito, un ámbito y compromisos. El rol pertenece al círculo, y una persona entra en él."
+msgid "A role is a named responsibility inside a circle, with an aim, a domain, and accountabilities. The role belongs to the circle, and a person plays it for a season."
+msgstr "Un rol es una responsabilidad con nombre dentro de un círculo, con un propósito, un ámbito y compromisos. El rol pertenece al círculo, y una persona lo desempeña durante una temporada."
 
 #: client/src/components/openWork/QuestThreadPicker.tsx
 msgctxt "quest goal thread editor: button while saving"
@@ -9104,10 +9159,11 @@ msgctxt "role draft heading"
 msgid "Open roles"
 msgstr "Roles abiertos"
 
+# needs-native-review: new words, 12 Nov 2026
 #: client/src/pages/RoleDraft.tsx
 msgctxt "role draft next"
-msgid "Next: your R-Ikigai and characters"
-msgstr "Siguiente: tu R-Ikigai y tus personajes"
+msgid "Next: your Ikigai and characters"
+msgstr "Siguiente: tu Ikigai y tus personajes"
 
 #: client/src/components/review/useSeraActs.ts
 msgctxt "sera answers"
@@ -9376,8 +9432,8 @@ msgid "This moon's threads between people who thanked each other, faces in alpha
 msgstr "Los hilos de esta luna entre personas que se agradecieron, con las caras en orden alfabético"
 
 #: client/src/pages/Propose.tsx
-msgid "Propose for a role"
-msgstr ""
+#~ msgid "Propose for a role"
+#~ msgstr ""
 
 #. placeholder {0}: money(s.range.lowTotalMinor)
 #. placeholder {1}: money(s.range.highTotalMinor)
@@ -9521,9 +9577,10 @@ msgstr "Tu solicitud ya está con nosotros. Leemos cada palabra y te escribimos 
 msgid "they are planted and watered"
 msgstr "están sembrados y regados"
 
+# needs-native-review: new words, 12 Nov 2026
 #: client/src/components/roleDraft/DraftCarry.tsx
-msgid "Your R-Ikigai answers are saved in this browser. Nothing has been sent."
-msgstr "Tus respuestas de R-Ikigai se guardan en este navegador. No se ha enviado nada."
+msgid "Your Ikigai answers are saved in this browser. Nothing has been sent."
+msgstr "Tus respuestas de Ikigai se guardan en este navegador. No se ha enviado nada."
 
 #: client/src/components/governance/ExportByVote.tsx
 msgctxt "database export"
@@ -10011,6 +10068,12 @@ msgctxt "roles page season: how far into the season today is"
 msgid "Day {day} of {of}"
 msgstr "Día {day} de {of}"
 
+# needs-native-review: new words, 12 Nov 2026
+#: client/src/pages/Roles.tsx
+msgctxt "roles page, other ways to join"
+msgid "Live here one day? Start on the resident path."
+msgstr "¿Vivir aquí algún día? Empieza por el camino de residente."
+
 #. placeholder {0}: row.credited
 #. placeholder {1}: cycle.poolToken ?? ""
 #: client/src/components/journey/EconomicsView.tsx
@@ -10057,9 +10120,10 @@ msgctxt "notebook row kind, size and date"
 msgid "{0}, {1}, added {2}"
 msgstr ""
 
+# needs-native-review: new words, 12 Nov 2026
 #: client/src/pages/RoleDraft.tsx
-msgid "You confirm your email within 48 hours. Nothing reaches the village before you do."
-msgstr "Confirmas tu correo dentro de 48 horas. Nada llega a la aldea antes de que lo hagas."
+msgid "You confirm your email within 48 hours."
+msgstr "Confirmas tu correo dentro de 48 horas."
 
 #: client/src/components/NextStepBox.tsx
 msgctxt "next step box, the deadline"
@@ -10792,6 +10856,12 @@ msgctxt "sera changes"
 msgid "Which changes"
 msgstr ""
 
+# needs-native-review: new words, 12 Nov 2026
+#: client/src/pages/RequestMembership.tsx
+msgctxt "join page link"
+msgid "Find your roles"
+msgstr "Encuentra tus roles"
+
 #: client/src/pages/RoleMeasures.tsx
 msgid "Nothing has been stamped yet."
 msgstr ""
@@ -10945,9 +11015,10 @@ msgctxt "admin header, per-device dark colours"
 msgid "Night look"
 msgstr ""
 
+# needs-native-review: new words, 12 Nov 2026
 #: client/src/pages/Roles.tsx
-msgid "Circles are sociocratic working groups with real authority over their own domain. Decisions inside a circle pass by consent."
-msgstr "Los círculos son grupos de trabajo sociocráticos con autoridad real sobre su propio ámbito. Las decisiones dentro de un círculo se toman por consentimiento."
+msgid "Circles are sociocratic working groups with real authority over their own domain. Decisions inside a circle pass by consent or other circle-chosen processes."
+msgstr "Los círculos son grupos de trabajo sociocráticos con autoridad real sobre su propio ámbito. Las decisiones dentro de un círculo se toman por consentimiento o por otros procesos que el círculo elija."
 
 #: client/src/components/roleEdit/SectionsFields.tsx
 msgctxt "role editor, ceiling hint"
@@ -11860,9 +11931,9 @@ msgstr ""
 #~ msgstr ""
 
 #: client/src/pages/ProposeARole.tsx
-msgctxt "founding application lede"
-msgid "This application is for the cycle from {termFrom} to {termTo}."
-msgstr "Esta solicitud es para el ciclo del {termFrom} al {termTo}."
+#~ msgctxt "founding application lede"
+#~ msgid "This application is for the cycle from {termFrom} to {termTo}."
+#~ msgstr "Esta solicitud es para el ciclo del {termFrom} al {termTo}."
 
 #: client/src/components/openProposal/RoleCardBridge.tsx
 #~ msgid "Once approved into a role, I will sign the village's confidentiality agreement (NDA) before I see any confidential records."
@@ -12081,9 +12152,9 @@ msgid "Nothing changed: this is what the village already has on record."
 msgstr ""
 
 #: client/src/pages/RequestMembership.tsx
-msgctxt "join page link"
-msgid "Select your roles"
-msgstr "Elige tus roles"
+#~ msgctxt "join page link"
+#~ msgid "Select your roles"
+#~ msgstr "Elige tus roles"
 
 #. placeholder {0}: i + 1
 #: client/src/components/openProposal/AboutYou.tsx
@@ -12097,7 +12168,7 @@ msgid "The role asks {pct}% of your commitment"
 msgstr "El rol pide el {pct}% de tu compromiso"
 
 #: client/src/pages/RoleDraft.tsx
-msgid "You align with the Love Letter, the village's membership agreement, when you apply. Aligning is the village's way of signing."
+msgid "You align with the Love Letter, the village's membership agreement, when you apply."
 msgstr ""
 
 #: client/src/components/admin/AiAgentsApprovalPanel.tsx
@@ -12717,6 +12788,11 @@ msgctxt "a saved choice the picker no longer offers"
 msgid "No longer in the list. Choose another, or none"
 msgstr ""
 
+# needs-native-review: new words, 12 Nov 2026
+#: client/src/pages/RoleDraft.tsx
+msgid "Find your roles at {villageName}"
+msgstr "Encuentra tus roles en {villageName}"
+
 #: client/src/components/valuation/PricingDesk.tsx
 msgctxt "pricing desk"
 msgid "Past prices"
@@ -13151,9 +13227,10 @@ msgstr ""
 #~ msgid "Your season"
 #~ msgstr "Tu temporada"
 
+# needs-native-review: new words, 12 Nov 2026
 #: client/src/pages/RoleDraft.tsx
-msgid "You meet the people the role works with, in the order the role sets, when it sets one."
-msgstr "Conoces a las personas con quienes trabaja el rol, en el orden que el rol fije, cuando fija uno."
+msgid "You meet the people the role works closest with."
+msgstr "Conoces a las personas con quienes el rol trabaja más de cerca."
 
 #: client/src/components/governance/SeasonGoalField.tsx
 msgid "The village has not set its goals for this season yet. You can still apply: say in your aim what you would bring."
@@ -13332,6 +13409,11 @@ msgstr ""
 msgctxt "terms setting"
 msgid "Allowance"
 msgstr "Asignación"
+
+# needs-native-review: new words, 12 Nov 2026
+#: client/src/pages/Propose.tsx
+msgid "Apply for these roles"
+msgstr "Postúlate a estos roles"
 
 #: client/src/components/admin/AgentPathTree.tsx
 msgctxt "agent paths, a group"
@@ -13649,8 +13731,8 @@ msgid "Choose the season goal value {n} serves."
 msgstr "Elige la meta de la temporada a la que sirve el aporte {n}."
 
 #: client/src/pages/Propose.tsx
-msgid "Propose for these roles"
-msgstr ""
+#~ msgid "Propose for these roles"
+#~ msgstr ""
 
 #. placeholder {0}: c.name
 #: client/src/components/roleDraft/ArchetypeStep.tsx
@@ -13904,3 +13986,457 @@ msgstr ""
 #~ msgctxt "open proposal review"
 #~ msgid "1 goal for your first moon"
 #~ msgstr "1 meta para tu primera luna"
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar page: the moon's name is an example"
+msgid "(example name)"
+msgstr "(nombre de ejemplo)"
+
+#: client/src/components/circleCard/Hearth.tsx
+msgctxt "circle hearth, the drawing"
+msgid "The {circleName} hearth. No roles sit here yet."
+msgstr "El fogón de {circleName}. Todavía no hay roles aquí."
+
+#: client/src/components/circleCard/Hearth.tsx
+msgctxt "circle hearth, the drawing"
+msgid "The {circleName} hearth: {0} roles around the fire, {held} held. Threads reach to {1} linked circles."
+msgstr "El fogón de {circleName}: {0} roles alrededor del fuego, {held} ocupados. Los hilos llegan a {1} círculos vinculados."
+
+#: client/src/components/circleCard/Hearth.tsx
+msgctxt "circle hearth, a thread"
+msgid "Linked circle: {0}"
+msgstr "Círculo vinculado: {0}"
+
+#: client/src/components/circleCard/Hearth.tsx
+msgctxt "circle hearth, a stone"
+msgid "{0}, held"
+msgstr "{0}, ocupado"
+
+#: client/src/components/circleCard/Hearth.tsx
+msgctxt "circle hearth, a stone"
+msgid "{0}, open"
+msgstr "{0}, abierto"
+
+#: client/src/components/circleCard/HearthSections.tsx
+msgctxt "circle hearth, we meet"
+msgid "We meet"
+msgstr "Nos reunimos"
+
+#: client/src/components/circleCard/HearthSections.tsx
+msgctxt "circle hearth, we meet"
+msgid "We will see you there. Your circle fills the seed."
+msgstr "Nos vemos allí. Tu círculo llena la semilla."
+
+#: client/src/components/circleCard/HearthSections.tsx
+msgctxt "circle hearth, we meet"
+msgid "Thank you for saying. We will miss you this time."
+msgstr "Gracias por avisar. Esta vez te vamos a extrañar."
+
+#: client/src/components/circleCard/HearthSections.tsx
+msgctxt "circle hearth, we meet"
+msgid "That did not reach us. Try again in a moment."
+msgstr "Eso no nos llegó. Inténtalo de nuevo en un momento."
+
+#: client/src/components/circleCard/HearthSections.tsx
+msgctxt "circle hearth, we meet"
+msgid "Nobody has said yet. The seed fills as we say we will come."
+msgstr "Nadie ha dicho todavía. La semilla se llena a medida que decimos que vendremos."
+
+#: client/src/components/circleCard/HearthSections.tsx
+msgctxt "circle hearth, we meet"
+msgid "One of us said they will be there."
+msgstr "Una persona dijo que estará allí."
+
+#: client/src/components/circleCard/HearthSections.tsx
+msgctxt "circle hearth, we meet"
+msgid "{0} of us said we will be there."
+msgstr "{0} de nosotros dijimos que estaremos allí."
+
+#: client/src/components/circleCard/HearthSections.tsx
+msgctxt "circle hearth, we meet"
+msgid "The seed for this meeting: {0} of {SEED_CIRCLES} circles filled"
+msgstr "La semilla de esta reunión: {0} de {SEED_CIRCLES} círculos llenos"
+
+#: client/src/components/circleCard/HearthSections.tsx
+msgctxt "circle hearth, we meet"
+msgid "You said you will be there."
+msgstr "Dijiste que estarás allí."
+
+#: client/src/components/circleCard/HearthSections.tsx
+msgctxt "circle hearth, we meet"
+msgid "I can't come after all"
+msgstr "Al final no puedo ir"
+
+#: client/src/components/circleCard/HearthSections.tsx
+msgctxt "circle hearth, we meet"
+msgid "I'll be there"
+msgstr "Allí estaré"
+
+#: client/src/components/circleCard/HearthSections.tsx
+msgctxt "circle hearth, we meet"
+msgid "I can't come this time"
+msgstr "Esta vez no puedo ir"
+
+#: client/src/components/circleCard/HearthSections.tsx
+msgctxt "circle hearth, we meet"
+msgid "Answer on the calendar"
+msgstr "Responde en el calendario"
+
+#: client/src/components/circleCard/HearthSections.tsx
+msgctxt "circle hearth, a plant"
+msgid "A seed, waiting for hands"
+msgstr "Una semilla, esperando manos"
+
+#: client/src/components/circleCard/HearthSections.tsx
+msgctxt "circle hearth, a plant"
+msgid "In bud, being carried"
+msgstr "En botón, alguien la lleva"
+
+#: client/src/components/circleCard/HearthSections.tsx
+msgctxt "circle hearth, a plant"
+msgid "Flowered"
+msgstr "Floreció"
+
+#: client/src/components/circleCard/HearthSections.tsx
+msgctxt "circle hearth, what we tend"
+msgid "What we tend"
+msgstr "Lo que cuidamos"
+
+#: client/src/components/circleCard/HearthSections.tsx
+msgctxt "circle hearth, what we tend"
+msgid "See all our work on the quest board"
+msgstr "Ver todo nuestro trabajo en el tablero de misiones"
+
+#: client/src/components/circleCard/HearthSections.tsx
+msgctxt "circle hearth, who holds what"
+msgid "Who holds what"
+msgstr "Quién sostiene qué"
+
+#: client/src/components/circleCard/HearthSections.tsx
+msgctxt "circle hearth, what we decided"
+msgid "Decided by consent"
+msgstr "Decidido por consentimiento"
+
+#: client/src/components/circleCard/HearthSections.tsx
+msgctxt "circle hearth, what we decided"
+msgid "By consent, {0}"
+msgstr "Por consentimiento, {0}"
+
+#: client/src/components/circleCard/HearthSections.tsx
+msgctxt "circle hearth, what we decided"
+msgid "What we decided"
+msgstr "Lo que decidimos"
+
+#: client/src/components/circleCard/HearthSections.tsx
+msgctxt "circle hearth, what we decided"
+msgid "Our words, adopted"
+msgstr "Nuestras palabras, adoptadas"
+
+#: client/src/components/circleCard/HearthSections.tsx
+msgctxt "circle hearth, what we decided"
+msgid "The whole log and its review dates are in Sessions"
+msgstr "El registro completo y sus fechas de revisión están en Sesiones"
+
+#: client/src/components/circleCard/HearthSections.tsx
+msgctxt "circle hearth, linked circles"
+msgid "Linked circles"
+msgstr "Círculos vinculados"
+
+#: client/src/components/circleCard/HearthSections.tsx
+msgctxt "circle hearth, linked circles"
+msgid "We sit within this circle"
+msgstr "Estamos dentro de este círculo"
+
+#: client/src/components/circleCard/HearthSections.tsx
+msgctxt "circle hearth, linked circles"
+msgid "This circle sits within ours"
+msgstr "Este círculo está dentro del nuestro"
+
+#: client/src/components/circleCard/HearthSections.tsx
+msgctxt "circle hearth, quiet"
+msgid "No roles sit at this hearth yet. The fire is lit for the first."
+msgstr "Todavía no hay roles en este fogón. El fuego está encendido para el primero."
+
+#: client/src/components/circleCard/HearthSections.tsx
+msgctxt "circle hearth, quiet"
+msgid "Propose a role for this circle"
+msgstr "Proponer un rol para este círculo"
+
+#: client/src/components/map/TodayOnTheMap.tsx
+msgctxt "circles map, today card"
+msgid "Today on the map"
+msgstr "Hoy en el mapa"
+
+#: client/src/components/map/TodayOnTheMap.tsx
+msgctxt "circles map, today card eyebrow"
+msgid "Today"
+msgstr "Hoy"
+
+#: client/src/components/map/TodayOnTheMap.tsx
+msgctxt "circles map, today card"
+msgid "Meeting today: {names}."
+msgstr "Se reúnen hoy: {names}."
+
+#: client/src/components/map/TodayOnTheMap.tsx
+msgctxt "circles map, today card"
+msgid "No circle meets today."
+msgstr "Hoy no se reúne ningún círculo."
+
+#: client/src/components/map/TodayOnTheMap.tsx
+msgctxt "circles map, today card"
+msgid "Fireflies gather at a circle's hearth when people meet there. A light shows only for members who turned theirs on, and never with a name."
+msgstr "Las luciérnagas se juntan en el fogón de un círculo cuando la gente se reúne allí. Una luz aparece solo por quienes encendieron la suya, y nunca con un nombre."
+
+#: client/src/components/map/TodayOnTheMap.tsx
+msgctxt "circles map, today card"
+msgid "Your light is on."
+msgstr "Tu luz está encendida."
+
+#: client/src/components/map/TodayOnTheMap.tsx
+msgctxt "circles map, today card"
+msgid "Your light is off."
+msgstr "Tu luz está apagada."
+
+#: client/src/components/map/TodayOnTheMap.tsx
+msgctxt "circles map, today card link to the setting"
+msgid "Change it"
+msgstr "Cambiarla"
+
+#: client/src/components/map/MapLightSetting.tsx
+msgctxt "map light setting"
+msgid "Show my light on the map"
+msgstr "Mostrar mi luz en el mapa"
+
+#: client/src/components/map/MapLightSetting.tsx
+msgctxt "map light setting, hint"
+msgid "When you join a circle's meeting today, a firefly joins the others at its hearth. Only signed-in members see it, it never carries your name, and a light shows only when at least one other is there too."
+msgstr "Cuando te unes hoy a la reunión de un círculo, una luciérnaga se suma a las demás en su fogón. Solo la ven quienes tienen sesión iniciada, nunca lleva tu nombre, y una luz aparece solo cuando hay al menos otra también."
+
+#: client/src/components/map/MapLightSetting.tsx
+msgctxt "map light setting, refused"
+msgid "That did not save. Your light is unchanged."
+msgstr "No se guardó. Tu luz sigue igual."
+
+#: client/src/components/map/MapLightSetting.tsx
+msgctxt "map light setting, offline"
+msgid "That did not reach the server. Your light is unchanged."
+msgstr "No llegó al servidor. Tu luz sigue igual."
+
+# needs-native-review: new words, 12 Nov 2026
+#: client/src/components/fireflyPath/ApplySteps.tsx
+msgctxt "founding application first day"
+msgid "Your first conversation"
+msgstr "Tu primera conversación"
+
+# needs-native-review: new words, 12 Nov 2026
+#: client/src/components/fireflyPath/ApplySteps.tsx
+msgctxt "founding application first day"
+msgid "With {firstConversation}. Once we invite you, you book it at a time you choose, through the booking link in your invitation, or we'll write to you with times."
+msgstr "Con {firstConversation}. Cuando te invitemos, la reservas en el horario que elijas, con el enlace de reserva de tu invitación, o te escribiremos con horarios."
+
+# needs-native-review: new words, 12 Nov 2026
+#: client/src/pages/Roles.tsx
+msgctxt "roles page, other ways to join"
+msgid "Become a Founding Seeder"
+msgstr "Hazte Sembrador Fundador"
+
+#: client/src/components/QuestCard.tsx
+msgctxt "open work card: the quest's size beside the reader's own percent"
+msgid "Fits what you can give"
+msgstr "Encaja con lo que puedes dar"
+
+#: client/src/components/QuestCard.tsx
+msgctxt "open work card: the quest asks less than the reader can give"
+msgid "Easier"
+msgstr "Más ligera"
+
+#: client/src/components/QuestCard.tsx
+msgctxt "open work card: the quest asks more than the reader can give"
+msgid "Harder"
+msgstr "Más exigente"
+
+#: client/src/components/QuestCard.tsx
+msgctxt "open work card: how much of a person the quest asks"
+msgid "{commitment}% of you"
+msgstr "{commitment}% de ti"
+
+#: client/src/components/admin/QuestsTab.tsx
+msgctxt "admin quests: the percent of a person a quest asks"
+msgid "Commitment it asks (%)"
+msgstr "Compromiso que pide (%)"
+
+#: client/src/components/admin/QuestsTab.tsx
+msgctxt "admin quests: the commitment field placeholder"
+msgid "1 to 100"
+msgstr "De 1 a 100"
+
+#: client/src/components/roleEdit/RoleEditor.tsx
+msgctxt "role editor"
+msgid "Commitment it asks"
+msgstr "Compromiso que pide"
+
+#: client/src/components/roleEdit/RoleEditor.tsx
+msgctxt "role editor"
+msgid "Commitment it asks, in percent"
+msgstr "Compromiso que pide, en porcentaje"
+
+#: client/src/components/roleEdit/RoleEditor.tsx
+msgctxt "role editor"
+msgid "Is the whole commitment needed"
+msgstr "¿Hace falta todo el compromiso?"
+
+#: client/src/components/roleEdit/RoleEditor.tsx
+msgctxt "role editor: commitment"
+msgid "Flexible: less can work"
+msgstr "Flexible: con menos también funciona"
+
+#: client/src/components/roleEdit/RoleEditor.tsx
+msgctxt "role editor: commitment"
+msgid "Required: the role needs all of it"
+msgstr "Obligatorio: el rol lo necesita todo"
+
+#: client/src/components/roleEdit/RoleEditor.tsx
+msgctxt "role editor"
+msgid "A required role is hidden from members who say they can give less. Nothing that pays reads this."
+msgstr "Un rol obligatorio se oculta a quienes dicen que pueden dar menos. Nada que pague lee este dato."
+
+#: client/src/pages/Quests.tsx
+msgctxt "open work filter: quests that ask a quarter of a person or less"
+msgid "Light, up to 25%"
+msgstr "Ligera, hasta 25%"
+
+#: client/src/pages/Quests.tsx
+msgctxt "open work filter: quests that ask between a quarter and most of a person"
+msgid "Medium, 26 to 60%"
+msgstr "Media, de 26 a 60%"
+
+#: client/src/pages/Quests.tsx
+msgctxt "open work filter: quests that ask most of a person"
+msgid "Heavy, over 60%"
+msgstr "Exigente, más de 60%"
+
+#: client/src/pages/Quests.tsx
+msgctxt "open work filter row"
+msgid "Size, easier to harder"
+msgstr "Tamaño, de más ligera a más exigente"
+
+#: client/src/pages/Quests.tsx
+msgctxt "open work filter: every size"
+msgid "Any size"
+msgstr "Cualquier tamaño"
+
+#: client/src/pages/Quests.tsx
+msgctxt "open work: the board is ordered for the reader"
+msgid "Ordered by how well each fits the {memberPct}% you can give now."
+msgstr "Ordenadas según cuánto encaja cada una con el {memberPct}% que puedes dar ahora."
+
+#: client/src/pages/Quests.tsx
+msgctxt "open work: invite the reader to say their percent"
+msgid "Say how much you can give on your profile, and the work that fits comes first."
+msgstr "Di en tu perfil cuánto puedes dar, y el trabajo que encaja aparecerá primero."
+
+#: client/src/pages/Quests.tsx
+msgctxt "open work: change your percent"
+msgid "Change it"
+msgstr "Cambiarlo"
+
+#: client/src/pages/Quests.tsx
+msgctxt "open work: say your percent"
+msgid "Say it"
+msgstr "Decirlo"
+
+#: client/src/pages/Quests.tsx
+msgctxt "open work: the goal thread, none"
+msgid "No open quests grow this yet. Suggest one you feel this village is missing."
+msgstr "Todavía ninguna misión abierta hace crecer esto. Sugiere una que sientas que le falta a esta aldea."
+
+#: client/src/pages/Quests.tsx
+msgctxt "open work: the goal thread, none, the one door"
+msgid "Suggest a quest"
+msgstr "Sugerir una misión"
+
+#: client/src/pages/Roles.tsx
+msgctxt "roles page: required roles beyond the reader's percent, one"
+msgid "1 role needs more time than you have right now."
+msgstr "1 rol necesita más tiempo del que tienes ahora."
+
+#: client/src/pages/Roles.tsx
+msgctxt "roles page: required roles beyond the reader's percent, several"
+msgid "{beyondCount} roles need more time than you have right now."
+msgstr "{beyondCount} roles necesitan más tiempo del que tienes ahora."
+
+#: client/src/pages/Roles.tsx
+msgctxt "roles page: hide the roles beyond the reader's percent"
+msgid "Hide them again"
+msgstr "Ocultarlos otra vez"
+
+#: client/src/pages/Roles.tsx
+msgctxt "roles page: show the roles beyond the reader's percent"
+msgid "Show them anyway"
+msgstr "Mostrarlos de todos modos"
+
+#: client/src/components/commitment/CommitmentField.tsx
+msgctxt "commitment field: the period a member's word covers"
+msgid "This season"
+msgstr "Esta temporada"
+
+#: client/src/components/commitment/CommitmentField.tsx
+msgctxt "commitment field: the period a member's word covers"
+msgid "This moon"
+msgstr "Esta luna"
+
+#: client/src/components/commitment/CommitmentField.tsx
+msgctxt "commitment field: the period a member's word covers"
+msgid "This week"
+msgstr "Esta semana"
+
+#: client/src/components/commitment/CommitmentField.tsx
+msgctxt "commitment field: after saving"
+msgid "Saved. The open work and roles now fit this."
+msgstr "Guardado. El trabajo abierto y los roles ya se ajustan a esto."
+
+#: client/src/components/commitment/CommitmentField.tsx
+msgctxt "commitment field: heading"
+msgid "How much can you give right now?"
+msgstr "¿Cuánto puedes dar ahora mismo?"
+
+#: client/src/components/commitment/CommitmentField.tsx
+msgctxt "commitment field: what holds now"
+msgid "You said {nowPct}% from {nowFrom}. Change it whenever life changes."
+msgstr "Dijiste {nowPct}% desde {nowFrom}. Cámbialo cuando la vida cambie."
+
+#: client/src/components/commitment/CommitmentField.tsx
+msgctxt "commitment field: before a first word"
+msgid "Say it as a percent of yourself. The open work and the roles you see will fit it. Only you see this."
+msgstr "Dilo como un porcentaje de ti. El trabajo abierto y los roles que ves se ajustarán a ello. Solo tú lo ves."
+
+#: client/src/components/commitment/CommitmentField.tsx
+msgctxt "commitment field"
+msgid "Percent you can give"
+msgstr "Porcentaje que puedes dar"
+
+#: client/src/components/commitment/CommitmentField.tsx
+msgctxt "commitment field"
+msgid "The time this covers"
+msgstr "El tiempo que abarca"
+
+#: client/src/components/commitment/CommitmentField.tsx
+msgctxt "commitment field"
+msgid "A note for yourself (optional)"
+msgstr "Una nota para ti (opcional)"
+
+#: client/src/components/commitment/CommitmentField.tsx
+msgctxt "commitment field"
+msgid "Save"
+msgstr "Guardar"
+
+#: client/src/components/commitment/CommitmentField.tsx
+msgctxt "commitment field: the history"
+msgid "What you said before"
+msgstr "Lo que dijiste antes"
+
+#: client/src/components/commitment/CommitmentField.tsx
+msgctxt "commitment field: one earlier word"
+msgid "{pct}% from {from}, {period}"
+msgstr "{pct}% desde {from}, {period}"
+

@@ -94,9 +94,9 @@ const seating = (over: Partial<SeatSeating> & { id: string }): SeatSeating => ({
 
 describe("the handover a seat's history is allowed to claim", () => {
   it("does not tell a seat whose names were taken off that nobody ever held it", () => {
-    // `releaseSeatingsForUser` clears `display_name` on every row a departing
-    // member held, live and ended, so a seat two people carried for years can
-    // come back with no names on it. `holderOrder` returns an empty list for
+    // An erasure clears `display_name` on every row the person held, live and
+    // ended, so a seat two people carried for years can come back with no
+    // names on it. `holderOrder` returns an empty list for
     // that seat AND for a seat nobody has ever held, and the card has to tell
     // those two apart: saying nobody held it would erase them a second time.
     const anonymised = [
@@ -151,9 +151,9 @@ describe("the handover a seat's history is allowed to claim", () => {
   });
 
   it("skips a holding whose name was taken off the record rather than naming a stranger", () => {
-    // `releaseSeatingsForUser` clears `display_name` on every row a departing
-    // member held, live and ended. A handover the page cannot attribute is a
-    // handover it must not describe.
+    // An erasure clears `display_name` on every row the person held, live and
+    // ended. A handover the page cannot attribute is a handover it must not
+    // describe.
     const found = lastHandover([
       seating({ id: "a", name: null, endedAt: "2026-03-01T00:00:00.000Z" }),
       seating({ id: "b", name: "Wren", startedAt: "2026-03-02T00:00:00.000Z" }),

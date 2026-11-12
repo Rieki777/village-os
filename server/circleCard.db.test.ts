@@ -144,7 +144,8 @@ describe.skipIf(!configured)("the circle card, on a real schema", () => {
     const acc = section(card, "accountabilities") as Extract<CircleSection, { kind: "list" }>;
     expect(acc.slot).toEqual({ kind: "shown", value: ["Every household has fresh food each week", "The soil is richer each season"] });
     expect(acc.note).toBe("2 lines written. A circle answers for 3 to 6 things.");
-    expect(section(card, "authorities").slot).toEqual({ kind: "empty", words: "Not written yet" });
+    // QA2-06: a visitor sees only the headings that have words; an unwritten list draws nothing.
+    expect(section(card, "authorities").slot).toEqual({ kind: "unread" });
     expect(section(card, "values").slot).toEqual({
       kind: "shown",
       value: [{ value: "Reciprocity", practice: "We share every harvest before we sell any of it." }],
@@ -216,8 +217,20 @@ describe.skipIf(!configured)("the circle card, on a real schema", () => {
     expect(adoption.term).toBe("CCOS: Signatures");
   });
 
-  it("an unwritten circle reads its empty words, and the terms can be turned off", async () => {
+  it("QA2-06: a visitor reads an unwritten circle with no empty headings, and keeps the facts that are true", async () => {
+    admin = false;
+    const { body } = await read("c-new");
+    const card: CircleCard = body.card;
+    expect(card.header.existsWhile).toEqual({ kind: "unread" });
+    expect(card.sections.find((s) => s.key === "purpose")).toBeUndefined();
+    for (const s of card.sections) if (s.kind === "list" || s.kind === "values") expect(s.slot, s.key).toEqual({ kind: "unread" });
+    expect(JSON.stringify(card)).not.toMatch(/not written yet|No purpose written yet/i);
+    expect(section(card, "roles").slot).toEqual({ kind: "empty", words: "No roles in this circle yet" });
+  });
+
+  it("an unwritten circle reads its empty words to those who may propose them, and the terms can be turned off", async () => {
     terms = false;
+    admin = true;
     const { body } = await read("c-new");
     const card: CircleCard = body.card;
     expect(card.header.status).toBe("Forming");
@@ -228,6 +241,7 @@ describe.skipIf(!configured)("the circle card, on a real schema", () => {
     expect(section(card, "adoption").slot).toEqual({ kind: "empty", words: "No words for this circle have been adopted by consent yet." });
     expect(card.sections.every((s) => s.term === null)).toBe(true);
     terms = true;
+    admin = false;
   });
 
   it("answers 404 for a circle that does not exist", async () => {

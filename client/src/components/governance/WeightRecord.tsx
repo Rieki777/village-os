@@ -94,16 +94,16 @@ export default function WeightRecord({
   const shown = showAll ? record.history : record.history.slice(0, cut);
 
   return (
-    <section className="rounded-xl border border-stone-200 bg-white p-4">
-      <h3 className="flex items-center gap-2 text-base font-bold text-stone-900">
-        <History className="w-4 h-4 text-teal-deep" aria-hidden="true" />
+    <section className="rounded-xl border border-border bg-card p-4">
+      <h3 className="flex items-center gap-2 text-base font-bold text-foreground">
+        <History className="w-4 h-4 text-notice" aria-hidden="true" />
         The weight record
         <InfoTip
           tip="Every change to anyone's voting weight is kept with its reason and its author, and every member can read it."
           label="What the weight record is"
         />
       </h3>
-      <p className="mt-2 text-sm text-stone-600 leading-relaxed">
+      <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
         {record.mode === "custom"
           ? `${holding.length} ${holding.length === 1 ? "member holds" : "members hold"} voting weight in this village.`
           : "This village does not allocate weight by hand today. What it did allocate is kept here."}
@@ -113,34 +113,34 @@ export default function WeightRecord({
         <ul className="mt-3 space-y-1">
           {holding.map((a, i) => (
             <li key={`${a.member}-${i}`} className="flex items-baseline justify-between gap-3 text-sm">
-              <span className="text-stone-800">{a.member}</span>
-              <span className="font-medium tabular-nums text-stone-900">{weightText(a.weight)}</span>
+              <span className="text-foreground">{a.member}</span>
+              <span className="font-medium tabular-nums text-foreground">{weightText(a.weight)}</span>
             </li>
           ))}
         </ul>
       )}
 
       {record.history.length > 0 && (
-        <div className="mt-4 border-t border-stone-100 pt-3">
-          <h4 className="text-sm font-semibold text-stone-800">Every change, and who made it</h4>
+        <div className="mt-4 border-t border-border pt-3">
+          <h4 className="text-sm font-semibold text-foreground">Every change, and who made it</h4>
           <ul className="mt-2 space-y-2.5">
             {/* `shown` is always a prefix of `record.history`, so i indexes
                 `isMine` as well. */}
             {shown.map((h, i) => (
               <li key={`${h.at}-${i}`} className="text-sm">
-                <span className={isMine[i] ? "font-semibold text-teal-deep" : "font-medium text-stone-900"}>
+                <span className={isMine[i] ? "font-semibold text-notice" : "font-medium text-foreground"}>
                   {isMine[i] ? "You" : h.member}
                 </span>
-                <span className="tabular-nums text-stone-800">
+                <span className="tabular-nums text-foreground">
                   {h.oldWeight === null ? " set to " : ` ${weightText(h.oldWeight)} to `}
                   {weightText(h.newWeight)}
                 </span>
-                <span className="text-stone-500">
+                <span className="text-muted-foreground">
                   {" by "}
                   {h.by} on{" "}
                   {new Date(h.at).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}
                 </span>
-                <p className="text-stone-600 leading-relaxed">{h.note}</p>
+                <p className="text-muted-foreground leading-relaxed">{h.note}</p>
               </li>
             ))}
           </ul>
@@ -149,12 +149,12 @@ export default function WeightRecord({
               type="button"
               onClick={() => setShowAll((v) => !v)}
               aria-expanded={showAll}
-              className="mt-2 inline-flex min-h-[44px] items-center text-sm font-semibold text-teal-deep hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep rounded-lg"
+              className="mt-2 inline-flex min-h-[44px] items-center text-sm font-semibold text-notice hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-lg"
             >
               {showAll ? "Show fewer changes" : `Show all ${record.history.length} changes`}
             </button>
           )}
-          <p className="mt-2 text-xs text-stone-500 leading-relaxed">
+          <p className="mt-2 text-xs text-muted-foreground leading-relaxed">
             Append-only. Nothing on this list can be edited or removed, by anyone.
           </p>
         </div>

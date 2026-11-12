@@ -55,12 +55,20 @@ const FIGURE =
  * Grey, and grey again. The pair is a contrast step and not a hue step, so the
  * field reads the same in greyscale as it does in colour.
  */
-const SILENT_FILL = "#e2e0dd";
-const SILENT_EDGE = "#c4c0bc";
-const SPOKEN_FILL = "#6d6763";
-const SPOKEN_EDGE = "#443f3c";
-const NOTCH = "#1c1917";
-const NOTCH_HALO = "#faf9f8";
+/*
+ * FROM THE THEME'S TOKENS (decider calm, Phase D). These were fixed greys
+ * measured on a light page, and on the night ground the pair inverted: the
+ * silent figures drew pale and bright and the spoken ones dark, so the field
+ * read the wrong way round. The step stays a contrast step and never a hue:
+ * silent is the raised surface on its edge, spoken is the dim ink on the full
+ * ink, and the notch is the ink on a halo of the ground, on either ground.
+ */
+const SILENT_FILL = "var(--muted)";
+const SILENT_EDGE = "var(--border)";
+const SPOKEN_FILL = "var(--muted-foreground)";
+const SPOKEN_EDGE = "var(--foreground)";
+const NOTCH = "var(--foreground)";
+const NOTCH_HALO = "var(--background)";
 
 const positions = Array.from({ length: CROWD_FIGURES }, (_, i) => i * PITCH);
 
@@ -156,14 +164,14 @@ export default function QuorumField({
 
         {/* The village that could speak. Drawn whole, always, so the field has
             a size before anybody has voted. */}
-        <g fill={SILENT_FILL} stroke={SILENT_EDGE} strokeWidth="0.5">
+        <g style={{ fill: SILENT_FILL, stroke: SILENT_EDGE }} strokeWidth="0.5">
           {positions.map((x) => (
             <path key={x} d={FIGURE} transform={`translate(${x} 0)`} />
           ))}
         </g>
 
         {/* The weight that has spoken, cut to the front. */}
-        <g fill={SPOKEN_FILL} stroke={SPOKEN_EDGE} strokeWidth="0.5" clipPath={`url(#gov-field-${uid})`}>
+        <g style={{ fill: SPOKEN_FILL, stroke: SPOKEN_EDGE }} strokeWidth="0.5" clipPath={`url(#gov-field-${uid})`}>
           {positions.map((x) => (
             <path key={x} d={FIGURE} transform={`translate(${x} 0)`} />
           ))}
@@ -179,13 +187,13 @@ export default function QuorumField({
             the air between figures and does its work over a filled one. */}
         {notchX !== null && (
           <>
-            <line x1={notchX} y1={0} x2={notchX} y2={BOX_H} stroke={NOTCH_HALO} strokeWidth="3.4" />
+            <line x1={notchX} y1={0} x2={notchX} y2={BOX_H} style={{ stroke: NOTCH_HALO }} strokeWidth="3.4" />
             <line
               x1={notchX}
               y1={0}
               x2={notchX}
               y2={BOX_H}
-              stroke={NOTCH}
+              style={{ stroke: NOTCH }}
               strokeWidth="1.2"
               strokeOpacity="0.85"
             />
@@ -212,7 +220,7 @@ export function CrowdFigure({ size = 20, className = "" }: { size?: number; clas
       className={className}
       style={{ display: "block", flex: "0 0 auto" }}
     >
-      <path d={FIGURE} fill={SPOKEN_FILL} stroke={SPOKEN_EDGE} strokeWidth="0.5" />
+      <path d={FIGURE} style={{ fill: SPOKEN_FILL, stroke: SPOKEN_EDGE }} strokeWidth="0.5" />
     </svg>
   );
 }

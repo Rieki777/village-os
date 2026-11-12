@@ -411,6 +411,17 @@ describe("your first day", () => {
     expect(step.querySelector("[data-first-conversations]")?.textContent).toContain("Technical Operations: your accounts and tools");
     expect((within(step).getByLabelText("Your time zone") as HTMLInputElement).value).toBe(Intl.DateTimeFormat().resolvedOptions().timeZone);
     expect(within(step).getByLabelText(/earliest you could start/)).toBeTruthy();
+    expect(step.querySelector("[data-first-booking]"), "control: a role with no conversations names no first one").toBeNull();
+  });
+
+  it("names the first interviewer from the role's own list, and says its booking link comes with the invitation", async () => {
+    const conversations = [{ role: "Operations Role", minutes: 60 }, { role: "Hiring Role", minutes: 20 }];
+    await applyFor("r-gate", { ...FORM, roles: [{ ...(FORM as any).roles[0], conversations }] });
+    const step = document.querySelector('[data-stone="first"]') as HTMLElement;
+    const said = step.querySelector("[data-first-booking]")?.textContent ?? "";
+    expect(said).toContain("With Operations Role.");
+    expect(said).toContain("through the booking link in your invitation, or we'll write to you with times");
+    expect(said).not.toContain("Hiring Role");
   });
 });
 
@@ -560,9 +571,21 @@ describe("what the form kept from the Firefly Path", () => {
     expect(document.body.textContent).toContain("Your name and email come from your account");
   });
 
-  it("a village whose applications are for one cycle names its days", async () => {
+  it("QA2-05: names no internal cycle under the title, even when the village's applications run by the moon", async () => {
     await applyFor("r-gate", { ...FORM, season: { id: "s-now", name: "Season of Seeds", startsOn: "2000-01-01" }, term: { kind: "moon", startsOn: "2026-11-09", endsOn: "2026-12-08" } });
-    expect(document.querySelector("[data-term-days]")?.textContent).toBe("This application is for the cycle from 9 November 2026 to 8 December 2026.");
+    expect(document.querySelector("[data-term-days]")).toBeNull();
+    expect(document.querySelector("header")?.textContent).not.toMatch(/9 November 2026|8 December 2026|This application is for the cycle/);
+  });
+
+  it("QA2-14: the village's note shows under the title while it is set, and nothing shows while it is empty", async () => {
+    await applyFor("r-gate", { ...FORM, founding: { ...SETUP, updatedNote: "We updated this application on 14 November. Your saved answers are still here." } });
+    const note = document.querySelector("[data-updated-note]");
+    expect(note?.textContent).toBe("We updated this application on 14 November. Your saved answers are still here.");
+    // Under the title: the note sits in the page header with the heading.
+    expect(note?.closest("header")?.querySelector("h1")).toBeTruthy();
+    cleanup();
+    await applyFor("r-gate");
+    expect(document.querySelector("[data-updated-note]")).toBeNull();
   });
 
   it("closed: says so, and shows no form", async () => {
@@ -666,5 +689,45 @@ describe("the confirmation link", () => {
     render(<ConfirmProposal />);
     expect(await screen.findByText(OPEN_WORDS.confirmGone)).toBeTruthy();
     expect(screen.getByRole("link", { name: "Apply again" }).getAttribute("href")).toBe("/propose-a-role");
+  });
+});
+
+describe("on a phone with the keyboard up (M2, batch 158)", () => {
+  it("keeps one bar at the bottom: the tab bar steps out while the application is open", async () => {
+    await applyFor();
+    expect(document.querySelector("form[data-open-proposal]")?.hasAttribute("data-hides-tabbar-phone")).toBe(true);
+  });
+
+  it("lifts the step bar above the keyboard, and lets it down when the keyboard closes", async () => {
+    class FakeViewport extends EventTarget {
+      height = 800;
+      offsetTop = 0;
+    }
+    const vv = new FakeViewport();
+    vi.stubGlobal("visualViewport", vv);
+    Object.defineProperty(window, "innerHeight", { configurable: true, value: 800 });
+    await applyFor();
+    const bar = document.querySelector("[data-stone-bar]") as HTMLElement;
+    expect(bar.getAttribute("data-keyboard")).toBeNull();
+    expect(bar.className).toContain("bottom-[calc(var(--stone-kb,0px)");
+    vv.height = 460;
+    vv.dispatchEvent(new Event("resize"));
+    await waitFor(() => expect(bar.getAttribute("data-keyboard")).toBe("open"));
+    expect(bar.style.getPropertyValue("--stone-kb")).toBe("340px");
+    vv.height = 800;
+    vv.dispatchEvent(new Event("resize"));
+    await waitFor(() => expect(bar.getAttribute("data-keyboard")).toBeNull());
+  });
+});
+
+describe("the review step's words (batch 158)", () => {
+  it("no longer says the line the lead deleted: \"Aligning is the village's way of signing\"", async () => {
+    await applyFor();
+    await completeAll();
+    walk();
+    expect(stoneNow()).toBe("review");
+    await screen.findByLabelText(LETTER.intent);
+    expect(document.body.textContent).toContain("It takes effect once you confirm your address");
+    expect(document.body.textContent).not.toMatch(/way of signing/);
   });
 });

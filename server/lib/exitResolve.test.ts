@@ -277,6 +277,43 @@ describe.skipIf(!configured)("resolve and They're staying take turns on one exit
     expect(await statusOf(exitId)).toBe("resolved");
   });
 
+  // ── 1a. Names on a role's record (lead, 12 Nov 2026: "we can keep names on record") ──
+
+  /** The seating `member()` made, given the name it was documented under, plus one they had already left. */
+  async function namedSeatings(id: string): Promise<void> {
+    await q("UPDATE `org_role_assignments` SET `display_name` = 'Ash the Steward', `note` = 'Away this moon.' WHERE `id` = ?", [`seating-${id}`]);
+    await q(
+      "INSERT INTO `org_role_assignments` (`id`, `org_role_id`, `holder_kind`, `user_id`, `holder_key`, `display_name`, `is_example`, `ended_at`, `ended_reason`) VALUES (?,'kitchen-voice','member',?,?,'Ash the Steward',0,'2026-01-01 00:00:00','season ended')",
+      [`old-seating-${id}`, id, id],
+    );
+  }
+  const seatingNames = async (id: string) =>
+    (await q("SELECT `id`, `display_name`, `note`, `ended_at` FROM `org_role_assignments` WHERE `user_id` = ? ORDER BY `id`", [id])).map((r) => ({
+      id: r.id,
+      name: r.display_name,
+      note: r.note,
+      ended: r.ended_at != null,
+    }));
+
+  it("a member who leaves keeps their name on every role they held; an erasure takes it off", async () => {
+    const kept = await member({ holdsValue: true });
+    await namedSeatings(kept.id);
+    expect((await resolve(kept.exitId, kept.id)).outcome).toBe("former");
+    expect(await seatingNames(kept.id), "leaving ends the seatings and keeps the name on the record").toEqual([
+      { id: `old-seating-${kept.id}`, name: "Ash the Steward", note: null, ended: true },
+      { id: `seating-${kept.id}`, name: "Ash the Steward", note: null, ended: true },
+    ]);
+
+    // The other half, through the same door: an exit that erases removes the name from every row.
+    const erased = await member({ holdsValue: false });
+    await namedSeatings(erased.id);
+    expect((await resolve(erased.exitId, erased.id)).outcome).toBe("erased");
+    expect(await seatingNames(erased.id), "an erasure leaves no name on any seating").toEqual([
+      { id: `old-seating-${erased.id}`, name: null, note: null, ended: true },
+      { id: `seating-${erased.id}`, name: null, note: null, ended: true },
+    ]);
+  });
+
   // ── 1b. A former member's open links (round 6, R5-2) ────────────────────
 
   it("a former member's open invitation links stop admitting, and nobody arrives on their vouch", async () => {

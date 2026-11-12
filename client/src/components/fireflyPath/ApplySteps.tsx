@@ -298,10 +298,20 @@ export function CompensationShape({ setup }: { setup: FoundingSetup }) {
 }
 
 /** Step 5's facts: what the first cycle looks like, and the first conversations once chosen. */
-export function FirstDayFacts({ setup }: { setup: FoundingSetup }) {
+export function FirstDayFacts({ setup, firstConversation = null }: { setup: FoundingSetup; firstConversation?: string | null }) {
   const { t } = useLingui();
   return (
     <div className="grid gap-5">
+      {/* The first conversation of the role's own list (conversations[0]). Its booking link comes with the
+          invitation and on the status page, so nobody books before we invite them (role journey L6). */}
+      {firstConversation && (
+        <div className="grid gap-2" data-first-booking="">
+          <p className={EYEBROW}>{t({ message: "Your first conversation", context: "founding application first day" })}</p>
+          <p className="text-base leading-relaxed text-foreground">
+            {t({ message: `With ${firstConversation}. Once we invite you, you book it at a time you choose, through the booking link in your invitation, or we'll write to you with times.`, context: "founding application first day" })}
+          </p>
+        </div>
+      )}
       {setup.firstCycle && (
         <div className="grid gap-2" data-first-cycle="">
           <p className={EYEBROW}>{t({ message: "Your first cycle", context: "founding application first day" })}</p>

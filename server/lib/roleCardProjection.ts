@@ -50,7 +50,7 @@ export function gateOf(role: OrgRole, defaultTrack?: string | null) {
       domain: role.domain,
       accountabilities: role.accountabilities,
       timeCommitment: role.timeCommitment,
-      commitmentPct: settings?.clocks?.commitmentPct ?? null,
+      commitmentPct: role.commitmentPct ?? settings?.clocks?.commitmentPct ?? null,
       track: trackOf(role.track, defaultTrack),
       payKind: pay?.kind ?? null,
       hasRange: payStatesRange(pay),
@@ -104,7 +104,10 @@ export function roleCard(
     languages: role.languages ?? null,
     reviewAfterDays: role.reviewAfterDays ?? null,
     // The commitment the role asks (joining lane PR 3): energy and attention, never hours. A planning signal read by no pay code.
-    commitmentPct: publicTermsOf(role.termsOffer).commitmentPct,
+    // 0383: the stored value wins; a role with none still reads its terms on offer.
+    commitmentPct: role.commitmentPct ?? publicTermsOf(role.termsOffer).commitmentPct,
+    // 0383: whether the role needs its whole commitment. The roles list hides a required role that asks more than a member can give.
+    commitmentRequired: role.commitmentRequired === true,
     // Joining lane PR 2 (0370): a check happens for this role whatever the references say; the forms tell the applicant.
     alwaysChecked: role.alwaysChecked === true,
     // 0374: who the card says may hold it (null: not said), and whether an agent may, the unsaid read as either.

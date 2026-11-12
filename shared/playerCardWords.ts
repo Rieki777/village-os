@@ -47,7 +47,7 @@ export const CARD_WORDS = {
   portraitAlt: (name: string) => `${name}'s character portrait`,
 
   // Doors
-  applyDoor: "Propose for a role",
+  applyDoor: "Apply for a role",
   planDoor: "Plan my season",
 
   // Tiles

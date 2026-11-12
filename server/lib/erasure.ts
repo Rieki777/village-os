@@ -174,6 +174,7 @@ import { forgetMemberGeneKeys } from "./geneKeys";
 import { forgetMemberFundingRounds } from "./fundingRounds";
 import { forgetMemberTasks } from "../repos/memberTasks";
 import { forgetTimeZone } from "../repos/memberTimeZone";
+import { forgetCommitments } from "../repos/memberCommitments";
 import { forgetMoonReviews } from "../repos/moonRecaps";
 import { forgetMemberCards } from "./sessionCard";
 import { forgetMemberInOutbox } from "./saberraOutbox";
@@ -1635,6 +1636,7 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
       run: async () => {
         await forgetMemberTasks(pool, target.id);
         await forgetTimeZone(pool, target.id); // role journey L6
+        await forgetCommitments(pool, target.id); // 0383: what they said they could give, the whole history
       },
     },
     {

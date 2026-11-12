@@ -15,7 +15,8 @@
  * place it inside a positioned illustration. The lights are decoration only
  * (aria-hidden): the act says what it does.
  */
-import type { CSSProperties, ReactNode } from "react";
+import { useEffect, type CSSProperties, type ReactNode } from "react";
+import { holdPageLight } from "@/lib/pageLight";
 import { useReducedMotion } from "@/components/natural/useReducedMotion";
 import { fireflySpots } from "./geometry";
 import { useRest } from "./useRest";
@@ -42,6 +43,9 @@ export default function Fireflies({ count = 6, children, block = false, size = "
   const resting = useRest(!still);
   const spots = fireflySpots(count, inner, reach);
   const motion = still ? "still" : "live";
+  // Around an act, these are the page's one light: the shell's lights go still while they show (lib/pageLight.ts).
+  const isAct = children !== undefined;
+  useEffect(() => (isAct ? holdPageLight() : undefined), [isAct]);
 
   const layer = (
     <span aria-hidden="true" className="nk-ff-layer" data-testid="fireflies" data-count={spots.length}>

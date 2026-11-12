@@ -12,7 +12,10 @@
  *
  * Limits: 1 to 6 steps, 5 to 240 minutes each, at most one final approval, no
  * role twice. `org_roles.conversation_mode` says whether the village holds the
- * conversations as one block (the default when NULL) or separately (D30).
+ * conversations as one block or separately (D30). Empty reads as separately:
+ * since 12 Nov 2026 the applicant books each conversation at times they
+ * choose, in order (the lead's one booking story), and no applicant's words
+ * depend on this value.
  *
  * Pure: no Node builtins. Shared by the server projection, the admin write, the
  * card and the interview lane.
@@ -134,9 +137,9 @@ export function parseConversationMode(raw: unknown): Parsed<ConversationMode | n
     : { ok: false, problem: `The conversations are held as one of: ${CONVERSATION_MODES.join(", ")}.` };
 }
 
-/** NULL reads as one block. */
+/** Only a stored "block" reads as one block. Empty or unknown reads as separately, the one booking story (12 Nov 2026). */
 export function conversationModeOf(raw: unknown): ConversationMode {
-  return raw === "separate" ? "separate" : "block";
+  return raw === "block" ? "block" : "separate";
 }
 
 /** The total time of a list of conversations, in minutes. */

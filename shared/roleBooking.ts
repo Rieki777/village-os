@@ -11,7 +11,7 @@
 export const BOOKING_URL_MAX = 300;
 
 /** Shown wherever a role has no usable link. */
-export const NO_BOOKING_COPY = "We'll write to you to find a time";
+export const NO_BOOKING_COPY = "We'll write to you with times";
 
 /**
  * The link as stored, or null. Only https links with a host are accepted:

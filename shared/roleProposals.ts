@@ -124,6 +124,10 @@ export const NOT_ROLE_WORDS: ReadonlySet<string> = new Set([
   "reviewAfterDays",
   "accessBundle",
   "bookingUrl",
+  // 0383 (E1): the share of a week a role asks and whether it is required. Set where roles are edited, alongside
+  // the card's other parameters; a number and a switch, never words a member proposes (batch 158).
+  "commitmentPct",
+  "commitmentRequired",
   // 0060: the building on the land the seat lives in. Structure, set where seats are placed (map lane R1).
   "structureKey",
   "circleName",

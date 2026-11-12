@@ -28,13 +28,13 @@ const doors = (tokenName: string) => [
   {
     href: "/quests",
     title: "Quests",
-    body: "The work this village has asked for, open for anyone to pick up.",
+    body: "The work this village needs, open for anyone.",
     Icon: Scroll,
   },
   {
     href: "/gratitude",
     title: `${tokenName} Wall`,
-    body: "Who has helped whom, said out loud and kept on the wall.",
+    body: "Who has helped whom.",
     Icon: Heart,
   },
   {

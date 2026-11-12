@@ -18,7 +18,7 @@ describe("the player card, live", () => {
   it("with no roles says Holds no roles yet and opens the doors to apply and to plan the season", () => {
     render(<PlayerRoleCardView data={fixturePayload(0)} />);
     expect(screen.getAllByText("Holds no roles yet").length).toBeGreaterThan(0);
-    expect(screen.getByRole("link", { name: "Propose for a role" }).getAttribute("href")).toBe("/roles");
+    expect(screen.getByRole("link", { name: "Apply for a role" }).getAttribute("href")).toBe("/roles");
     expect(screen.getByRole("link", { name: "Plan my season" }).getAttribute("href")).toBe("/season-plans/mine");
     expect(document.querySelectorAll("article")).toHaveLength(0);
   });

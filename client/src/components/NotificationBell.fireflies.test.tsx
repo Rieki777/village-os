@@ -115,3 +115,42 @@ describe("a firefly arrives once", () => {
     expect(ff.getAttribute("data-arrival")).toBe("false");
   });
 });
+
+describe("one light per screen (batch 158)", () => {
+  it("keeps one still light on the bell while the page shows its own lit act, and the swarm returns after", async () => {
+    const { default: Fireflies } = await import("@/components/journey/nature/Fireflies");
+    store.set({ items: [vote], unread: 1, unseen: 1, loaded: true });
+    const view = render(
+      <Router>
+        <NotificationBell />
+        <Fireflies block>
+          <button type="button">Take your turn</button>
+        </Fireflies>
+      </Router>,
+    );
+    expect(screen.getByTestId("bell-still-light")).toBeTruthy();
+    expect(screen.queryByTestId("bell-fireflies")).toBeNull();
+    // The count still lives in the bell's name.
+    expect(screen.getByRole("button", { name: "Notifications, 1 waits on you, 1 new" })).toBeTruthy();
+    view.rerender(
+      <Router>
+        <NotificationBell />
+      </Router>,
+    );
+    expect(await screen.findByTestId("bell-fireflies")).toBeTruthy();
+    expect(screen.queryByTestId("bell-still-light")).toBeNull();
+  });
+
+  it("an illustration's fireflies (no act inside) leave the bell's swarm alone", async () => {
+    const { default: Fireflies } = await import("@/components/journey/nature/Fireflies");
+    store.set({ items: [vote], unread: 1, unseen: 1, loaded: true });
+    render(
+      <Router>
+        <NotificationBell />
+        <Fireflies />
+      </Router>,
+    );
+    expect(await screen.findByTestId("bell-fireflies")).toBeTruthy();
+    expect(screen.queryByTestId("bell-still-light")).toBeNull();
+  });
+});

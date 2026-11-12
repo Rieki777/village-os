@@ -738,7 +738,7 @@ export default function Layout({ children }: LayoutProps) {
                 {crowdpoolModule && (
                   <li>
                     <Link href="/campaigns" className="text-white hover:underline transition-colors text-sm flex min-h-11 items-center">
-                      Our Raisings
+                      Pooling Resources
                     </Link>
                   </li>
                 )}

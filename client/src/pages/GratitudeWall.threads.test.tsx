@@ -169,4 +169,26 @@ describe("the wall on a phone", () => {
     const mark = await screen.findByRole("button", { name: "How the allowance works" });
     expect(mark.className).toMatch(/(min-)?(h|size)-11\b/);
   });
+
+  it("on a phone, the open sheet rides above the keyboard (M9, batch 158)", async () => {
+    wall = [];
+    vi.stubGlobal("matchMedia", (q: string) => ({ matches: false, media: q, addEventListener() {}, removeEventListener() {} }));
+    class FakeViewport extends EventTarget {
+      height = 800;
+      offsetTop = 0;
+    }
+    const vv = new FakeViewport();
+    vi.stubGlobal("visualViewport", vv);
+    Object.defineProperty(window, "innerHeight", { configurable: true, value: 800 });
+    page();
+    await waitFor(() => expect(screen.getByText("No thanks on the wall yet")).toBeTruthy());
+    fireEvent.click(screen.getAllByRole("button", { name: "Carry a thanks" })[0]);
+    const sheet = screen.getByTestId("composer");
+    await waitFor(() => expect(sheet.getAttribute("data-sheet")).toBe("open"));
+    expect(sheet.getAttribute("data-keyboard")).toBeNull();
+    vv.height = 450;
+    vv.dispatchEvent(new Event("resize"));
+    await waitFor(() => expect(sheet.getAttribute("data-keyboard")).toBe("open"));
+    expect(sheet.style.bottom).toBe("350px");
+  });
 });

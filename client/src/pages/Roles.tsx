@@ -30,6 +30,8 @@ import { agentProposalHref, proposeRoleHref } from "@/components/roleProposal/Qu
 import { useClassNames } from "@/components/power/useClassNames";
 import { useModule } from "@/modules/ModuleProvider";
 import { useAuth } from "@/contexts/AuthContext";
+import { useMyCommitment } from "@/lib/useMyCommitment";
+import { rolesWithinReach } from "@shared/commitment";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { isSeatState, type SeatStateWord, type SheetContext } from "@shared/roleSheet";
 import { fromOrgSeat, orgHolderName, seasonForSheet, seatHistoryShown } from "@shared/roleSheetInputs";
@@ -37,6 +39,7 @@ import { coordinatingCircle } from "@shared/coordinatingCircle";
 import FoundingTeam, { type FoundingRole } from "@/components/roleCard/FoundingTeam";
 import FullRoleCard from "@/components/roleCard/FullRoleCard";
 import { readFoundingTeam, type FoundingTeamAnswer } from "@/components/roleCard/roleCardApi";
+import { DEFAULT_OTHER_WAYS, OTHER_WAYS_DEFAULTS } from "@shared/otherWays";
 import RootsFilterToggle from "@/components/roots/RootsFilterToggle";
 import { useRootsFilter } from "@/components/roots/useRootsFilter";
 
@@ -429,6 +432,9 @@ export default function Roles() {
   // Who may say what a seat is held for. The server refuses everybody else by
   // itself; this only decides whether the control is drawn.
   const { user } = useAuth();
+  // What this member says they can give now (0383): a role that needs more than that, and says it is required, waits behind one press.
+  const memberPct = useMyCommitment(!!user).pct;
+  const [showBeyond, setShowBeyond] = useState(false);
   const { t } = useLingui();
   const canTagNeeds = !!user && (user.role === "admin" || user.role === "founder");
   // "Show only what matches my roots": the same filter and rule the quests board runs.
@@ -536,6 +542,12 @@ export default function Roles() {
         .filter((r): r is RoleEntry => !!r && r.raw?.listed !== false)
         .map((r) => ({ seat: r.raw, circleName: r.group, sections: founding.sections[r.id] ?? null }))
     : [];
+  const otherWays = founding?.otherWays ?? DEFAULT_OTHER_WAYS;
+  const leads = featured.length > 0;
+  // One h1 per page: the founding team's heading while it leads, the page's own otherwise.
+  const HeroHeading = leads ? "h2" : "h1";
+  // The header waits for both reads, so it never draws on top and then jumps below the founding team.
+  const heroShown = founding !== null && (!founding.on || roles !== null || failed);
   const featuredShown = new Set(featured.map((f) => String(f.seat.id)));
   const unlistedCount = (roles ?? []).filter((r) => r.raw?.listed === false).length;
   // Each role appears once: a featured role lives in the founding section. A linked seat is a
@@ -544,8 +556,31 @@ export default function Roles() {
   // The roots filter hides only roles tagged with none of the reader's roots; a linked seat always shows.
   const byRoots = roots.apply(listedDirectory, (r) => (Array.isArray(r.raw?.archetypes) ? r.raw.archetypes : []));
   const rootKept = new Set(byRoots.shown.map((r) => r.id));
-  const directory = listedDirectory.filter((r) => r.id === linked || rootKept.has(r.id));
+  const rooted = listedDirectory.filter((r) => r.id === linked || rootKept.has(r.id));
+  // Filters work for the reader alone, never ranks anyone. A linked seat always shows.
+  const reach = rolesWithinReach(rooted, (r) => ({ commitmentPct: r.raw?.card?.commitmentPct ?? null, commitmentRequired: r.raw?.card?.commitmentRequired === true }), memberPct);
+  // The founding team is held to the same reach: a founding role that needs more than the reader has waits too.
+  const featuredReach = rolesWithinReach(featured, (f) => ({ commitmentPct: f.seat?.card?.commitmentPct ?? null, commitmentRequired: f.seat?.card?.commitmentRequired === true }), memberPct);
+  const featuredHidden = featuredReach.beyond.filter((f) => String(f.seat?.id) !== linked);
+  const featuredVisible = showBeyond ? featured : featured.filter((f) => !featuredHidden.includes(f));
+  const beyondCount = reach.beyond.filter((r) => r.id !== linked).length + featuredHidden.length;
+  const directory = showBeyond ? rooted : rooted.filter((r) => r.id === linked || !reach.beyond.includes(r));
   const rootsOffered = roots.available && byRoots.tagged;
+  // 0383: required roles that ask more than the reader can give now, held back with one door to show them.
+  // Drawn once: above the founding team when it holds one of them, else above the directory.
+  const beyondLine =
+    beyondCount > 0 ? (
+      <div className="mb-8 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-border bg-card px-4 py-2 text-sm text-foreground" data-roles-beyond={beyondCount}>
+                <span>
+                  {beyondCount === 1
+                    ? t({ message: "1 role needs more time than you have right now.", context: "roles page: required roles beyond the reader's percent, one" })
+                    : t({ message: `${beyondCount} roles need more time than you have right now.`, context: "roles page: required roles beyond the reader's percent, several" })}
+                </span>
+                <button type="button" className="min-h-11 font-medium text-notice underline underline-offset-2 hover:text-foreground" onClick={() => setShowBeyond((v) => !v)} aria-pressed={showBeyond}>
+                  {showBeyond ? t({ message: "Hide them again", context: "roles page: hide the roles beyond the reader's percent" }) : t({ message: "Show them anyway", context: "roles page: show the roles beyond the reader's percent" })}
+                </button>
+              </div>
+    ) : null;
   const groups: { title: string; subtitle: string; circleId: string | null; roles: RoleEntry[] }[] = [];
   for (const role of directory) {
     const g = groups.find((x) => x.title === role.group);
@@ -559,12 +594,75 @@ export default function Roles() {
     (a, b) => (circleOrder.get(a.title) ?? 999) - (circleOrder.get(b.title) ?? 999),
   );
 
+
+  const otherWaysSection = (
+    <>
+          {/* OTHER WAYS TO JOIN: clearly secondary to the founding team, and open from the start. */}
+          <section aria-labelledby="other-ways" className="mx-auto mb-14 max-w-4xl" data-other-ways="">
+            <h2 id="other-ways" className={`${H2} mb-2`}>{t({ message: "Other ways to join", context: "roles page, other ways to join" })}</h2>
+            <p className="mb-4 text-sm text-muted-foreground">{t({ message: "Not every way in is a founding role. Each of these is open now.", context: "roles page, other ways to join" })}</p>
+            <ul className="grid gap-3 sm:grid-cols-2">
+              <li className={TILE}>
+                <Link href="/role-proposals/new" className={`inline-flex min-h-11 items-center gap-2 ${LINK}`} data-propose-new-role="">
+                  {t({ message: "Propose a new role", context: "roles page, other ways to join" })}
+                  <ArrowRight className="size-4" aria-hidden="true" />
+                </Link>
+                <p className="mt-1 text-xs text-muted-foreground">{t({ message: "Propose is for a role we do not list. Tell us the role you see, and the village decides.", context: "roles page, other ways to join" })}</p>
+              </li>
+              <li className={TILE}>
+                <Link href="/quests" className={`inline-flex min-h-11 items-center gap-2 ${LINK}`}>
+                  {t({ message: "Take a quest, alone or with others", context: "roles page, other ways to join" })}
+                  <ArrowRight className="size-4" aria-hidden="true" />
+                </Link>
+              </li>
+              {/* QA2-07: the resident path and the gifts tile, the village's own words (shared/otherWays.ts). */}
+              <li className={TILE} data-other-way="seeder">
+                <Link href={otherWays.seeder.href} className={`inline-flex min-h-11 items-center gap-2 ${LINK}`}>
+                  {otherWays.seeder.title === OTHER_WAYS_DEFAULTS.seederTitle ? t({ message: "Become a Founding Seeder", context: "roles page, other ways to join" }) : otherWays.seeder.title}
+                  <ArrowRight className="size-4" aria-hidden="true" />
+                </Link>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {otherWays.seeder.line === OTHER_WAYS_DEFAULTS.seederLine ? t({ message: "Live here one day? Start on the resident path.", context: "roles page, other ways to join" }) : otherWays.seeder.line}
+                </p>
+              </li>
+              <li className={TILE} data-other-way="gifts">
+                <Link href={otherWays.gifts.href} className={`inline-flex min-h-11 items-center gap-2 ${LINK}`}>
+                  {otherWays.gifts.title === OTHER_WAYS_DEFAULTS.giftsTitle ? t({ message: "Offer your gifts", context: "roles page, other ways to join" }) : otherWays.gifts.title}
+                  <ArrowRight className="size-4" aria-hidden="true" />
+                </Link>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {otherWays.gifts.line === OTHER_WAYS_DEFAULTS.giftsLine ? t({ message: "Volunteer or work-trade: tell us what you would like to give.", context: "roles page, other ways to join" }) : otherWays.gifts.line}
+                </p>
+              </li>
+            </ul>
+            {/* QA2-02: while the founding team is featured, the game's way in sits here, quiet and
+                secondary, with no "Step one": the founding application keeps the only steps on the page. */}
+            {featured.length > 0 && (
+              <div className="mt-8" data-game-way="">
+                <h3 className="font-display text-2xl leading-tight text-foreground">{t({ message: "Find your place in the game", context: "roles page, other ways to join" })}</h3>
+                <ArchetypeStep nested allShown={showAll} onSeeAll={() => setShowAll(true)} />
+              </div>
+            )}
+          </section>
+    </>
+  );
+
   return (
     <Layout>
       {/* The sheet's world (docs/DESIGN_RULE.md): the same night ground and display face as the profile. */}
-      <section className={`${WORLD} py-16 sm:py-24`}>
+      <section className={`${WORLD} ${leads ? "pb-16 pt-4 sm:py-16" : "py-16"} sm:py-24`}>
         <div className="container">
-          {/* Header */}
+          {leads && (
+            <>
+              {featuredHidden.length > 0 && beyondLine}
+              {featuredVisible.length > 0 && <FoundingTeam lead roles={featuredVisible} villagePay={founding?.villagePay ?? null} />}
+              {otherWaysSection}
+            </>
+          )}
+
+          {/* Header: below "Other ways to join" while the founding team leads (design pass M1 and D-04). */}
+          {heroShown && (
+          <>
           <m.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -573,16 +671,16 @@ export default function Roles() {
             <div className={`${RING} mx-auto mb-6 size-16`}>
               <Briefcase className="w-7 h-7" aria-hidden="true" />
             </div>
-            <h1 className={`${H1} mb-4`}>
+            <HeroHeading className={`${H1} mb-4`}>
               {linkedName ?? t({ message: `Roles and Circles`, context: "roles page" })}
-            </h1>
+            </HeroHeading>
             {/* R46 enchant-first: the forest image carries the surface; the
                 sociocracy mechanics live in the three tooltips. */}
             <p className="text-lg leading-relaxed text-muted-foreground max-w-2xl mx-auto sm:text-xl">
               {t`The village organizes itself the way a forest does:`}{" "}
-              <InfoTip tip={t`Circles are sociocratic working groups with real authority over their own domain. Decisions inside a circle pass by consent.`}>{t({ message: `circles`, context: "roles page, intro word with a tooltip" })}</InfoTip>{" "}
+              <InfoTip tip={t`Circles are sociocratic working groups with real authority over their own domain. Decisions inside a circle pass by consent or other circle-chosen processes.`}>{t({ message: `circles`, context: "roles page, intro word with a tooltip" })}</InfoTip>{" "}
               {t`of care, each holding its own ground, and every`}{" "}
-              <InfoTip tip={t`A role is a named responsibility inside a circle, with an aim, a domain, and accountabilities. The role belongs to the circle, and a person steps into it.`}>{t({ message: `role`, context: "roles page, intro word with a tooltip" })}</InfoTip>{" "}
+              <InfoTip tip={t`A role is a named responsibility inside a circle, with an aim, a domain, and accountabilities. The role belongs to the circle, and a person plays it for a season.`}>{t({ message: `role`, context: "roles page, intro word with a tooltip" })}</InfoTip>{" "}
               {t`is a way to hold some of it with your own hands, by`}{" "}
               <InfoTip tip={t`A decision moves forward when nobody holds a reasoned objection. Consent is quieter than consensus and faster than voting.`}>{t({ message: `consent`, context: "roles page, intro word with a tooltip" })}</InfoTip>.
             </p>
@@ -608,32 +706,12 @@ export default function Roles() {
               </Link>
             )}
           </m.div>
-
-          {featured.length > 0 && <FoundingTeam roles={featured} villagePay={founding?.villagePay ?? null} />}
-
-          {/* OTHER WAYS TO JOIN: clearly secondary to the founding team, and open from the start. */}
-          <section aria-labelledby="other-ways" className="mx-auto mb-14 max-w-4xl" data-other-ways="">
-            <h2 id="other-ways" className={`${H2} mb-2`}>{t({ message: "Other ways to join", context: "roles page, other ways to join" })}</h2>
-            <p className="mb-4 text-sm text-muted-foreground">{t({ message: "Not every way in is a founding role. Each of these is open now.", context: "roles page, other ways to join" })}</p>
-            <ul className="grid gap-3 sm:grid-cols-2">
-              <li className={TILE}>
-                <Link href="/role-proposals/new" className={`inline-flex min-h-11 items-center gap-2 ${LINK}`} data-propose-new-role="">
-                  {t({ message: "Propose a new role", context: "roles page, other ways to join" })}
-                  <ArrowRight className="size-4" aria-hidden="true" />
-                </Link>
-                <p className="mt-1 text-xs text-muted-foreground">{t({ message: "Propose is for a role we do not list. Tell us the role you see, and the village decides.", context: "roles page, other ways to join" })}</p>
-              </li>
-              <li className={TILE}>
-                <Link href="/quests" className={`inline-flex min-h-11 items-center gap-2 ${LINK}`}>
-                  {t({ message: "Take a quest, alone or with others", context: "roles page, other ways to join" })}
-                  <ArrowRight className="size-4" aria-hidden="true" />
-                </Link>
-              </li>
-            </ul>
-          </section>
+          </>
+          )}
+          {!leads && otherWaysSection}
 
           <SeasonGoals />
-          <ArchetypeStep allShown={showAll} onSeeAll={() => setShowAll(true)} />
+          {featured.length === 0 && <ArchetypeStep allShown={showAll} onSeeAll={() => setShowAll(true)} />}
 
           <div className="max-w-4xl mx-auto">
             {/* Offered here because this is the page that names you: the
@@ -676,9 +754,10 @@ export default function Roles() {
             {/* "Show only what matches my roots", offered only when some role carries roots. */}
             {rootsOffered && (
               <div className="mb-8">
-                <RootsFilterToggle filter={roots} total={listedDirectory.length} shown={directory.length} noun="roles" />
+                <RootsFilterToggle filter={roots} total={listedDirectory.length} shown={rooted.length} noun="roles" />
               </div>
             )}
+            {featuredHidden.length === 0 && beyondLine}
             {/* The admin view: only a reader the server sent unlisted roles to has anything to switch on. */}
             {unlistedCount > 0 && (
               <label className="mb-8 flex min-h-11 items-center gap-3 rounded-xl border border-border bg-card px-4 py-2 text-sm text-foreground" data-show-unlisted="">

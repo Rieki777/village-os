@@ -45,13 +45,14 @@ const ORG = {
 
 const OPEN_FORM = { open: true, roles: ORG.roles.map((r) => ({ id: r.id, name: r.name })) };
 
-function serve(over: { org?: unknown; places?: unknown; form?: unknown; season?: unknown } = {}) {
+function serve(over: { org?: unknown; places?: unknown; form?: unknown; season?: unknown; founding?: unknown } = {}) {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string) => {
       const u = String(url);
       const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
       if (u.includes("/api/archetypes")) return json(CAST);
+      if (u.includes("/api/org/founding-team")) return json(over.founding ?? { on: false, roleIds: [] });
       if (u.includes("/api/org")) return json(over.org ?? ORG);
       if (u.includes("/api/open-proposals/form")) return json(over.form ?? OPEN_FORM);
       if (u.includes("/api/place-registry")) return over.places ? json(over.places) : json({ error: "not here" }, 404);
@@ -70,6 +71,39 @@ afterEach(() => {
   cleanup();
   seasonRef.value = null;
   vi.unstubAllGlobals();
+});
+
+describe("QA2-01: the founding team's roles stay off the game's board", () => {
+  it("leaves a featured founding role off the board, and points to the founding team instead", async () => {
+    serve({ founding: { on: true, roleIds: ["lfs"], sections: {} } });
+    render(<RoleDraft />);
+    await screen.findByRole("heading", { level: 3, name: "Gardener" });
+    expect(screen.queryByRole("heading", { level: 3, name: "Lead Financial Steward" })).toBeNull();
+    const line = document.querySelector("[data-founding-elsewhere]") as HTMLElement;
+    expect(line.textContent).toBe("Looking for a founding role? See the founding team.");
+    expect(within(line).getByRole("link", { name: "See the founding team." }).getAttribute("href")).toBe("/roles");
+  });
+
+  it("drops a founding role a visitor drafted before, so it never rides into an application", async () => {
+    localStorage.setItem(ROLE_DRAFT_KEY, JSON.stringify({ chars: [], picks: ["lfs", "garden"] }));
+    serve({ founding: { on: true, roleIds: ["lfs"], sections: {} } });
+    render(<RoleDraft />);
+    await screen.findByRole("heading", { level: 3, name: "Gardener" });
+    await waitFor(() => expect(JSON.parse(localStorage.getItem(ROLE_DRAFT_KEY) ?? "{}").picks).toEqual(["garden"]));
+  });
+
+  it("lists every open role and says nothing of a founding team while the section is off (control)", async () => {
+    serve();
+    render(<RoleDraft />);
+    expect(await screen.findByRole("heading", { level: 3, name: "Lead Financial Steward" })).toBeTruthy();
+    expect(document.querySelector("[data-founding-elsewhere]")).toBeNull();
+  });
+
+  it("titles the board Find your roles", async () => {
+    serve();
+    render(<RoleDraft />);
+    expect(await screen.findByRole("heading", { level: 1, name: "Find your roles at Hollow Oak" })).toBeTruthy();
+  });
 });
 
 describe("the board, read live", () => {

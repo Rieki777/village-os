@@ -46,6 +46,7 @@ export const TAB_OF_ANCHOR: Record<string, ProfileTab> = {
   "sheet-paths": "sheet",
   about: "sheet",
   invite: "sheet",
+  "map-light": "sheet",
   roles: "roles",
   // The path's own doors (shared/yourPath.ts): each opens the tab its section lives on.
   "your-path": "today",

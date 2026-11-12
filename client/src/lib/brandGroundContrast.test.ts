@@ -799,9 +799,8 @@ const BAND_INKS = whiteInksOnTheBand();
  */
 const BAND_HELD: Record<string, number> = { "client/src/pages/Home.tsx": 1 };
 
-/* The paragraphs this change made full white, one per file, plus the Housing hero. Training left the band on 11 Nov 2026 for the night world (docs/DESIGN_RULE.md), so it has no band ink to hold. */
+/* The paragraphs this change made full white, one per file, plus the Housing hero. Training left the band on 11 Nov 2026 and Decisions on 12 Nov 2026 for the night world (docs/DESIGN_RULE.md, decider calm), so neither has a band ink to hold. */
 const BAND_FIXED = [
-  "client/src/pages/Decisions.tsx",
   "client/src/pages/Governance.tsx",
   "client/src/pages/Housing.tsx",
   "client/src/pages/Visit.tsx",

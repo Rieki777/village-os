@@ -17,7 +17,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "wouter";
 import Layout from "@/components/Layout";
-import { BTN_SECONDARY, CARD, CARD_FEATURED, DOOR, EYEBROW, H1, H2, TILE, WORLD } from "@/components/journey/look";
+import { CARD, CARD_FEATURED, DOOR, EYEBROW, H1, H2, TILE, WORLD } from "@/components/journey/look";
 import { ArrowRight, Check } from "lucide-react";
 import { SeedOfLife } from "@/components/journey/nature";
 import NextAct from "@/components/path/NextAct";
@@ -40,6 +40,8 @@ interface Served {
   path: Array<{ label: string; state: "done" | "now" | "later" }>;
   booking: string | null;
   mode: "block" | "split";
+  /** The conversation open now and its role's booking link (12 Nov 2026). */
+  bookNow?: { role: string; url: string | null } | null;
   outcome?: "adopted" | "declined" | "withdrawn" | null;
   replyDays?: number;
   /** A count only: how many references the applicant gave (shared/proposalAbout.ts). */
@@ -175,25 +177,12 @@ export default function ApplicationStatus() {
   const ref = String(params.ref ?? "");
   const [s, setS] = useState<Served | null>(null);
   const [state, setState] = useState<"loading" | "ready" | "missing">("loading");
-  const [said, setSaid] = useState<string | null>(null);
   const token = typeof window === "undefined" ? "" : (new URLSearchParams(window.location.search).get("token") ?? "");
 
   // The words this page owns follow the language the person is reading the site in, else the one kept on their proposal.
   const lang = chooseApplicantLanguage({ chosenOnSite: i18n.locale, profile: s?.locale ?? null }).language;
   const w = wordsIn(lang);
   const view = s ? statusView(lang, s) : null;
-
-  const split = async () => {
-    const url = token ? `/api/application-status/${encodeURIComponent(ref)}/split?token=${encodeURIComponent(token)}` : `/api/governance/applications/${encodeURIComponent(ref)}/split`;
-    try {
-      const res = await gameFetch(url, { method: "POST", body: "{}", cache: "no-store" });
-      const data = await res.json().catch(() => null);
-      setSaid(String(data?.message ?? data?.error ?? ""));
-      if (res.ok) setS((cur) => (cur ? { ...cur, mode: "split" } : cur));
-    } catch {
-      setSaid(w.status.missing);
-    }
-  };
 
   useEffect(() => {
     const token = new URLSearchParams(window.location.search).get("token") ?? "";
@@ -374,17 +363,14 @@ export default function ApplicationStatus() {
             )}
             {view.booking && (
               <section aria-label={w.status.booking.label} className={TILE}>
+                {/* One story whatever the role's conversationMode holds: the applicant books each conversation at times they choose, in order. */}
                 <p className="text-foreground">{view.booking.text}</p>
-                {view.booking.canSplit && (
-                  <button
-                    type="button"
-                    onClick={() => void split()}
-                    className={`mt-3 ${BTN_SECONDARY}`}
-                  >
-                    {w.status.booking.splitAsk}
-                  </button>
+                {view.booking.book && "url" in view.booking.book && (
+                  <a href={view.booking.book.url} target="_blank" rel="noopener noreferrer" className={`mt-3 ${DOOR}`} data-book-now="">
+                    {view.booking.book.label}
+                  </a>
                 )}
-                {said && <p role="status" className="mt-2 text-sm text-foreground">{said}</p>}
+                {view.booking.book && "text" in view.booking.book && <p className="mt-2 text-sm text-muted-foreground" data-book-write="">{view.booking.book.text}</p>}
               </section>
             )}
             {s.outcome == null && (

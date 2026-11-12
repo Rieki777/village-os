@@ -12,6 +12,7 @@ import { hashString, sceneStopsFor, type SceneStop } from "@shared/questScenes";
 import type { StageRule } from "@shared/gameConfig";
 import type { WorkPay } from "@shared/workValue";
 import type { QuestPlace } from "@shared/questThreads";
+import { questFit } from "@shared/commitment";
 
 export interface BoardQuest {
   id: string;
@@ -41,6 +42,8 @@ export interface BoardQuest {
   /** The roots this quest grows from, one to three archetype keys (the five archetypes as roots). Absent from an older server. */
   archetypes?: string[];
   duration?: string | null;
+  /** How much of a person it asks, 1 to 100 (0383). Absent or null: not sized. */
+  commitmentPct?: number | null;
   difficulty?: string | null;
   circle?: string | null;
   status: string;
@@ -239,7 +242,9 @@ export function fitsRoots(
 
 /**
  * The one "fits you" quest the open work board leads with (Phase C,
- * decision 5). Among the open, ungated quests the member has not touched:
+ * decision 5). Among the open, ungated quests the member has not touched,
+ * with any quest that asks more than the member can give now (`memberPct`,
+ * 0383) put last:
  *   1. one that carries one of their roots;
  *   2. then one that grows a season goal not yet done (this season's need,
  *      `openGoalIds`);
@@ -254,6 +259,7 @@ export function leadQuestFor(
   claims: ClaimLike[],
   mine: readonly string[] = [],
   openGoalIds: readonly string[] = [],
+  memberPct: number | null = null,
 ): QuestSuggestion | null {
   const touched = new Set(
     claims.filter((c) => c.status !== "declined").map((c) => c.questId),
@@ -264,9 +270,11 @@ export function leadQuestFor(
     .filter((q) => statusIs(q, "open"))
     .filter((q) => !q.minStage && !q.requiresRole)
     .filter((q) => !touched.has(q.id))
-    .map((q) => ({ q, fits: fitsRoots(q, mine), needed: !!q.goalId && openGoalIds.includes(q.goalId) }))
+    .map((q) => ({ q, fits: fitsRoots(q, mine), needed: !!q.goalId && openGoalIds.includes(q.goalId), beyond: questFit(q.commitmentPct, memberPct) === "harder" }))
     .sort(
       (a, b) =>
+        // 0383: a quest that asks more than the member can give now never leads.
+        Number(a.beyond) - Number(b.beyond) ||
         Number(b.fits) - Number(a.fits) ||
         Number(b.needed) - Number(a.needed) ||
         (rank[a.q.difficulty ?? ""] ?? 1) - (rank[b.q.difficulty ?? ""] ?? 1) ||

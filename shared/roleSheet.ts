@@ -397,7 +397,7 @@ const COMMITMENT_ORDER: CommitmentKey[] = ["aim", "domain", "accountabilities", 
 
 const SR_WRITTEN = ", written down";
 const SR_VILLAGES = ", the village's way";
-const SR_AT_SEATING = ", set when someone is seated";
+const SR_AT_SEATING = ", set when someone takes the role";
 const SR_UNWRITTEN = ", still to be written down";
 
 /** A commitment's look, or "unread" when the payload does not carry it. */
@@ -703,7 +703,7 @@ function actionFor(input: SeatInput): SeatActionView {
           kind: "raise",
           seatName: input.name,
           label: SHEET_WORDS.raise,
-          ariaLabel: `Raise your hand for ${input.name}`,
+          ariaLabel: `Apply for this role: ${input.name}`,
           consequence: SHEET_WORDS.raiseConsequence,
         }
       : { kind: "signIn", seatName: input.name, label: SHEET_WORDS.signInToRaise, ariaLabel: null, consequence: null };

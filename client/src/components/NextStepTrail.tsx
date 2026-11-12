@@ -19,7 +19,8 @@ import { Suspense, lazy } from "react";
 
 const RootLine = lazy(() => import("./path/RootLine"));
 
-const QUIET_EXACT = new Set(["/profile", "/path", "/login", "/register", "/forgot-password", "/set-password", "/verify-email"]);
+// The steward and resident pages draw their own journey in the founding register, so a second path strip would show the journey twice (QA2-03).
+const QUIET_EXACT = new Set(["/profile", "/path", "/login", "/register", "/forgot-password", "/set-password", "/verify-email", "/steward", "/resident"]);
 // The founding-team application draws its own "Step N of 6" and keeps the founding register: the game's strip never blends into it (Phase A brief).
 const QUIET_PREFIX = ["/admin", "/project-history", "/journey-to-launch", "/claim", "/application-status", "/sessions/", "/propose-a-role"];
 

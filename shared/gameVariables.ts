@@ -2643,9 +2643,9 @@ export const VARIABLES: VariableDef[] = [
   {
     key: "org.pay_shape",
     category: "The founding team",
-    label: "How pay works, on every role card",
+    label: "How rewards work, on every role card",
     description:
-      "The shape of the pay every role card shows under \"How pay works\", as shares of the whole, never an amount: write each share's name and percent, separated by commas, like Cash 40, Equity 55, Credits 5. The shares add up to 100 or less. A role whose card writes its own shares shows those instead. Empty, cards show no pay shape.",
+      "The shape of the pay every role card shows under \"How rewards work\", as shares of the whole, never an amount: write each share's name and percent, separated by commas, like Cash 40, Equity 55, Credits 5. The shares add up to 100 or less. A role whose card writes its own shares shows those instead. Empty, cards show no pay shape.",
     type: "text",
     default: "",
   },
@@ -2696,7 +2696,7 @@ export const VARIABLES: VariableDef[] = [
     key: "org.founding_first_cycle",
     category: "The founding team",
     label: "What the first cycle looks like",
-    description: "Shown on the Your first day step of the application: how long the first cycle is, when it runs, and that either side may end it there.",
+    description: "Shown on the Your first day step of the application: how long the first cycle is, when it runs, and that either side may end it there after the first full moon cycle.",
     type: "longtext",
     default: "Your first cycle is one month. At its end, either side may choose to stop there, with thanks.",
   },
@@ -2707,6 +2707,50 @@ export const VARIABLES: VariableDef[] = [
     description: "Shown on the Your first day step: the first conversations a new team member has once they are chosen, one per line. Leave it empty and none are listed.",
     type: "longtext",
     default: "",
+  },
+  {
+    key: "org.founding_updated_note",
+    category: "The founding team",
+    label: "A note when the application changes",
+    description:
+      "Shown under the application's title while it is set, for example: We updated this application on 14 November. Your saved answers are still here. Empty, no note.",
+    type: "text",
+    default: "",
+  },
+  // "Other ways to join" on the Roles page: the resident path and the gifts tile. shared/otherWays.ts
+  // holds the same keys and defaults, and shared/otherWays.test.ts holds the two equal.
+  // The resident path tile goes to the way to stay close (org.stay_close_link), or /resident while that is empty.
+  {
+    key: "org.other_ways_seeder_title",
+    category: "The founding team",
+    label: "Other ways to join: the resident path tile",
+    description: "The first tile under Other ways to join on the Roles page. It goes to the way to stay close, or to the resident page while that is empty.",
+    type: "text",
+    default: "Become a Founding Seeder",
+  },
+  {
+    key: "org.other_ways_seeder_line",
+    category: "The founding team",
+    label: "Other ways to join: the line under the resident path tile",
+    description: "One short line under the resident path tile.",
+    type: "text",
+    default: "Live here one day? Start on the resident path.",
+  },
+  {
+    key: "org.other_ways_gifts_title",
+    category: "The founding team",
+    label: "Other ways to join: the gifts tile",
+    description: "The tile under Other ways to join that goes to the work-with-us page, for volunteering and work-trade.",
+    type: "text",
+    default: "Offer your gifts",
+  },
+  {
+    key: "org.other_ways_gifts_line",
+    category: "The founding team",
+    label: "Other ways to join: the line under the gifts tile",
+    description: "One short line under the gifts tile.",
+    type: "text",
+    default: "Volunteer or work-trade: tell us what you would like to give.",
   },
 
   // ── Events (0059; visible in Admin only while the module is non-off) ─────

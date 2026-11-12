@@ -84,12 +84,12 @@ type StepTable = Record<CompanionStep, StepWords>;
 const EN: StepTable = {
   "find-role": {
     short: "Start with the roles that call to you.",
-    line: "Read a few roles slowly. The one that stays with you is a good place to start.",
+    line: "Read a few roles slowly: the one that stays with you is a good place to start.",
     why: "Each role card says what the work is and who it serves, so you can choose with your eyes open.",
   },
   propose: {
     short: "Tell us in your own words, one step at a time.",
-    line: "Tell us in your own words. A few honest lines are plenty.",
+    line: "Tell us in your own words. A few heart-filled, gut-inspired, and truthful lines are plenty.",
     why: "People read what you write here, and only people decide.",
   },
   "check-email": {
@@ -140,11 +140,11 @@ const EN: StepTable = {
   "send-gratitude": {
     short: "Someone helped this cycle. Thank them.",
     line: "Think of someone who helped this cycle and send them a thank-you.",
-    why: "Thank-yous are how we notice each other's care, and they carry real weight here.",
+    why: "Thank-yous and gratitude are how we notice each other's care, and they carry real weight here.",
   },
   "gene-keys": {
-    short: "Your lines are here if you'd like them.",
-    line: "If you'd like, add your lines. They stay yours, and you can skip them.",
+    short: "Your Gene Key lines are here if you'd like them.",
+    line: "If you'd like, add your Gene Key lines. They stay yours, and you can skip them.",
     why: "They're a way to know yourself a little better. Nobody decides anything from them.",
   },
   explore: {
@@ -157,12 +157,12 @@ const EN: StepTable = {
 const ES: StepTable = {
   "find-role": {
     short: "Empieza por los roles que te llaman.",
-    line: "Lee algunos roles con calma. El que se quede contigo es un buen comienzo.",
+    line: "Lee algunos roles con calma: el que se quede contigo es un buen comienzo.", // needs-native-review: new words, 12 Nov 2026
     why: "Cada tarjeta de rol dice cuál es el trabajo y a quién sirve, para que elijas con claridad.",
   },
   propose: {
     short: "Cuéntanos con tus palabras, paso a paso.",
-    line: "Cuéntanos con tus propias palabras. Unas pocas líneas sinceras bastan.",
+    line: "Cuéntanos con tus palabras. Bastan unas líneas sinceras, del corazón y de las entrañas.", // needs-native-review: new words, 12 Nov 2026
     why: "Personas leen lo que escribes aquí, y solo personas deciden.",
   },
   "check-email": {
@@ -213,11 +213,11 @@ const ES: StepTable = {
   "send-gratitude": {
     short: "Alguien te ayudó este ciclo. Agradécele.",
     line: "Piensa en alguien que te ayudó este ciclo y envíale un agradecimiento.",
-    why: "Los agradecimientos son cómo notamos el cuidado de los demás, y aquí tienen peso real.",
+    why: "Los agradecimientos y la gratitud son cómo notamos el cuidado de los demás, y aquí tienen peso real.", // needs-native-review: new words, 12 Nov 2026
   },
   "gene-keys": {
-    short: "Tus líneas están aquí si las quieres.",
-    line: "Si quieres, agrega tus líneas. Son tuyas y puedes saltarlas.",
+    short: "Tus líneas de Gene Keys están aquí si las quieres.", // needs-native-review: new words, 12 Nov 2026
+    line: "Si quieres, agrega tus líneas de Gene Keys. Son tuyas y puedes saltarlas.", // needs-native-review: new words, 12 Nov 2026
     why: "Son una forma de conocerte un poco mejor. Nadie decide nada a partir de ellas.",
   },
   explore: {

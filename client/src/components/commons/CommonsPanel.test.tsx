@@ -43,6 +43,13 @@ describe("a goal's open work", () => {
     expect(items[2].querySelector("[data-open-work]")).toBeNull();
   });
 
+  it("says nothing under a goal with no open quests: never \"0 open quests grow\" (batch 158)", () => {
+    const { container } = render(<CommonsPanel goals={GOALS} head={<h2>The commons</h2>} openWork={{ g0123456789a: 0, g0123456789b: 2 }} />);
+    expect(container.textContent).not.toMatch(/0 open quests/);
+    expect(container.querySelectorAll("[data-open-work]")).toHaveLength(1);
+    expect(screen.getByText("2 open quests grow Shared meals every week")).toBeTruthy();
+  });
+
   it("shows no count at all while the read is unknown", () => {
     const { container } = render(<CommonsPanel goals={GOALS} head={<h2>The commons</h2>} openWork={null} />);
     expect(container.querySelector("[data-open-work]")).toBeNull();

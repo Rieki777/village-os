@@ -7,7 +7,7 @@ describe("BookingOffer", () => {
   it("shows the no-link copy for a missing or non-https link", () => {
     for (const url of [null, undefined, "http://cal.example/x", "javascript:alert(1)"]) {
       const { unmount } = render(<BookingOffer bookingUrl={url} />);
-      expect(screen.getByText("We'll write to you to find a time")).toBeTruthy();
+      expect(screen.getByText("We'll write to you with times")).toBeTruthy();
       expect(screen.queryByTestId("booking-link")).toBeNull();
       unmount();
     }

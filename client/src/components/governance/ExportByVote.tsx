@@ -53,7 +53,7 @@ export function AskForExport() {
 
   if (opened) {
     return (
-      <p className="text-sm text-stone-700">
+      <p className="text-sm text-muted-foreground">
         <Trans>
           The vote is open. <Link href={`/decisions/${opened}`} className="underline">Read it and vote</Link>.
         </Trans>
@@ -62,44 +62,44 @@ export function AskForExport() {
   }
   if (!open) {
     return (
-      <button type="button" onClick={() => setOpen(true)} className="text-sm text-stone-600 underline">
+      <button type="button" onClick={() => setOpen(true)} className="text-sm text-muted-foreground underline">
         <Trans>Ask the village for one copy of its database</Trans>
       </button>
     );
   }
   return (
-    <div className="rounded-xl border border-stone-200 bg-white p-4 space-y-3">
-      <p className="text-sm text-stone-700">
+    <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+      <p className="text-sm text-muted-foreground">
         <Trans>
           The copy holds every member's data. If the village carries this at its highest bar, the steward you name may
           download it once, and every member is told when they do.
         </Trans>
       </p>
-      <label className="block text-sm text-stone-700">
+      <label className="block text-sm text-muted-foreground">
         <Trans>The steward who receives it</Trans>
-        <select value={steward} onChange={(e) => setSteward(e.target.value)} className="mt-1 block w-full rounded-lg border border-stone-300 px-3 py-1.5 text-sm">
+        <select value={steward} onChange={(e) => setSteward(e.target.value)} className="mt-1 block w-full rounded-lg border border-border px-3 py-1.5 text-sm">
           <option value="">{t`Choose a sitting steward`}</option>
           {(stewards ?? []).map((s) => (
             <option key={s.userId} value={s.userId}>{s.label}</option>
           ))}
         </select>
       </label>
-      {stewards && stewards.length === 0 && <p className="text-xs text-amber-700"><Trans>No steward is sitting now, so there is nobody to name.</Trans></p>}
-      <label className="block text-sm text-stone-700">
+      {stewards && stewards.length === 0 && <p className="text-xs text-notice"><Trans>No steward is sitting now, so there is nobody to name.</Trans></p>}
+      <label className="block text-sm text-muted-foreground">
         <Trans>Why the village needs it</Trans>
-        <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3} className="mt-1 block w-full rounded-lg border border-stone-300 px-3 py-1.5 text-sm" />
+        <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3} className="mt-1 block w-full rounded-lg border border-border px-3 py-1.5 text-sm" />
       </label>
-      {error && <p className="text-xs text-red-700">{error}</p>}
+      {error && <p className="text-xs text-destructive">{error}</p>}
       <div className="flex gap-2">
         <button
           type="button"
           disabled={busy || !steward || reason.trim().length < 10}
           onClick={ask}
-          className="rounded-lg bg-stone-900 px-3 py-1.5 text-sm text-white disabled:opacity-40"
+          className="rounded-lg bg-foreground px-3 py-1.5 text-sm text-background disabled:opacity-40"
         >
           {busy ? t({ message: "Opening...", context: "database export" }) : t({ message: "Ask the village", context: "database export" })}
         </button>
-        <button type="button" onClick={() => setOpen(false)} className="text-sm text-stone-500"><Trans context="database export">Not now</Trans></button>
+        <button type="button" onClick={() => setOpen(false)} className="text-sm text-muted-foreground"><Trans context="database export">Not now</Trans></button>
       </div>
     </div>
   );
@@ -144,30 +144,30 @@ export function ExportDelivery({ ballotId }: { ballotId: string }) {
   };
 
   return (
-    <div className="rounded-xl border border-stone-200 bg-white p-4 space-y-2">
-      <p className="text-sm font-medium text-stone-900"><Trans>One copy of the village's database</Trans></p>
+    <div className="rounded-xl border border-border bg-card p-4 space-y-2">
+      <p className="text-sm font-medium text-foreground"><Trans>One copy of the village's database</Trans></p>
       {when ? (
-        <p className="text-sm text-stone-700"><Trans>It was downloaded on {when} UTC, once, as the vote allowed. Another copy needs another vote.</Trans></p>
+        <p className="text-sm text-muted-foreground"><Trans>It was downloaded on {when} UTC, once, as the vote allowed. Another copy needs another vote.</Trans></p>
       ) : standing.forYou ? (
         standing.stewardLive ? (
           <>
-            <p className="text-sm text-stone-700">
+            <p className="text-sm text-muted-foreground">
               <Trans>
                 The village authorised this copy for you. You can download it once; every member is told when you do. Keep the
                 file where only you can reach it.
               </Trans>
             </p>
-            <button type="button" disabled={busy} onClick={download} className="rounded-lg bg-stone-900 px-3 py-1.5 text-sm text-white disabled:opacity-40">
+            <button type="button" disabled={busy} onClick={download} className="rounded-lg bg-foreground px-3 py-1.5 text-sm text-background disabled:opacity-40">
               {busy ? t({ message: "Downloading...", context: "database export" }) : t({ message: "Download the copy", context: "database export" })}
             </button>
           </>
         ) : (
-          <p className="text-sm text-amber-700"><Trans>You do not hold the steward role now, so this copy cannot be delivered. It stays unused.</Trans></p>
+          <p className="text-sm text-notice"><Trans>You do not hold the steward role now, so this copy cannot be delivered. It stays unused.</Trans></p>
         )
       ) : (
-        <p className="text-sm text-stone-700"><Trans>The village authorised one copy for the steward this vote names. It has not been downloaded yet.</Trans></p>
+        <p className="text-sm text-muted-foreground"><Trans>The village authorised one copy for the steward this vote names. It has not been downloaded yet.</Trans></p>
       )}
-      {error && <p className="text-xs text-red-700">{error}</p>}
+      {error && <p className="text-xs text-destructive">{error}</p>}
     </div>
   );
 }

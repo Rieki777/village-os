@@ -52,8 +52,8 @@ import { BLANK_GOAL, GOAL_LIMITS } from "@shared/proposalGoals";
 import { CARD_LIMITS } from "@shared/openProposalCard";
 import { BreathingLoader } from "@/components/natural";
 import { AboutYouFacts, ReferencesBlock, EMPTY_ABOUT_YOU, aboutYouBody, aboutYouProblem, type AboutYouValue } from "@/components/openProposal/AboutYou";
-import { termOf, type OpenProposalTerm } from "@shared/openProposalTerm";
 import { civilDayWords } from "@shared/seasonPlans";
+import { termOf, type OpenProposalTerm } from "@shared/openProposalTerm";
 import { useLingui } from "@lingui/react/macro";
 import { i18n } from "@/i18n/i18n";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -65,6 +65,7 @@ import Layout from "@/components/Layout";
 import { Fireflies } from "@/components/journey/nature";
 import { useOptionalAuth } from "@/contexts/AuthContext";
 import { readStoredJson, removeStored, writeStoredJson } from "@/lib/safeStorage";
+import { useFocusedFieldInView, useKeyboardInset } from "@/lib/keyboardInset";
 import { IKIGAI_KEY, ikigaiFromStored, whyFromIkigai } from "@shared/roleDiscover";
 import { OPEN_AIM_MAX, OPEN_ANONYMISE_DAYS, OPEN_CONFIRM_HOURS, OPEN_WHY_MAX, OPEN_WORDS, SELF_KNOWLEDGE_MAX } from "@shared/openProposals";
 import { foundingSetupOf, type FoundingSetup } from "@shared/foundingApplication";
@@ -254,6 +255,10 @@ export default function ProposeARole() {
   /** What to put the cursor on after the next draw: the step's heading, or a field with a problem. */
   const [aimAt, setAimAt] = useState<{ n: number; target: string | null } | null>(null);
   const touch = useRef<{ x: number; y: number; owned: boolean } | null>(null);
+  // M2: the step bar rides above a phone's keyboard, and the field being typed in comes into view.
+  const formRef = useRef<HTMLFormElement>(null);
+  const keyboard = useKeyboardInset();
+  useFocusedFieldInView(formRef);
   const me = useOptionalAuth()?.user ?? null;
   const { t } = useLingui();
 
@@ -635,7 +640,7 @@ export default function ProposeARole() {
   const intro = [
     t({ message: "Before you apply, come and meet us. Tick what you have done so far.", context: "founding application intro" }),
     t({ message: "Who you are, and why this role, now. A few honest lines is enough: the people who decide read every word.", context: "founding application intro" }),
-    t({ message: "The value you would bring in your first months, item by item, each tagged to the season goal it serves.", context: "founding application intro" }),
+    t({ message: "The value you would bring in your first months, item by item, each tagged to the seasonal goal it serves.", context: "founding application intro" }),
     t({ message: "A starting point we agree together. Choose your commitment, and mark anything you would like to talk through.", context: "founding application intro" }),
     t({ message: "What your first month with us would look like, and when you could begin.", context: "founding application intro" }),
     t({ message: "Read it through once, then send. Nothing reaches us until you confirm your email.", context: "founding application intro" }),
@@ -666,7 +671,8 @@ export default function ProposeARole() {
   const missingTag = form.goals.length > 0 ? items.map((g, i) => (g.title.trim() && !g.serves ? i + 1 : 0)).filter(Boolean) : [];
   const short = (s: string) => (s.trim().length > 90 ? `${s.trim().slice(0, 90)}…` : s.trim());
   const notYet = t({ message: "Not written yet", context: "founding application review" });
-  const startDay = practical.earliestStart;
+  // The review reads the earliest start in plain words ("1 December 2026"), as the rest of the page says a day.
+  const startDay = practical.earliestStart ? civilDayWords(practical.earliestStart) : "";
   /** Review & submit: each step in a line, with a way back to it. */
   const review: Array<[number, string]> = [
     [0, ways === 0 ? t({ message: "Nothing to tick", context: "founding application review" }) : t({ message: `${ticked} of ${ways} done`, context: "founding application review" })],
@@ -700,8 +706,6 @@ export default function ProposeARole() {
     </div>
   );
   const pct = role.terms?.commitmentPct;
-  const termFrom = form.term ? civilDayWords(form.term.startsOn) : "";
-  const termTo = form.term ? civilDayWords(form.term.endsOn) : "";
   const roleBeside = (
     <div className={`${CARD} grid gap-3`} data-role-beside="">
       <p className={EYEBROW}>{role.circle}</p>
@@ -724,10 +728,12 @@ export default function ProposeARole() {
             ? t({ message: "Six steps. Your name and email come from your account, and your answers are saved on this device as you go.", context: "founding application lede" })
             : t({ message: "Six steps, and no account needed. Your answers are saved on this device as you go.", context: "founding application lede" })}
         </p>
-        {/* A village whose applications are for one lunar cycle names its days (Rye, 9 Nov 2026), in plain words. */}
-        {form.term && (
-          <p className="mt-1 text-sm text-muted-foreground" data-term-days="">
-            {t({ message: `This application is for the cycle from ${termFrom} to ${termTo}.`, context: "founding application lede" })}
+        {/* The cycle's dates are not named here (QA2-05): a founding role's first cycle is one paid month from
+            the day it starts, said on the Your first day step, and an internal moon has no plain meaning here. */}
+        {/* The village's note when the application changes (QA2-14, org.founding_updated_note): empty, no note. */}
+        {setup.updatedNote && (
+          <p className="mt-2 text-sm text-foreground" data-updated-note="">
+            {setup.updatedNote}
           </p>
         )}
         {restored && (
@@ -743,6 +749,7 @@ export default function ProposeARole() {
       ) : (
         <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start">
           <form
+            ref={formRef}
             onSubmit={submit}
             onKeyDown={onKeys}
             onTouchStart={onTouchStart}
@@ -751,6 +758,7 @@ export default function ProposeARole() {
             className="relative min-w-0 scroll-mt-28 rounded-2xl border border-border bg-card p-5 shadow-sm sm:p-10"
             data-open-proposal=""
             data-hides-fab=""
+            data-hides-tabbar-phone=""
             data-stone-now={STONES[stone]}
           >
             <div className={`mb-8 border-b border-notice/40 pb-6`}>
@@ -913,7 +921,7 @@ export default function ProposeARole() {
             {/* STEP 5: your first day. The first cycle, the first conversations, and when you could begin. */}
             <section {...panel(4)}>
               {heading(4)}
-              <FirstDayFacts setup={setup} />
+              <FirstDayFacts setup={setup} firstConversation={role.conversations?.[0]?.role ?? null} />
               <div className={`${GOLD_RULE} pt-6`}>
                 <Practicalities value={practical} onChange={setPractical} />
               </div>
@@ -953,11 +961,12 @@ export default function ProposeARole() {
             </div>
 
             {/*
-              THE ONE PRIMARY ACT, within thumb reach. On a phone the bar rides just
-              above the tab bar (--tabbar-h, index.css); on a desk that band is 0 and
-              it rests at the card's foot. One firefly cluster gathers on it.
+              THE ONE PRIMARY ACT, within thumb reach. On a phone the tab bar steps out (M2,
+              data-hides-tabbar-phone on the form) and this bar rides above the keyboard
+              (--stone-kb, visualViewport). On a desk it rests at the card's foot.
             */}
-            <div className="sticky bottom-[calc(var(--tabbar-h)+0.5rem)] z-20 -mx-5 mt-10 flex items-center justify-between gap-3 rounded-2xl border border-border bg-card/95 px-4 py-3 shadow-sm backdrop-blur sm:-mx-10 sm:px-8" data-stone-bar="">
+            <div style={{ "--stone-kb": `${keyboard}px` } as React.CSSProperties} data-keyboard={keyboard > 0 ? "open" : undefined}
+              className="sticky bottom-[calc(var(--stone-kb,0px)+env(safe-area-inset-bottom,0px)+0.5rem)] z-20 -mx-5 mt-10 flex items-center justify-between gap-3 rounded-2xl border border-border bg-card/95 px-4 py-3 shadow-sm backdrop-blur sm:-mx-10 sm:px-8" data-stone-bar="">
               <button type="button" onClick={back} disabled={stone === 0} className={`${BTN_SECONDARY} disabled:invisible`} data-stone-back="">
                 <ArrowLeft className="size-4" aria-hidden="true" />
                 {/* On a phone the arrow says it, so Continue has the width; a screen reader still hears "Back". */}

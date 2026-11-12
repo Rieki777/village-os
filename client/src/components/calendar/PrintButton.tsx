@@ -5,7 +5,7 @@
  * print-header block, invisible on screen.
  */
 import { Printer } from "lucide-react";
-import "./print.css";
+// Its stylesheet rides the main one (index.css), saving a 4 KB block of the dist budget.
 
 export default function PrintButton({ label = "Print" }: { label?: string }) {
   return (

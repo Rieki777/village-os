@@ -404,6 +404,27 @@ asks the external stores last so a slow vendor never delays the local sweep. Val
 ledger, gratitude, claims, loans, orders and badge awards are the village's record of what happened
 and what is owed, and deleting them would break the conservation proof.
 
+**Names on a role's record: leaving keeps them, erasure removes them** (Rye, 2026-11-12: "we can
+keep names on record"). Both paths end every live org seating through `releaseSeatingsForUser`
+(`server/lib/orgChart.ts`), with the ending reason "member left the village", and neither deletes a
+row: the dates, the `focus` and the `user_id` stay, so the role's history still shows that it was
+held and when.
+
+- A member who LEAVES (`keepAsFormerMember` in `server/lib/exitResolve.ts`, the exit desk's former
+  member path) passes `keepName`. `display_name` stays on every seating they held, live and already
+  ended, and their account keeps its name, so "Who has held this role" (`GET /api/org/roles/:id/history`,
+  `SeatHistory.tsx`) goes on naming them. Only the `note` goes, because it described the live holding.
+- An ERASURE (`anonymizeMember` in `server/lib/erasure.ts`, a person asking to be forgotten, or an exit
+  resolved by erasure) passes nothing and clears `display_name` and `note` on every row they held,
+  live and ended, twice (the `org-seatings` and `org-seatings-after-tombstone` steps). Their account
+  reads "A departed member", which is what the history route then shows for a member seating. A former
+  member who later asks to be erased loses the name the same way. `forgetDocumentedHolder` does the
+  same for a holder with no account. Forgetting is the default: a caller that does not pass `keepName`
+  removes the name.
+- When every name on a role is gone, the history says "This role has been held. The people who held it
+  asked for their names to be removed, so its record keeps the dates below." and each row reads "Name
+  removed at their request". It never says nobody held it.
+
 **A recurring payment stops with them** (round 3, finding 5). Nothing in the app lets a member cancel
 a Stripe subscription, so the sweep does: `product-subscriptions-after-tombstone`, just before the
 outside stores, cancels every subscription their purchases hold (`cancelSubscription` in

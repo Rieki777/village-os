@@ -13,6 +13,7 @@ import SendTokensCard from "@/components/SendTokensCard";
 import RedemptionPanel from "@/components/RedemptionPanel";
 import CashOwedPanel from "@/components/CashOwedPanel";
 import TimeZoneField from "@/components/TimeZoneField";
+import CommitmentField from "@/components/commitment/CommitmentField";
 import SeasonSummarySection from "@/components/seasonSummary/SeasonSummarySection";
 import MaturityLadder from "@/components/profile/MaturityLadder";
 import PowersMap from "@/components/profile/PowersMap";
@@ -30,7 +31,7 @@ import AlignedSection from "@/components/profile/AlignedSection";
 import YourRolesSection from "@/components/profile/YourRolesSection";
 import PlayerRoleCard from "@/components/playerCard/PlayerRoleCard";
 import { FirstDaysContext } from "@/components/playerCard/CardLower";
-import MyMoonMount from "@/components/myMoon/MyMoonMount";
+import MyMoonMount, { holdsReviewPower } from "@/components/myMoon/MyMoonMount";
 import RolesBand from "@/components/profileDash/RolesBand";
 import ProposeBanner from "@/components/roleProposal/ProposeBanner";
 import ProposeRolesEntry from "@/components/roleProposal/ProposeRolesEntry";
@@ -548,6 +549,13 @@ export default function Profile() {
               <GuideChoiceCard />
             </div>
 
+            {/* HOW MUCH CAN YOU GIVE (0383): a quiet percent the open work and roles fit to. Only this member sees it. */}
+            {user && (
+              <div className={tabOf("today")}>
+                <CommitmentField />
+              </div>
+            )}
+
             {/* ASKED OF YOU: what other members asked this member, and what they asked (shared/memberAsks.ts). */}
             <div id="waiting" className={`scroll-mt-28 ${tabOf("today")}`}>
               <AsksPanel />
@@ -651,7 +659,7 @@ export default function Profile() {
                   <PlayerRoleCard />
                 </FirstDaysContext.Provider>
               }
-              moon={<MyMoonMount />}
+              moon={<MyMoonMount reviewer={holdsReviewPower(prog?.capabilityCatalogue)} />}
               season={!firstDays ? <SeasonPlanSection /> : null}
             />
             {config && prog ? (

@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { APPLICANT_LANGUAGES, APPLICANT_NOTE_MAX, LANGUAGES, STATUS_LINK_STARTS, cleanNote, statusView, type ApplicantLanguage } from "./applicantWords";
-import { statusFor } from "./applicationReview";
+import { bookingWords, statusFor } from "./applicationReview";
 import { chooseApplicantLanguage } from "./applicantLanguage";
 import { offeredLocaleTags } from "./i18nLocales";
-import { adoptedAccountLetter, adoptedInviteLetter, applicantUpdate, declinedLetter, type ApplicantUpdateKind } from "./openProposalDecide";
+import { adoptedAccountLetter, adoptedInviteLetter, applicantUpdate, declinedLetter, invitedLetter, type ApplicantUpdateKind } from "./openProposalDecide";
 import { confirmLetter } from "./openProposals";
 
 /** Every leaf of a table as `path: kind`, so two languages must agree on the shape of every line, not only on its name. */
@@ -167,13 +167,50 @@ describe("the status page's words (statusView)", () => {
     expect(statusView("es", served(input())).path.map((p) => p.label)).toContain("Conversación con Water Role (20 minutos)");
   });
 
-  it("the booking line is built in the language, in minutes only", () => {
+  it("the booking line tells one story: the applicant books each conversation at times they choose, in order", () => {
     const en = statusView("en", served(input())).booking!;
-    expect(en.text).toContain("80 minutes");
-    expect(en.text).toContain("Welcome Role");
-    expect(en.canSplit).toBe(true);
-    expect(statusView("es", served(input())).booking!.text).toContain("80 minutos");
-    for (const lang of APPLICANT_LANGUAGES) expect(JSON.stringify(LANGUAGES[lang].status.booking.minutes(80))).not.toMatch(/hour|hora/i);
+    expect(en.text).toBe(
+      "After the invitation, you book each conversation at times you choose, in this order: Welcome Role first, then Water Role. Each one opens once the one before it is written up.",
+    );
+    // The same story whatever the role's conversationMode holds (old cards may carry "split").
+    expect(statusView("en", served(input(), { mode: "split" })).booking!.text).toBe(en.text);
+    expect(statusView("es", served(input())).booking!.text).toContain("primero Welcome Role, luego Water Role");
+    // The words the server sends for the reviewer and the status read are the applicant's English, word for word.
+    expect(bookingWords(["Welcome Role", "Water Role"])).toBe(en.text);
+    expect(bookingWords(["Welcome Role"])).toBe(LANGUAGES.en.status.booking.order(["Welcome Role"]));
+    // Nothing about one block, splitting, or asking for the conversations to be moved.
+    for (const lang of APPLICANT_LANGUAGES) {
+      const said = JSON.stringify(LANGUAGES[lang].status.booking) + LANGUAGES[lang].status.booking.order(["A", "B"]) + LANGUAGES[lang].invite.booking;
+      expect(said).not.toMatch(/block|split|bloque|repart/i);
+    }
+  });
+
+  it("offers only the open conversation's way to book: its role's link, or our letter with times", () => {
+    const withLink = statusView("en", served(input(), { bookNow: { role: "Welcome Role", url: "https://cal.example.test/welcome" } })).booking!;
+    expect(withLink.book).toEqual({ label: "Book your conversation with Welcome Role", url: "https://cal.example.test/welcome" });
+    const noLink = statusView("en", served(input(), { bookNow: { role: "Welcome Role", url: null } })).booking!;
+    expect(noLink.book).toEqual({ text: "We'll write to you with times for your conversation with Welcome Role." });
+    expect(statusView("en", served(input())).booking!.book, "control: nothing open, nothing to book").toBeNull();
+    expect(statusView("es", served(input(), { bookNow: { role: "Welcome Role", url: null } })).booking!.book).toEqual({ text: "Te escribiremos con horarios para tu conversación con Welcome Role." });
+  });
+
+  it("the invitation gives the first interviewer's booking link, and says the later ones open in order", () => {
+    const conversations = [
+      { role: "Ops Role", minutes: 60, bookingUrl: "https://cal.example.test/ops" },
+      { role: "Hiring Role", minutes: 20, bookingUrl: "https://cal.example.test/hiring" },
+    ];
+    const letter = invitedLetter({ firstName: "Ada", village: "V", roleNames: ["Lead Role"], conversations, statusLink: null, lang: "en" });
+    expect(letter.text).toContain("Book your first conversation, with Ops Role, here: https://cal.example.test/ops");
+    expect(letter.text).toContain("Each later conversation opens once the one before it is written up");
+    expect(letter.text, "a later conversation's link waits until it opens").not.toContain("cal.example.test/hiring");
+    const none = invitedLetter({ firstName: "Ada", village: "V", roleNames: ["Lead Role"], conversations: [{ role: "Ops Role", minutes: 60, bookingUrl: null }], statusLink: null, lang: "en" });
+    expect(none.text).toContain("We'll write to you with times for your first conversation, with Ops Role.");
+    expect(none.text, "control: one conversation has no later ones").not.toContain("Each later conversation");
+    const es = invitedLetter({ firstName: "Ada", village: "V", roleNames: ["Lead Role"], conversations, statusLink: null, lang: "es" });
+    expect(es.text).toContain("Reserva tu primera conversación, con Ops Role, aquí: https://cal.example.test/ops");
+    // The opened later conversation's letter carries its own role's link, or our letter with times.
+    expect(applicantUpdate("conversation", { firstName: null, village: "V", roleNames: ["Lead Role"], replyDays: 7, withRole: "Hiring Role", minutes: 20, bookingUrl: "https://cal.example.test/hiring" }).text).toContain("Book it at a time you choose: https://cal.example.test/hiring");
+    expect(applicantUpdate("conversation", { firstName: null, village: "V", roleNames: ["Lead Role"], replyDays: 7, withRole: "Hiring Role", minutes: 20 }).text).toContain("We'll write to you with times.");
   });
 
   it("the references line says what we know, never 'no references' after a decision", () => {

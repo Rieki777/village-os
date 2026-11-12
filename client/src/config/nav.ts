@@ -262,7 +262,7 @@ export const NAV: readonly NavEntry[] = [
        * link to /campaigns in the whole client sat on the campaign page,
        * reachable only from /campaigns: a closed loop with no door in.
        */
-      { href: "/campaigns", label: "Our Raisings", module: "crowdpool" },
+      { href: "/campaigns", label: "Pooling Resources", module: "crowdpool" },
     ],
   },
   {

@@ -530,9 +530,9 @@ describe("the one action a seat offers", () => {
   it("invites a hand on open, partial, expired and recruiting-while-full seats", () => {
     expect(act(EMPTY_SEAT)).toMatchObject({
       kind: "raise",
-      label: "Raise your hand",
-      ariaLabel: "Raise your hand for Seed Keeper",
-      consequence: "A raised hand reaches the founding team, who will be in touch.",
+      label: "Apply for this role",
+      ariaLabel: "Apply for this role: Seed Keeper",
+      consequence: "Your application reaches the founding team, who will be in touch.",
     });
     expect(act(SAMPLE_MAP).kind).toBe("raise");
     expect(act(EXPIRED).kind).toBe("raise");
@@ -545,7 +545,7 @@ describe("the one action a seat offers", () => {
     // The raise-hand route checks no vacancy, so an Open badge with no door is a wall.
     const declaredOpen = { ...FULL, state: "open", stateSource: "declared" };
     expect(act(declaredOpen).kind).toBe("raise");
-    expect(act(declaredOpen, { viewPeople: false, signedIn: false })).toMatchObject({ kind: "signIn", label: "Sign in to raise your hand" });
+    expect(act(declaredOpen, { viewPeople: false, signedIn: false })).toMatchObject({ kind: "signIn", label: "Sign in to apply for this role" });
     expect(sheet(fromMap(declaredOpen)).badge).toMatchObject({ word: "open", label: "Open" });
     // Control: the same full seat, held, offers no hand, and an example declared Open offers nothing.
     expect(act(FULL).kind).toBe("unreachable");
@@ -560,7 +560,7 @@ describe("the one action a seat offers", () => {
   });
 
   it("asks a signed-out reader to sign in first", () => {
-    expect(act(EMPTY_SEAT, { signedIn: false })).toMatchObject({ kind: "signIn", label: "Sign in to raise your hand" });
+    expect(act(EMPTY_SEAT, { signedIn: false })).toMatchObject({ kind: "signIn", label: "Sign in to apply for this role" });
   });
 
   it("offers the relay for a member holder on the map, and never from /api/org", () => {
@@ -684,7 +684,7 @@ describe("the commitments: seven, one look each", () => {
       nextHolder: "dashed",
       decides: "edged",
     });
-    expect(chip(v, "term")).toMatchObject({ suffix: "set at seating", srWords: ", set when someone is seated" });
+    expect(chip(v, "term")).toMatchObject({ suffix: "set at seating", srWords: ", set when someone takes the role" });
     expect(chip(v, "decides")).toMatchObject({ suffix: "the village's", srWords: ", the village's way" });
     expect(chip(v, "domain")!.srWords).toBe(", still to be written down");
     expect(v.tally).toEqual({ written: 1, of: 7 });

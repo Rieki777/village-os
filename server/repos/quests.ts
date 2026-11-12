@@ -16,6 +16,7 @@ import type { Pool, PoolConnection, ResultSetHeader, RowDataPacket } from "mysql
 import { rootsFrom } from "../../shared/archetypeRoots";
 import { parseRewardRange } from "../../shared/questRewards";
 import { readValueTokens, readWorkValue, valueTokensToStore, type TokenAmount } from "../../shared/workValue";
+import { storedCommitmentPct } from "../../shared/commitment";
 import { lostConcurrencyRace } from "../db/concurrency";
 import { calendarRemove, calendarUpsert } from "../lib/calendar";
 import { questCalendarInput } from "../lib/calendarProviders";
@@ -89,6 +90,12 @@ export interface QuestRecord {
   /** The advertised label, verbatim â€” "50-100", "75". A contract, never coerced. */
   gratitude: string;
   duration?: string | null;
+  /**
+   * How much of a person the quest asks, a whole percent from 1 to 100 (0383),
+   * beside the `duration` words. NULL: not sized. Store and display only:
+   * nothing that pays reads it (shared/commitment.ts).
+   */
+  commitmentPct?: number | null;
   difficulty?: string | null;
   circle?: string | null;
   status: string;
@@ -205,7 +212,7 @@ const QUEST_SELECT =
   // is_example is selected so consumers can filter. Without it no downstream
   // code could tell an example quest from a real one â€” the work-exchange
   // suggester was offering seeded quests to real guests as paid work.
-  "SELECT id, title, subtitle, description, impact, story, first_step, steps, deliverable, tips, image_url, gratitude, duration, difficulty, circle, status, icon, role_required, min_stage, requires_role, stay_credit_reward, tags, sort_order, is_example, starts_at, ends_at, due_at, value_minor, value_currency, value_tokens, cash_minor, cash_currency, archetypes, archetypes_suggested FROM quests";
+  "SELECT id, title, subtitle, description, impact, story, first_step, steps, deliverable, tips, image_url, gratitude, duration, difficulty, circle, status, icon, role_required, min_stage, requires_role, stay_credit_reward, tags, sort_order, is_example, starts_at, ends_at, due_at, value_minor, value_currency, value_tokens, cash_minor, cash_currency, archetypes, archetypes_suggested, commitment_pct FROM quests";
 
 /** JSON column â†’ string array, tolerant of junk: an empty list renders fine. */
 function toList(v: unknown): string[] {
@@ -233,6 +240,7 @@ function rowToQuest(r: RowDataPacket): QuestRecord {
     imageUrl: r.image_url ?? null,
     gratitude: String(r.gratitude ?? ""),
     duration: r.duration ?? null,
+    commitmentPct: storedCommitmentPct(r.commitment_pct),
     difficulty: r.difficulty ?? null,
     circle: r.circle ?? null,
     status: String(r.status ?? "open"),
@@ -311,11 +319,13 @@ function questParams(q: QuestRecord): any[] {
     // currency stores neither half: a quest that pays no cash has no row here.
     !q.cashMinor || !q.cashCurrency ? null : Math.trunc(Number(q.cashMinor)),
     !q.cashMinor || !q.cashCurrency ? null : String(q.cashCurrency).toUpperCase(),
+    // The commitment it asks (0383), appended for the same reason. Unreadable stores nothing.
+    storedCommitmentPct(q.commitmentPct),
   ];
 }
 
 const QUEST_COLS =
-  "(id, title, description, impact, gratitude, gratitude_min, gratitude_max, duration, difficulty, circle, status, icon, role_required, min_stage, requires_role, stay_credit_reward, tags, sort_order, subtitle, story, first_step, steps, deliverable, tips, image_url, starts_at, ends_at, due_at, value_minor, value_currency, value_tokens, cash_minor, cash_currency)";
+  "(id, title, description, impact, gratitude, gratitude_min, gratitude_max, duration, difficulty, circle, status, icon, role_required, min_stage, requires_role, stay_credit_reward, tags, sort_order, subtitle, story, first_step, steps, deliverable, tips, image_url, starts_at, ends_at, due_at, value_minor, value_currency, value_tokens, cash_minor, cash_currency, commitment_pct)";
 
 /**
  * The quest's calendar row (0085): written on the quest's own save path, so a
@@ -348,7 +358,7 @@ export function questsRepo(pool: Pool): QuestsRepo {
 
     async add(q) {
       await pool.query(
-        `INSERT INTO quests ${QUEST_COLS} VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        `INSERT INTO quests ${QUEST_COLS} VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         questParams(q),
       );
       await syncQuestCalendar(pool, q);
@@ -371,7 +381,7 @@ export function questsRepo(pool: Pool): QuestsRepo {
           "UPDATE quests SET title=?, description=?, impact=?, gratitude=?, gratitude_min=?, gratitude_max=?, " +
             "duration=?, difficulty=?, circle=?, status=?, icon=?, role_required=?, min_stage=?, requires_role=?, stay_credit_reward=?, tags=?, sort_order=?, " +
             "subtitle=?, story=?, first_step=?, steps=?, deliverable=?, tips=?, image_url=?, starts_at=?, ends_at=?, due_at=?, " +
-            "value_minor=?, value_currency=?, value_tokens=?, cash_minor=?, cash_currency=? WHERE id=?",
+            "value_minor=?, value_currency=?, value_tokens=?, cash_minor=?, cash_currency=?, commitment_pct=? WHERE id=?",
           [...p.slice(1), id],
         );
         await conn.commit();
@@ -489,7 +499,7 @@ export async function keepExampleQuest(
       "UPDATE quests SET title=?, description=?, impact=?, gratitude=?, gratitude_min=?, gratitude_max=?, " +
         "duration=?, difficulty=?, circle=?, status=?, icon=?, role_required=?, min_stage=?, requires_role=?, stay_credit_reward=?, tags=?, sort_order=?, " +
         "subtitle=?, story=?, first_step=?, steps=?, deliverable=?, tips=?, image_url=?, starts_at=?, ends_at=?, due_at=?, " +
-        "value_minor=?, value_currency=?, value_tokens=?, cash_minor=?, cash_currency=?, " +
+        "value_minor=?, value_currency=?, value_tokens=?, cash_minor=?, cash_currency=?, commitment_pct=?, " +
         "is_example = 0, created_at = CURRENT_TIMESTAMP WHERE id = ? AND is_example = 1",
       [...p.slice(1), id],
     );

@@ -59,6 +59,7 @@ import crypto from "node:crypto";
 import { boolVar, stringVar } from "../lib/variables";
 import { isListed } from "../../shared/roleListing";
 import { foundingRoles } from "../../shared/foundingTeam";
+import { otherWaysFrom } from "../../shared/otherWays";
 import { hasSections, villagePayFrom, type RoleCardSections } from "../../shared/roleCardSections";
 import { lastEditedOf, sectionsFor, sectionsForMany } from "../lib/roleCardSections";
 
@@ -139,9 +140,14 @@ export function registerRoleEditRoutes(app: Express, g: Gate): void {
     res.set("Cache-Control", "no-store").json({
       on: on && featured.length > 0,
       roleIds: featured.map((r) => r.id),
+      // Each featured role's name, so a page that speaks of the founding team (the steward page's
+      // band) names the roles that are open today and never a list typed once and left to go stale.
+      names: Object.fromEntries(featured.map((r) => [r.id, r.name])),
       sections: Object.fromEntries(featured.map((r) => [r.id, sections.get(r.id) as RoleCardSections])),
       showPayRanges: boolVar("org.show_pay_ranges"),
       villagePay: villagePay(),
+      // The "Other ways to join" tiles beside the section (QA2-07): village words, sent whether the section is on or off.
+      otherWays: otherWaysFrom((k) => stringVar(k)),
     });
   });
 
@@ -428,6 +434,8 @@ function parameterLines(state: EditorState, roles: readonly OrgRole[]): Record<s
   if (p.listed !== undefined) put("listed", [p.listed ? "Yes" : "No"]);
   if (p.alwaysChecked !== undefined) put("alwaysChecked", [p.alwaysChecked ? "Yes" : "No"]);
   if (p.heldBy) put("heldBy", [p.heldBy]);
+  if (typeof p.commitmentPct === "number") put("commitmentPct", [`${p.commitmentPct}%`]);
+  if (p.commitmentRequired !== undefined) put("commitmentRequired", [p.commitmentRequired ? "Required" : "Flexible"]);
   if (p.recruiting !== undefined) put("recruiting", [p.recruiting ? "Open" : "Closed"]);
   if (p.track) put("track", [p.track]);
   if (p.whereWorked) put("whereWorked", [p.whereWorked]);
