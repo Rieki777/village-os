@@ -307,7 +307,8 @@ describe.skipIf(!configured)("our review before the conversations, on a real sch
     const letter = state.sent.find((m) => m.idempotencyKey === `open-proposal:${id}:not-invited`)!;
     expect(letter.subject).toBe("Thank you for applying to Test Village");
     expect(letter.text).toContain("more closely matched to this role");
-    expect(letter.text).toContain("it is not personal");
+    expect(letter.text).toContain("Thank you for your time and interest.");
+    expect(letter.text, "the lead cut the paragraph explaining it is not personal (12 Nov 2026)").not.toContain("it is not personal");
     expect(letter.text).toContain(`Friends of the Village: ${ORIGIN}/resident`);
     expect(letter.text).toContain(`Take a quest: ${ORIGIN}/quests`);
     const row = (await q("SELECT status FROM open_role_proposals WHERE id = ?", [id]))[0];

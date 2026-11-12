@@ -74,7 +74,7 @@ describe.skipIf(!configured)("taking a person off the org chart", () => {
     await pool.query("DELETE FROM org_role_assignments");
   });
 
-  describe("a member who leaves", () => {
+  describe("an erasure (the default, when the caller does not ask to keep the name)", () => {
     it("ends every live seating and takes their name off all of them", async () => {
       // The row that matters most is the CLAIMED one: `claimSeating` turns a
       // documented seating into a member one and keeps the name it was
@@ -126,6 +126,28 @@ describe.skipIf(!configured)("taking a person off the org chart", () => {
       expect(theirs.display_name).toBe("Still Here");
       expect(theirs.note).toBe("Carrying on.");
       expect((await read("doc")).display_name).toBe("Never Signed Up");
+    });
+  });
+
+  describe("a member who leaves the village (keepName)", () => {
+    it("ends every live seating and keeps their name on all of them, live and already ended", async () => {
+      await seat({ id: "k1", roleId: "seat-a", userId: "u-goes", holderKey: "u-goes",
+        displayName: "Leaving Steward", note: "Away and inactive.", focus: "the north slope" });
+      await seat({ id: "k-old", roleId: "seat-b", userId: "u-goes", holderKey: "u-goes",
+        displayName: "Leaving Steward", endedAt: "2026-01-01 00:00:00" });
+
+      expect(await releaseSeatingsForUser(pool, "u-goes", "member left the village", { keepName: true })).toBe(1);
+
+      const k1 = await read("k1");
+      expect(k1.ended_at, "the seating ends").not.toBeNull();
+      expect(k1.display_name, "the name stays on the role's history").toBe("Leaving Steward");
+      expect(k1.note, "the note described the live holding, and it has ended").toBeNull();
+      expect((await read("k-old")).display_name).toBe("Leaving Steward");
+
+      // Control: the same rows, then an erasure, lose the name.
+      await releaseSeatingsForUser(pool, "u-goes", "member left the village");
+      expect((await read("k1")).display_name).toBeNull();
+      expect((await read("k-old")).display_name).toBeNull();
     });
   });
 

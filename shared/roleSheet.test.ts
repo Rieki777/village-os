@@ -684,7 +684,7 @@ describe("the commitments: seven, one look each", () => {
       nextHolder: "dashed",
       decides: "edged",
     });
-    expect(chip(v, "term")).toMatchObject({ suffix: "set at seating", srWords: ", set when someone is seated" });
+    expect(chip(v, "term")).toMatchObject({ suffix: "set at seating", srWords: ", set when someone takes the role" });
     expect(chip(v, "decides")).toMatchObject({ suffix: "the village's", srWords: ", the village's way" });
     expect(chip(v, "domain")!.srWords).toBe(", still to be written down");
     expect(v.tally).toEqual({ written: 1, of: 7 });

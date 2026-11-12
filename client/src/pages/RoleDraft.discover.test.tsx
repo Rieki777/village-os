@@ -72,7 +72,7 @@ describe("with every optional step skipped", () => {
   it("shows both doors and still selects a role and links to apply", async () => {
     serve();
     render(<RoleDraft />);
-    expect(await screen.findByRole("heading", { level: 2, name: "Your R-Ikigai" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { level: 2, name: "Your Ikigai" })).toBeTruthy();
     expect(screen.getByRole("heading", { level: 2, name: "Who do you play? Pick one or more." })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Add your Human Design or Gene Keys" })).toBeTruthy();
     fireEvent.click(await screen.findByRole("button", { name: "Select Gardener" }));

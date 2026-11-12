@@ -635,7 +635,7 @@ export default function ProposeARole() {
   const intro = [
     t({ message: "Before you apply, come and meet us. Tick what you have done so far.", context: "founding application intro" }),
     t({ message: "Who you are, and why this role, now. A few honest lines is enough: the people who decide read every word.", context: "founding application intro" }),
-    t({ message: "The value you would bring in your first months, item by item, each tagged to the season goal it serves.", context: "founding application intro" }),
+    t({ message: "The value you would bring in your first months, item by item, each tagged to the seasonal goal it serves.", context: "founding application intro" }),
     t({ message: "A starting point we agree together. Choose your commitment, and mark anything you would like to talk through.", context: "founding application intro" }),
     t({ message: "What your first month with us would look like, and when you could begin.", context: "founding application intro" }),
     t({ message: "Read it through once, then send. Nothing reaches us until you confirm your email.", context: "founding application intro" }),
@@ -913,7 +913,7 @@ export default function ProposeARole() {
             {/* STEP 5: your first day. The first cycle, the first conversations, and when you could begin. */}
             <section {...panel(4)}>
               {heading(4)}
-              <FirstDayFacts setup={setup} />
+              <FirstDayFacts setup={setup} firstConversation={role.conversations?.[0]?.role ?? null} />
               <div className={`${GOLD_RULE} pt-6`}>
                 <Practicalities value={practical} onChange={setPractical} />
               </div>

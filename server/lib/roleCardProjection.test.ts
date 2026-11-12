@@ -132,7 +132,7 @@ describe("the card's parameters", () => {
       { roleId: "human-ops", minutes: 60, roleName: null },
       { roleId: "visionary", minutes: 20, final: true, roleName: "Visionary Channel" },
     ]);
-    expect(card(role(), VISITOR)).toMatchObject({ conversationMode: "block", firstConversation: "Human Operations & Onboarding Lead Steward" });
+    expect(card(role(), VISITOR)).toMatchObject({ conversationMode: "separate", firstConversation: "Human Operations & Onboarding Lead Steward" });
   });
 
   it("names the consenting circle for a paid role only (control: the paid role above names it)", () => {

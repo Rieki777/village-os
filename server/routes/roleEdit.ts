@@ -139,6 +139,9 @@ export function registerRoleEditRoutes(app: Express, g: Gate): void {
     res.set("Cache-Control", "no-store").json({
       on: on && featured.length > 0,
       roleIds: featured.map((r) => r.id),
+      // Each featured role's name, so a page that speaks of the founding team (the steward page's
+      // band) names the roles that are open today and never a list typed once and left to go stale.
+      names: Object.fromEntries(featured.map((r) => [r.id, r.name])),
       sections: Object.fromEntries(featured.map((r) => [r.id, sections.get(r.id) as RoleCardSections])),
       showPayRanges: boolVar("org.show_pay_ranges"),
       villagePay: villagePay(),

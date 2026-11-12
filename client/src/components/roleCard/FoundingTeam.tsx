@@ -61,7 +61,7 @@ export default function FoundingTeam({ roles, initialOpen = null, villagePay = n
           {t({ message: "Join the founding team", context: "founding team section heading" })}
         </h2>
         <p className="mt-5 max-w-2xl text-lg leading-relaxed text-muted-foreground sm:text-xl">
-          {t({ message: "We are hiring the people who will lead each domain of the village from the foundation through to completion. These are paid, multi-year roles, filled by application and conversation.", context: "founding team section lede" })}
+          {t({ message: "We are building our team of people who will lead each domain of the village from the foundation through to completion.", context: "founding team section lede" })}
         </p>
       </div>
 

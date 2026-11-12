@@ -72,7 +72,7 @@ const withPerson = (p: Partial<Extract<PathFacts["person"], { kind: "account" }>
 /** One case per rule: the least that matches it, on top of facts that would otherwise fall through. */
 const CASES: Array<{ state: PathState; facts: PathFacts; step: string; after?: string | null; href: string | null }> = [
   { state: "founder-setup", facts: account({ person: withPerson({ role: "founder", founderPowerStands: true }) }), step: "Set up your village", href: "/setup-game" },
-  { state: "leaving", facts: account({ exit: { status: "open" } }), step: "Your leaving is with us. Read how it goes", after: "We write to you when it is settled.", href: "/exit-policy" },
+  { state: "leaving", facts: account({ exit: { status: "open" } }), step: "Your leaving is with us. Read how it goes", after: "We'll write to you when it is settled.", href: "/exit-policy" },
   { state: "session-live", facts: account({ sessionLive: { href: "/sessions/s1", circle: "Land" } }), step: "Join the Land session now", href: "/sessions/s1" },
   { state: "terms-to-answer", facts: tokenFacts(NOW, TZ, proposal({ termsToAnswer: true })), step: "Read the terms we changed and answer", href: "/application-status/p1?token=abc" },
   {

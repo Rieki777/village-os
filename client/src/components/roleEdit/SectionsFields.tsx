@@ -127,7 +127,7 @@ export default function SectionsFields({ value, start, onChange }: { value: Sect
           value={value.aiSupport}
           maxLength={SECTION_LIMITS.aiSupportChars}
           onChange={(e) => set("aiSupport", e.target.value)}
-          aria-label={t({ message: "What the AI companion does for this role", context: "role editor" })}
+          aria-label={t({ message: "What the Digital Companion does for this role", context: "role editor" })}
         />
       </Field>
 

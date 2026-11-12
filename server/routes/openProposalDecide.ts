@@ -805,7 +805,7 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
             firstName,
             village: projectName(),
             roleNames: namesOf(await rolesOf(pool, p)),
-            conversations: out.conversations.map((c) => ({ role: c.role, minutes: c.minutes })),
+            conversations: out.conversations.map((c) => ({ role: c.role, minutes: c.minutes, bookingUrl: c.bookingUrl })),
             statusLink: statusLinkFor({ siteUrl: site }, p.id),
             lang: languageOf(p),
             note,

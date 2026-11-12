@@ -137,8 +137,8 @@ export default function DraftCarry({
       {hasAnswers && (
         <p className="mt-3 text-sm">
           {ikigai.carry
-            ? t`Your R-Ikigai answers are saved in this browser, and the open form copies them into Why you.`
-            : t`Your R-Ikigai answers are saved in this browser. Nothing has been sent.`}
+            ? t`Your Ikigai answers are saved in this browser, and the open form copies them into Why you.`
+            : t`Your Ikigai answers are saved in this browser. Nothing has been sent.`}
         </p>
       )}
       {adoptedNames && <p className="mt-3 text-sm font-semibold">{t`Adopted, and yours from the start of next season: ${adoptedNames}.`}</p>}

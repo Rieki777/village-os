@@ -51,6 +51,8 @@ export interface UpdateFacts {
   part?: string;
   withRole?: string | null;
   minutes?: number | null;
+  /** The opened conversation's role booking link, https or null. */
+  bookingUrl?: string | null;
 }
 
 export type TellApplicant = (ref: string, kind: ApplicantUpdateKind, facts?: UpdateFacts) => Promise<void>;
@@ -80,6 +82,7 @@ async function wordsFor(deps: Pick<TellDeps, "getPool" | "projectName" | "siteUr
     replyDays: numberVar("org.applicant_reply_days"),
     withRole: facts.withRole ?? null,
     minutes: facts.minutes ?? null,
+    bookingUrl: facts.bookingUrl ?? null,
     lang: languageOf(p),
     note: p.body.note ?? null,
     // Only the letters that ask the applicant to open the page carry the link; the rest never pointed there.

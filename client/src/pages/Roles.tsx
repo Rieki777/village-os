@@ -580,9 +580,9 @@ export default function Roles() {
                 sociocracy mechanics live in the three tooltips. */}
             <p className="text-lg leading-relaxed text-muted-foreground max-w-2xl mx-auto sm:text-xl">
               {t`The village organizes itself the way a forest does:`}{" "}
-              <InfoTip tip={t`Circles are sociocratic working groups with real authority over their own domain. Decisions inside a circle pass by consent.`}>{t({ message: `circles`, context: "roles page, intro word with a tooltip" })}</InfoTip>{" "}
+              <InfoTip tip={t`Circles are sociocratic working groups with real authority over their own domain. Decisions inside a circle pass by consent or other circle-chosen processes.`}>{t({ message: `circles`, context: "roles page, intro word with a tooltip" })}</InfoTip>{" "}
               {t`of care, each holding its own ground, and every`}{" "}
-              <InfoTip tip={t`A role is a named responsibility inside a circle, with an aim, a domain, and accountabilities. The role belongs to the circle, and a person steps into it.`}>{t({ message: `role`, context: "roles page, intro word with a tooltip" })}</InfoTip>{" "}
+              <InfoTip tip={t`A role is a named responsibility inside a circle, with an aim, a domain, and accountabilities. The role belongs to the circle, and a person plays it for a season.`}>{t({ message: `role`, context: "roles page, intro word with a tooltip" })}</InfoTip>{" "}
               {t`is a way to hold some of it with your own hands, by`}{" "}
               <InfoTip tip={t`A decision moves forward when nobody holds a reasoned objection. Consent is quieter than consensus and faster than voting.`}>{t({ message: `consent`, context: "roles page, intro word with a tooltip" })}</InfoTip>.
             </p>

@@ -74,8 +74,11 @@ describe("the tolerant reader", () => {
 });
 
 describe("the mode", () => {
-  it("reads NULL as one block, and refuses an unknown mode", () => {
-    expect(conversationModeOf(null)).toBe("block");
+  it("reads NULL or an unknown value as separately (the one booking story), and refuses an unknown mode on a write", () => {
+    expect(conversationModeOf(null)).toBe("separate");
+    expect(conversationModeOf("")).toBe("separate");
+    expect(conversationModeOf("scatter")).toBe("separate");
+    expect(conversationModeOf("block"), "control: a stored block is still read as written").toBe("block");
     expect(conversationModeOf("separate")).toBe("separate");
     expect(parseConversationMode("separate")).toEqual({ ok: true, value: "separate" });
     expect(parseConversationMode(null)).toEqual({ ok: true, value: null });

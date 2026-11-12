@@ -33,6 +33,11 @@ vi.mock("@/hooks/useVillageContent", () => ({
 }));
 vi.mock("@/hooks/useVillageName", () => ({ useVillageName: () => "Hollow Oak" }));
 vi.mock("@/hooks/useTokenNames", () => ({ useTokenName: (fallback: string) => fallback }));
+// The founding roles the band names: the same read as the Roles page's founding section.
+const founding = vi.hoisted(() => ({ answer: { on: false, roleIds: [] as string[], names: {} as Record<string, string> } }));
+vi.mock("@/components/roleCard/roleCardApi", () => ({
+  readFoundingTeam: () => Promise.resolve({ ...founding.answer, sections: {}, showPayRanges: false, villagePay: { shape: [], atRisk: "", note: "" } }),
+}));
 
 import StewardJourney from "./StewardJourney";
 
@@ -46,6 +51,7 @@ const show = () =>
 beforeEach(() => {
   auth.admin = false;
   stored.doc = null;
+  founding.answer = { on: false, roleIds: [], names: {} };
   vi.stubGlobal("IntersectionObserver", class { observe() {} unobserve() {} disconnect() {} takeRecords() { return []; } });
   vi.stubGlobal("fetch", vi.fn());
 });
@@ -160,6 +166,35 @@ describe("/steward", () => {
     show();
     await screen.findByText("The team that builds Hollow Oak");
     expect(document.body.textContent).not.toMatch(/\bquests?\b|\bmoons?\b|\bXP\b|level up/i);
+  });
+
+  it("names the founding roles open now, live, as links to their cards, wherever {foundingRoles} is written", async () => {
+    stored.doc = { foundingTeam: { body: "We are building the team. The roles open now are {foundingRoles}. Read each card." } };
+    founding.answer = { on: true, roleIds: ["land", "cook"], names: { land: "Land Lead", cook: "Village Cook" } };
+    show();
+    await screen.findByText("The team that builds Hollow Oak");
+    const band = document.getElementById("founding-team")!;
+    expect(await within(band).findByText("We are building the team. The roles open now are the Land Lead and the Village Cook. Read each card.")).toBeInTheDocument();
+    const list = within(band).getByTestId("founding-roles");
+    expect(within(list).getAllByRole("link").map((a) => [a.textContent, a.getAttribute("href")])).toEqual([
+      ["Land Lead", "/roles?seat=land"],
+      ["Village Cook", "/roles?seat=cook"],
+    ]);
+    // Control: a role the village opens later is named with no edit to the words.
+    cleanup();
+    founding.answer = { on: true, roleIds: ["land", "cook", "well"], names: { land: "Land Lead", cook: "Village Cook", well: "Water Keeper" } };
+    show();
+    expect(await screen.findByText(/are the Land Lead, the Village Cook and the Water Keeper\./)).toBeInTheDocument();
+  });
+
+  it("says something true and names nobody when the founding team is off", async () => {
+    stored.doc = { foundingTeam: { body: "We are building the team. The roles open now are {foundingRoles}. Read each card." } };
+    show();
+    await screen.findByText("The team that builds Hollow Oak");
+    const band = document.getElementById("founding-team")!;
+    expect(await within(band).findByText("We are building the team. Read each card.")).toBeInTheDocument();
+    expect(within(band).queryByTestId("founding-roles")).toBeNull();
+    expect(band.textContent).not.toContain("{foundingRoles}");
   });
 
   it("hides the crossover and the founding band when the village hides them", async () => {

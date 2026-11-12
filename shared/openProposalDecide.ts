@@ -444,6 +444,8 @@ export function declinedLetter(i: { firstName: string | null; village: string; r
 export interface InvitedConversation {
   role: string;
   minutes: number;
+  /** The interviewing role's booking link (`bookingUrl`), https or nothing. Only the first one's is offered. */
+  bookingUrl?: string | null;
 }
 
 /**
@@ -461,8 +463,19 @@ export function invitedLetter(i: {
 }): { subject: string; text: string } {
   const w = wordsIn(i.lang);
   const total = i.conversations.reduce((n, c) => n + c.minutes, 0);
+  const first = i.conversations[0];
   const talks = i.conversations.length
-    ? ["", w.invite.conversationsIntro, ...i.conversations.map((c, n) => `${n + 1}. ${w.invite.conversation(c.role, c.minutes)}`), w.invite.total(total), "", w.invite.booking]
+    ? [
+        "",
+        w.invite.conversationsIntro,
+        ...i.conversations.map((c, n) => `${n + 1}. ${w.invite.conversation(c.role, c.minutes)}`),
+        w.invite.total(total),
+        "",
+        w.invite.booking,
+        // The first conversation's own way in. The later ones open in order, each with its own role's link then.
+        first.bookingUrl ? w.invite.bookFirst(first.role, first.bookingUrl) : w.invite.writeFirst(first.role),
+        ...(i.conversations.length > 1 ? [w.invite.laterOpen] : []),
+      ]
     : [];
   return {
     subject: w.invite.subject(i.village),
@@ -570,7 +583,7 @@ export const UPDATE_EMAILS: Record<ApplicantUpdateKind, boolean> = {
 /** One update's title (the email's subject and the profile's headline) and its text. A decider's note rides under the text. */
 export function applicantUpdate(
   kind: ApplicantUpdateKind,
-  i: { firstName: string | null; village: string; roleNames: readonly string[]; replyDays: number; withRole?: string | null; minutes?: number | null; lang?: ApplicantLanguage; note?: string | null; statusLink?: string | null },
+  i: { firstName: string | null; village: string; roleNames: readonly string[]; replyDays: number; withRole?: string | null; minutes?: number | null; bookingUrl?: string | null; lang?: ApplicantLanguage; note?: string | null; statusLink?: string | null },
 ): { title: string; text: string } {
   const w = wordsIn(i.lang);
   const u = w.update;
@@ -583,7 +596,7 @@ export function applicantUpdate(
     case "first_reply":
       return { title: u.firstReplyTitle, text: body([u.firstReply(roles), w.replyPromise(i.replyDays)]) };
     case "conversation":
-      return { title: u.conversationTitle, text: body([u.conversation(roles, i.withRole ?? null, i.minutes ?? null)]) };
+      return { title: u.conversationTitle, text: body([u.conversation(roles, i.withRole ?? null, i.minutes ?? null, i.bookingUrl ?? null)]) };
     case "consent":
       return { title: u.consentTitle, text: body([u.consent(roles)]) };
     case "terms":

@@ -350,7 +350,7 @@ export default function RoleDraft() {
             <SelectStepper
               labels={[
                 t({ message: "This season's goals", context: "role draft step" }),
-                t({ message: "Your R-Ikigai and your characters", context: "role draft step" }),
+                t({ message: "Your Ikigai (look it up) and your characters", context: "role draft step" }),
                 t({ message: "Scout the open roles", context: "role draft step" }),
                 t({ message: "Select up to three", context: "role draft step" }),
                 t({ message: "Apply", context: "role draft step" }),
@@ -369,7 +369,7 @@ export default function RoleDraft() {
             </h2>
             {seasonDates && <p className="mt-1 text-sm font-semibold text-muted-foreground">{seasonDates}</p>}
             <p className="mt-2 max-w-[70ch] text-sm text-muted-foreground">
-              {t`A role card shows the work the village needs done. Your proposal is the other half: what you would like to contribute each moon and this season, and how it serves these goals.`}
+              {t`A role card shows the work the village needs done. Your proposal is the other half: what you would like to contribute each moon and this season, and how it serves our goals.`}
             </p>
             {goals.length > 0 ? (
               <ul className="mt-3 grid gap-2 sm:grid-cols-2">
@@ -389,7 +389,7 @@ export default function RoleDraft() {
             <div className="mt-4 flex justify-end">
               <NextAct here={step === 0} deskOnly>
               <button type="button" onClick={() => go(1)} className={BTN_PRIMARY} data-select-next="">
-                {t({ message: "Next: your R-Ikigai and characters", context: "role draft next" })}
+                {t({ message: "Next: your Ikigai and characters", context: "role draft next" })}
                 <ArrowRight className="size-4" aria-hidden="true" />
               </button>
               </NextAct>
@@ -680,15 +680,15 @@ export default function RoleDraft() {
                 </ol>
               ) : (
                 <ol aria-label={t({ message: "After you apply", context: "role draft steps" })} className="mt-3 grid list-decimal gap-2 pl-5 text-sm text-foreground">
-                  <li>{t`You align with the Love Letter, the village's membership agreement, when you apply. Aligning is the village's way of signing.`}</li>
-                  <li>{t`You confirm your email within 48 hours. Nothing reaches the village before you do.`}</li>
-                  <li>{t`You meet the people the role works with, in the order the role sets, when it sets one.`}</li>
-                  <li>{t`Each role's circle is asked to consent. A holder of the power to place people in roles adopts or declines your proposal, and never their own.`}</li>
-                  <li>{t`If it is adopted, an invitation to make your account comes to your email.`}</li>
+                  <li>{t`You align with the Love Letter, the village's membership agreement, when you apply.`}</li>
+                  <li>{t`You confirm your email within 48 hours.`}</li>
+                  <li>{t`You meet the people the role works closest with.`}</li>
+                  <li>{t`Each role's circle is asked to consent and pick who they'll co-create with.`}</li>
+                  <li>{t`If it is adopted, a formal invitation to make your account comes to your email.`}</li>
                   <li>{t`Once you are approved into a role, you align with the village's confidentiality agreement (NDA), before you see any confidential records.`}</li>
                   <li>
                     {form?.term
-                      ? t`Your role runs from adoption to the next new moon, ${moonEnds}. Each moon you lay out what you will contribute.`
+                      ? t`Your role runs from adoption to the next new moon, ${moonEnds}. Each new moon you lay out what you will contribute the next moon.`
                       : t`Your role starts on the first day of next season.`}
                   </li>
                 </ol>
@@ -751,7 +751,7 @@ export default function RoleDraft() {
               <NextAct here block>
                 <button type="button" onClick={() => go(step + 1)} className={`${BTN_PRIMARY} w-full shadow-sm`}>
                   {step === 0
-                    ? t({ message: "Next: your R-Ikigai and characters", context: "role draft next" })
+                    ? t({ message: "Next: your Ikigai and characters", context: "role draft next" })
                     : t({ message: "Next: scout the open roles", context: "role draft next" })}
                   <ArrowRight className="size-4" aria-hidden="true" />
                 </button>
