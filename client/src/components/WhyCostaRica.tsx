@@ -95,8 +95,7 @@ export default function WhyCostaRica() {
               </h2>
               <p className={`${HINT} leading-relaxed`}>
                 This village has not yet published the legal, tax and residency details
-                for where it sits. Ask a steward, or check back once the community has
-                written its own.
+                for where it sits. Ask a steward, or check back in a few moons.
               </p>
             </div>
           </div>

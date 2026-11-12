@@ -294,7 +294,7 @@ export default function Home() {
                   href="/map"
                   className="px-8 py-4 bg-white/20 backdrop-blur-sm border border-white/40 text-white rounded-lg font-semibold text-lg hover:bg-white/30 transition-all duration-200"
                 >
-                  Walk the map
+                  Explore the map
                 </Link>
               )}
             </div>

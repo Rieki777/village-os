@@ -397,7 +397,7 @@ const COMMITMENT_ORDER: CommitmentKey[] = ["aim", "domain", "accountabilities", 
 
 const SR_WRITTEN = ", written down";
 const SR_VILLAGES = ", the village's way";
-const SR_AT_SEATING = ", set when someone is seated";
+const SR_AT_SEATING = ", set when someone takes the role";
 const SR_UNWRITTEN = ", still to be written down";
 
 /** A commitment's look, or "unread" when the payload does not carry it. */

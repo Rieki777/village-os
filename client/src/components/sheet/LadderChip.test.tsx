@@ -43,7 +43,7 @@ describe("LadderChip", () => {
     const gilded = render(<LadderChip look="gilded" label="Aim" srWords=", written down" />).container.firstElementChild!;
     expect(gilded.getAttribute("class")).toContain("ring-notice/60");
     expect(gilded.querySelector("svg")!.getAttribute("class")).toContain("text-notice");
-    const edged = render(<LadderChip look="edged" label="Term" suffix="set at seating" srWords=", set when someone is seated" />).container
+    const edged = render(<LadderChip look="edged" label="Term" suffix="set at seating" srWords=", set when someone takes the role" />).container
       .firstElementChild!;
     expect(edged.getAttribute("class")).toContain("ring-border");
     expect(edged.querySelector("span.text-muted-foreground")!.textContent).toBe("set at seating");

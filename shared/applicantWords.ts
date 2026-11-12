@@ -171,11 +171,13 @@ export interface ApplicantMessages {
     notInvited: { heading: string; line: string; program(name: string): string; quests: string; events: string };
     booking: {
       label: string;
-      block(total: string, firstRole: string | null): string;
-      split: string;
-      splitAsk: string;
-      /** "100 minutes": minutes only, so a long block never reads as time that is counted. */
-      minutes(total: number): string;
+      /**
+       * The one booking story (lead, 12 Nov 2026: "we invite you to book conversation times"):
+       * after the invitation the applicant books each conversation at times they choose, in the
+       * role's order, back to back if they like. Told the same whatever the role's
+       * `conversationMode` holds, which old cards may still carry.
+       */
+      order(roles: readonly string[]): string;
     };
     references: {
       none: string;
@@ -237,37 +239,37 @@ const en: ApplicantMessages = {
     confirmedTitle: (v) => `Your proposal is with ${v}`,
     confirmed: (roles, promise) => `Your proposal to hold ${roles} is with us. ${promise}`,
     firstReplyTitle: "We have taken up your proposal",
-    firstReply: (roles) => `The role that welcomes people has taken up your proposal to hold ${roles} and is writing to you about a time to talk.`,
+    firstReply: (roles) => `The role that welcomes people has taken up your proposal to hold ${roles} and will write to you so you can book a time that suits you.`,
     conversationTitle: "We would love to talk with you",
-    conversation: (roles, withRole, minutes) => `The next step on your proposal to hold ${roles} is a conversation${withRole ? ` with ${withRole}` : ""}${minutes ? `, about ${minutes} minutes` : ""}. We will write to you about a time.`,
+    conversation: (roles, withRole, minutes) => `The next step on your proposal to hold ${roles} is a conversation${withRole ? ` with ${withRole}` : ""}${minutes ? `, about ${minutes} minutes` : ""}. We'll write to you so you can book it at a time you choose.`,
     consentTitle: "The circle is weighing your proposal",
-    consent: (roles) => `The conversations are written up, and the circle is now asked to consent to your proposal to hold ${roles}. We will tell you what it decides.`,
+    consent: (roles) => `The conversations are written up, and the circle is now doing its process for your proposal to hold ${roles}. Watch your email or status page for next steps.`,
     termsTitle: "The terms for your proposal changed",
     terms: (roles) => `We changed the terms we suggest for your proposal to hold ${roles}. Open your status page to read them, and tell us what you think.`,
     adoptedTitle: (v) => `${v} adopted your proposal`,
     adopted: (v, roles, next) => `${v} adopted your proposal to hold ${roles}. ${next}`,
     declinedTitle: (v) => `Your proposal to ${v}`,
-    declined: (roles) => `Thank you for proposing to hold ${roles}. We can't say yes this time. You can take a quest, look at other open roles, or propose again next season.`,
+    declined: (roles) => `Thank you for proposing to hold ${roles}. We can't say yes this time. We encourage you to explore quests, look at other open roles, or propose again next season.`,
     invitedTitle: "We would love to talk with you",
-    invited: (roles) => `We read your application to hold ${roles} with care, and we would love to invite you to the conversations. The details are in your email.`,
+    invited: (roles) => `We read your application to hold ${roles} with care, and we would love to invite you for the next step to meet the team. The details are in your email.`,
     notInvitedTitle: (v) => `Thank you for applying to ${v}`,
-    notInvited: (roles) => `Thank you for applying to hold ${roles}. We found someone more closely matched to this role, so we will not invite you to the conversations this time. It is not personal, and we would love to stay in touch.`,
+    notInvited: (roles) => `Thank you for applying to hold ${roles}. We found someone more closely matched to this role. We encourage you to explore quests instead. It is not personal, and we would love to stay in touch.`,
   },
 
   invite: {
     subject: (v) => `An invitation to talk with ${v}`,
-    headline: (roles) => `Thank you for applying to hold ${roles}. We have read your application with care, and we would love to invite you to the conversations.`,
+    headline: (roles) => `Thank you for applying to hold ${roles}. We have read your application with care, and we would love to invite you to book conversation times.`,
     conversationsIntro: "The conversations, in order:",
     conversation: (role, minutes) => `${role}, ${minutes} minutes`,
     total: (minutes) => `About ${minutes} minutes in all.`,
-    booking: "We will write to you about times. If one long block does not suit you, ask on your status page for the conversations to be split over several days.",
+    booking: "We'll write to you so you can book each conversation at times you choose, in the order above. You may book them back to back if you like.",
     after: "After the last conversation, the circle decides by consent, and we write to you with its answer.",
   },
 
   notInvited: {
     subject: (v) => `Thank you for applying to ${v}`,
     thanks: (roles, v) => `Thank you for applying to hold ${roles} in ${v}, and for the care you put into it.`,
-    matched: "We have found someone more closely matched to this role, so we will not invite you to the conversations this time. This is about the fit of one role, and it is not personal.",
+    matched: "We have found someone more closely matched to this role. Thank you for your time and interest.",
     stayClose: "We would love to stay in touch, and there are open ways to be part of the village:",
     program: (name, url) => `${name}: ${url}`,
     quest: (url) => `Take a quest: ${url}`,
@@ -344,9 +346,9 @@ const en: ApplicantMessages = {
     stateNow: "now",
     stateLater: "later",
     move: {
-      firstReply: "Our move: the role that welcomes people writes to you with a time to talk.",
+      firstReply: "Our move: the role that welcomes people writes to you so you can book a time to talk.",
       interview: (role, minutes) => `Our move: ${role} talks with you for ${minutes} minutes, then adds a note.`,
-      interviewWaiting: "Our move: we arrange the next conversation once the last one is written up.",
+      interviewWaiting: "Our move: the next conversation opens once the last one is written up. You book it at a time you choose.",
       consent: "Our move: the circle weighs your proposal and consents, or says what is missing.",
       adopted: "Your move: make your account. The link to make it is in your email.",
       withdrawn: "Nothing more is needed. You withdrew this proposal.",
@@ -364,10 +366,10 @@ const en: ApplicantMessages = {
     },
     booking: {
       label: "How the conversations are booked",
-      block: (total, firstRole) => `The conversations are one block of ${total}, booked through ${firstRole ?? "the first role"}, with the others joining at set times. Ask for them to be split over days if that suits you better.`,
-      split: "The conversations are booked one at a time, over several days, each through its own role.",
-      splitAsk: "Split the conversations over days",
-      minutes: (total) => `${total} minutes`,
+      order: (roles) =>
+        roles.length <= 1
+          ? `After the invitation, you book the conversation${roles[0] ? ` with ${roles[0]}` : ""} at a time you choose.`
+          : `After the invitation, you book each conversation at times you choose, in this order: ${roles[0]} first, then ${roles.slice(1).join(", then ")}. You may book them back to back if you like.`,
     },
     references: {
       none: "You gave no references, so we run a background check. You agreed to it when you proposed. We cover its cost, and we contact no one before our first conversation with you.",
@@ -412,38 +414,38 @@ const es: ApplicantMessages = {
     confirmedTitle: (v) => `Tu propuesta está con ${v}`,
     confirmed: (roles, promise) => `Tu propuesta para ocupar ${roles} ya está con nosotros. ${promise}`,
     firstReplyTitle: "Hemos recibido tu propuesta",
-    firstReply: (roles) => `El rol que da la bienvenida a las personas ha recibido tu propuesta para ocupar ${roles} y te está escribiendo para acordar un momento para conversar.`, // check
+    firstReply: (roles) => `El rol que da la bienvenida a las personas ha recibido tu propuesta para ocupar ${roles} y te escribirá para que reserves un momento que te convenga.`, // needs-native-review: new words, 12 Nov 2026
     conversationTitle: "Nos encantaría conversar contigo",
-    conversation: (roles, withRole, minutes) => `El siguiente paso de tu propuesta para ocupar ${roles} es una conversación${withRole ? ` con ${withRole}` : ""}${minutes ? `, de unos ${minutes} minutos` : ""}. Te escribiremos para acordar un momento.`,
+    conversation: (roles, withRole, minutes) => `El siguiente paso de tu propuesta para ocupar ${roles} es una conversación${withRole ? ` con ${withRole}` : ""}${minutes ? `, de unos ${minutes} minutos` : ""}. Te escribiremos para que la reserves en el horario que elijas.`, // needs-native-review: new words, 12 Nov 2026
     consentTitle: "El círculo está considerando tu propuesta", // check: "círculo" is the village's term for circle
-    consent: (roles) => `Las conversaciones ya están escritas, y ahora le pedimos al círculo su consentimiento para tu propuesta de ocupar ${roles}. Te contaremos lo que decida.`,
+    consent: (roles) => `Las conversaciones ya están escritas, y ahora el círculo sigue su proceso para tu propuesta de ocupar ${roles}. Revisa tu correo o la página de tu estado para los siguientes pasos.`, // needs-native-review: new words, 12 Nov 2026
     termsTitle: "Cambiaron las condiciones de tu propuesta",
     terms: (roles) => `Cambiamos las condiciones que sugerimos para tu propuesta de ocupar ${roles}. Abre la página del estado de tu propuesta para leerlas y cuéntanos qué piensas.`,
     adoptedTitle: (v) => `${v} adoptó tu propuesta`, // check: "adoptó" for "adopted"
     adopted: (v, roles, next) => `${v} adoptó tu propuesta para ocupar ${roles}. ${next}`,
     declinedTitle: (v) => `Tu propuesta a ${v}`,
-    declined: (roles) => `Gracias por proponerte para ocupar ${roles}. Esta vez no podemos decir que sí. Puedes tomar una misión, ver otros roles abiertos o volver a proponer la próxima temporada.`, // check: "misión" for quest
+    declined: (roles) => `Gracias por proponerte para ocupar ${roles}. Esta vez no podemos decir que sí. Te animamos a explorar misiones, ver otros roles abiertos o volver a proponer la próxima temporada.`, // check: "misión" for quest; needs-native-review: new words, 12 Nov 2026
     invitedTitle: "Nos encantaría conversar contigo",
-    invited: (roles) => `Leímos con cuidado tu postulación para ocupar ${roles}, y nos encantaría invitarte a las conversaciones. Los detalles están en tu correo.`, // check: "postulación" for application
+    invited: (roles) => `Leímos con cuidado tu postulación para ocupar ${roles}, y nos encantaría invitarte al siguiente paso para conocer al equipo. Los detalles están en tu correo.`, // check: "postulación" for application; needs-native-review: new words, 12 Nov 2026
     notInvitedTitle: (v) => `Gracias por postularte a ${v}`,
-    notInvited: (roles) => `Gracias por postularte para ocupar ${roles}. Encontramos a alguien que encaja más de cerca con este rol, así que esta vez no te invitaremos a las conversaciones. No es algo personal, y nos encantaría seguir en contacto.`,
+    notInvited: (roles) => `Gracias por postularte para ocupar ${roles}. Encontramos a alguien que encaja más de cerca con este rol. Te animamos a explorar misiones. No es algo personal, y nos encantaría seguir en contacto.`, // needs-native-review: new words, 12 Nov 2026
   },
 
   // needs-native-review: the invitation and the not-invited letter
   invite: {
     subject: (v) => `Una invitación a conversar con ${v}`,
-    headline: (roles) => `Gracias por postularte para ocupar ${roles}. Leímos tu postulación con cuidado, y nos encantaría invitarte a las conversaciones.`,
+    headline: (roles) => `Gracias por postularte para ocupar ${roles}. Leímos tu postulación con cuidado, y nos encantaría invitarte a reservar horarios para las conversaciones.`, // needs-native-review: new words, 12 Nov 2026
     conversationsIntro: "Las conversaciones, en orden:",
     conversation: (role, minutes) => `${role}, ${minutes} minutos`,
     total: (minutes) => `Unos ${minutes} minutos en total.`,
-    booking: "Te escribiremos para acordar los horarios. Si un solo bloque largo no te queda bien, pide en la página del estado de tu postulación que las repartamos en varios días.",
+    booking: "Te escribiremos para que reserves cada conversación en los horarios que elijas, en el orden de arriba. Si quieres, puedes reservarlas una tras otra.", // needs-native-review: new words, 12 Nov 2026
     after: "Después de la última conversación, el círculo decide por consentimiento, y te escribimos con su respuesta.",
   },
 
   notInvited: {
     subject: (v) => `Gracias por postularte a ${v}`,
     thanks: (roles, v) => `Gracias por postularte para ocupar ${roles} en ${v}, y por el cuidado que pusiste en ello.`,
-    matched: "Encontramos a alguien que encaja más de cerca con este rol, así que esta vez no te invitaremos a las conversaciones. Se trata del encaje de un rol, y no es algo personal.", // check: "encaje"
+    matched: "Encontramos a alguien que encaja más de cerca con este rol. Gracias por tu tiempo y tu interés.", // needs-native-review: new words, 12 Nov 2026
     stayClose: "Nos encantaría seguir en contacto, y hay caminos abiertos para ser parte de la aldea:",
     program: (name, url) => `${name}: ${url}`,
     quest: (url) => `Toma una misión: ${url}`,
@@ -521,9 +523,9 @@ const es: ApplicantMessages = {
     stateNow: "ahora",
     stateLater: "después",
     move: {
-      firstReply: "Nos toca a nosotros: el rol que da la bienvenida a las personas te escribe para acordar un momento para conversar.",
+      firstReply: "Nos toca a nosotros: el rol que da la bienvenida a las personas te escribe para que reserves un momento para conversar.", // needs-native-review: new words, 12 Nov 2026
       interview: (role, minutes) => `Nos toca a nosotros: ${role} conversa contigo unos ${minutes} minutos y luego deja una nota.`,
-      interviewWaiting: "Nos toca a nosotros: acordamos la siguiente conversación cuando la anterior esté escrita.",
+      interviewWaiting: "Nos toca a nosotros: la siguiente conversación se abre cuando la anterior esté escrita. Tú la reservas en el horario que elijas.", // needs-native-review: new words, 12 Nov 2026
       consent: "Nos toca a nosotros: el círculo valora tu propuesta y da su consentimiento, o dice qué falta.",
       adopted: "Te toca a ti: crear tu cuenta. El enlace para hacerlo está en tu correo.",
       withdrawn: "No hace falta nada más. Retiraste esta propuesta.",
@@ -541,10 +543,11 @@ const es: ApplicantMessages = {
     },
     booking: {
       label: "Cómo se agendan las conversaciones",
-      block: (total, firstRole) => `Las conversaciones son un solo bloque de ${total}, agendado con ${firstRole ?? "el primer rol"}, y los demás roles se suman en momentos fijos. Si te queda mejor, pide que se repartan en varios días.`,
-      split: "Las conversaciones se agendan una por una, en varios días, cada una con su propio rol.",
-      splitAsk: "Repartir las conversaciones en varios días",
-      minutes: (total) => `${total} minutos`,
+      // needs-native-review: new words, 12 Nov 2026
+      order: (roles) =>
+        roles.length <= 1
+          ? `Después de la invitación, reservas la conversación${roles[0] ? ` con ${roles[0]}` : ""} en el horario que elijas.`
+          : `Después de la invitación, reservas cada conversación en los horarios que elijas, en este orden: primero ${roles[0]}, luego ${roles.slice(1).join(", luego ")}. Si quieres, puedes reservarlas una tras otra.`,
     },
     references: {
       none: "No diste referencias, así que haremos una verificación de antecedentes. Aceptaste cuando enviaste tu propuesta. Nosotros cubrimos su costo y no contactamos a nadie antes de nuestra primera conversación contigo.",
@@ -582,7 +585,7 @@ export interface ApplicantStepWords {
 export const APPLICANT_STEPS: Record<ApplicantLanguage, Record<ApplicantStepKey, ApplicantStepWords>> = {
   en: {
     received: { name: "Received", when: () => "Your application reaches us the moment you confirm your address." },
-    review: { name: "Our review", when: (days) => `Within ${days} ${days === 1 ? "day" : "days"}, we invite you to the conversations or write to thank you.` },
+    review: { name: "Our review", when: (days) => `Within ${days} ${days === 1 ? "day" : "days"}, we invite you to book conversation times or write to thank you.` },
     invitation: { name: "Invitation", when: () => "An invitation by email lists the conversations in order, with how long each one is." },
     conversations: { name: "Conversations", when: () => "One after another with the roles you would work beside, usually within two weeks of the invitation." },
     decision: { name: "Decision", when: () => "The circle decides by consent, usually within a week of the last conversation." },
@@ -591,7 +594,7 @@ export const APPLICANT_STEPS: Record<ApplicantLanguage, Record<ApplicantStepKey,
   // needs-native-review
   es: {
     received: { name: "Recibida", when: () => "Tu postulación nos llega en cuanto confirmas tu correo." },
-    review: { name: "Nuestra revisión", when: (days) => `En un plazo de ${days} ${days === 1 ? "día" : "días"}, te invitamos a las conversaciones o te escribimos para darte las gracias.` },
+    review: { name: "Nuestra revisión", when: (days) => `En un plazo de ${days} ${days === 1 ? "día" : "días"}, te invitamos a reservar horarios para las conversaciones o te escribimos para darte las gracias.` }, // needs-native-review: new words, 12 Nov 2026
     invitation: { name: "Invitación", when: () => "Una invitación por correo enumera las conversaciones en orden, con la duración de cada una." },
     conversations: { name: "Conversaciones", when: () => "Una tras otra con los roles con los que trabajarías, por lo general dentro de las dos semanas siguientes a la invitación." },
     decision: { name: "Decisión", when: () => "El círculo decide por consentimiento, por lo general dentro de la semana siguiente a la última conversación." },
@@ -652,7 +655,7 @@ export interface StatusView {
   stepWords: string;
   move: string;
   path: Array<{ label: string; state: "done" | "now" | "later" }>;
-  booking: { text: string; canSplit: boolean } | null;
+  booking: { text: string } | null;
   references: string | null;
 }
 
@@ -719,10 +722,9 @@ export function statusView(lang: ApplicantLanguage | null | undefined, s: Status
   }
 
   const talks = s.path.map((p) => CONVERSATION_LABEL.exec(p.label)).filter((m): m is RegExpExecArray => !!m);
-  const total = talks.reduce((n, m) => n + Number(m[2]), 0);
   const booking =
     s.booking && !decided && talks.length > 0
-      ? { text: s.mode === "split" ? w.booking.split : w.booking.block(w.booking.minutes(total), talks[0][1]), canSplit: s.mode === "block" }
+      ? { text: w.booking.order(talks.map((m) => m[1])) }
       : null;
 
   const references = closed || typeof s.referencesGiven !== "number" ? null : s.referencesGiven === 0 ? w.references.none : w.references.some(s.referencesGiven);

@@ -87,7 +87,7 @@ export const SECTION_WORDS = {
   paid: "This is a paid role",
   payShape: "How pay works",
   editorHeading: "Who we hope for, and how pay works",
-  editorLede: "Shown on the full card to everyone. A card shows its ceiling when you write one, and the village's split unless you write this role's own shares. Ranges and minimums stay off every card.",
+  editorLede: "Shown on the full card to everyone. We're transparent about all compensation and how value in (contributions) equals value out (rewards).",
   paidToggle: "Say on the card that this is a paid role",
   shareLabel: "Share",
   sharePct: "Percent",
@@ -109,7 +109,7 @@ export const SECTION_PROBLEMS = {
   total: "The shares add up to more than 100 percent.",
   shareLabel: "Each share has a short name, like Cash.",
   tooManyShares: `At most ${SECTION_LIMITS.shares} shares.`,
-  ceiling: "The ceiling is one whole figure above zero, a three-letter currency like USD, and month, moon or year. Never a range.",
+  ceiling: "Write one amount above zero, a currency like USD, and month, moon or year.",
   notSections: "The founding sections arrive as a set of fields.",
 } as const;
 

@@ -398,19 +398,21 @@ describe.skipIf(!configured)("application review, on a real schema", () => {
     });
   });
 
-  describe("the conversations are one block unless split (D30)", () => {
-    it("says one block through the first role by default, and splits on request, once", async () => {
+  describe("one booking story, whatever the role's conversationMode holds (D30 kept, lead 12 Nov 2026)", () => {
+    it("tells the applicant they book each conversation at times they choose, in order, before and after an old split request", async () => {
       const { id, confirm } = await confirmed("block@example.test");
       const token = new URL(`${ORIGIN}${confirm.statusPath}`).searchParams.get("token");
       const before = await call("GET", `/api/application-status/${id}?token=${token}`, undefined, null);
       expect(before.body.status.mode).toBe("block");
-      expect(before.body.status.booking).toContain("one block of 120 minutes");
-      expect(before.body.status.booking).toContain("Channel Role");
+      expect(before.body.status.booking).toMatch(/^After the invitation, you book each conversation at times you choose, in this order: Channel Role first, then /);
+      expect(before.body.status.booking).toContain("You may book them back to back if you like.");
+      expect(before.body.status.booking).not.toMatch(/one block|split/);
+      // The old request is still answered (expand-only), and the story does not change with it.
       const split = await call("POST", `/api/application-status/${id}/split?token=${token}`, {}, null);
       expect(split.status).toBe(200);
       const after = await call("GET", `/api/application-status/${id}?token=${token}`, undefined, null);
       expect(after.body.status.mode).toBe("split");
-      expect(after.body.status.booking).toContain("over several days");
+      expect(after.body.status.booking).toBe(before.body.status.booking);
       // CONTROL: a wrong token cannot split, and the visitor path never reveals copy to a stranger.
       expect((await call("POST", `/api/application-status/${id}/split?token=nope`, {}, null)).status).toBe(404);
     });

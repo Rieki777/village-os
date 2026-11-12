@@ -2696,7 +2696,7 @@ export const VARIABLES: VariableDef[] = [
     key: "org.founding_first_cycle",
     category: "The founding team",
     label: "What the first cycle looks like",
-    description: "Shown on the Your first day step of the application: how long the first cycle is, when it runs, and that either side may end it there.",
+    description: "Shown on the Your first day step of the application: how long the first cycle is, when it runs, and that either side may end it there after the first full moon cycle.",
     type: "longtext",
     default: "Your first cycle is one month. At its end, either side may choose to stop there, with thanks.",
   },

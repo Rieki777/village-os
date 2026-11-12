@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { APPLICANT_LANGUAGES, APPLICANT_NOTE_MAX, LANGUAGES, STATUS_LINK_STARTS, cleanNote, statusView, type ApplicantLanguage } from "./applicantWords";
-import { statusFor } from "./applicationReview";
+import { bookingWords, statusFor } from "./applicationReview";
 import { chooseApplicantLanguage } from "./applicantLanguage";
 import { offeredLocaleTags } from "./i18nLocales";
 import { adoptedAccountLetter, adoptedInviteLetter, applicantUpdate, declinedLetter, type ApplicantUpdateKind } from "./openProposalDecide";
@@ -167,13 +167,22 @@ describe("the status page's words (statusView)", () => {
     expect(statusView("es", served(input())).path.map((p) => p.label)).toContain("Conversación con Water Role (20 minutos)");
   });
 
-  it("the booking line is built in the language, in minutes only", () => {
+  it("the booking line tells one story: the applicant books each conversation at times they choose, in order", () => {
     const en = statusView("en", served(input())).booking!;
-    expect(en.text).toContain("80 minutes");
-    expect(en.text).toContain("Welcome Role");
-    expect(en.canSplit).toBe(true);
-    expect(statusView("es", served(input())).booking!.text).toContain("80 minutos");
-    for (const lang of APPLICANT_LANGUAGES) expect(JSON.stringify(LANGUAGES[lang].status.booking.minutes(80))).not.toMatch(/hour|hora/i);
+    expect(en.text).toBe(
+      "After the invitation, you book each conversation at times you choose, in this order: Welcome Role first, then Water Role. You may book them back to back if you like.",
+    );
+    // The same story whatever the role's conversationMode holds (old cards may carry "split").
+    expect(statusView("en", served(input(), { mode: "split" })).booking!.text).toBe(en.text);
+    expect(statusView("es", served(input())).booking!.text).toContain("primero Welcome Role, luego Water Role");
+    // The words the server sends for the reviewer and the status read are the applicant's English, word for word.
+    expect(bookingWords(["Welcome Role", "Water Role"])).toBe(en.text);
+    expect(bookingWords(["Welcome Role"])).toBe(LANGUAGES.en.status.booking.order(["Welcome Role"]));
+    // Nothing about one block, splitting, or asking for the conversations to be moved.
+    for (const lang of APPLICANT_LANGUAGES) {
+      const said = JSON.stringify(LANGUAGES[lang].status.booking) + LANGUAGES[lang].status.booking.order(["A", "B"]) + LANGUAGES[lang].invite.booking;
+      expect(said).not.toMatch(/block|split|bloque|repart/i);
+    }
   });
 
   it("the references line says what we know, never 'no references' after a decision", () => {

@@ -88,16 +88,28 @@ export const REVIEW_FIRST_VARIABLE = "org.review_before_conversations";
 export const CONVERSATION_MODES = ["block", "split"] as const;
 export type ConversationMode = (typeof CONVERSATION_MODES)[number];
 
-/** A role's setting. By default one block through the first role's link, the others joining at set times; split over days on request. */
+/**
+ * A role's setting, kept for the cards that carry it (expand-only, D30). Since
+ * 12 Nov 2026 it no longer changes what the applicant reads: whatever it holds,
+ * the applicant books each conversation at times they choose, in order.
+ */
 export function parseConversationMode(raw: unknown): ConversationMode {
   return raw === "split" ? "split" : "block";
 }
 
-/** The line the applicant reads about how their conversations are booked. */
-export function bookingWords(mode: ConversationMode, firstRoleName: string | null, total: number): string {
-  return mode === "block"
-    ? `The conversations are one block of ${minutesWords(total)}, booked through ${firstRoleName ?? "the first role"}, with the others joining at set times. Ask for them to be split over days if that suits you better.`
-    : `The conversations are booked one at a time, over several days, each through its own role.`;
+/**
+ * The line about how the conversations are booked, in English, for the status
+ * read and the reviewer's panel. ONE STORY (lead, 12 Nov 2026: "we invite you
+ * to book conversation times"): after the invitation the applicant books each
+ * conversation at times they choose, in the role's order, back to back if they
+ * like. The applicant's own page says the same in their language
+ * (`status.booking.order` in shared/applicantWords.ts, held equal by a test).
+ */
+export function bookingWords(roleNamesInOrder: readonly string[]): string {
+  const roles = roleNamesInOrder;
+  return roles.length <= 1
+    ? `After the invitation, you book the conversation${roles[0] ? ` with ${roles[0]}` : ""} at a time you choose.`
+    : `After the invitation, you book each conversation at times you choose, in this order: ${roles[0]} first, then ${roles.slice(1).join(", then ")}. You may book them back to back if you like.`;
 }
 
 // ── The interviewers a role names ───────────────────────────────────────────
@@ -431,7 +443,7 @@ export const REVIEW_WORDS = {
   interviewsDone: (roleNames: readonly string[]) => `Every conversation is written up for ${roleNames.join(", ")}`,
   consentWaitsForInterviews: "The circle will be asked once the conversations are written up.",
   agentsSkipped: (names: readonly string[]) => `${names.join(", ")} ${names.length === 1 ? "is" : "are"} held by an AI agent and not asked: consent is a human act.`,
-  splitAsked: "Recorded. The conversations will be booked over several days.",
+  splitAsked: "Recorded. You book each conversation at times you choose, in order.",
   splitTooLate: "The conversations have started, so they stay as booked.",
   arrived: (roleNames: readonly string[]) => `A proposal arrived for ${roleNames.join(", ")}`,
   notYourTurn: "That conversation has not opened yet. It opens when the one before it is written up.",
@@ -499,7 +511,6 @@ export const PANEL_WORDS = {
   statusNext: "Whose move",
   statusBy: (day: string) => `By ${day}`,
   statusMissing: "That link does not match a proposal. Check the link in your email.",
-  splitAsk: "Split the conversations over days",
   bookingLabel: "How the conversations are booked",
   statusPrivate: "This page shows steps only. What the people who talk with you write down stays with them.",
 } as const;

@@ -410,10 +410,9 @@ export async function scorecardsFor(deps: ReviewDeps, ref: string, viewerId: str
   const names = await repo.roleNamesById(pool, interviews.map((i) => i.roleId));
   const cur = currentInterview(interviews);
   const mine = cur && heldRoles.has(cur.roleId) && !recused ? cur : null;
-  const total = interviews.reduce((n, i) => n + i.minutes, 0);
   return {
     criteria: d.criteria,
-    booking: { mode: d.mode, words: bookingWords(d.mode, names.get(interviews[0]?.roleId ?? "") ?? null, total) },
+    booking: { mode: d.mode, words: bookingWords(interviews.map((i) => names.get(i.roleId) ?? i.roleId)) },
     mayRead,
     mayScore: mine ? { interviewId: mine.id, position: mine.position, minutes: mine.minutes } : null,
     interviews: interviews.map((i) => {
@@ -633,7 +632,7 @@ export async function statusOf(deps: ReviewDeps, ref: string): Promise<(Status &
   const d = await confirmedDetail(pool, ref);
   const roleNames = await repo.roleNamesById(pool, d?.roleIds ?? []);
   const mode = d?.mode ?? "block";
-  const booking = interviews.length ? bookingWords(mode, names.get(interviews[0].roleId) ?? null, interviews.reduce((n, i) => n + i.minutes, 0)) : null;
+  const booking = interviews.length ? bookingWords(interviews.map((i) => names.get(i.roleId) ?? i.roleId)) : null;
   const outcome = how === "adopted" || how === "declined" || how === "withdrawn" ? how : decidedStep ? "declined" : null;
   // About you (joining lane PR 2): the applicant sees HOW MANY references they gave, never who, and nobody else reads this page.
   // The language and the decider's note belong to the applicant: they ride on the applicant's own page only (token or their account), never on a decider's read.
