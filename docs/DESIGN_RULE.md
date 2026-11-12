@@ -15,8 +15,8 @@ the member door of `/propose`, `/love-letter`, `/application-status` and `/role-
 confidentiality and membership align cards), `/register`, `/set-password`, `/verify-email`, the onboarding path on the
 profile, `/approvals`, `/role-measures` and `/quests`, the membership align step inside the proposal form
 (`MembershipAtApplication`), `RoleCardBridge`, the signed-out card (`SignInDoors` in `ModuleGate`, whose two doors now
-take `BTN_PRIMARY` and `BTN_SECONDARY` on every page that shows them), Admin's onboarding path editor and
-`/request-membership`. A page joins by being
+take `BTN_PRIMARY` and `BTN_SECONDARY` on every page that shows them), Admin's onboarding path editor,
+`/request-membership`, and the village calendar at `/events` with its moon spiral, strip of days and turnings. A page joins by being
 added to `JOURNEY` (and `PAGES`, for a page) in the script, once it passes.
 `node scripts/check-design-rule.mjs --report` lists what the rule would flag everywhere else.
 
