@@ -143,7 +143,7 @@ export async function buildCircleCardFor(
       if (name) namesByRole.set(a.orgRoleId, [...(namesByRole.get(a.orgRoleId) ?? []), name]);
     }
     // In alphabetical order, so the line reads the same on every read.
-    for (const names of namesByRole.values()) names.sort((x, y) => x.localeCompare(y));
+    namesByRole.forEach((names) => names.sort((x: string, y: string) => x.localeCompare(y)));
   }
 
   // The holders' names are never read: nameOf answers nothing a reader sees.
