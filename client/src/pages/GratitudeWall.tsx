@@ -60,6 +60,7 @@ import { bothWays, newestFirst, pairKey, personKey, sinceMoment } from "@/compon
 import Fireflies from "@/components/journey/nature/Fireflies";
 import { BTN_PRIMARY, BTN_SECONDARY, EYEBROW, H1, HINT, LEDE, WORLD } from "@/components/journey/look";
 import type { WallEntry } from "@shared/gratitudeVoices";
+import { useFocusedFieldInView, useKeyboardInset } from "@/lib/keyboardInset";
 
 interface SentEntry {
   toId?: string | null;
@@ -305,6 +306,11 @@ export default function GratitudeWall() {
   const thisMoon = useMemo(() => sinceMoment(wall ?? [], moonStart), [wall, moonStart]);
   const asSheet = !wide;
   const sheetHidden = asSheet && !sheetOpen;
+  // M9: on a phone the keyboard covers the sheet's foot, and the field sat off screen. The open sheet
+  // rides above the keyboard and the field being typed in comes into view.
+  const keyboard = useKeyboardInset();
+  useFocusedFieldInView(sheet, asSheet && sheetOpen);
+  const sheetLift = asSheet && sheetOpen && keyboard > 0 ? { bottom: keyboard, maxHeight: `calc(100svh - ${keyboard}px - 1rem)` } : undefined;
 
   const web = (className: string) =>
     thisMoon.length > 0 ? (
@@ -423,6 +429,8 @@ export default function GratitudeWall() {
                     inert={sheetHidden ? true : undefined}
                     data-testid="composer"
                     data-sheet={asSheet ? (sheetOpen ? "open" : "closed") : "page"}
+                    data-keyboard={sheetLift ? "open" : undefined}
+                    style={sheetLift}
                     onTouchStart={(e) => { touchY.current = e.touches[0]?.clientY ?? null; }}
                     onTouchEnd={(e) => {
                       const start = touchY.current;
