@@ -13043,3 +13043,8 @@ msgstr "Filtrar por meta de la temporada y lugar"
 msgctxt "open work board heading"
 msgid "Open work"
 msgstr "Trabajo abierto"
+
+#: client/src/pages/Quests.tsx
+msgctxt "open work: gated quests explained once"
+msgid "Some of this work opens as you walk the {ladder} or step into a role. Each card says what opens it."
+msgstr "Parte de este trabajo se abre a medida que recorres el {ladder} o asumes un rol. Cada tarjeta dice qué lo abre."

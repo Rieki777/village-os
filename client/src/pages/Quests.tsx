@@ -23,6 +23,7 @@ import { useTokenName, useTokensWord, useValueTokenName } from "@/hooks/useToken
 import { useValueConversion } from "@/lib/moneyClaims";
 import { ExamplesBanner } from "@/components/ExamplesBanner";
 import InfoTip from "@/components/InfoTip";
+import { useLadderTitle } from "@/hooks/useVillagePaths";
 import QuestCard, { iconFor, QuestPoster } from "@/components/QuestCard";
 import {
   currentClaims,
@@ -89,6 +90,9 @@ export default function Quests() {
   const villageName = cfg?.project?.name ?? "the village";
   const eventsUrl = cfg?.project?.eventsUrl ?? "";
   const stages = cfg?.stages ?? [];
+  // The ladder's name in this village's words (Admin, Paths & Stages), for the
+  // one line that says some work opens further along it.
+  const ladder = useLadderTitle();
   const [activeCircle, setActiveCircle] = useState<string>("All");
   const [activeDifficulty, setActiveDifficulty] = useState<Difficulty | "All">(
     "All"
@@ -492,6 +496,13 @@ export default function Quests() {
                 {t({ message: "Show every goal", context: "open work: clear the season goal filter" })}
               </button>
             </div>
+          )}
+          {/* What the old "Further in" ring said, kept as one line: some work
+              opens with a stage or a role, and each card names what opens it. */}
+          {filtered.some((q) => q.minStage || q.requiresRole) && (
+            <p className="max-w-7xl mx-auto mb-8 text-sm text-muted-foreground">
+              {t({ message: `Some of this work opens as you walk the ${ladder} or step into a role. Each card says what opens it.`, context: "open work: gated quests explained once" })}
+            </p>
           )}
           <div className="max-w-7xl mx-auto mb-16 space-y-14">
             {groups.map((group, gi) => (
