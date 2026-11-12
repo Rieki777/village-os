@@ -22,7 +22,8 @@
  * business, the way the gatherings keep attendance off the public pulse.
  * Names come back alphabetical, never in any order that measures a person.
  */
-import type { Pool, RowDataPacket } from "mysql2/promise";
+import type { Pool } from "mysql2/promise";
+import * as store from "../repos/sessionGathering";
 import { calendarIdFor } from "./calendar";
 import { effectiveLifecycle } from "./modules";
 import { boolVar } from "./variables";
@@ -79,27 +80,11 @@ export async function attachGatherings(
     }));
   if (!wanted.length) return rows;
 
-  const ids = wanted.map(w => w.eventId);
-  const [events] = await pool.query<RowDataPacket[]>(
-    `SELECT id FROM events WHERE id IN (${ids.map(() => "?").join(",")}) AND removed_at IS NULL AND status IN ('scheduled','postponed')`,
-    ids
-  );
-  const live = new Set(events.map(e => String(e.id)));
+  const live = new Set((await store.liveGatheringRows(pool, wanted.map(w => w.eventId))).map(e => String(e.id)));
   const present = wanted.filter(w => live.has(w.eventId));
   if (!present.length) return rows;
-
   // One read for every evening: (event, date) pairs, `going` only.
-  const pairs = present
-    .map(() => "(r.event_id = ? AND r.occurrence_key = ?)")
-    .join(" OR ");
-  const params = present.flatMap(w => [w.eventId, w.row.next.key]);
-  const [answers] = await pool.query<RowDataPacket[]>(
-    `SELECT r.event_id, r.occurrence_key, r.user_id, u.name
-       FROM event_rsvps r
-       LEFT JOIN users u ON u.id = r.user_id
-      WHERE r.status = 'going' AND (${pairs})`,
-    params
-  );
+  const answers = await store.goingRows(pool, present.map(w => ({ eventId: w.eventId, occurrenceKey: w.row.next.key })));
 
   for (const w of present) {
     const mineHere = answers.filter(

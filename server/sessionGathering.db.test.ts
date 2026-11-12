@@ -149,19 +149,14 @@ describe.skipIf(!configured)(
       return row;
     };
     const eventsModule = async (value: string) => {
-      await q(
-        "INSERT INTO `module_settings` (`module_id`, `lifecycle`) VALUES ('events', ?) ON DUPLICATE KEY UPDATE `lifecycle` = VALUES(`lifecycle`)",
-        [value]
-      ); // module-review-ok: moves the events module in the scratch schema this suite provisioned, the way an admin would
+      await q("INSERT INTO `module_settings` (`module_id`, `lifecycle`) VALUES ('events', ?) ON DUPLICATE KEY UPDATE `lifecycle` = VALUES(`lifecycle`)", [value]); // module-review-ok: moves the events module in the scratch schema this suite provisioned, the way an admin would
       await loadModuleSettings(pool);
     };
 
     beforeAll(async () => {
       db = await provisionTestDb();
       pool = testPool(db, { connectionLimit: 4 });
-      await q(
-        "INSERT INTO `module_settings` (`module_id`, `lifecycle`) VALUES ('sessions', 'members')"
-      ); // module-review-ok: turns Live Sessions on in the scratch schema this suite provisioned, since the mirror measures the module's state
+      await q("INSERT INTO `module_settings` (`module_id`, `lifecycle`) VALUES ('sessions', 'members')"); // module-review-ok: turns Live Sessions on in the scratch schema this suite provisioned, since the mirror measures the module's state
       await eventsModule("members");
       for (const p of Object.values(PEOPLE))
         await usersRepo(pool).add({
