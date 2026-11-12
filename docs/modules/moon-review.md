@@ -100,6 +100,10 @@ launch, `members` takes a `module.switch` holder or a vote.
   more, the reading stops at Steady with its own line, the number unchanged; when the score is under 60% and Outside my
   roles items number at least the larger of 3 and Done, it reads "Covering an empty role". The score never sets pay
   and is never ranked.
+- **Who reads the score** (Phase C, decision 2, 12 Nov 2026): the member alone, on `GET /api/me/moon`. The review
+  queue (`GET /api/moon-review/queue`, and the Finance desk and the agent connector that read it) carries no task
+  score, band or role coverage, because the people reading it approve the member's pay. `QUEUE_ROW_KEYS` lists every
+  key a row carries. The arithmetic, the approval hash, the invoice and both approvals are unchanged.
 - **Thanks** (`parseThanks`, `moon_recaps.thanks_json`): who helped, up to ten, each a member or a named person with a
   short note that shows to other members only when the member chooses. The recap text carries a THANK YOU section. A
   thanked member is told once per recap. Gratitude moves only when the member sends it through the gratitude flow.
