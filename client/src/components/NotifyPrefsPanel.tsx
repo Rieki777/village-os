@@ -16,6 +16,7 @@ import { CashOwedNotice, VotesCastNotice, useUnpaidCash } from "@/components/Lea
 import { CASH_GIVE_UP_FIELD } from "@shared/cashOwed";
 import LeavingNotices, { useLeavingNotices } from "@/components/LeavingNotices";
 import EmailFromVillage from "@/components/EmailFromVillage";
+import MapLightSetting from "@/components/map/MapLightSetting";
 import { useModuleOn } from "@/modules/ModuleProvider";
 import { TASK_COPY, TASK_EMAIL_PREFS, isTaskEmailPref } from "@shared/sessionTasks";
 
@@ -371,6 +372,9 @@ export default function NotifyPrefsPanel({ onDeleted }: { onDeleted?: () => void
           {contactNote && <p role="alert" className="text-xs text-destructive mt-1">{contactNote}</p>}
         </div>
       )}
+
+      {/* D2: the member's own light on the circles map, off until they choose it. */}
+      <MapLightSetting />
 
       <GuideDataSection />
 

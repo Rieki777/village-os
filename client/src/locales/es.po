@@ -12646,3 +12646,63 @@ msgstr ""
 #~ msgctxt "open proposal review"
 #~ msgid "1 goal for your first moon"
 #~ msgstr "1 meta para tu primera luna"
+
+#: client/src/components/map/TodayOnTheMap.tsx
+msgctxt "circles map, today card"
+msgid "Today on the map"
+msgstr "Hoy en el mapa"
+
+#: client/src/components/map/TodayOnTheMap.tsx
+msgctxt "circles map, today card eyebrow"
+msgid "Today"
+msgstr "Hoy"
+
+#: client/src/components/map/TodayOnTheMap.tsx
+msgctxt "circles map, today card"
+msgid "Meeting today: {names}."
+msgstr "Se reúnen hoy: {names}."
+
+#: client/src/components/map/TodayOnTheMap.tsx
+msgctxt "circles map, today card"
+msgid "No circle meets today."
+msgstr "Hoy no se reúne ningún círculo."
+
+#: client/src/components/map/TodayOnTheMap.tsx
+msgctxt "circles map, today card"
+msgid "Fireflies gather at a circle's hearth when people meet there. A light shows only for members who turned theirs on, and never with a name."
+msgstr "Las luciérnagas se juntan en el fogón de un círculo cuando la gente se reúne allí. Una luz aparece solo por quienes encendieron la suya, y nunca con un nombre."
+
+#: client/src/components/map/TodayOnTheMap.tsx
+msgctxt "circles map, today card"
+msgid "Your light is on."
+msgstr "Tu luz está encendida."
+
+#: client/src/components/map/TodayOnTheMap.tsx
+msgctxt "circles map, today card"
+msgid "Your light is off."
+msgstr "Tu luz está apagada."
+
+#: client/src/components/map/TodayOnTheMap.tsx
+msgctxt "circles map, today card link to the setting"
+msgid "Change it"
+msgstr "Cambiarla"
+
+#: client/src/components/map/MapLightSetting.tsx
+msgctxt "map light setting"
+msgid "Show my light on the map"
+msgstr "Mostrar mi luz en el mapa"
+
+#: client/src/components/map/MapLightSetting.tsx
+msgctxt "map light setting, hint"
+msgid "When you join a circle's meeting today, a firefly joins the others at its hearth. Only signed-in members see it, it never carries your name, and a light shows only when at least one other is there too."
+msgstr "Cuando te unes hoy a la reunión de un círculo, una luciérnaga se suma a las demás en su fogón. Solo la ven quienes tienen sesión iniciada, nunca lleva tu nombre, y una luz aparece solo cuando hay al menos otra también."
+
+#: client/src/components/map/MapLightSetting.tsx
+msgctxt "map light setting, refused"
+msgid "That did not save. Your light is unchanged."
+msgstr "No se guardó. Tu luz sigue igual."
+
+#: client/src/components/map/MapLightSetting.tsx
+msgctxt "map light setting, offline"
+msgid "That did not reach the server. Your light is unchanged."
+msgstr "No llegó al servidor. Tu luz sigue igual."

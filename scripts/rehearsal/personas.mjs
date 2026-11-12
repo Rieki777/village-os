@@ -16,7 +16,8 @@
  *                    application with the warm not-invited letter.
  *   5. holder        Persona 2 again, adopted: registers from the invitation,
  *                    aligns with confidentiality and the terms, and reads the
- *                    profile in their first hour.
+ *                    profile in their first hour. Finds her light on the map
+ *                    off, turns it on, and reads the circles map's today card.
  *
  * Each walk is a list of acts. An act that fails stops that walk, and the
  * summary names it. The words typed are invented and plain.
@@ -508,6 +509,34 @@ export async function holder(w, ctx) {
     await sw.click();
   });
   await w.look("quests-by-roots");
+  // The living map (Phase D, D2): her light on the map is off until she
+  // chooses it, on her own settings; then the circles map glows as hearths
+  // joined by threads, with today's card naming circles and never people.
+  await w.step("find her light on the map off, and turn it on", async () => {
+    await w.goto("/profile#map-light");
+    const box = page.getByRole("checkbox", { name: "Show my light on the map" });
+    await box.waitFor();
+    if (await box.isChecked()) throw new Error("a new member's light on the map should be off until they choose it");
+    await box.scrollIntoViewIfNeeded();
+    await box.check();
+    // Asked of the server as the holder, so a switch that only looked on cannot pass.
+    const token = await page.evaluate(() => localStorage.getItem("village-auth-token"));
+    for (let i = 0; i < 10; i++) {
+      const res = await fetch(`${ctx.base}/api/map/my-light`, { headers: { authorization: `Bearer ${token}` } });
+      if ((await res.json()).on === true) return;
+      await page.waitForTimeout(300);
+    }
+    throw new Error("the server does not say her light is on");
+  });
+  await w.look("map-light", { journey: false, full: false });
+  await w.step("open the circles map and read today", async () => {
+    await w.goto("/map/circles");
+    await page.locator("[data-hearths]").first().waitFor({ state: "attached" });
+    const card = page.locator("[data-today-on-map]:visible").first();
+    await card.waitFor();
+    if ((await card.locator("[data-my-light]").getAttribute("data-my-light")) !== "on") throw new Error("today's card does not say her light is on");
+  });
+  await w.look("living-map", { journey: false });
 }
 
 export const PERSONAS = [

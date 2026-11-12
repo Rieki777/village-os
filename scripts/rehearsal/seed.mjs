@@ -89,6 +89,8 @@ export async function seedVillage({ base, dbUrl, adminPassword, log = () => {} }
   await call("PUT", "/api/admin/brand", { project: { name: "Example Village", tagline: "A small village that grows food and looks after its river" }, theme: { seed: "#1d3a30" } }, F);
   await call("PUT", "/api/admin/brochure-pages", { enabled: true }, F);
   for (const m of ["governance"]) await call("PUT", `/api/admin/modules/${m}/lifecycle`, { lifecycle: "public" }, F);
+  // The circles map, for members: the holder finds her light on it off until she chooses it (Phase D, D2).
+  await call("PUT", "/api/admin/modules/map/lifecycle", { lifecycle: "members" }, F);
   const cfg = await call("GET", "/api/admin/seasons", undefined, F);
   const now = Date.now();
   await call(
