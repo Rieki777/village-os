@@ -31,7 +31,7 @@ export interface CommonsPanelProps {
   shown?: number;
   /**
    * Open quests per goal id, the village's own count. Left out, the panel asks
-   * `useGoalOpenWork` (the slot lane C5 fills); a test passes it directly.
+   * `useGoalOpenWork` (the "Open work" board's read, `GET /api/quests/goals`); a test passes it directly.
    */
   openWork?: GoalOpenWork;
 }
