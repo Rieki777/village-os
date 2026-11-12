@@ -12646,3 +12646,173 @@ msgstr ""
 #~ msgctxt "open proposal review"
 #~ msgid "1 goal for your first moon"
 #~ msgstr "1 meta para tu primera luna"
+
+#: client/src/components/circleCard/Hearth.tsx
+msgctxt "circle hearth, the drawing"
+msgid "The {circleName} hearth. No roles sit here yet."
+msgstr "El fogón de {circleName}. Todavía no hay roles aquí."
+
+#: client/src/components/circleCard/Hearth.tsx
+msgctxt "circle hearth, the drawing"
+msgid "The {circleName} hearth: {0} roles around the fire, {held} held. Threads reach to {1} linked circles."
+msgstr "El fogón de {circleName}: {0} roles alrededor del fuego, {held} ocupados. Los hilos llegan a {1} círculos vinculados."
+
+#: client/src/components/circleCard/Hearth.tsx
+msgctxt "circle hearth, a thread"
+msgid "Linked circle: {0}"
+msgstr "Círculo vinculado: {0}"
+
+#: client/src/components/circleCard/Hearth.tsx
+msgctxt "circle hearth, a stone"
+msgid "{0}, held"
+msgstr "{0}, ocupado"
+
+#: client/src/components/circleCard/Hearth.tsx
+msgctxt "circle hearth, a stone"
+msgid "{0}, open"
+msgstr "{0}, abierto"
+
+#: client/src/components/circleCard/HearthSections.tsx
+msgctxt "circle hearth, we meet"
+msgid "We meet"
+msgstr "Nos reunimos"
+
+#: client/src/components/circleCard/HearthSections.tsx
+msgctxt "circle hearth, we meet"
+msgid "We will see you there. Your circle fills the seed."
+msgstr "Nos vemos allí. Tu círculo llena la semilla."
+
+#: client/src/components/circleCard/HearthSections.tsx
+msgctxt "circle hearth, we meet"
+msgid "Thank you for saying. We will miss you this time."
+msgstr "Gracias por avisar. Esta vez te vamos a extrañar."
+
+#: client/src/components/circleCard/HearthSections.tsx
+msgctxt "circle hearth, we meet"
+msgid "That did not reach us. Try again in a moment."
+msgstr "Eso no nos llegó. Inténtalo de nuevo en un momento."
+
+#: client/src/components/circleCard/HearthSections.tsx
+msgctxt "circle hearth, we meet"
+msgid "Nobody has said yet. The seed fills as we say we will come."
+msgstr "Nadie ha dicho todavía. La semilla se llena a medida que decimos que vendremos."
+
+#: client/src/components/circleCard/HearthSections.tsx
+msgctxt "circle hearth, we meet"
+msgid "One of us said they will be there."
+msgstr "Una persona dijo que estará allí."
+
+#: client/src/components/circleCard/HearthSections.tsx
+msgctxt "circle hearth, we meet"
+msgid "{0} of us said we will be there."
+msgstr "{0} de nosotros dijimos que estaremos allí."
+
+#: client/src/components/circleCard/HearthSections.tsx
+msgctxt "circle hearth, we meet"
+msgid "The seed for this meeting: {0} of {SEED_CIRCLES} circles filled"
+msgstr "La semilla de esta reunión: {0} de {SEED_CIRCLES} círculos llenos"
+
+#: client/src/components/circleCard/HearthSections.tsx
+msgctxt "circle hearth, we meet"
+msgid "You said you will be there."
+msgstr "Dijiste que estarás allí."
+
+#: client/src/components/circleCard/HearthSections.tsx
+msgctxt "circle hearth, we meet"
+msgid "I can't come after all"
+msgstr "Al final no puedo ir"
+
+#: client/src/components/circleCard/HearthSections.tsx
+msgctxt "circle hearth, we meet"
+msgid "I'll be there"
+msgstr "Allí estaré"
+
+#: client/src/components/circleCard/HearthSections.tsx
+msgctxt "circle hearth, we meet"
+msgid "I can't come this time"
+msgstr "Esta vez no puedo ir"
+
+#: client/src/components/circleCard/HearthSections.tsx
+msgctxt "circle hearth, we meet"
+msgid "Answer on the calendar"
+msgstr "Responde en el calendario"
+
+#: client/src/components/circleCard/HearthSections.tsx
+msgctxt "circle hearth, a plant"
+msgid "A seed, waiting for hands"
+msgstr "Una semilla, esperando manos"
+
+#: client/src/components/circleCard/HearthSections.tsx
+msgctxt "circle hearth, a plant"
+msgid "In bud, being carried"
+msgstr "En botón, alguien la lleva"
+
+#: client/src/components/circleCard/HearthSections.tsx
+msgctxt "circle hearth, a plant"
+msgid "Flowered"
+msgstr "Floreció"
+
+#: client/src/components/circleCard/HearthSections.tsx
+msgctxt "circle hearth, what we tend"
+msgid "What we tend"
+msgstr "Lo que cuidamos"
+
+#: client/src/components/circleCard/HearthSections.tsx
+msgctxt "circle hearth, what we tend"
+msgid "See all our work on the quest board"
+msgstr "Ver todo nuestro trabajo en el tablero de misiones"
+
+#: client/src/components/circleCard/HearthSections.tsx
+msgctxt "circle hearth, who holds what"
+msgid "Who holds what"
+msgstr "Quién sostiene qué"
+
+#: client/src/components/circleCard/HearthSections.tsx
+msgctxt "circle hearth, what we decided"
+msgid "Decided by consent"
+msgstr "Decidido por consentimiento"
+
+#: client/src/components/circleCard/HearthSections.tsx
+msgctxt "circle hearth, what we decided"
+msgid "By consent, {0}"
+msgstr "Por consentimiento, {0}"
+
+#: client/src/components/circleCard/HearthSections.tsx
+msgctxt "circle hearth, what we decided"
+msgid "What we decided"
+msgstr "Lo que decidimos"
+
+#: client/src/components/circleCard/HearthSections.tsx
+msgctxt "circle hearth, what we decided"
+msgid "Our words, adopted"
+msgstr "Nuestras palabras, adoptadas"
+
+#: client/src/components/circleCard/HearthSections.tsx
+msgctxt "circle hearth, what we decided"
+msgid "The whole log and its review dates are in Sessions"
+msgstr "El registro completo y sus fechas de revisión están en Sesiones"
+
+#: client/src/components/circleCard/HearthSections.tsx
+msgctxt "circle hearth, linked circles"
+msgid "Linked circles"
+msgstr "Círculos vinculados"
+
+#: client/src/components/circleCard/HearthSections.tsx
+msgctxt "circle hearth, linked circles"
+msgid "We sit within this circle"
+msgstr "Estamos dentro de este círculo"
+
+#: client/src/components/circleCard/HearthSections.tsx
+msgctxt "circle hearth, linked circles"
+msgid "This circle sits within ours"
+msgstr "Este círculo está dentro del nuestro"
+
+#: client/src/components/circleCard/HearthSections.tsx
+msgctxt "circle hearth, quiet"
+msgid "No roles sit at this hearth yet. The fire is lit for the first."
+msgstr "Todavía no hay roles en este fogón. El fuego está encendido para el primero."
+
+#: client/src/components/circleCard/HearthSections.tsx
+msgctxt "circle hearth, quiet"
+msgid "Propose a role for this circle"
+msgstr "Proponer un rol para este círculo"
