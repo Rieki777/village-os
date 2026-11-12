@@ -21,7 +21,12 @@
  * file counts a person against anyone, and none of it is ever sent to the
  * people approving pay (decision 2).
  */
-import { addDays, dayWords, type MoonRef, type RecapItem } from "@shared/moonRecap";
+import {
+  addDays,
+  dayWords,
+  type MoonRef,
+  type RecapItem,
+} from "@shared/moonRecap";
 import { PHI, vogel } from "@/components/journey/nature/geometry";
 
 // ── Words ────────────────────────────────────────────────────────────────────
@@ -30,19 +35,33 @@ export const CHAPTERS = ["sow", "tend", "full", "harvest"] as const;
 export type Chapter = (typeof CHAPTERS)[number];
 
 export const MOON_GARDEN_WORDS = {
-  chapterKicker: (n: number) => `Chapter ${["one", "two", "three", "four"][n] ?? n + 1}`,
+  chapterKicker: (n: number) =>
+    `Chapter ${["one", "two", "three", "four"][n] ?? n + 1}`,
   chapters: {
-    sow: { name: "We sow", line: "The new moon. We choose what we will tend this moon and bring our work in as it starts." },
-    tend: { name: "We tend", line: "Mondays we plant, Fridays we gather. Each piece of work grows in its role's bed." },
-    full: { name: "Full moon", line: "A short pause halfway. We look at what is growing and what can rest." },
-    harvest: { name: "We harvest", line: "We tell this moon in our own words and send it to the circle." },
+    sow: {
+      name: "We sow",
+      line: "The new moon. We choose what we will tend this moon and bring our work in as it starts.",
+    },
+    tend: {
+      name: "We tend",
+      line: "Mondays we plant, Fridays we gather. Each piece of work grows in its role's bed.",
+    },
+    full: {
+      name: "Full moon",
+      line: "A short pause halfway. We look at what is growing and what can rest.",
+    },
+    harvest: {
+      name: "We harvest",
+      line: "We tell this moon in our own words and send it to the circle.",
+    },
   } satisfies Record<Chapter, { name: string; line: string }>,
   chaptersHeading: "The four chapters",
   now: "Now",
   dayOf: (day: number, of: number) => `Day ${day} of ${of}`,
   closed: "This moon has closed",
   notYet: "This moon has not begun",
-  spiralLabel: (of: number) => `This moon as a golden spiral of ${of} days, the new moon at the centre`,
+  spiralLabel: (of: number) =>
+    `This moon as a golden spiral of ${of} days, the new moon at the centre`,
   today: "Today",
   newMoon: "New moon",
   fullMoon: "Full moon",
@@ -56,19 +75,33 @@ export const MOON_GARDEN_WORDS = {
   seed: "seed kept",
   emptyBed: "Resting soil this moon",
   lookAfter: "What I look after",
-  growing: (n: number) => (n === 1 ? "One piece of work growing here" : `${n} pieces of work growing here`),
+  growing: (n: number) =>
+    n === 1
+      ? "One piece of work growing here"
+      : `${n} pieces of work growing here`,
   resting: "Resting soil this moon",
-  restingNote: "Resting soil is part of the cycle. If part of a role is no longer yours to hold, we can say so at the harvest.",
+  restingNote:
+    "Resting soil is part of the cycle. If part of a role is no longer yours to hold, we can say so at the harvest.",
 } as const;
 
 // ── Days and chapters ────────────────────────────────────────────────────────
 
-type MoonDates = Pick<MoonRef, "firstDay" | "lastDay" | "halfwayDay" | "endOfMoonFriday">;
+type MoonDates = Pick<
+  MoonRef,
+  "firstDay" | "lastDay" | "halfwayDay" | "endOfMoonFriday"
+>;
 
 /** Every civil day of the moon, first to last. */
-export function moonDays(moon: Pick<MoonRef, "firstDay" | "lastDay">): string[] {
+export function moonDays(
+  moon: Pick<MoonRef, "firstDay" | "lastDay">
+): string[] {
   const out: string[] = [];
-  for (let d = moon.firstDay; d <= moon.lastDay && out.length < 40; d = addDays(d, 1)) out.push(d);
+  for (
+    let d = moon.firstDay;
+    d <= moon.lastDay && out.length < 40;
+    d = addDays(d, 1)
+  )
+    out.push(d);
   return out;
 }
 
@@ -81,8 +114,14 @@ export function harvestFrom(moon: MoonDates): string {
 /** The first day of each chapter, in order. The full moon falls back to the middle day when the table has none. */
 export function chapterStarts(moon: MoonDates): Record<Chapter, string> {
   const days = moonDays(moon);
-  const full = moon.halfwayDay ?? days[Math.floor(days.length / 2)] ?? moon.firstDay;
-  return { sow: moon.firstDay, tend: addDays(moon.firstDay, 7), full, harvest: harvestFrom(moon) };
+  const full =
+    moon.halfwayDay ?? days[Math.floor(days.length / 2)] ?? moon.firstDay;
+  return {
+    sow: moon.firstDay,
+    tend: addDays(moon.firstDay, 7),
+    full,
+    harvest: harvestFrom(moon),
+  };
 }
 
 /**
@@ -99,7 +138,10 @@ export function chapterOf(day: string, moon: MoonDates): Chapter {
 }
 
 /** Where today stands in this moon: before it, in it (with its day number), or after it. */
-export function standing(today: string, moon: Pick<MoonRef, "firstDay" | "lastDay">): { kind: "before" | "after" } | { kind: "in"; day: number; of: number } {
+export function standing(
+  today: string,
+  moon: Pick<MoonRef, "firstDay" | "lastDay">
+): { kind: "before" | "after" } | { kind: "in"; day: number; of: number } {
   const days = moonDays(moon);
   if (today < moon.firstDay) return { kind: "before" };
   if (today > moon.lastDay) return { kind: "after" };
@@ -113,9 +155,14 @@ export function localToday(now: Date = new Date()): string {
 }
 
 /** The one next act for the header, or null when the recap is no longer the member's to edit. */
-export function nextAct(chapter: Chapter, editable: boolean): { label: string; href: string } | null {
+export function nextAct(
+  chapter: Chapter,
+  editable: boolean
+): { label: string; href: string } | null {
   if (!editable) return null;
-  return chapter === "harvest" ? { label: MOON_GARDEN_WORDS.actWords, href: "#moon-own-words" } : { label: MOON_GARDEN_WORDS.actGather, href: "#moon-gather" };
+  return chapter === "harvest"
+    ? { label: MOON_GARDEN_WORDS.actWords, href: "#moon-own-words" }
+    : { label: MOON_GARDEN_WORDS.actGather, href: "#moon-gather" };
 }
 
 /** A chapter's line in the list: its first day in words, without the year the header already names. */
@@ -139,7 +186,12 @@ export const radiusAt = (t: number) => Math.pow(PHI, (2 * t) / Math.PI);
  * circle of radius `size` around (0, 0). Deterministic: the same moon draws
  * the same spiral on every render and in every test.
  */
-export function spiralDays(n: number, size = 100, turns = 1.75, samples = 1200): SpiralPoint[] {
+export function spiralDays(
+  n: number,
+  size = 100,
+  turns = 1.75,
+  samples = 1200
+): SpiralPoint[] {
   if (n <= 0) return [];
   const t0 = Math.PI * 0.5;
   const t1 = t0 + turns * Math.PI * 2;
@@ -161,7 +213,10 @@ export function spiralDays(n: number, size = 100, turns = 1.75, samples = 1200):
     const a = pts[j];
     const b = pts[Math.min(j + 1, pts.length - 1)];
     const f = b.s > a.s ? (want - a.s) / (b.s - a.s) : 0;
-    out.push({ x: (a.x + (b.x - a.x) * f) * scale, y: (a.y + (b.y - a.y) * f) * scale });
+    out.push({
+      x: (a.x + (b.x - a.x) * f) * scale,
+      y: (a.y + (b.y - a.y) * f) * scale,
+    });
   }
   return out;
 }
@@ -175,7 +230,9 @@ export function spiralPath(size = 100, turns = 1.75, steps = 240): string {
   for (let i = 0; i <= steps; i++) {
     const t = t0 + ((t1 - t0) * i) / steps;
     const r = radiusAt(t) * scale;
-    parts.push(`${i === 0 ? "M" : "L"}${(r * Math.cos(t)).toFixed(2)} ${(-r * Math.sin(t)).toFixed(2)}`);
+    parts.push(
+      `${i === 0 ? "M" : "L"}${(r * Math.cos(t)).toFixed(2)} ${(-r * Math.sin(t)).toFixed(2)}`
+    );
   }
   return parts.join(" ");
 }
@@ -185,7 +242,9 @@ export function spiralPath(size = 100, turns = 1.75, steps = 240): string {
 export type BedPlant = "flowered" | "bud" | "sprout" | "seed";
 
 /** The plant a kept piece of work grows as, or null when it leaves the bed (let go, redirect, not kept). */
-export function plantOf(item: Pick<RecapItem, "state" | "taskStatus">): BedPlant | null {
+export function plantOf(
+  item: Pick<RecapItem, "state" | "taskStatus">
+): BedPlant | null {
   if (item.state !== "kept") return null;
   switch (item.taskStatus) {
     case "done":
@@ -203,9 +262,15 @@ export function plantOf(item: Pick<RecapItem, "state" | "taskStatus">): BedPlant
 }
 
 /** One role's bed: its plants in the order the work was kept (first at the centre). */
-export function bedFor(roleId: string, items: readonly Pick<RecapItem, "roleId" | "state" | "taskStatus" | "position">[]): BedPlant[] {
+export function bedFor(
+  roleId: string,
+  items: readonly Pick<
+    RecapItem,
+    "roleId" | "state" | "taskStatus" | "position"
+  >[]
+): BedPlant[] {
   return [...items]
-    .filter((i) => i.roleId === roleId)
+    .filter(i => i.roleId === roleId)
     .sort((a, b) => a.position - b.position)
     .map(plantOf)
     .filter((p): p is BedPlant => p !== null);
@@ -225,7 +290,7 @@ export function bedSpots(n: number, size = 100): SpiralPoint[] {
 export function bedWords(plants: readonly BedPlant[]): string {
   const order: BedPlant[] = ["flowered", "bud", "sprout", "seed"];
   return order
-    .map((k) => [k, plants.filter((p) => p === k).length] as const)
+    .map(k => [k, plants.filter(p => p === k).length] as const)
     .filter(([, n]) => n > 0)
     .map(([k, n]) => `${n} ${MOON_GARDEN_WORDS[k]}`)
     .join(", ");

@@ -499,9 +499,11 @@ export async function holder(w, ctx) {
     if (days < 28 || days > 31) throw new Error(`the spiral draws ${days} days`);
     if (!(await page.locator("[data-testid=moon-chapter]").innerText()).trim()) throw new Error("the moon board names no chapter");
     if (!(await page.locator("[data-testid=role-bed]").count())) throw new Error("the role has no garden bed");
-    const text = (await page.locator("[data-testid=my-moon]").innerText()).replace(/\s+/g, " ");
-    const band = text.match(/Task score|Role coverage|\d+%/);
-    if (band) throw new Error(`the moon board shows a score: "${band[0]}"`);
+    // The spiral and the beds themselves (a role card's own words may carry a percent, such as a commitment).
+    const drawn = [await header.innerText(), ...(await page.locator("[data-testid=role-bed]").allInnerTexts())].join(" ").replace(/\s+/g, " ");
+    const band = drawn.match(/Task score|Role coverage|\d+%/);
+    if (band) throw new Error(`the moon garden shows a score: "${band[0]}"`);
+    if (await page.getByText("Task score", { exact: true }).count()) throw new Error("the moon board still draws the task score rings");
   });
   await w.look("moon-garden", { next: page.locator("[data-testid=moon-act]").first() });
   // The prune (11 Nov 2026): a profile wears no rung and keeps no totals beside a name.
