@@ -26,7 +26,6 @@ import Layout from "@/components/Layout";
 import ModuleGate from "@/components/modules/ModuleGate";
 import { storedText, writeStored } from "@/lib/safeStorage";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "wouter";
 import { useModule, useModules } from "@/modules/ModuleProvider";
 import { authToken } from "@/lib/gameApi";
 import { CalendarDays, ChevronLeft, ChevronRight, ExternalLink, MapPin, Users, Video } from "lucide-react";
@@ -44,6 +43,7 @@ import CalendarFeedCard from "@/components/calendar/CalendarFeedCard";
 import MoonSpiral from "@/components/calendar/MoonSpiral";
 import DayStrip from "@/components/calendar/DayStrip";
 import MoonTurnings from "@/components/calendar/MoonTurnings";
+import CalendarNotes, { notesUnderMoon, usePhoneWidth } from "@/components/calendar/CalendarNotes";
 import { moonDays } from "@/components/calendar/moonSpiral";
 import GatheringEmailSettings from "@/components/comms/GatheringEmailSettings";
 // Village Comms (5.8, 5.9): a visitor's guest door, and the host's recap after it begins.
@@ -213,6 +213,8 @@ export default function Events() {
     () => (payload && cursor ? moonDays(cursor, today, anchor, timezone, byDay) : null),
     [payload, cursor, today, anchor, timezone, byDay],
   );
+  const phone = usePhoneWidth();
+  const tuckNotes = notesUnderMoon(phone, tab, Boolean(payload && cursor && moon));
 
   /** Dates on the moon view, in the reader's language and the village's zone. */
   const fmt = (d: CivilDay, opts: Intl.DateTimeFormatOptions): string => {
@@ -404,18 +406,8 @@ export default function Events() {
               </span>
             </p>
           )}
-          {payload && <p className="mt-2 text-xs text-muted-foreground">{zoneNote(timezone)}</p>}
-          {/* The season page is what this calendar sits inside, and it is
-              ungated core content, so this link is safe on every fork. It is
-              also the second door onto /seasonal-festivals, which lived behind
-              one menu entry. */}
-          <p className="mt-2 text-xs text-muted-foreground">
-            The turnings that shape this year are on the{" "}
-            <Link href="/seasonal-festivals" className="text-notice font-medium underline underline-offset-2 hover:text-foreground">
-              Seasonal Festivals
-            </Link>{" "}
-            page.
-          </p>
+          {/* The clock line and the festivals door; on a phone in the moon view they sit under the moon (CalendarNotes). */}
+          {!tuckNotes && <CalendarNotes zoneLine={payload ? zoneNote(timezone) : null} />}
         </div>
       </section>
 
@@ -528,6 +520,7 @@ export default function Events() {
                   </section>
                 )}
                 <MoonTurnings moon={moon} dayFor={dayFor} onSelect={selectDay} dayName={dayName} />
+                {tuckNotes && <CalendarNotes zoneLine={zoneNote(timezone)} />}
               </div>
             </div>
           )}
