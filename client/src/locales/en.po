@@ -7029,6 +7029,11 @@ msgctxt "approved writes"
 msgid "Approved by {0}"
 msgstr "Approved by {0}"
 
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "thanks composer: the plain allowance line"
+msgid "Each cycle every member receives an allowance to send."
+msgstr "Each cycle every member receives an allowance to send."
+
 #: client/src/components/review/SeraActs.tsx
 msgid "Keep ours means {owner} version stays out of the list until {agent} changes it again. Undo brings it back."
 msgstr "Keep ours means {owner} version stays out of the list until {agent} changes it again. Undo brings it back."
@@ -11076,6 +11081,11 @@ msgstr "Add to a new change request"
 msgid "If that does not settle it, we ask the care holder to sit with us. In the room: the two of us and the care holder."
 msgstr "If that does not settle it, we ask the care holder to sit with us. In the room: the two of us and the care holder."
 
+#: client/src/pages/Home.tsx
+msgctxt "landing hero, the founding team line"
+msgid "We're forming the founding team now: paid roles that take the village from idea to home, season by season and intended for the long run."
+msgstr "We're forming the founding team now: paid roles that take the village from idea to home, season by season and intended for the long run."
+
 #: client/src/components/canvas/CanvasSeason.tsx
 msgid "Take the stored season off? It no longer reads, so the canvas is already in canvas order, and every reading stays."
 msgstr "Take the stored season off? It no longer reads, so the canvas is already in canvas order, and every reading stays."
@@ -11613,9 +11623,9 @@ msgid "No words yet"
 msgstr "No words yet"
 
 #: client/src/pages/Home.tsx
-msgctxt "landing hero, the founding team line"
-msgid "We're forming the founding team now: paid, multi-year roles that take the village from idea to home."
-msgstr "We're forming the founding team now: paid, multi-year roles that take the village from idea to home."
+#~ msgctxt "landing hero, the founding team line"
+#~ msgid "We're forming the founding team now: paid, multi-year roles that take the village from idea to home."
+#~ msgstr "We're forming the founding team now: paid, multi-year roles that take the village from idea to home."
 
 #: client/src/pages/ProposeARole.tsx
 #~ msgctxt "open proposal companion"
@@ -14463,9 +14473,9 @@ msgstr "Ask in {circle}"
 #. placeholder {0}: budget.remaining
 #. placeholder {1}: budget.total
 #: client/src/pages/GratitudeWall.tsx
-msgctxt "thanks composer: the allowance left this cycle"
-msgid "<0>{0}</0> of {1} left to give this cycle"
-msgstr "<0>{0}</0> of {1} left to give this cycle"
+#~ msgctxt "thanks composer: the allowance left this cycle"
+#~ msgid "<0>{0}</0> of {1} left to give this cycle"
+#~ msgstr "<0>{0}</0> of {1} left to give this cycle"
 
 #: client/src/components/admin/QuestSafetyEditor.tsx
 msgid "{refused, plural, one {# open claim on this quest no longer meets these rules. Talk with whoever holds it.} other {# open claims on this quest no longer meet these rules. Talk with whoever holds them.}}"
