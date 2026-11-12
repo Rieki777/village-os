@@ -46,7 +46,6 @@ export const EMPTY_TERMS_STEP: TermsStepValue = { answers: {}, commitmentPct: nu
 
 // The profile's shapes (docs/DESIGN_RULE.md): a tile, the eyebrow, a field, a hint.
 const TILE = "rounded-xl border border-border bg-muted p-4";
-const EYEBROW = "text-xs font-semibold uppercase tracking-widest text-notice";
 const HINT = "text-sm text-muted-foreground";
 const FIELD = "w-full rounded-lg border border-border bg-background px-3 py-2 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring";
 
@@ -88,6 +87,10 @@ export default function TermsEight({
       <p className={HINT} data-terms-hint="">
         {t`Mark anything you'd like to talk through. Nothing is final until we agree together.`}
       </p>
+      {/* One row per setting (D-06): its name, the role's wording, and a two-part I accept / Let's talk
+          control. A phone stacks the three; from sm up they sit on one line, with any note and the
+          commitment beneath. The radios stay radios, each laid over its half of the control. */}
+      <div className="grid" data-terms-rows="">
       {TERM_KEYS.map((k) => {
         const lines = roles
           .map((r) => ({ role: r, text: r.words?.[k]?.trim() ?? "", commitment: k === "clocks" ? (r.commitmentPct ?? null) : null }))
@@ -95,11 +98,23 @@ export default function TermsEight({
         const written = lines.length > 0;
         const answer = value.answers[k];
         const name = `${idPrefix}-${k}`;
+        const half = (choice: "accept" | "talk", words: string) => (
+          <label className="relative flex min-h-11 flex-1 cursor-pointer items-center justify-center rounded-md px-3 text-sm text-muted-foreground hover:text-foreground has-[:checked]:bg-muted has-[:checked]:text-foreground has-[:checked]:ring-1 has-[:checked]:ring-notice/70 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring">
+            <input
+              type="radio"
+              name={name}
+              className="absolute inset-0 size-full cursor-pointer opacity-0"
+              checked={answer?.choice === choice}
+              onChange={() => setAnswer(k, { choice, note: answer?.note ?? "" })}
+            />
+            {words}
+          </label>
+        );
         return (
-          <div key={k} className={TILE} data-term={k} data-written={written ? "yes" : "no"}>
-            <p className={EYEBROW}>{labels[k]}</p>
+          <div key={k} className="grid gap-3 border-t border-border py-4 sm:grid-cols-[6rem_minmax(0,1fr)_auto] sm:items-center sm:gap-x-5" data-term={k} data-written={written ? "yes" : "no"}>
+            <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">{labels[k]}</p>
             {written ? (
-              <div className="mt-2 grid gap-2">
+              <div className="grid gap-1">
                 {lines.map((l) => (
                   <div key={l.role.id} className="text-foreground">
                     {several && <p className="text-sm font-semibold text-foreground">{l.role.name}</p>}
@@ -109,35 +124,29 @@ export default function TermsEight({
                 ))}
               </div>
             ) : (
-              <p className="mt-2 text-foreground" data-set-together="">
+              <p className="text-foreground sm:col-span-2" data-set-together="">
                 {t`We'll set this together.`}
               </p>
             )}
             {written && (
-              <div className="mt-3 grid gap-1" role="radiogroup" aria-label={labels[k]}>
-                <label className="flex min-h-11 items-center gap-2 text-sm text-foreground">
-                  <input type="radio" name={name} className="size-5 shrink-0 accent-notice" checked={answer?.choice === "accept"} onChange={() => setAnswer(k, { choice: "accept", note: answer?.note ?? "" })} />
-                  {t({ message: "I accept", context: "terms setting answer" })}
-                </label>
-                <label className="flex min-h-11 items-center gap-2 text-sm text-foreground">
-                  <input type="radio" name={name} className="size-5 shrink-0 accent-notice" checked={answer?.choice === "talk"} onChange={() => setAnswer(k, { choice: "talk", note: answer?.note ?? "" })} />
-                  {t({ message: "Let's talk", context: "terms setting answer" })}
-                </label>
-                {answer?.choice === "talk" && (
-                  <textarea
-                    aria-label={t`What you would like to talk about: ${labels[k]}`}
-                    placeholder={t`A note, if you like`}
-                    rows={2}
-                    maxLength={TERM_NOTE_MAX}
-                    value={answer.note}
-                    onChange={(e) => setAnswer(k, { choice: "talk", note: e.target.value })}
-                    className={FIELD}
-                  />
-                )}
+              <div className="flex gap-1 rounded-lg border border-border p-1 sm:w-48" role="radiogroup" aria-label={labels[k]}>
+                {half("accept", t({ message: "I accept", context: "terms setting answer" }))}
+                {half("talk", t({ message: "Let's talk", context: "terms setting answer" }))}
               </div>
             )}
+            {written && answer?.choice === "talk" && (
+              <textarea
+                aria-label={t`What you would like to talk about: ${labels[k]}`}
+                placeholder={t`A note, if you like`}
+                rows={2}
+                maxLength={TERM_NOTE_MAX}
+                value={answer.note}
+                onChange={(e) => setAnswer(k, { choice: "talk", note: e.target.value })}
+                className={`${FIELD} sm:col-span-2 sm:col-start-2`}
+              />
+            )}
             {k === "clocks" && (
-              <div className="mt-4 border-t border-border pt-4" data-commitment="">
+              <div className={`${TILE} sm:col-span-2 sm:col-start-2`} data-commitment="">
                 <label htmlFor={`${idPrefix}-commitment`} className="text-sm font-semibold text-foreground">
                   {t({ message: "Your commitment", context: "terms commitment" })}
                 </label>
@@ -164,6 +173,7 @@ export default function TermsEight({
           </div>
         );
       })}
+      </div>
       {problem && (
         <p role="alert" className="text-sm font-medium text-destructive">
           {problem}

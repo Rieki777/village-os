@@ -806,6 +806,11 @@ msgctxt "roles page button"
 msgid "Browse the open roles"
 msgstr "Browse the open roles"
 
+#: client/src/pages/ApplicationStatus.tsx
+msgctxt "applicant's application status, adoption"
+msgid "The circle said yes. We'd love you on the team."
+msgstr "The circle said yes. We'd love you on the team."
+
 #: client/src/components/notebook/NotebookAdd.tsx
 msgctxt "pasted document body field"
 msgid "The text"
@@ -910,6 +915,11 @@ msgstr "See which one"
 msgctxt "agent paths, search hint"
 msgid "A word, a path or GET"
 msgstr "A word, a path or GET"
+
+#: client/src/pages/ApplicationStatus.tsx
+msgctxt "applicant's application status, adoption"
+msgid "The circle said yes. We'd love you on the team. Your invitation to make your account is in your email."
+msgstr "The circle said yes. We'd love you on the team. Your invitation to make your account is in your email."
 
 #: client/src/components/map/TodayOnTheMap.tsx
 msgctxt "circles map, today card"
@@ -1060,7 +1070,7 @@ msgctxt "circle hearth, we meet"
 msgid "I can't come after all"
 msgstr "I can't come after all"
 
-#: client/src/pages/ProposeARole.tsx
+#: client/src/components/fireflyPath/ApplySteps.tsx
 msgctxt "open proposal review"
 msgid "Change"
 msgstr "Change"
@@ -1715,8 +1725,8 @@ msgid "{0} answers for the service."
 msgstr "{0} answers for the service."
 
 #: client/src/components/openProposal/RoleCardBridge.tsx
-msgid "Wants to talk about the terms: {termsNote}"
-msgstr "Wants to talk about the terms: {termsNote}"
+#~ msgid "Wants to talk about the terms: {termsNote}"
+#~ msgstr "Wants to talk about the terms: {termsNote}"
 
 #: client/src/components/roleEdit/RoleEditor.tsx
 msgctxt "role editor"
@@ -1919,6 +1929,11 @@ msgstr "Kept ours for {n}. They stay out of the list until they change again."
 msgid "The blocks below are in canvas order until a season is loaded again."
 msgstr "The blocks below are in canvas order until a season is loaded again."
 
+#: client/src/components/openProposal/RoleCardBridge.tsx
+msgctxt "open proposal side by side"
+msgid "Terms to talk through"
+msgstr "Terms to talk through"
+
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "heading on the change requests page"
 msgid "Start a change request"
@@ -1988,7 +2003,7 @@ msgctxt "accept a suggested edit"
 msgid "Take it in"
 msgstr "Take it in"
 
-#: client/src/pages/ProposeARole.tsx
+#: client/src/components/fireflyPath/ApplySteps.tsx
 msgid "One thing to fix before we can send this:"
 msgstr "One thing to fix before we can send this:"
 
@@ -2403,6 +2418,11 @@ msgstr "{0, plural, one {# change did not save. It is still here to try again.} 
 msgctxt "change request note kind"
 msgid "Can live with it"
 msgstr "Can live with it"
+
+#: client/src/components/openProposal/RoleCardBridge.tsx
+msgctxt "open proposal side by side"
+msgid "Accepts: {acceptedWords}"
+msgstr "Accepts: {acceptedWords}"
 
 #: client/src/components/review/SeraDifferences.tsx
 msgctxt "sera changes"
@@ -2919,7 +2939,7 @@ msgctxt "admin helper, proposal"
 msgid "Applied."
 msgstr "Applied."
 
-#: client/src/pages/ProposeARole.tsx
+#: client/src/components/fireflyPath/ApplySteps.tsx
 msgctxt "founding application check"
 msgid "One thing to look at before you continue:"
 msgstr "One thing to look at before you continue:"
@@ -3119,6 +3139,11 @@ msgstr "That did not save. Try again."
 msgctxt "sera answers"
 msgid "Taken again. The draft holds what it says now."
 msgstr "Taken again. The draft holds what it says now."
+
+#: client/src/components/fireflyPath/ApplySteps.tsx
+msgctxt "the keyboard key"
+msgid "Enter"
+msgstr "Enter"
 
 #: client/src/components/governance/ExportByVote.tsx
 msgid "The steward who receives it"
@@ -4437,6 +4462,11 @@ msgctxt "open work: why the lead quest was chosen"
 msgid "It grows from your roots."
 msgstr "It grows from your roots."
 
+#: client/src/components/fireflyPath/ApplySteps.tsx
+msgctxt "founding application compensation"
+msgid "How rewards work"
+msgstr "How rewards work"
+
 #: client/src/pages/ChangeRequests.tsx
 msgid "Counts for this version. An edit asks again."
 msgstr "Counts for this version. An edit asks again."
@@ -5187,7 +5217,7 @@ msgid "Talk it out"
 msgstr "Talk it out"
 
 #. placeholder {0}: problems.length
-#: client/src/pages/ProposeARole.tsx
+#: client/src/components/fireflyPath/ApplySteps.tsx
 msgctxt "founding application check"
 msgid "{0} things to look at before you continue:"
 msgstr "{0} things to look at before you continue:"
@@ -8485,6 +8515,11 @@ msgctxt "quest safety, ask for the age band"
 msgid "Say your age band once. The village keeps the band, never your birth date."
 msgstr "Say your age band once. The village keeps the band, never your birth date."
 
+#: client/src/components/fireflyPath/ApplySteps.tsx
+msgctxt "founding application keys"
+msgid "to continue"
+msgstr "to continue"
+
 #: client/src/components/admin/QuestSafetyEditor.tsx
 msgctxt "admin quest safety"
 msgid "Hours it takes"
@@ -9428,6 +9463,11 @@ msgctxt "quest goal thread editor: button while saving"
 msgid "Saving"
 msgstr "Saving"
 
+#: client/src/pages/ApplicationStatus.tsx
+msgctxt "applicant's application status, while you wait"
+msgid "Read the role again"
+msgstr "Read the role again"
+
 #: client/src/components/admin/AdminHeader.tsx
 msgctxt "admin header, menu button"
 msgid "Your settings"
@@ -9463,9 +9503,9 @@ msgid "Set aside. The people who decide these still see it."
 msgstr "Set aside. The people who decide these still see it."
 
 #: client/src/components/openProposal/RoleCardBridge.tsx
-msgctxt "open proposal side by side"
-msgid "(not picked)"
-msgstr "(not picked)"
+#~ msgctxt "open proposal side by side"
+#~ msgid "(not picked)"
+#~ msgstr "(not picked)"
 
 #: client/src/components/governance/ObjectionPanel.tsx
 msgctxt "voice field label: raise an objection"
@@ -9686,9 +9726,9 @@ msgid "your village guide"
 msgstr "your village guide"
 
 #: client/src/components/openProposal/RoleCardBridge.tsx
-msgctxt "open proposal side by side answer"
-msgid "Accepts"
-msgstr "Accepts"
+#~ msgctxt "open proposal side by side answer"
+#~ msgid "Accepts"
+#~ msgstr "Accepts"
 
 #: client/src/components/admin/ClosingPolicyEditor.tsx
 msgid "The village adopts these words as what closing means here."
@@ -9867,8 +9907,8 @@ msgid "Sent"
 msgstr "Sent"
 
 #: client/src/components/openProposal/RoleCardBridge.tsx
-msgid "They want to talk about the terms"
-msgstr "They want to talk about the terms"
+#~ msgid "They want to talk about the terms"
+#~ msgstr "They want to talk about the terms"
 
 #: client/src/components/fireflyPath/Thresholds.tsx
 msgctxt "founding application confirm"
@@ -11030,7 +11070,7 @@ msgid "Close"
 msgstr "Close"
 
 #. placeholder {0}: problems.length
-#: client/src/pages/ProposeARole.tsx
+#: client/src/components/fireflyPath/ApplySteps.tsx
 msgid "{0} things to fix before we can send this:"
 msgstr "{0} things to fix before we can send this:"
 
@@ -11370,9 +11410,9 @@ msgid "intake role"
 msgstr "intake role"
 
 #: client/src/pages/ProposeARole.tsx
-msgctxt "founding application keys"
-msgid "Enter moves on. When the cursor is not in a field, the arrow keys walk between steps."
-msgstr "Enter moves on. When the cursor is not in a field, the arrow keys walk between steps."
+#~ msgctxt "founding application keys"
+#~ msgid "Enter moves on. When the cursor is not in a field, the arrow keys walk between steps."
+#~ msgstr "Enter moves on. When the cursor is not in a field, the arrow keys walk between steps."
 
 #: client/src/components/review/SeraDifferences.tsx
 msgctxt "sera changes"
@@ -11595,7 +11635,7 @@ msgctxt "open proposal side by side"
 msgid "Their card beside the open card"
 msgstr "Their card beside the open card"
 
-#: client/src/pages/ProposeARole.tsx
+#: client/src/components/fireflyPath/ApplySteps.tsx
 msgctxt "open proposal role"
 msgid "A background check happens for this role whatever the references say."
 msgstr "A background check happens for this role whatever the references say."
@@ -11750,9 +11790,9 @@ msgid "Show me how"
 msgstr "Show me how"
 
 #: client/src/components/openProposal/RoleCardBridge.tsx
-msgctxt "open proposal side by side answer"
-msgid "Wants to talk"
-msgstr "Wants to talk"
+#~ msgctxt "open proposal side by side answer"
+#~ msgid "Wants to talk"
+#~ msgstr "Wants to talk"
 
 #: client/src/components/admin/RoleCharacterTags.tsx
 #~ msgid "Shown on the draft board, the character page and the map's party filter. Saving makes it the village's choice, so a later guess never replaces it."
@@ -12575,7 +12615,7 @@ msgctxt "about you"
 msgid "Reference {0}: how you know them"
 msgstr "Reference {0}: how you know them"
 
-#: client/src/pages/ProposeARole.tsx
+#: client/src/components/fireflyPath/ApplySteps.tsx
 msgctxt "founding application beside"
 msgid "The role asks {pct}% of your commitment"
 msgstr "The role asks {pct}% of your commitment"
@@ -12876,6 +12916,11 @@ msgctxt "about you"
 msgid "Languages"
 msgstr "Languages"
 
+#: client/src/pages/ProposeARole.tsx
+msgctxt "founding application about pane"
+msgid "Who can speak for you"
+msgstr "Who can speak for you"
+
 #: client/src/components/canvas/ConflictAgreementEditor.tsx
 msgid "In the village's own words"
 msgstr "In the village's own words"
@@ -13060,6 +13105,11 @@ msgstr "role"
 msgctxt "quest editor"
 msgid "The village has not set its rates yet, so there is no suggested price. Set them on the economics page, or type a price below."
 msgstr "The village has not set its rates yet, so there is no suggested price. Set them on the economics page, or type a price below."
+
+#: client/src/pages/ProposeARole.tsx
+msgctxt "founding application about pane"
+msgid "You"
+msgstr "You"
 
 #: client/src/components/review/SeraDifferences.tsx
 msgid "{error}. There may be changes waiting; this is not an empty list."
@@ -13278,6 +13328,11 @@ msgstr "No goal yet"
 #~ msgctxt "role draft steps"
 #~ msgid "After you propose"
 #~ msgstr "After you propose"
+
+#: client/src/pages/ProposeARole.tsx
+msgctxt "founding application about pane"
+msgid "Your story"
+msgstr "Your story"
 
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "change request note outcome"
@@ -13653,9 +13708,9 @@ msgid "What the document does not answer yet"
 msgstr "What the document does not answer yet"
 
 #: client/src/pages/ApplicationStatus.tsx
-msgctxt "applicant's application status, adoption"
-msgid "The circle said yes. Your seed is whole."
-msgstr "The circle said yes. Your seed is whole."
+#~ msgctxt "applicant's application status, adoption"
+#~ msgid "The circle said yes. Your seed is whole."
+#~ msgstr "The circle said yes. Your seed is whole."
 
 #: client/src/pages/RoleDraft.tsx
 msgid "This village has not tagged its roles by character for visitors yet, so every role is shown for every character."

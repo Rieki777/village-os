@@ -100,6 +100,9 @@ export const DECIDE_WORDS = {
   // The page.
   heading: (proposer: string | null, roles: readonly string[], moon = false) =>
     `${proposer || "Somebody"} proposes to hold ${andList(roles) || "a role"} ${moon ? "this moon" : "next season"}`,
+  /** A founding application (our review comes first): it applies for one role, and names no moon's dates (D-08). */
+  applies: (proposer: string | null, roles: readonly string[]) => `${proposer || "Somebody"} applies for ${andList(roles) || "a role"}`,
+  appliedFromOutside: "Applied through the village's public page. Adopted, they begin with a first cycle together.",
   fromOutside: "Proposed through the village's public page. Adopted, they hold these roles from the season's first day.",
   fromOutsideMoon: (from: string, to: string) => `Proposed through the village's public page, for this moon. Adopted, they hold these roles from adoption (never before ${from}) to the next new moon, ${to}.`,
   rolesHeading: "The roles",
@@ -186,7 +189,7 @@ export const DECIDE_WORDS = {
   // Our review (Phase A): invite to the conversations, or send the not-invited letter. Calm, and never personal.
   review: {
     heading: "Our review",
-    line: "Read the application through, then answer it. An invitation opens the conversations in order. The not-invited letter thanks them warmly and points to open ways to stay close.",
+    line: "Read it through, then answer.",
     conversations: "The conversations, in order",
     noConversations: "This role names no conversations, so an invitation takes the application straight to the circle's decision.",
     invite: "Invite to the conversations",
