@@ -65,9 +65,8 @@ import {
 } from "@shared/sessionTemplates";
 import type { SessionItem } from "@shared/sessions";
 import { moonRoomPanel } from "@shared/moonRoom";
-import { useLingui } from "@lingui/react/macro";
 import { gameFetch } from "@/lib/gameApi";
-import HarvestPlant, { HARVEST_SOIL, HARVEST_UNREAD, HARVEST_WORD } from "./HarvestPlant";
+import HarvestPlant, { HarvestSoil, HarvestWord } from "./HarvestPlant";
 import { useMoonReviewOn } from "./useMoonReviewOn";
 import { MoonGoalsBody, MoonInvoicesBody, MoonRecapBody, MoonShareChoice, useMoonRoom } from "./MoonSections";
 import { ServesChip, ServesPicker } from "./ServesPicker";
@@ -172,7 +171,6 @@ function StickControls({
 }
 
 export default function TemplatePanel({ sessionId, agenda }: { sessionId: number; agenda: readonly SessionItem[] }) {
-  const { i18n } = useLingui();
   const [view, setView] = useState<TemplateRoomView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -468,7 +466,7 @@ export default function TemplatePanel({ sessionId, agenda }: { sessionId: number
                         <HarvestPlant outcome={p.outcome} />
                         <span className="min-w-0">
                           {p.text} <ServesChip goal={p.servesGoal} />
-                          <span className="block text-xs text-muted-foreground">{p.outcome ? i18n._(HARVEST_WORD[p.outcome]) : i18n._(HARVEST_UNREAD)}</span>
+                          <span className="block text-xs text-muted-foreground"><HarvestWord outcome={p.outcome} /></span>
                         </span>
                       </span>
                       <span className="flex flex-wrap gap-1" role="group" aria-label={TEMPLATE_COPY.outcomeAsk}>
@@ -485,14 +483,14 @@ export default function TemplatePanel({ sessionId, agenda }: { sessionId: number
                             }
                             onClick={() => void write(`/priorities/${p.id}`, "PATCH", { outcome: p.outcome === o ? null : o })}
                           >
-                            {i18n._(HARVEST_WORD[o])}
+                            <HarvestWord outcome={o} />
                           </button>
                         ))}
                       </span>
                     </li>
                   ))}
                 </ul>
-                <p className={HINT}>{i18n._(HARVEST_SOIL)}</p>
+                <HarvestSoil className={HINT} />
                 </>
               ) : (
                 <p className={HINT}>{TEMPLATE_COPY.reviewEmpty}</p>
@@ -515,7 +513,7 @@ export default function TemplatePanel({ sessionId, agenda }: { sessionId: number
                   <span className="flex min-w-0 items-start gap-2 text-foreground">
                     <HarvestPlant outcome={p.outcome} />
                     <span className="min-w-0">
-                      {p.text} {p.outcome && <span className={CHIP}>{i18n._(HARVEST_WORD[p.outcome])}</span>} <ServesChip goal={p.servesGoal} />
+                      {p.text} {p.outcome && <span className={CHIP}><HarvestWord outcome={p.outcome} /></span>} <ServesChip goal={p.servesGoal} />
                     </span>
                   </span>
                   {canHost && (

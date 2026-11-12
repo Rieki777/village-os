@@ -19,6 +19,7 @@
  * a plant does not move here, so there is nothing for reduced motion to stop.
  */
 import { msg } from "@lingui/core/macro";
+import { useLingui } from "@lingui/react/macro";
 import type { MessageDescriptor } from "@lingui/core";
 import type { PriorityOutcome } from "@shared/sessionTemplates";
 
@@ -61,6 +62,23 @@ export const HARVEST_SOIL: MessageDescriptor = msg({
     "Nothing is marked as failed. What did not grow goes back to Monday's soil.",
   context: "friday harvest, the line under the read back",
 });
+
+/**
+ * The harvest's word for an outcome, or "a seed, not read back yet". It reads
+ * the descriptors above through the runtime, which is also what lets the build
+ * compile them ahead of time (precompileEnglish only rewrites a file that
+ * imports the runtime).
+ */
+export function HarvestWord({ outcome }: { outcome: PriorityOutcome | null }) {
+  const { i18n } = useLingui();
+  return <>{i18n._(outcome ? HARVEST_WORD[outcome] : HARVEST_UNREAD)}</>;
+}
+
+/** The line under the read back. */
+export function HarvestSoil({ className = "" }: { className?: string }) {
+  const { i18n } = useLingui();
+  return <p className={className}>{i18n._(HARVEST_SOIL)}</p>;
+}
 
 export default function HarvestPlant({
   outcome,
