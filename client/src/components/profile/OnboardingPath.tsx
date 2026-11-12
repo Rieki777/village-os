@@ -137,7 +137,7 @@ function CheckinForm({
       );
   }
   return (
-    <form onSubmit={submit} className={`${TILE} mt-3 space-y-3`}>
+    <form onSubmit={submit} className={`${TILE} mt-3 max-w-xl space-y-3`}>
       <p className={H2}>{ONBOARDING_WORDS.checkinOpen(day)}</p>
       {(["clarity", "overall"] as const).map(k => (
         <label key={k} className={`block ${LABEL}`}>

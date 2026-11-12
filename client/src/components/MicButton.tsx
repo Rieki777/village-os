@@ -116,7 +116,7 @@ export default function MicButton({
         disabled={disabled}
         aria-label={label}
         title={label}
-        className={`shrink-0 w-10 h-10 rounded-xl flex items-center justify-center pointer-coarse:min-h-11 pointer-coarse:min-w-11 disabled:opacity-50 ${
+        className={`shrink-0 size-11 rounded-xl flex items-center justify-center disabled:opacity-50 ${
           listening
             ? "bg-red-500 text-white animate-pulse"
             : "bg-stone-100 text-stone-600 hover:bg-stone-200"

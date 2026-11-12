@@ -120,9 +120,16 @@ export default function YourCompanions() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="flex flex-col gap-1.5">
           <p className={KICKER}>Your companions · {army.length}</p>
-          <h2 id="comp-h" className={H2}>
-            {plural(openQ, "question", "questions")} and {plural(openD, "draft", "drafts")} wait for you
-          </h2>
+          {/* D-09: a heading that reads "0 questions and 0 drafts" shouts a zero. At zero it stays only as the section's name for a screen reader. */}
+          {openQ + openD > 0 ? (
+            <h2 id="comp-h" data-companions-waiting="" className={H2}>
+              {plural(openQ, "question", "questions")} and {plural(openD, "draft", "drafts")} wait for you
+            </h2>
+          ) : (
+            <h2 id="comp-h" className="sr-only">
+              Your companions
+            </h2>
+          )}
           <p className="m-0 text-sm text-muted-foreground">
             Nothing moves until you say yes.<span className="max-sm:hidden"> Each companion asks at most {data.ceiling} questions a day.</span>
           </p>

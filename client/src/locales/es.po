@@ -11597,8 +11597,8 @@ msgstr ""
 
 #: client/src/pages/Home.tsx
 msgctxt "landing hero, the founding team line"
-msgid "We're forming the founding team now: paid, multi-year roles that take the village from idea to home."
-msgstr "Estamos formando el equipo fundador: roles remunerados, de varios años, que llevan la aldea de la idea al hogar."
+msgid "We're forming the founding team now: paid roles that take the village from idea to home, season by season and intended for the long run."
+msgstr "Estamos formando el equipo fundador: roles remunerados que llevan la aldea de la idea al hogar, temporada a temporada y pensados para el largo plazo."
 
 #: client/src/pages/ProposeARole.tsx
 #~ msgctxt "open proposal companion"

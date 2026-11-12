@@ -192,3 +192,17 @@ describe("the wall on a phone", () => {
     expect(sheet.style.bottom).toBe("350px");
   });
 });
+
+describe("the allowance beside the hearts (D-24)", () => {
+  it("says the plain allowance line and draws no 'x of y left' meter", async () => {
+    page();
+    const line = await waitFor(() => {
+      const el = document.querySelector("[data-allowance-line]");
+      expect(el).not.toBeNull();
+      return el as HTMLElement;
+    });
+    expect(line.textContent).toContain("Each cycle every member receives an allowance to send.");
+    // CONTROL: putting the meter back ("60 of 100 left") fails here by name.
+    expect(document.body.textContent).not.toMatch(/\d+ of \d+ left/);
+  });
+});

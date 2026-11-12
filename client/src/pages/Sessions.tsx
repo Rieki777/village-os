@@ -414,13 +414,13 @@ export default function Sessions() {
     <Layout>
       <div className={WORLD} data-world="night">
       <section className="py-8 md:py-12">
-        <div className="container max-w-5xl">
+        <div className="container max-w-6xl">
           <h1 className={STAGE_TITLE}>{SESSION_COPY.listTitle}</h1>
           <p className={STAGE_LEDE}>{SESSION_COPY.listLede}</p>
         </div>
       </section>
 
-      <div className="container max-w-5xl pb-16">
+      <div className="container max-w-6xl pb-16">
         <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_20rem] md:items-start">
           <div className="space-y-6">
             {gone && (

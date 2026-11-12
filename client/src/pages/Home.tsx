@@ -244,7 +244,7 @@ export default function Home() {
                 <>
                   {" "}
                   {t({
-                    message: "We're forming the founding team now: paid, multi-year roles that take the village from idea to home.",
+                    message: "We're forming the founding team now: paid roles that take the village from idea to home, season by season and intended for the long run.",
                     context: "landing hero, the founding team line",
                   })}
                 </>

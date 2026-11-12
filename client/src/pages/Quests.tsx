@@ -23,7 +23,6 @@ import { pageVarsFrom } from "@shared/pageContent/vars";
 import { useTokenName, useTokensWord, useValueTokenName } from "@/hooks/useTokenNames";
 import { useValueConversion } from "@/lib/moneyClaims";
 import { ExamplesBanner } from "@/components/ExamplesBanner";
-import InfoTip from "@/components/InfoTip";
 import { useLadderTitle } from "@/hooks/useVillagePaths";
 import QuestCard, { iconFor, QuestPoster } from "@/components/QuestCard";
 import {
@@ -47,17 +46,6 @@ import { usePlaceWords } from "@/components/openWork/placeWords";
 import { useQuestGoals } from "@/components/openWork/useQuestGoals";
 import { useMyCommitment } from "@/lib/useMyCommitment";
 import { orderByFit, questSizeOf, QUEST_SIZES, type QuestSize } from "@shared/commitment";
-
-/*
- * The bare "?" is a 16px circle set inside a sentence. Its button's own box is
- * 44px (`tapBox`), with negative margins giving the space back so the line
- * does not reflow; the rehearsal measured the old ::before hit area as a 16px
- * box on /quests at 390 (12 Nov 2026), and a box is what a thumb is promised.
- * `z-10` lifts the wrapper over the next paragraph, which on the hero is
- * pulled up under it by a negative margin and was eating the bottom of the
- * target.
- */
-const INFO_TIP_44 = "z-10";
 
 type Difficulty = "Beginner" | "Intermediate" | "Advanced";
 
@@ -263,12 +251,8 @@ export default function Quests() {
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto mb-4">
               Take a Quest, do the work, turn it in.
             </p>
-            <ExamplesBanner moduleId="quests" noun="quest" />
-            <p className="text-sm text-muted-foreground mb-8">
-              {quests.length} active quests &nbsp;·&nbsp; {quests.filter((q) => q.pay?.value).length} with a value set
-              <InfoTip tip="A quest with a value set shows it on its card. One without says to inquire for payment details." label="What a value is" className={INFO_TIP_44} tapBox />
-            </p>
-            <p className="text-sm italic text-muted-foreground -mt-6 mb-8">
+            <ExamplesBanner moduleId="quests" noun="quest" tone="night" />
+            <p className="text-sm italic text-muted-foreground mt-2 mb-8">
               Real work, on real land, beside people becoming your people.
             </p>
 

@@ -32,7 +32,7 @@ import {
 import { addDaysTo } from "@shared/sessionDecisions";
 import AdviceCard from "./AdviceCard";
 import { adviceCall } from "./adviceCall";
-import { BTN_PRIMARY, BTN_QUIET, HINT, INPUT, LABEL, PANEL } from "./roomUi";
+import { BTN_PRIMARY, BTN_QUIET, BTN_SECONDARY, HINT, INPUT, LABEL, PANEL } from "./roomUi";
 import { useHash } from "./useHash";
 
 /** How often the lists are read again while the page is in view. */
@@ -280,7 +280,7 @@ export default function AdviceProcess() {
               />
             ) : (
               payload.circles.length > 0 && (
-                <button ref={opener} type="button" className={BTN_PRIMARY} onClick={() => setAsking(true)}>
+                <button ref={opener} type="button" className={BTN_SECONDARY} onClick={() => setAsking(true)}>
                   {ADVICE_COPY.askButton}
                 </button>
               )
