@@ -1,6 +1,6 @@
 # The nightly rehearsal
 
-Every night, five made-up people walk the whole joining path on a freshly built server with an
+Every night, five made-up people walk the whole joining path and the founder reviews an agent's proposed changes, on a freshly built server with an
 empty scratch database. Each walks once on a phone (390px) and once on a desktop (1280px). The run
 keeps a screenshot of every page they reach, captures every email the village sends them, and
 compares tonight's screenshots with the last complete run's.
@@ -11,15 +11,16 @@ and how did it look and feel on each screen?**
 Code: `scripts/rehearsal/`. Workflow: `.github/workflows/rehearsal.yml`. (This is unrelated to the
 comms module's "rehearsal inbox", which is a mode for real email.)
 
-## The five people
+## The six people
 
 | id | who | what they do |
 |---|---|---|
-| `neighbour` | A Spanish-speaking neighbour, sent a link on a messaging app (`es-CR`) | Reads /roles, picks the Land Steward, fills the open proposal form, sends it, opens the confirm link from her email, reads her status page. |
+| `neighbour` | A Spanish-speaking neighbour, sent a link on a messaging app (`es-CR`) | Taps an old link first and lands on the 404, takes its one door home, then reads /roles, picks the Land Steward, fills the open proposal form, sends it, opens the confirm link from her email, reads her status page. |
 | `professional` | A professional from the newsletter (`en-GB`) | Arrives on /steward, finds a role, opens the Finance Steward's full card, proposes with two terms to talk about, confirms, reads the status page. |
 | `member` | An existing member | Opens the member's door (/role-proposals/new), answers each step, adds a seasonal goal when asked, submits for next season and confirms. |
 | `steward` | The steward who decides | Opens the professional's proposal, invites them to the conversations (our review comes first), offers different terms (allowance and bonus), saves the revision, then adopts. Checks the applicant was emailed each time. Then answers the neighbour's application with the not-invited letter and checks it went. |
-| `holder` | The professional again, adopted | Opens the invitation, makes an account, aligns with confidentiality and the terms, checks with the server that nothing still waits before the role starts, reads the profile. |
+| `holder` | The professional again, adopted | Opens the invitation, makes an account, aligns with confidentiality and the terms, checks with the server that nothing still waits before the role starts, reads the profile, and finds our first 14 days there as a strip of days (the village's onboarding path, seeded through Admin). |
+| `reviewer` | The founder, on the review page | An agent proposes a batch of three changes through the connector (a page, a role card, an FAQ). The founder opens `/admin/proposals`, edits the role's aim in place, selects the batch, accepts it, and the card and the lessons read show the edit. |
 
 They run in that order at 390, then again at 1280, because each depends on the one before (the
 steward decides the professional's proposal, and the holder is that person adopted). Each width

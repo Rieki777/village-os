@@ -53,28 +53,3 @@ export function Section({ title, kicker, children, id }: { title: string; kicker
   );
 }
 
-/** A ring for a percent, drawn in the current text colour so it follows the theme. */
-export function Ring({ pct, label }: { pct: number | null; label: string }) {
-  const r = 34;
-  const c = 2 * Math.PI * r;
-  const shown = pct === null ? 0 : Math.max(0, Math.min(100, pct));
-  return (
-    <svg viewBox="0 0 80 80" className="h-20 w-20 shrink-0 text-dash-gold-lit" role="img" aria-label={pct === null ? label : `${label}: ${pct}%`}>
-      <circle cx="40" cy="40" r={r} fill="none" stroke="currentColor" strokeOpacity="0.2" strokeWidth="8" />
-      <circle
-        cx="40"
-        cy="40"
-        r={r}
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="8"
-        strokeLinecap="round"
-        strokeDasharray={`${(shown / 100) * c} ${c}`}
-        transform="rotate(-90 40 40)"
-      />
-      <text x="40" y="45" textAnchor="middle" className="fill-foreground text-[15px] font-semibold">
-        {pct === null ? "" : `${pct}%`}
-      </text>
-    </svg>
-  );
-}

@@ -42,6 +42,7 @@ import { Link, Redirect } from "wouter";
 import { legacyModulesTabTarget } from "@shared/moduleSetupLink";
 import AdminHeader from "@/components/admin/AdminHeader";
 import AdminHelperHost from "@/components/admin/AdminHelperHost";
+import ProposedChangesLink from "@/components/admin/ProposedChangesLink";
 import AiSetupBanner from "@/components/admin/AiSetupBanner";
 import ConnectorSetupPanel from "@/components/agent/ConnectorSetupPanel";
 import { adminRootClass, readAdminNight, writeAdminNight } from "@/components/admin/adminNight";
@@ -1900,7 +1901,10 @@ function TrainingModulesTab({ password }: { password: string }) {
         <div>
           <h2 className="text-xl font-bold text-gray-900">Training Modules</h2>
           <p className="text-sm text-gray-500 mt-1">
-            Manage what shows on the /training page.
+            The lessons both training pages show, on{" "}
+            <a href="/training/steward" target="_blank" rel="noopener noreferrer" className="text-teal-deep underline">/training/steward</a> and{" "}
+            <a href="/training/resident" target="_blank" rel="noopener noreferrer" className="text-teal-deep underline">/training/resident</a>.
+            Each page's own words are in Pages, under Training: steward and Training: resident.
           </p>
         </div>
         {editingId === null && (
@@ -7931,6 +7935,7 @@ export default function Admin() {
               open, keyed by the open tab's module. It also feeds the nav
               filter, so the rail and the card ride one fetch. */}
           <TourCard wait={activeTab === "home"} />
+          <ProposedChangesLink password={password} always={activeTab === "home"} />
           <HealthStrip password={password} full={activeTab === "home" || activeTab === "integrations"} onOpen={setActiveTab} />
           <AdminHelp tab={activeTab} />
           {activeTab === "home" && <Suspense fallback={null}><HomeBase password={password} onOpenTab={setActiveTab} groups={shownGroups} role={user?.role} /></Suspense>}

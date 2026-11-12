@@ -94,7 +94,8 @@ export function seasonCardModel(s: SeasonSummary, choices: ShareChoices, thanksN
       title: c.title,
       detail: c.kind === "role" ? termText(c.term) : "",
     })),
-    badges: s.badges.map((b) => (b.count > 1 ? `${b.name} ×${b.count}` : b.name)),
+    // A badge that grew is a fuller flower, never "x3" (the prune, C15): the card names it once.
+    badges: s.badges.map((b) => b.name),
     footer: "Thank you for the season",
   };
 }
