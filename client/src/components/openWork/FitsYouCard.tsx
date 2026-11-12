@@ -36,18 +36,18 @@ export default function FitsYouCard({ lead, status, goal, footer }: FitsYouCardP
   const q = lead.quest;
   const goalText = goal?.text ?? "";
   const why = lead.fits
-    ? t({ message: "It grows from your roots.", context: "open work: why the fits-you quest was chosen" })
+    ? t({ message: "It grows from your roots.", context: "open work: why the lead quest was chosen" })
     : lead.needed && goal
-      ? t({ message: `It grows ${goalText}, and that goal needs hands this season.`, context: "open work: why the fits-you quest was chosen" })
-      : t({ message: "A gentle place to begin.", context: "open work: why the fits-you quest was chosen" });
+      ? t({ message: `It grows ${goalText}, and that goal needs hands this season.`, context: "open work: why the lead quest was chosen" })
+      : t({ message: "A gentle place to begin.", context: "open work: why the lead quest was chosen" });
   const about = q.subtitle?.trim() || q.description?.trim() || "";
 
   return (
-    <section className={CARD_FEATURED} aria-labelledby="fits-you-title" data-fits-you={q.id}>
+    <section className={CARD_FEATURED} aria-labelledby="lead-quest-title" data-lead-quest={q.id}>
       <p className={EYEBROW}>{t({ message: "Fits you", context: "open work: the one card chosen for the reader" })}</p>
       <div className="mt-2 grid gap-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
         <div className="min-w-0">
-          <h2 id="fits-you-title" className="font-display text-2xl font-bold leading-snug text-card-foreground sm:text-3xl">
+          <h2 id="lead-quest-title" className="font-display text-2xl font-bold leading-snug text-card-foreground sm:text-3xl">
             {q.title}
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -88,7 +88,7 @@ export default function FitsYouCard({ lead, status, goal, footer }: FitsYouCardP
         <div className="lg:w-64">
           <Fireflies block count={6}>
             <Link href={`/quests/${q.id}`} className={`${BTN_PRIMARY} w-full`}>
-              {t({ message: "Take this on", context: "open work: the one act on the fits-you card" })}
+              {t({ message: "Take this on", context: "open work: the one act on the lead card" })}
               <ArrowRight className="size-4" aria-hidden="true" />
             </Link>
           </Fireflies>

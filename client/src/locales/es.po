@@ -12953,7 +12953,7 @@ msgid "See the open work"
 msgstr "Ver el trabajo abierto"
 
 #: client/src/components/openWork/FitsYouCard.tsx
-msgctxt "open work: why the fits-you quest was chosen"
+msgctxt "open work: why the lead quest was chosen"
 msgid "It grows {goalText}, and that goal needs hands this season."
 msgstr "Hace crecer {goalText}, y esa meta necesita manos esta temporada."
 
@@ -12988,7 +12988,7 @@ msgid "That did not save. Try again."
 msgstr "No se guardó. Inténtalo de nuevo."
 
 #: client/src/components/openWork/FitsYouCard.tsx
-msgctxt "open work: the one act on the fits-you card"
+msgctxt "open work: the one act on the lead card"
 msgid "Take this on"
 msgstr "Tomar esto"
 
@@ -13010,7 +13010,7 @@ msgid "Save the thread"
 msgstr "Guardar el hilo"
 
 #: client/src/components/openWork/FitsYouCard.tsx
-msgctxt "open work: why the fits-you quest was chosen"
+msgctxt "open work: why the lead quest was chosen"
 msgid "A gentle place to begin."
 msgstr "Un lugar tranquilo para empezar."
 
@@ -13030,7 +13030,7 @@ msgid "No goal yet"
 msgstr "Sin meta todavía"
 
 #: client/src/components/openWork/FitsYouCard.tsx
-msgctxt "open work: why the fits-you quest was chosen"
+msgctxt "open work: why the lead quest was chosen"
 msgid "It grows from your roots."
 msgstr "Crece de tus raíces."
 

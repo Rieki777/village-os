@@ -130,7 +130,7 @@ describe("the board at /quests?goal=<id>", () => {
     await waitFor(() => expect(container.querySelectorAll("[data-circle-group]")).toHaveLength(2));
     expect(Array.from(container.querySelectorAll("[data-circle-group]")).map((g) => g.getAttribute("data-circle-group"))).toEqual(["Land", "Hearth"]);
     // The goal that still needs hands leads among the gentle ones.
-    expect(container.querySelector("[data-fits-you]")?.getAttribute("data-fits-you")).toBe("q-well");
+    expect(container.querySelector("[data-lead-quest]")?.getAttribute("data-lead-quest")).toBe("q-well");
     expect(container.querySelectorAll('[data-testid="fireflies"]')).toHaveLength(1);
   });
 
