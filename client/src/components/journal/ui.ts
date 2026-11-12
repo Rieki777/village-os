@@ -1,21 +1,27 @@
 /**
  * The Journal's shared class strings, so every control on its four tabs is
- * one size and one shape. Light surfaces only, on the semantic tokens, so a
- * village's own colours reach every one of them (index.css, brandTokens.ts).
- * Every control is at least 44px tall, the phone's thumb target.
+ * one size and one shape. Every control is at least 44px tall, the phone's
+ * thumb target.
+ *
+ * ON ANY GROUND (batch 158, the lead's screenshot of Profile, Your journal):
+ * these once said "light surfaces only" and set brand teal ink on `bg-card`.
+ * The profile draws this card on the night world, where `bg-card` is dark,
+ * so "Weekly pulse" and "Feedback" were dark teal on night: nearly invisible.
+ * The buttons are now the journey's own (components/journey/look.ts), on
+ * semantic tokens that read on the night and on linen alike. A test holds
+ * every local BTN_* string to it (client/src/lib/btnGround.test.ts).
  */
+import { BTN_PRIMARY as LOOK_PRIMARY, BTN_SECONDARY as LOOK_SECONDARY } from "@/components/journey/look";
 
-const FOCUS = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep focus-visible:ring-offset-2";
+const FOCUS = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
 
-/** White on the brand tone; hover steps to the derived hover tone, never a fade. */
-export const BTN_PRIMARY =
-  `inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-teal-deep px-5 py-2.5 font-semibold text-white hover:bg-teal-deep-dark disabled:opacity-50 disabled:cursor-not-allowed ${FOCUS}`;
+/** The one primary act: gold with dark ink on the night, the same token pair on linen. */
+export const BTN_PRIMARY = `${LOOK_PRIMARY} ${FOCUS}`;
 
-export const BTN_SECONDARY =
-  `inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-teal-deep bg-card px-4 py-2 font-semibold text-teal-deep hover:bg-teal-deep/5 disabled:opacity-50 disabled:cursor-not-allowed ${FOCUS}`;
+export const BTN_SECONDARY = `${LOOK_SECONDARY} ${FOCUS}`;
 
 export const BTN_QUIET =
-  `inline-flex min-h-11 items-center gap-1.5 rounded-lg px-2 font-medium text-teal-deep underline underline-offset-2 hover:bg-teal-deep/5 disabled:opacity-50 ${FOCUS}`;
+  `inline-flex min-h-11 items-center gap-1.5 rounded-lg px-2 font-medium text-foreground underline decoration-notice/60 underline-offset-2 hover:bg-muted disabled:opacity-50 ${FOCUS}`;
 
 export const CARD = "rounded-2xl border border-border bg-card p-5 text-card-foreground shadow-sm";
 
