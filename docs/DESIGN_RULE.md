@@ -17,8 +17,8 @@ profile, `/approvals`, `/role-measures` and `/quests`, the membership align step
 (`MembershipAtApplication`), `RoleCardBridge`, the signed-out card (`SignInDoors` in `ModuleGate`, whose two doors now
 take `BTN_PRIMARY` and `BTN_SECONDARY` on every page that shows them), Admin's onboarding path editor,
 `/request-membership`, the village calendar at `/events` with its moon spiral, strip of days and turnings, and
-`/season-plans/mine`, with the commons it draws (`components/commons`, also on the landing and `/roles`). A page
-joins by being
+`/season-plans/mine`, with the commons it draws (`components/commons`, also on the landing and `/roles`), and the
+gratitude wall at `/gratitude` with its threads. A page joins by being
 added to `JOURNEY` (and `PAGES`, for a page) in the script, once it passes.
 `node scripts/check-design-rule.mjs --report` lists what the rule would flag everywhere else.
 
