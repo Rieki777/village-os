@@ -23,6 +23,7 @@ import { Link } from "wouter";
 import { ArrowDown, ArrowRight } from "lucide-react";
 import { Fireflies } from "@/components/journey/nature";
 import { BTN_PRIMARY } from "@/components/journey/look";
+import { scrollBehavior } from "@/components/natural/scrollBehavior";
 
 export interface YourTurnProps {
   /** Where the door leads: "#id" for the round on this page, or a path. */
@@ -40,7 +41,7 @@ function goTo(e: MouseEvent<HTMLAnchorElement>, hash: string) {
   const el = typeof document !== "undefined" ? document.getElementById(hash.slice(1)) : null;
   if (!el) return;
   e.preventDefault();
-  el.scrollIntoView({ block: "start", behavior: "smooth" });
+  el.scrollIntoView({ block: "start", behavior: scrollBehavior() });
   if (!el.hasAttribute("tabindex")) el.setAttribute("tabindex", "-1");
   el.focus({ preventScroll: true });
 }
