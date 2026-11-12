@@ -80,7 +80,7 @@ Send `{batch, items}`, where `batch` is a short title ("Phase A content") or `ba
 | `role_listing` | `{}` | `{ids}`: list only these |
 | `season_goals` | `{seasonId}` | `{goals: [{text, done}]}` |
 | `onboarding_path` | `{}` | `{doc}` |
-| `setting` | `{method, path, readPath?}` | the route's own body: any other admin setting (brand, email words, launch, terms wording, org drafts, seat notes) |
+| `setting` | `{method, path, readPath?}` | the route's own body: any other admin setting (brand, email words, launch, terms wording, org drafts, the focus and note on someone's role) |
 
 Each item is checked by its route's own validator when it is proposed. When any item is broken the batch is refused whole, and `refused` names each one's index, reason and field. Never proposable: secrets and keys, erasure, the agent accounts and tokens, powers and badges, moving value, seating or unseating a person, and sending letters or email.
 

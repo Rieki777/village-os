@@ -31,8 +31,8 @@ if (!DB_CONFIGURED) {
 }
 
 const DIST = path.resolve(process.cwd(), "dist/index.js");
-/** A window no other suite takes (32752-32791, checked by scripts/check-e2e-ports.mjs). */
-const PORT = 32752 + (process.pid % 40);
+/** A window no other suite takes (32752-32767, the last below the ephemeral range; checked by scripts/check-e2e-ports.mjs). */
+const PORT = 32752 + (process.pid % 16);
 const BASE = `http://localhost:${PORT}`;
 const ADMIN = "proposed-changes-admin";
 
@@ -145,7 +145,7 @@ describe.skipIf(!DB_CONFIGURED)("proposed changes, end to end", () => {
     const r = await tool(adminVat, "admin_request", { method: "POST", path: "/api/admin/proposals/accept", body: { items: [{ id: ids[0] }] }, summary: "Accept it." });
     expect(r.json.result.isError).toBe(true);
     expect(r.json.result.structuredContent.code ?? JSON.stringify(r.json.result.structuredContent)).toContain("always_a_person");
-    const [rows] = await pool.query<any[]>("SELECT status FROM proposed_changes WHERE id = ?", [ids[0]]);
+    const [rows] = await pool.query<any[]>("SELECT status FROM proposed_changes WHERE id = ?", [ids[0]]); // module-review-ok: the e2e reading back its own scratch schema
     expect(rows[0].status).toBe("proposed");
   });
 
@@ -185,7 +185,7 @@ describe.skipIf(!DB_CONFIGURED)("proposed changes, end to end", () => {
     const content = await call("GET", "/api/admin/content");
     expect(content.json["page-home"].hero.headline).toBe("A home on the land, held together");
     expect((await call("GET", "/api/admin/proposals/count")).json.open).toBe(0);
-    const [ev] = await pool.query<any[]>("SELECT COUNT(*) AS n FROM health_events WHERE kind = 'proposed_change' AND text LIKE '%accepted by Rosa%'");
+    const [ev] = await pool.query<any[]>("SELECT COUNT(*) AS n FROM health_events WHERE kind = 'proposed_change' AND text LIKE '%accepted by Rosa%'"); // module-review-ok: the e2e reading back its own scratch schema
     expect(Number(ev[0].n)).toBe(3);
   });
 
