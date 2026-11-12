@@ -53,6 +53,7 @@ import Decisions from "./Decisions";
 import Review from "./Review";
 import SeatApplication from "./SeatApplication";
 import CircleConsent, { CONSENT_SEAL, ConsentSummary } from "@/components/roleProposal/CircleConsent";
+import ConsentSeal from "@/components/governance/ConsentSeal";
 
 type Sent = { method: string; url: string; body: unknown };
 const sent: Sent[] = [];
@@ -383,12 +384,12 @@ describe("/role-applications/:id, the circle's round", () => {
 
 describe("the circle's answer: two circles meet only for a consent reached", () => {
   it("draws the meeting once the circle has consented", () => {
-    render(<CircleConsent applicationId="a1" consent={consentOf("consented")} decided={null} waiting />);
+    render(<CircleConsent applicationId="a1" consent={consentOf("consented")} decided={null} waiting seal={ConsentSeal} />);
     expect(screen.getByRole("img", { name: CONSENT_SEAL })).toBeTruthy();
   });
 
   it.each(["open", "objected", "lapsed", "no-other-holders"] as const)("draws nothing while it stands %s", (state) => {
-    render(<CircleConsent applicationId="a1" consent={consentOf(state)} decided={null} waiting />);
+    render(<CircleConsent applicationId="a1" consent={consentOf(state)} decided={null} waiting seal={ConsentSeal} />);
     expect(screen.queryByRole("img", { name: CONSENT_SEAL })).toBeNull();
   });
 

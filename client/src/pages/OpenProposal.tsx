@@ -43,6 +43,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { BreathingLoader } from "@/components/natural";
 import CircleConsent from "@/components/roleProposal/CircleConsent";
 import YourTurn from "@/components/governance/YourTurn";
+import ConsentSeal from "@/components/governance/ConsentSeal";
 
 /** Decider calm: the one lit door, when the circle asked the reader and the answer is still open. */
 const TURN_WORDS = {
@@ -415,6 +416,7 @@ export default function OpenProposal() {
                 waiting={p.status === "confirmed"}
                 onAnswered={() => void load()}
                 answer={answerConsent}
+                seal={ConsentSeal}
               />
               </div>
             )}

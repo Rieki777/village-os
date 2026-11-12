@@ -138,6 +138,7 @@ const JOURNEY = [
   // Decider calm (Phase D, decision 4): what a decider reads and answers in, on the sheet's tokens.
   "client/src/components/roleProposal/CircleConsent.tsx",
   "client/src/components/governance/YourTurn.tsx",
+  "client/src/components/governance/ConsentSeal.tsx",
   "client/src/components/governance/DecisionCard.tsx",
   "client/src/components/governance/DecisionOutcome.tsx",
   "client/src/components/governance/VoteWidget.tsx",

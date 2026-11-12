@@ -76,6 +76,7 @@ import { ApplicantGeneKeys } from "@/components/geneKeys/ProfileGeneKeys";
 import CircleConsent from "@/components/roleProposal/CircleConsent";
 import { CONSENT_WORDS } from "@shared/roleProposalConsent";
 import YourTurn from "@/components/governance/YourTurn";
+import ConsentSeal from "@/components/governance/ConsentSeal";
 
 export const APPLICATION_WORDS = {
   membersOnly: "Members read role proposals.",
@@ -453,6 +454,7 @@ export default function SeatApplication() {
                 decided={app.proposal.decided}
                 waiting={app.status === "awaiting-holder"}
                 onAnswered={() => void load()}
+                seal={ConsentSeal}
               />
               </div>
             )}
