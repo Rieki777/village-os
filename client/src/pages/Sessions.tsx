@@ -44,10 +44,18 @@
  * flow; the room opens linked to that template, so its meetings form a series.
  * The templates themselves are kept in components/sessions/MeetingTemplates.
  *
- * The page stays on the light linen, a document beside the room's night: the
- * title in the village's display face set large and light, each session its
- * own panel (SessionList), and the title box the room's own growing box, so a
- * long title is seen whole while it is typed.
+ * THE NIGHT WORLD (Phase C, the Gathering). The page stands in the profile's
+ * night (`WORLD`, the sheet's ground), the same world as the open room, so
+ * walking from Coming up into a room changes nothing underfoot: the title in
+ * the village's display face set large and light, each session its own panel
+ * (SessionList), and the title box the room's own growing box, so a long
+ * title is seen whole while it is typed. Every panel draws from the semantic
+ * tokens, so the night re-tints them with no class of their own.
+ *
+ * Phone and desktop: on a phone it is one column, Coming up first with its
+ * "I'll be there" under the thumb, and the start card after the lists. On a
+ * desktop the start card stays beside the lists, sticky, so a meeting can be
+ * got ready while its row is in view.
  */
 import type { PickerCircle } from "@shared/circlePicker";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
@@ -65,6 +73,7 @@ import { LIBRARY_COPY, LIBRARY_REFUSALS, offeredFor, type LibraryCard, type Libr
 import { RHYTHM_COPY, type ComingUpPayload, type ComingUpRow } from "@shared/sessionRhythm";
 import { TEMPLATES_API, type SessionTemplate, type TemplatesPayload } from "@shared/sessionTemplates";
 import Layout from "@/components/Layout";
+import { WORLD } from "@/components/journey/look";
 import BreathingLoader from "@/components/natural/BreathingLoader";
 import ModuleGate, { SignInToSee } from "@/components/modules/ModuleGate";
 import GrowingText from "@/components/sessions/GrowingText";
@@ -403,6 +412,7 @@ export default function Sessions() {
 
   return (
     <Layout>
+      <div className={WORLD} data-world="night">
       <section className="py-8 md:py-12">
         <div className="container max-w-5xl">
           <h1 className={STAGE_TITLE}>{SESSION_COPY.listTitle}</h1>
@@ -548,6 +558,7 @@ export default function Sessions() {
             </form>
           </section>
         </div>
+      </div>
       </div>
     </Layout>
   );

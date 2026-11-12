@@ -151,6 +151,31 @@ export interface ComingUpRow {
   canKeep: boolean;
   /** For the form: the rhythm as it is now, a weekly one starting from its next meeting, so a change keeps the circle's week. `none` while the circle has no rhythm. */
   rhythm: RhythmInput;
+  /**
+   * "I'll be there" for this meeting (Phase C, the Gathering). A circle's
+   * rhythm is mirrored onto the village calendar as one gathering
+   * (server/lib/sessionCalendar.ts), so its next meeting is one evening of
+   * that gathering, and the answer is the gatherings' own `going`
+   * (`POST /api/events/:eventId/rsvp` with `occurrenceKey`). Absent from an
+   * older server, and null while the next meeting is not on the calendar
+   * (it comes from the circle's own calendar, the mirror has not run yet) or
+   * while the village takes no answers to gatherings.
+   */
+  gathering?: SessionGathering | null;
+}
+
+/** Who said they will be at a circle's next meeting. Never ordered by anything but name. */
+export interface SessionGathering {
+  /** The mirrored gathering's id on the village calendar. */
+  eventId: string;
+  /** Which evening of it: the meeting's village date, YYYY-MM-DD. */
+  occurrenceKey: string;
+  /** How many said they will be there. The Seed of Life fills one circle each, seven at most. */
+  going: number;
+  /** Whether this viewer said so. */
+  mine: boolean;
+  /** The first names of who said so, alphabetical, for the circle's own members and admins only; empty for anybody else. */
+  names: string[];
 }
 
 export interface ComingUpPayload {
