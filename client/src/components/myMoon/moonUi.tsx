@@ -20,8 +20,8 @@ export const LABEL = "block text-xs font-medium text-muted-foreground";
 export const INPUT =
   "mt-1 block w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 export const SMALL_BTN =
-  "inline-flex min-h-9 items-center justify-center rounded-lg border border-border bg-transparent px-3 text-sm font-medium text-foreground hover:bg-muted disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
-export const SMALL_BTN_ON = "inline-flex min-h-9 items-center justify-center rounded-lg border border-transparent bg-teal-deep px-3 text-sm font-medium text-white hover:bg-teal-deep-dark";
+  "inline-flex min-h-11 items-center justify-center rounded-lg sm:min-h-9 border border-border bg-transparent px-3 text-sm font-medium text-foreground hover:bg-muted disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+export const SMALL_BTN_ON = "inline-flex min-h-11 items-center justify-center rounded-lg sm:min-h-9 border border-transparent bg-teal-deep px-3 text-sm font-medium text-white hover:bg-teal-deep-dark";
 export const MUTED = "text-sm text-muted-foreground";
 export const ERROR = "text-sm text-destructive";
 
