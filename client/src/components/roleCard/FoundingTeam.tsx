@@ -98,7 +98,7 @@ export default function FoundingTeam({ roles, initialOpen = null, villagePay = n
                 {/* A phone reads the open card right under its row. */}
                 {here && !wide && (
                   <div className="mt-3" id={`${headingId}-card`}>
-                    <FullRoleCard seat={r.seat} circleName={r.circleName} sections={r.sections} villagePay={villagePay} register="founding" />
+                    <FullRoleCard seat={r.seat} circleName={r.circleName} sections={r.sections} villagePay={villagePay} register="founding" lifted={lead} />
                   </div>
                 )}
               </li>
@@ -108,7 +108,7 @@ export default function FoundingTeam({ roles, initialOpen = null, villagePay = n
         {wide && (
         <div id={`${headingId}-card`}>
           {current ? (
-            <FullRoleCard key={String(current.seat.id)} seat={current.seat} circleName={current.circleName} sections={current.sections} villagePay={villagePay} register="founding" />
+            <FullRoleCard key={String(current.seat.id)} seat={current.seat} circleName={current.circleName} sections={current.sections} villagePay={villagePay} register="founding" lifted={lead} />
           ) : (
             <p className="rounded-2xl border border-dashed border-notice/40 p-8 text-muted-foreground">{t({ message: "Choose a role to read it in full.", context: "founding team, no role open" })}</p>
           )}

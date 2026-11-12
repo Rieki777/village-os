@@ -157,6 +157,17 @@ describe("Join the founding team", () => {
     expect(screen.queryByRole("heading", { level: 3, name: "Lead Finance Steward" })).toBeNull();
   });
 
+  it("keeps the page's outline whole while the founding team leads: no heading skips a level (axe heading-order)", async () => {
+    renderRoles();
+    const section = await screen.findByRole("region", { name: "Join the founding team" });
+    const row = within(section).getAllByRole("button").find((b) => b.getAttribute("data-founding-role") === "land") as HTMLElement;
+    if (row.getAttribute("aria-expanded") !== "true") fireEvent.click(row);
+    await waitFor(() => expect(section.querySelector("[data-full-role-card]")).toBeTruthy());
+    const levels = Array.from(document.querySelectorAll("h1, h2, h3, h4, h5, h6")).map((h) => Number(h.tagName[1]));
+    expect(levels[0]).toBe(1);
+    for (let i = 1; i < levels.length; i++) expect(levels[i] - levels[i - 1], `heading ${i}: h${levels[i - 1]} then h${levels[i]}`).toBeLessThanOrEqual(1);
+  });
+
   it("draws nothing while the village has it off (control: the directory lists every role, and the board's act returns)", async () => {
     founding = { on: false, roleIds: [], sections: {}, showPayRanges: false, villagePay: VILLAGE_PAY };
     renderRoles();

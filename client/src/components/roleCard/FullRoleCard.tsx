@@ -91,10 +91,11 @@ const asLines = (v: unknown): string[] => {
   return Array.isArray(x) ? x.map((s) => String(s).trim()).filter(Boolean) : [];
 };
 
-function Block({ heading, register, children, testId }: { heading: string; register: CardRegister; children: ReactNode; testId?: string }) {
+function Block({ heading, register, children, testId, lifted = false }: { heading: string; register: CardRegister; children: ReactNode; testId?: string; lifted?: boolean }) {
+  const H = lifted ? "h3" : "h4";
   return (
     <section className={register === "founding" ? "border-t border-notice/30 pt-5" : "border-t border-border pt-4"} data-testid={testId}>
-      <h4 className={register === "founding" ? "font-display text-xl text-card-foreground" : "font-display text-lg font-bold text-card-foreground"}>{heading}</h4>
+      <H className={register === "founding" ? "font-display text-xl text-card-foreground" : "font-display text-lg font-bold text-card-foreground"}>{heading}</H>
       <div className="mt-2 text-card-foreground">{children}</div>
     </section>
   );
@@ -125,9 +126,16 @@ export interface FullRoleCardProps {
   showTitle?: boolean;
   /** The village's pay shape when the host already holds it; read here otherwise. */
   villagePay?: VillagePay | null;
+  /**
+   * One heading level up: the title is an h2 and its sections h3. For a host whose own heading is the
+   * page's h1 (the founding team leading /roles), so the outline never skips a level (axe heading-order).
+   */
+  lifted?: boolean;
 }
 
-export default function FullRoleCard({ seat, circleName = null, register = "game", sections: given, labelledBy, showTitle = true, villagePay: givenPay = null }: FullRoleCardProps) {
+export default function FullRoleCard({ seat, circleName = null, register = "game", sections: given, labelledBy, showTitle = true, villagePay: givenPay = null, lifted = false }: FullRoleCardProps) {
+  const H3 = lifted ? "h2" : "h3";
+  const H4 = lifted ? "h3" : "h4";
   const { t } = useLingui();
   const id = String(seat?.id ?? "");
   const [answer, setAnswer] = useState<RoleCardAnswer | null>(null);
@@ -189,7 +197,7 @@ export default function FullRoleCard({ seat, circleName = null, register = "game
     <section className="rounded-2xl border border-notice/50 bg-card p-5 shadow-sm" data-testid="offer-rail">
       {pay && (
         <div data-testid="pay-shape">
-          <h4 className={EYEBROW}>{SECTION_WORDS.payShape}</h4>
+          <H4 className={EYEBROW}>{SECTION_WORDS.payShape}</H4>
           {pay.ceiling && <p className="mt-2 font-display text-2xl leading-snug text-card-foreground" data-testid="pay-ceiling">{pay.ceiling}</p>}
           {pay.shape.length > 0 && (
             <ul className="mt-4 grid grid-cols-3 gap-2" aria-hidden="true" data-testid="pay-tiles">
@@ -233,7 +241,7 @@ export default function FullRoleCard({ seat, circleName = null, register = "game
     <div className="flex flex-col gap-5">
       {pay && (
         <section className={`rounded-xl border ${founding ? "border-notice/50" : "border-border"} bg-card p-4`} data-testid="pay-shape">
-          <h4 className="font-display text-lg text-card-foreground">{SECTION_WORDS.payShape}</h4>
+          <H4 className="font-display text-lg text-card-foreground">{SECTION_WORDS.payShape}</H4>
           {pay.ceiling && <p className="mt-2 font-display text-xl leading-snug text-notice" data-testid="pay-ceiling">{pay.ceiling}</p>}
           {pay.split && <p className="mt-2 leading-relaxed text-card-foreground" data-testid="pay-split">{pay.split}</p>}
           {pay.atRisk && <p className="mt-3 text-sm leading-relaxed text-card-foreground" data-testid="pay-at-risk">{pay.atRisk}</p>}
@@ -262,7 +270,7 @@ export default function FullRoleCard({ seat, circleName = null, register = "game
       <header className="flex flex-col gap-2">
         {/* "Paid" is said once, by "This is a paid role" under the title (QA2-16). */}
         {circleName && <p className={EYEBROW}>{circleName}</p>}
-        {showTitle && <h3 className={founding ? "font-display text-3xl leading-tight text-card-foreground sm:text-4xl" : "font-display text-2xl text-card-foreground"}>{String(seat?.name ?? "")}</h3>}
+        {showTitle && <H3 className={founding ? "font-display text-3xl leading-tight text-card-foreground sm:text-4xl" : "font-display text-2xl text-card-foreground"}>{String(seat?.name ?? "")}</H3>}
         {/* The roots it grows from, drawn by RootTags (RootsSlot.tsx). */}
         <RootsSlot roots={roots} />
         {sections?.paid && (
@@ -274,7 +282,7 @@ export default function FullRoleCard({ seat, circleName = null, register = "game
         <div className="flex min-w-0 flex-col gap-5 break-words">
           {aim && (
             <section className="rounded-xl border-l-4 border-notice bg-muted px-4 py-3" data-testid="purpose">
-              <h4 className={EYEBROW}>{W.purpose}</h4>
+              <H4 className={EYEBROW}>{W.purpose}</H4>
               <p className={founding ? "mt-1 font-display text-xl leading-snug text-card-foreground sm:text-2xl" : "mt-1 text-lg text-card-foreground"}>{aim}</p>
               {existsWhile && (
                 <p className="mt-2 text-sm text-muted-foreground">
@@ -284,22 +292,22 @@ export default function FullRoleCard({ seat, circleName = null, register = "game
             </section>
           )}
           {words.map((w) => (
-            <Block key={w.key} heading={w.heading} register={register} testId={`words-${w.key}`}>
+            <Block key={w.key} heading={w.heading} register={register} lifted={lifted} testId={`words-${w.key}`}>
               <Lines lines={w.lines} />
             </Block>
           ))}
           {sections && sections.idealBackground.length > 0 && (
-            <Block heading={SECTION_WORDS.idealBackground} register={register} testId="ideal-background">
+            <Block heading={SECTION_WORDS.idealBackground} register={register} lifted={lifted} testId="ideal-background">
               <Lines lines={sections.idealBackground} />
             </Block>
           )}
           {sections && sections.qualities.length > 0 && (
-            <Block heading={SECTION_WORDS.qualities} register={register} testId="qualities">
+            <Block heading={SECTION_WORDS.qualities} register={register} lifted={lifted} testId="qualities">
               <Lines lines={sections.qualities} />
             </Block>
           )}
           {sections && (sections.aiSupport || sections.aiCompanion) && (
-            <Block heading={SECTION_WORDS.aiSupport} register={register} testId="ai-support">
+            <Block heading={SECTION_WORDS.aiSupport} register={register} lifted={lifted} testId="ai-support">
               <div className="flex items-start gap-3">
                 <span className="grid size-11 shrink-0 place-items-center rounded-full border border-notice/50">
                   <AnimalIcon name={sections.aiCompanion} />
@@ -312,12 +320,12 @@ export default function FullRoleCard({ seat, circleName = null, register = "game
             </Block>
           )}
           {bringMe.length > 0 && (
-            <Block heading={W.bringMe} register={register} testId="words-bringMe">
+            <Block heading={W.bringMe} register={register} lifted={lifted} testId="words-bringMe">
               <Lines lines={bringMe} />
             </Block>
           )}
           {holding.length > 0 && (
-            <Block heading={W.holdingWell} register={register} testId="holding-well">
+            <Block heading={W.holdingWell} register={register} lifted={lifted} testId="holding-well">
               <dl className="grid gap-3 sm:grid-cols-3">
                 {holding.map((h) => (
                   <div key={h.key}>
@@ -329,7 +337,7 @@ export default function FullRoleCard({ seat, circleName = null, register = "game
             </Block>
           )}
           {notMine.length > 0 && (
-            <Block heading={W.notMine} register={register} testId="words-notMine">
+            <Block heading={W.notMine} register={register} lifted={lifted} testId="words-notMine">
               <Lines lines={notMine} />
             </Block>
           )}
