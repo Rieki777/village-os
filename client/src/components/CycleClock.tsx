@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
+import { useLingui } from "@lingui/react/macro";
 import { SYNODIC_MONTH_DAYS, moonPhase, moonPhaseName } from "@shared/lunar";
+import { closingNewMoonDay, halfwayDay } from "@shared/moonRhythm";
 import { quarterMarks, wheelState, type Hemisphere } from "@shared/wheel";
 import MoonGlyph from "@/components/calendar/MoonGlyph";
 
@@ -10,7 +12,7 @@ import MoonGlyph from "@/components/calendar/MoonGlyph";
  * Wheel-of-the-year STRUCTURE, nobody's liturgy: the quarter labels are
  * astronomy (equal days, longest, shortest), true everywhere and
  * hemisphere-aware. It shows REAL state, which is the clock the economy runs
- * on: the current lunation, and the days until sending budgets refill.
+ * on: the current lunation, and the moon and day sending allowances refill.
  *
  * ── THE CYCLE COMES FROM THE SERVER, NEVER FROM ARITHMETIC HERE ──────────
  *
@@ -60,6 +62,42 @@ import MoonGlyph from "@/components/calendar/MoonGlyph";
  * moon at the centre of this dial and the moon in the corner of that page are
  * the same moon, lit on the same side for the hemisphere.
  */
+/** What the clock reads of `/api/game/cycle`: the open cycle's id, clock and bounds. */
+export interface ClockCycle {
+  id: string;
+  clock: "lunar" | "calendar";
+  startsAt: string;
+  endsAt: string;
+}
+
+/**
+ * WHEN ALLOWANCES REFILL, AS A MOON AND A DATE, NEVER A COUNTDOWN (batch 157,
+ * C4 Q4). The line used to read "3 days until budgets refill", a number
+ * running down on the wall. It now names the moon that is turning and the day
+ * it turns, so it reads like the calendar does: the month of the moon's full
+ * moon (the calendar's own moon name, shared/moonRhythm.ts), and the civil
+ * day of the closing new moon in the village's time zone. A village keeping
+ * calendar months gets its month's last turn instead, and no moon.
+ */
+export function refillParts(cycle: ClockCycle, timeZone: string, locale: string): { moon: string | null; date: string } | null {
+  const starts = new Date(cycle.startsAt);
+  const ends = new Date(cycle.endsAt);
+  if (Number.isNaN(starts.getTime()) || Number.isNaN(ends.getTime())) return null;
+  const bounds = { id: cycle.id, clock: cycle.clock, startsAt: starts, endsAt: ends };
+  const tz = timeZone || "UTC";
+  const civil = (key: string, opts: Intl.DateTimeFormatOptions) => {
+    try {
+      return new Intl.DateTimeFormat(locale, { ...opts, timeZone: "UTC" }).format(new Date(`${key}T12:00:00Z`));
+    } catch {
+      return new Intl.DateTimeFormat("en", { ...opts, timeZone: "UTC" }).format(new Date(`${key}T12:00:00Z`));
+    }
+  };
+  const date = civil(closingNewMoonDay(bounds, tz), { weekday: "long", day: "numeric", month: "long" });
+  if (cycle.clock === "calendar") return { moon: null, date };
+  const full = halfwayDay(bounds, tz) ?? closingNewMoonDay({ ...bounds, endsAt: starts }, tz);
+  return { moon: civil(full, { month: "long" }), date };
+}
+
 const CENTRE = 110;
 const YEAR_R = 86;
 const LUNAR_R = 58;
@@ -84,14 +122,23 @@ const pt = (angle: number, r: number) => {
  */
 export default function CycleClock({ hemisphere }: { hemisphere?: Hemisphere }) {
   const [season, setSeason] = useState<string>("");
-  const [cycle, setCycle] = useState<{ daysRemaining: number; clock?: string } | null>(null);
+  const { t, i18n } = useLingui();
+  const [cycle, setCycle] = useState<ClockCycle | null>(null);
+  const [timeZone, setTimeZone] = useState("UTC");
   const [villageHemisphere, setVillageHemisphere] = useState<Hemisphere>("north");
   useEffect(() => {
     fetch("/api/season").then((r) => (r.ok ? r.json() : null))
-      .then((d) => setSeason(d?.current?.name ?? "")).catch(() => {});
+      .then((d) => {
+        setSeason(d?.current?.name ?? "");
+        if (typeof d?.timezone === "string" && d.timezone) setTimeZone(d.timezone);
+      }).catch(() => {});
     fetch("/api/game/cycle").then((r) => (r.ok ? r.json() : null))
       .then((d) => {
-        setCycle(d ? { daysRemaining: Number(d.daysRemaining) || 0, clock: d.clock } : null);
+        setCycle(
+          d && typeof d.startsAt === "string" && typeof d.endsAt === "string"
+            ? { id: String(d.id ?? ""), clock: d.clock === "calendar" ? "calendar" : "lunar", startsAt: d.startsAt, endsAt: d.endsAt }
+            : null,
+        );
         if (d?.hemisphere === "south" || d?.hemisphere === "north") setVillageHemisphere(d.hemisphere);
       })
       .catch(() => {});
@@ -105,9 +152,9 @@ export default function CycleClock({ hemisphere }: { hemisphere?: Hemisphere }) 
   // A caller's answer wins; otherwise the village's own, once it arrives.
   const sky: Hemisphere = hemisphere ?? villageHemisphere;
   const state = wheelState(now, phase * SYNODIC_MONTH_DAYS, sky);
-  // Null until the server answers. "Counting" says the number is on its way,
-  // which is a different sentence from a confident zero.
-  const daysLeft = cycle?.daysRemaining ?? null;
+  // Null until the server answers: the line then says it is reading the
+  // clock, which is a different sentence from a confident date.
+  const refill = cycle ? refillParts(cycle, timeZone, i18n.locale) : null;
   const [tx, ty] = pt(state.yearAngle, YEAR_R);
   const lunarSweep = state.lunationFraction;
   const phaseName = moonPhaseName(phase);
@@ -198,12 +245,15 @@ export default function CycleClock({ hemisphere }: { hemisphere?: Hemisphere }) 
           <p className="font-display text-lg leading-snug text-foreground">{season}</p>
         )}
         <p className="mt-1 text-sm text-muted-foreground">{phaseName}</p>
-        <p className="mt-0.5 text-sm text-notice">
-          {daysLeft === null
-            ? "Counting the days until budgets refill"
-            : `${daysLeft} day${daysLeft === 1 ? "" : "s"} until budgets refill, when this ${
-                cycle?.clock === "calendar" ? "calendar month" : "moon"
-              } turns`}
+        <p className="mt-0.5 text-sm text-notice" data-testid="cycle-refill">
+          {(() => {
+            if (!refill) return t({ message: "Reading when allowances refill", context: "cycle clock: the clock has not answered yet" });
+            const date = refill.date;
+            const month = refill.moon;
+            return month
+              ? t({ message: `Allowances refill when the ${month} Moon turns, on ${date}.`, context: "cycle clock: the moon that turns and the day it turns" })
+              : t({ message: `Allowances refill when this calendar month turns, on ${date}.`, context: "cycle clock: a village on calendar months, the day the month turns" });
+          })()}
         </p>
       </figcaption>
     </figure>

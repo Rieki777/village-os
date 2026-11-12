@@ -23,7 +23,8 @@
  */
 import { describe, expect, it, vi, afterEach } from "vitest";
 import { render, waitFor } from "@testing-library/react";
-import CycleClock from "./CycleClock";
+import CycleClock, { refillParts } from "./CycleClock";
+import { CALENDAR_CLOCK, LUNAR_CLOCK } from "@shared/cycleClock";
 
 const answering = (hemisphere?: string) =>
   vi.stubGlobal(
@@ -92,5 +93,46 @@ describe("CycleClock", () => {
     render(<CycleClock />);
     await waitFor(() => expect(litHalf()).toBeTruthy());
     expect(quietPath).toBe(litHalf());
+  });
+});
+
+/**
+ * WHEN ALLOWANCES REFILL IS A MOON AND A DATE, NEVER A COUNTDOWN (batch 157,
+ * C4 Q4). The November 2026 moon in a UTC-6 village runs 9 November to
+ * 7 December, its full moon is on 24 November and the next new moon falls on
+ * 8 December (the calendar's own reading, moonSpiral.test.ts).
+ */
+describe("the refill line", () => {
+  const november = () => {
+    const b = LUNAR_CLOCK.boundsFor(new Date("2026-11-20T12:00:00Z"));
+    return { id: b.id, clock: "lunar" as const, startsAt: b.startsAt.toISOString(), endsAt: b.endsAt.toISOString() };
+  };
+
+  it("names the moon and the day it turns, in the village's time zone", () => {
+    expect(refillParts(november(), "America/Costa_Rica", "en")).toEqual({ moon: "November", date: "Tuesday, December 8" });
+  });
+
+  it("names a calendar month's turn with no moon", () => {
+    const b = CALENDAR_CLOCK.boundsFor(new Date("2026-11-20T12:00:00Z"));
+    expect(refillParts({ id: b.id, clock: "calendar", startsAt: b.startsAt.toISOString(), endsAt: b.endsAt.toISOString() }, "America/Costa_Rica", "en")).toEqual({
+      moon: null,
+      date: "Tuesday, December 1",
+    });
+  });
+
+  it("draws the moon and the date on the wall, and no number of days", async () => {
+    const cycle = november();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        const u = String(url);
+        if (u.includes("/api/game/cycle")) return { ok: true, json: async () => ({ ...cycle, daysRemaining: 3, moonPhase: 0.5 }) };
+        if (u.includes("/api/season")) return { ok: true, json: async () => ({ current: { name: "First season" }, timezone: "America/Costa_Rica" }) };
+        return { ok: false, json: async () => ({}) };
+      }),
+    );
+    const { getByTestId } = render(<CycleClock />);
+    await waitFor(() => expect(getByTestId("cycle-refill").textContent).toBe("Allowances refill when the November Moon turns, on Tuesday, December 8."));
+    expect(getByTestId("cycle-refill").textContent).not.toMatch(/\d+ days?\b/);
   });
 });
