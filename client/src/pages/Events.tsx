@@ -389,15 +389,18 @@ export default function Events() {
             <p className="mt-3 inline-flex items-center gap-2 text-sm text-foreground bg-card border border-border rounded-full px-3 py-1.5">
               <MoonGlyph phase={lunar.phase} size={16} hemisphere={hemisphere} title={lunar.phaseName} />
               <span>
-                Today is day {lunar.day} of {lunar.length}
                 {(() => {
                   // The village's own count and the moon's name, with whichever
                   // of the two this village has. A village that has not set a
                   // first moon reads the name alone, and never a Moon 0.
+                  const lunarDay = lunar.day;
+                  const moonLength = lunar.length;
                   const said = [moonCountLabel(lunar.cycleNumber, moonOneCycle), lunar.name].filter(Boolean).join(", ");
-                  return said ? ` in ${said}` : "";
+                  return said
+                    ? t({ message: `Today is day ${lunarDay} of ${moonLength} in ${said}`, context: "calendar page: today's place in the moon, with the moon's name" })
+                    : t({ message: `Today is day ${lunarDay} of ${moonLength}`, context: "calendar page: today's place in the moon" });
                 })()}
-                {lunar.name && lunar.isExampleName ? " (example name)" : ""}
+                {lunar.name && lunar.isExampleName ? ` ${t({ message: "(example name)", context: "calendar page: the moon's name is an example" })}` : ""}
               </span>
             </p>
           )}

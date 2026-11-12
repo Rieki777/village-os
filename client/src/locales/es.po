@@ -12871,3 +12871,18 @@ msgstr "Esta luna"
 msgctxt "calendar: go to today"
 msgid "Today"
 msgstr "Hoy"
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar page: today's place in the moon, with the moon's name"
+msgid "Today is day {lunarDay} of {moonLength} in {said}"
+msgstr "Hoy es el día {lunarDay} de {moonLength} en {said}"
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar page: the moon's name is an example"
+msgid "(example name)"
+msgstr "(nombre de ejemplo)"
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar page: today's place in the moon"
+msgid "Today is day {lunarDay} of {moonLength}"
+msgstr "Hoy es el día {lunarDay} de {moonLength}"

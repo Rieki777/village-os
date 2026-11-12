@@ -42,7 +42,7 @@ export default function MoonTurnings({ moon, dayFor, onSelect, dayName, classNam
 
   return (
     <section className={`${CARD} ${className}`.trim()} aria-labelledby="moon-turnings-h" data-testid="moon-turnings">
-      <h2 id="moon-turnings-h" className="text-xs font-semibold uppercase tracking-widest text-open">
+      <h2 id="moon-turnings-h" className="font-sans text-xs font-semibold uppercase tracking-widest text-open">
         {t({ message: "This moon's turnings", context: "calendar turnings heading" })}
       </h2>
       <ul className="mt-3 space-y-1">
