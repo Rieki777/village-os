@@ -255,8 +255,7 @@ export default function ProposeARole() {
   /** What to put the cursor on after the next draw: the step's heading, or a field with a problem. */
   const [aimAt, setAimAt] = useState<{ n: number; target: string | null } | null>(null);
   const touch = useRef<{ x: number; y: number; owned: boolean } | null>(null);
-  // M2: on a phone the keyboard covers the bottom of the screen. The step bar rides above it, and the field
-  // being typed in comes to the middle of what is left, so the bar never sits on it.
+  // M2: the step bar rides above a phone's keyboard, and the field being typed in comes into view.
   const formRef = useRef<HTMLFormElement>(null);
   const keyboard = useKeyboardInset();
   useFocusedFieldInView(formRef);
@@ -759,7 +758,6 @@ export default function ProposeARole() {
             className="relative min-w-0 scroll-mt-28 rounded-2xl border border-border bg-card p-5 shadow-sm sm:p-10"
             data-open-proposal=""
             data-hides-fab=""
-            // M2: one bar at the bottom of a phone. The tab bar steps out while the application is open (index.css).
             data-hides-tabbar-phone=""
             data-stone-now={STONES[stone]}
           >
@@ -963,15 +961,11 @@ export default function ProposeARole() {
             </div>
 
             {/*
-              THE ONE PRIMARY ACT, within thumb reach. On a phone the tab bar steps out
-              while the application is open (data-hides-tabbar-phone), so this is the one
-              bar at the bottom, and with the keyboard up it rides above the keyboard
-              (--stone-kb, from visualViewport). On a desk it rests at the card's foot.
-              One firefly cluster gathers on it.
+              THE ONE PRIMARY ACT, within thumb reach. On a phone the tab bar steps out (M2,
+              data-hides-tabbar-phone on the form) and this bar rides above the keyboard
+              (--stone-kb, visualViewport). On a desk it rests at the card's foot.
             */}
-            <div
-              style={{ "--stone-kb": `${keyboard}px` } as React.CSSProperties}
-              data-keyboard={keyboard > 0 ? "open" : undefined}
+            <div style={{ "--stone-kb": `${keyboard}px` } as React.CSSProperties} data-keyboard={keyboard > 0 ? "open" : undefined}
               className="sticky bottom-[calc(var(--stone-kb,0px)+env(safe-area-inset-bottom,0px)+0.5rem)] z-20 -mx-5 mt-10 flex items-center justify-between gap-3 rounded-2xl border border-border bg-card/95 px-4 py-3 shadow-sm backdrop-blur sm:-mx-10 sm:px-8" data-stone-bar="">
               <button type="button" onClick={back} disabled={stone === 0} className={`${BTN_SECONDARY} disabled:invisible`} data-stone-back="">
                 <ArrowLeft className="size-4" aria-hidden="true" />
