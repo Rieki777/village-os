@@ -74,6 +74,8 @@ const PAGES = [
   "client/src/pages/StewardJourney.tsx",
   "client/src/pages/Quests.tsx",
   "client/src/pages/RoleMeasures.tsx",
+  // The village calendar, moon first (Phase C, decision 3).
+  "client/src/pages/Events.tsx",
   "client/src/pages/Approvals.tsx",
   "client/src/pages/VerifyEmail.tsx",
   "client/src/pages/SetPassword.tsx",
@@ -90,6 +92,9 @@ const JOURNEY = [
   "client/src/components/journey/look.ts",
   "client/src/components/journey/Trail.tsx",
   "client/src/components/journey/Leaf.tsx",
+  "client/src/components/calendar/MoonSpiral.tsx",
+  "client/src/components/calendar/DayStrip.tsx",
+  "client/src/components/calendar/MoonTurnings.tsx",
   "client/src/components/agent/ConnectorSetupPanel.tsx",
   "client/src/components/roleDraft/SeasonGoals.tsx",
   "client/src/components/roleDraft/ArchetypeStep.tsx",

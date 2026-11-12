@@ -120,13 +120,13 @@ export default function CalendarFeedCard({ signedIn }: { signedIn: boolean }) {
               )}
               <div className="flex items-center gap-2 flex-wrap">
                 <button type="button" onClick={mint} disabled={busy}
-                  className="px-3 py-1.5 text-xs font-medium rounded-lg bg-teal-deep text-white disabled:opacity-50 inline-flex items-center gap-1.5">
+                  className="px-3 py-1.5 text-xs font-medium rounded-lg bg-notice text-background disabled:opacity-50 inline-flex items-center gap-1.5">
                   <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
                   {state?.hasToken ? "Make a new address" : "Make my address"}
                 </button>
                 {state?.hasToken && (
                   <button type="button" onClick={revoke} disabled={busy}
-                    className="px-3 py-1.5 text-xs font-medium rounded-lg border border-red-200 text-red-700 disabled:opacity-50">
+                    className="px-3 py-1.5 text-xs font-medium rounded-lg border border-destructive/50 text-destructive disabled:opacity-50">
                     Revoke
                   </button>
                 )}

@@ -12646,3 +12646,228 @@ msgstr ""
 #~ msgctxt "open proposal review"
 #~ msgid "1 goal for your first moon"
 #~ msgstr "1 meta para tu primera luna"
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar moon view legend"
+msgid "What the marks mean"
+msgstr "Qué significan las marcas"
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar page: tip about moons"
+msgid "About the moons"
+msgstr "Sobre las lunas"
+
+#: client/src/components/calendar/DayStrip.tsx
+msgctxt "calendar day strip"
+msgid "The days of this moon"
+msgstr "Los días de esta luna"
+
+#: client/src/components/calendar/MoonSpiral.tsx
+msgctxt "calendar spiral: label beside today's seed"
+msgid "Today"
+msgstr "Hoy"
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar day panel eyebrow"
+msgid "Today"
+msgstr "Hoy"
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar view tab"
+msgid "Month"
+msgstr "Mes"
+
+#: client/src/components/calendar/DayStrip.tsx
+msgctxt "calendar day strip: this day is today"
+msgid "today"
+msgstr "hoy"
+
+#: client/src/components/calendar/MoonSpiral.tsx
+msgctxt "calendar spiral: label beside the full moon"
+msgid "Full moon, {date}"
+msgstr "Luna llena, {date}"
+
+#: client/src/components/calendar/MoonTurnings.tsx
+msgctxt "calendar turnings heading"
+msgid "This moon's turnings"
+msgstr "Los giros de esta luna"
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar page title"
+msgid "Village calendar"
+msgstr "Calendario de la aldea"
+
+#: client/src/components/calendar/MoonSpiral.tsx
+msgctxt "calendar spiral: a turning"
+msgid "new moon"
+msgstr "luna nueva"
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar page eyebrow"
+msgid "Calendar"
+msgstr "Calendario"
+
+#: client/src/components/calendar/MoonTurnings.tsx
+msgctxt "calendar turnings"
+msgid "New moon, the next moon opens"
+msgstr "Luna nueva, se abre la próxima luna"
+
+#: client/src/components/calendar/DayStrip.tsx
+msgctxt "calendar day strip: a turning"
+msgid "full moon"
+msgstr "luna llena"
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar view tab"
+msgid "Year"
+msgstr "Año"
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar day panel: empty day"
+msgid "Nothing is on this day yet."
+msgstr "Todavía no hay nada en este día."
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar view tab"
+msgid "Week"
+msgstr "Semana"
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar day panel heading"
+msgid "What is on this day"
+msgstr "Lo que hay este día"
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar moon view heading, a village with no moon count or names"
+msgid "This moon"
+msgstr "Esta luna"
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar day panel: place in the moon"
+msgid "day {lunarDay} of {moonLength}"
+msgstr "día {lunarDay} de {moonLength}"
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar legend"
+msgid "today"
+msgstr "hoy"
+
+#: client/src/components/calendar/MoonSpiral.tsx
+msgctxt "calendar spiral: what is on a day"
+msgid "something on the calendar"
+msgstr "algo en el calendario"
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar legend"
+msgid "days walked"
+msgstr "días andados"
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar loading"
+msgid "Opening the calendar"
+msgstr "Abriendo el calendario"
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar: step back one moon"
+msgid "The moon before"
+msgstr "La luna anterior"
+
+#: client/src/components/calendar/MoonSpiral.tsx
+msgctxt "calendar spiral: what the drawing is"
+msgid "This moon's {n} days on a golden spiral, the new moon at the centre"
+msgstr "Los {n} días de esta luna en una espiral dorada, con la luna nueva en el centro"
+
+#: client/src/components/calendar/MoonTurnings.tsx
+msgctxt "calendar turnings"
+msgid "Full moon"
+msgstr "Luna llena"
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar page lede"
+msgid "Pick a day to see what is on. The village keeps two clocks: the twelve months everyone shares, and the moons the land turns by."
+msgstr "Elige un día para ver lo que hay. La aldea lleva dos relojes: los doce meses que todos compartimos y las lunas con que gira la tierra."
+
+#: client/src/components/calendar/MoonSpiral.tsx
+msgctxt "calendar spiral: this day is today"
+msgid "today"
+msgstr "hoy"
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar view tabs"
+msgid "Calendar views"
+msgstr "Vistas del calendario"
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar: step on one moon"
+msgid "The moon after"
+msgstr "La luna siguiente"
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar moon view: keyboard hint, desktop"
+msgid "The arrow keys walk the days. Home and End go to the first and last day of the moon."
+msgstr "Las flechas recorren los días. Inicio y Fin llevan al primer y al último día de la luna."
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar legend"
+msgid "something else on"
+msgstr "algo más"
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar view tab"
+msgid "List"
+msgstr "Lista"
+
+#: client/src/components/calendar/MoonSpiral.tsx
+msgctxt "calendar spiral: label beside the first day"
+msgid "New moon, {date}"
+msgstr "Luna nueva, {date}"
+
+#: client/src/components/calendar/MoonSpiral.tsx
+msgctxt "calendar spiral: what is on a day"
+msgid "a gathering"
+msgstr "un encuentro"
+
+#: client/src/components/calendar/MoonTurnings.tsx
+msgctxt "calendar turnings"
+msgid "New moon, this moon opens"
+msgstr "Luna nueva, se abre esta luna"
+
+#: client/src/components/calendar/MoonSpiral.tsx
+msgctxt "calendar spiral: a day's place in the moon"
+msgid "day {lunarDay} of {n}"
+msgstr "día {lunarDay} de {n}"
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar moon view: the moon's window"
+msgid "{firstDay} to {lastDay}. The new moon is at the centre, and each day is a seed further out."
+msgstr "Del {firstDay} al {lastDay}. La luna nueva está en el centro, y cada día es una semilla más hacia afuera."
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar view tab"
+msgid "Moon"
+msgstr "Luna"
+
+#: client/src/components/calendar/MoonSpiral.tsx
+msgctxt "calendar spiral: a turning"
+msgid "full moon"
+msgstr "luna llena"
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar legend"
+msgid "a gathering"
+msgstr "un encuentro"
+
+#: client/src/components/calendar/DayStrip.tsx
+msgctxt "calendar day strip: what is on a day"
+msgid "a gathering"
+msgstr "un encuentro"
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar moon view eyebrow"
+msgid "This moon"
+msgstr "Esta luna"
+
+#: client/src/pages/Events.tsx
+msgctxt "calendar: go to today"
+msgid "Today"
+msgstr "Hoy"
