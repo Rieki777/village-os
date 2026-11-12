@@ -11,6 +11,7 @@
  */
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
+import { Trans } from "@lingui/react/macro";
 
 /** Below Tailwind's `sm`: the width the phone layout is drawn at. */
 const PHONE = "(max-width: 639px)";
@@ -45,11 +46,13 @@ export default function CalendarNotes({ zoneLine, className = "" }: { zoneLine: 
           also the second door onto /seasonal-festivals, which lived behind
           one menu entry. */}
       <p className="mt-2 text-xs text-muted-foreground">
-        The turnings that shape this year are on the{" "}
-        <Link href="/seasonal-festivals" className="text-notice font-medium underline underline-offset-2 hover:text-foreground">
-          Seasonal Festivals
-        </Link>{" "}
-        page.
+        <Trans context="calendar page: the door to the Seasonal Festivals page">
+          The turnings that shape this year are on the{" "}
+          <Link href="/seasonal-festivals" className="text-notice font-medium underline underline-offset-2 hover:text-foreground">
+            Seasonal Festivals
+          </Link>{" "}
+          page.
+        </Trans>
       </p>
     </div>
   );
