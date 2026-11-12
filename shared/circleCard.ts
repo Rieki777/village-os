@@ -18,9 +18,12 @@
  *      draws nothing. `null` or an empty list is "read, and empty", and comes
  *      out with its own words.
  *   2. A ROLE IS NAMED BY ITS FULL TITLE, `org_roles.name` verbatim.
- *   3. NO PERSON IS NAMED. A holder arrives as a handle for the link to their
- *      card and nothing else, and the link's words name the role. The adoption
- *      record says how the words were adopted, never by whom.
+ *   3. NO PERSON IS NAMED TO A VISITOR. A holder arrives as a handle for the
+ *      link to their card, and the link's words name the role. A signed-in
+ *      member whose account is live also reads each holder's FIRST NAME
+ *      (`holderNames`, lead 12 Nov 2026), decided on the server; a visitor's
+ *      card carries none, and never a surname. The adoption record says how
+ *      the words were adopted, never by whom.
  *   4. EVERY HEADING IS PLAIN WORDS, with its CCOS term beside it for the
  *      hover, or `null` where the village turned the terms off.
  */
@@ -92,6 +95,11 @@ export interface CircleRoleIn {
    * A holder with no account or no handle is `null` and gets no link.
    */
   holderHandles: Read<(string | null)[]>;
+  /**
+   * The holders' first names, read only for a signed-in member whose account
+   * is live (server/lib/circleCardData.ts); `undefined` for a visitor.
+   */
+  holderNames?: Read<string[]>;
   /**
    * What the role pays (server/lib/workPay.ts), at the `terms.read` tier, so
    * the Apply link never sits beside a role whose pay the reader has not seen
@@ -193,6 +201,8 @@ export interface RoleRowOut {
   filled: boolean;
   /** One link per member holder with a card, each named by the role it holds. */
   holderCards: { href: string; label: string; ariaLabel: string }[];
+  /** "Held by Ana and Cai", for a live member only; null for a visitor and for a role nobody holds. */
+  holderLine: string | null;
   /** Apply for it: an open or partly filled real role. */
   applyHref: string | null;
   applyLabel: string;
@@ -297,6 +307,7 @@ function roleRow(r: CircleRoleIn, asMember: boolean, circleId: string): RoleRowO
     stateWords: words,
     filled,
     holderCards,
+    holderLine: W.heldByNames((r.holderNames ?? []).map((n) => n.trim()).filter(Boolean)),
     // The member door, back to this circle's card; a visitor gets the open form (role audit, 10 Nov 2026).
     applyHref: mayApply ? (asMember ? applySeatsHref([r.id], { from: circleCardHref(circleId) }) : openProposalHref(r.id)) : null,
     applyLabel: W.apply,

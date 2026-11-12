@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildCircleCard, holderCardHref, writtenOnly, type CircleCardIn, type CircleSection } from "./circleCard";
 import { charterFromRow, EMPTY_CHARTER, readStoredValues } from "./circleCharter";
-import { CCOS_TERMS, CIRCLE_HEADINGS, CIRCLE_SECTION_KEYS } from "./circleCardWords";
+import { CCOS_TERMS, CIRCLE_CARD_WORDS, CIRCLE_HEADINGS, CIRCLE_SECTION_KEYS } from "./circleCardWords";
 import { ROLE_ANCHOR } from "./playerCard";
 
 const base = (over: Partial<CircleCardIn> = {}): CircleCardIn => ({
@@ -277,3 +277,12 @@ describe("QA2-06: the card a reader who cannot propose words sees", () => {
   });
 });
 
+
+describe("the holders' first names line (lead, 12 Nov 2026)", () => {
+  it("names one, two or more holders, and draws nothing for none", () => {
+    expect(CIRCLE_CARD_WORDS.heldByNames([])).toBeNull();
+    expect(CIRCLE_CARD_WORDS.heldByNames(["Ana"])).toBe("Held by Ana");
+    expect(CIRCLE_CARD_WORDS.heldByNames(["Ana", "Cai"])).toBe("Held by Ana and Cai");
+    expect(CIRCLE_CARD_WORDS.heldByNames(["Ana", "Cai", "Gil"])).toBe("Held by Ana, Cai and Gil");
+  });
+});

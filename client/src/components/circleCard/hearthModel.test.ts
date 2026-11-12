@@ -30,6 +30,7 @@ const role = (id: string, name: string, filled: boolean): RoleRowOut => ({
   stateWords: filled ? "Filled" : "Open",
   filled,
   holderCards: filled ? [{ href: `/profile/ana#role-${id}`, label: "See their card", ariaLabel: `See the card of who holds ${name}` }] : [],
+  holderLine: null,
   applyHref: filled ? null : `/propose?seat=${id}`,
   applyLabel: "Apply for this role",
 });
