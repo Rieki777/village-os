@@ -552,9 +552,28 @@ export default function Roles() {
   const rooted = listedDirectory.filter((r) => r.id === linked || rootKept.has(r.id));
   // Filters work for the reader alone, never ranks anyone. A linked seat always shows.
   const reach = rolesWithinReach(rooted, (r) => ({ commitmentPct: r.raw?.card?.commitmentPct ?? null, commitmentRequired: r.raw?.card?.commitmentRequired === true }), memberPct);
-  const beyondCount = reach.beyond.filter((r) => r.id !== linked).length;
+  // The founding team is held to the same reach: a founding role that needs more than the reader has waits too.
+  const featuredReach = rolesWithinReach(featured, (f) => ({ commitmentPct: f.seat?.card?.commitmentPct ?? null, commitmentRequired: f.seat?.card?.commitmentRequired === true }), memberPct);
+  const featuredHidden = featuredReach.beyond.filter((f) => String(f.seat?.id) !== linked);
+  const featuredVisible = showBeyond ? featured : featured.filter((f) => !featuredHidden.includes(f));
+  const beyondCount = reach.beyond.filter((r) => r.id !== linked).length + featuredHidden.length;
   const directory = showBeyond ? rooted : rooted.filter((r) => r.id === linked || !reach.beyond.includes(r));
   const rootsOffered = roots.available && byRoots.tagged;
+  // 0383: required roles that ask more than the reader can give now, held back with one door to show them.
+  // Drawn once: above the founding team when it holds one of them, else above the directory.
+  const beyondLine =
+    beyondCount > 0 ? (
+      <div className="mb-8 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-border bg-card px-4 py-2 text-sm text-foreground" data-roles-beyond={beyondCount}>
+                <span>
+                  {beyondCount === 1
+                    ? t({ message: "1 role needs more time than you have right now.", context: "roles page: required roles beyond the reader's percent, one" })
+                    : t({ message: `${beyondCount} roles need more time than you have right now.`, context: "roles page: required roles beyond the reader's percent, several" })}
+                </span>
+                <button type="button" className="min-h-11 font-medium text-notice underline underline-offset-2 hover:text-foreground" onClick={() => setShowBeyond((v) => !v)} aria-pressed={showBeyond}>
+                  {showBeyond ? t({ message: "Hide them again", context: "roles page: hide the roles beyond the reader's percent" }) : t({ message: "Show them anyway", context: "roles page: show the roles beyond the reader's percent" })}
+                </button>
+              </div>
+    ) : null;
   const groups: { title: string; subtitle: string; circleId: string | null; roles: RoleEntry[] }[] = [];
   for (const role of directory) {
     const g = groups.find((x) => x.title === role.group);
@@ -618,7 +637,8 @@ export default function Roles() {
             )}
           </m.div>
 
-          {featured.length > 0 && <FoundingTeam roles={featured} villagePay={founding?.villagePay ?? null} />}
+          {featuredHidden.length > 0 && beyondLine}
+          {featuredVisible.length > 0 && <FoundingTeam roles={featuredVisible} villagePay={founding?.villagePay ?? null} />}
 
           {/* OTHER WAYS TO JOIN: clearly secondary to the founding team, and open from the start. */}
           <section aria-labelledby="other-ways" className="mx-auto mb-14 max-w-4xl" data-other-ways="">
@@ -688,19 +708,7 @@ export default function Roles() {
                 <RootsFilterToggle filter={roots} total={listedDirectory.length} shown={rooted.length} noun="roles" />
               </div>
             )}
-            {/* 0383: required roles that ask more than the reader can give now, held back with one door to show them. */}
-            {beyondCount > 0 && (
-              <div className="mb-8 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-border bg-card px-4 py-2 text-sm text-foreground" data-roles-beyond={beyondCount}>
-                <span>
-                  {beyondCount === 1
-                    ? t({ message: "1 role needs more time than you have right now.", context: "roles page: required roles beyond the reader's percent, one" })
-                    : t({ message: `${beyondCount} roles need more time than you have right now.`, context: "roles page: required roles beyond the reader's percent, several" })}
-                </span>
-                <button type="button" className="min-h-11 font-medium text-notice underline underline-offset-2 hover:text-foreground" onClick={() => setShowBeyond((v) => !v)} aria-pressed={showBeyond}>
-                  {showBeyond ? t({ message: "Hide them again", context: "roles page: hide the roles beyond the reader's percent" }) : t({ message: "Show them anyway", context: "roles page: show the roles beyond the reader's percent" })}
-                </button>
-              </div>
-            )}
+            {featuredHidden.length === 0 && beyondLine}
             {/* The admin view: only a reader the server sent unlisted roles to has anything to switch on. */}
             {unlistedCount > 0 && (
               <label className="mb-8 flex min-h-11 items-center gap-3 rounded-xl border border-border bg-card px-4 py-2 text-sm text-foreground" data-show-unlisted="">

@@ -84,6 +84,7 @@ const ORG = {
 };
 
 let mine: number | null = 50;
+let founding: any = { on: false, roleIds: [], sections: {}, showPayRanges: false, villagePay: null };
 
 beforeEach(() => {
   window.history.replaceState(null, "", "/roles");
@@ -91,6 +92,7 @@ beforeEach(() => {
   session.user = { id: "u-me" };
   catalog.modules = [];
   mine = 50;
+  founding = { on: false, roleIds: [], sections: {}, showPayRanges: false, villagePay: null };
   vi.stubGlobal("IntersectionObserver", NoopIntersectionObserver);
   vi.stubGlobal(
     "fetch",
@@ -98,6 +100,7 @@ beforeEach(() => {
       const u = String(url);
       const reply = (body: unknown, status = 200) => ({ ok: status < 300, status, json: async () => body });
       if (u === "/api/org") return reply(ORG);
+      if (u === "/api/org/founding-team") return reply(founding);
       if (u === "/api/me/commitment") return reply({ now: mine === null ? null : { id: 1, pct: mine, fromDate: "2026-11-12", period: "season", note: null, saidAt: null }, history: [] });
       if (u === "/api/season") return reply({ current: { name: "Season of Foundations", endsOn: "2099-03-21" }, daysLeft: 171 });
       if (u.endsWith("/needs")) return reply({ needs: [] });
@@ -153,5 +156,20 @@ describe("roles that need more time than the member has", () => {
     renderRoles();
     expect(await screen.findByRole("heading", { level: 3, name: "Land Steward" })).toBeTruthy();
     expect(screen.queryByText(/needs? more time than you have/)).toBeNull();
+  });
+
+  it("holds a founding role required at 100% back too, and says so above the founding team", async () => {
+    founding = { on: true, roleIds: ["land-steward", "seed-keeper"], sections: {}, showPayRanges: false, villagePay: null };
+    render(
+      <Router>
+        <Roles />
+      </Router>,
+    );
+    await waitFor(() => expect(screen.getByText("1 role needs more time than you have right now.")).toBeTruthy());
+    // Control: the flexible founding role at 100% is still featured.
+    await waitFor(() => expect(screen.getAllByText("Seed Keeper").length).toBeGreaterThan(0));
+    expect(screen.queryAllByText("Land Steward")).toEqual([]);
+    fireEvent.click(screen.getByRole("button", { name: "Show them anyway" }));
+    await waitFor(() => expect(screen.getAllByText("Land Steward").length).toBeGreaterThan(0));
   });
 });
