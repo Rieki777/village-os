@@ -219,7 +219,11 @@ export default function GratitudeWall() {
     setSending(true);
     setFeedback(null);
     const typed = form.to.trim();
-    setLantern({ moment: "carrying", toName: typed.replace(/^@/, "") });
+    // The name the lantern carries toward: the person's first name when the
+    // wall already knows the handle, otherwise what was typed.
+    const handle = typed.replace(/^@/, "").toLowerCase();
+    const known = (wall ?? []).flatMap((w) => [w.from, w.to]).find((p) => p.handle?.toLowerCase() === handle);
+    setLantern({ moment: "carrying", toName: known ? known.name.trim().split(/\s+/)[0] ?? handle : handle });
     try {
       const res = await gameFetch("/api/game/gratitude/send", {
         method: "POST",
