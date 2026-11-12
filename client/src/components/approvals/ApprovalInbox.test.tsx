@@ -93,4 +93,14 @@ describe("the approval inbox", () => {
     render(<ApprovalInbox headers={() => ({})} />);
     expect(await screen.findByTestId("inbox-failed")).toBeTruthy();
   });
+
+  it("reads oldest first, by arrival alone, whatever order the server sends (decider calm)", async () => {
+    const newer = { ...A, id: "prop_new", title: "The newer one", at: "2026-12-05T10:00:00.000Z" };
+    const older = { ...A, id: "prop_old", title: "The older one", at: "2026-11-20T10:00:00.000Z" };
+    stub({ waiting: [newer, older] });
+    render(<ApprovalInbox headers={() => ({})} />);
+    const first = await screen.findByText("The older one");
+    const second = screen.getByText("The newer one");
+    expect(first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
 });
