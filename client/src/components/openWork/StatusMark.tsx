@@ -16,8 +16,9 @@ export function PlantShape({ state, scale = 1 }: { state: QuestStatus; scale?: n
     <g transform={`scale(${scale})`} data-plant={state} fill="none" strokeLinecap="round" strokeLinejoin="round">
       {state === "seed" && (
         <g className="text-muted-foreground">
-          <path d="M-7 2 Q0 -1.5 7 2" stroke="currentColor" strokeWidth={1} opacity={0.7} />
-          <ellipse cx={0} cy={-3.5} rx={3.2} ry={4.4} stroke="currentColor" strokeWidth={1.2} />
+          <path d="M-11 2 Q0 -2.5 11 2" stroke="currentColor" strokeWidth={1.4} opacity={0.75} />
+          <ellipse cx={0} cy={-9} rx={6.2} ry={8.6} fill="currentColor" fillOpacity={0.2} stroke="currentColor" strokeWidth={1.6} />
+          <path d="M0 -14 Q-2 -9 0 -4" stroke="currentColor" strokeWidth={1.1} opacity={0.7} />
         </g>
       )}
       {state === "sprout" && (

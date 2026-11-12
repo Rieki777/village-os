@@ -27,9 +27,11 @@ export interface FitsYouCardProps {
   goal: { id: string; text: string } | null;
   /** A line under the act (the member's own type line). */
   footer?: React.ReactNode;
+  /** Signed in: the card is chosen for this person. A visitor gets a plain "start here". */
+  forYou?: boolean;
 }
 
-export default function FitsYouCard({ lead, status, goal, footer }: FitsYouCardProps) {
+export default function FitsYouCard({ lead, status, goal, footer, forYou = true }: FitsYouCardProps) {
   const { t } = useLingui();
   const statusWords = useStatusWords();
   const placeWords = usePlaceWords();
@@ -44,7 +46,12 @@ export default function FitsYouCard({ lead, status, goal, footer }: FitsYouCardP
 
   return (
     <section className={CARD_FEATURED} aria-labelledby="lead-quest-title" data-lead-quest={q.id}>
-      <p className={EYEBROW}>{t({ message: "Fits you", context: "open work: the one card chosen for the reader" })}</p>
+      <p className={EYEBROW}>
+        {forYou
+          ? t({ message: "Fits you", context: "open work: the one card chosen for the reader" })
+          : t({ message: "A good place to start", context: "open work: the lead card for a visitor" })}
+        {q.circle ? ` · ${q.circle}` : ""}
+      </p>
       <div className="mt-2 grid gap-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
         <div className="min-w-0">
           <h2 id="lead-quest-title" className="font-display text-2xl font-bold leading-snug text-card-foreground sm:text-3xl">
@@ -52,7 +59,6 @@ export default function FitsYouCard({ lead, status, goal, footer }: FitsYouCardP
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
             {why}
-            {q.circle ? ` ${q.circle}.` : ""}
           </p>
           {about && <p className="mt-3 max-w-2xl text-sm leading-relaxed text-foreground/90 line-clamp-3">{about}</p>}
           <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">

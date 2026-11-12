@@ -312,6 +312,7 @@ export default function Quests() {
               lead={lead}
               status={statusFor(signs?.perQuest?.[lead.quest.id])}
               goal={goalFor(lead.quest)}
+              forYou={!!user}
               footer={user ? <MaiaTypeLine className="mt-3" /> : null}
             />
           </div>
@@ -374,6 +375,54 @@ export default function Quests() {
         </div>
       </section>
 
+      {/* The season goal and the place, the two filters goal threads add
+          (decision 5). Right under the sticky bar and outside it, so a phone
+          keeps its slim sticky row. */}
+      {(threadedGoals.length > 0 || placesUsed.length > 0 || activeGoal !== "All") && (
+        <section className="pt-6 bg-background" aria-label={t({ message: "Filter by season goal and place", context: "open work filters" })}>
+          <div className="container max-w-7xl space-y-1">
+            {(threadedGoals.length > 0 || activeGoal !== "All") && (
+              <div className="flex gap-2 items-center overflow-x-auto flex-nowrap" data-scroll-contain role="group" aria-label={t({ message: "Season goal", context: "open work filter row" })}>
+                <Target className="w-4 h-4 text-muted-foreground flex-shrink-0" aria-hidden="true" />
+                {[{ id: "All", text: t({ message: "Every goal", context: "open work filter: all season goals" }) }, ...threadedGoals].map((g) => (
+                  <button
+                    key={g.id}
+                    type="button"
+                    aria-pressed={activeGoal === g.id}
+                    data-goal-filter={g.id}
+                    onClick={() => setActiveGoal(g.id)}
+                    className={`px-3 min-h-[44px] min-w-[44px] inline-flex items-center justify-center whitespace-nowrap flex-shrink-0 rounded-full text-xs font-medium transition-colors ${
+                      activeGoal === g.id ? "bg-open text-background" : "bg-muted text-muted-foreground hover:bg-muted/80"
+                    }`}
+                  >
+                    {g.text}
+                  </button>
+                ))}
+              </div>
+            )}
+            {placesUsed.length > 0 && (
+              <div className="flex gap-2 items-center overflow-x-auto flex-nowrap" data-scroll-contain role="group" aria-label={t({ message: "Where it happens", context: "open work filter row" })}>
+                <span className="w-4 flex-shrink-0" aria-hidden="true" />
+                {(["All", ...placesUsed] as const).map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    aria-pressed={activePlace === p}
+                    data-place-filter={p}
+                    onClick={() => setActivePlace(p)}
+                    className={`px-3 min-h-[44px] min-w-[44px] inline-flex items-center justify-center whitespace-nowrap flex-shrink-0 rounded-full text-xs font-medium transition-colors ${
+                      activePlace === p ? "bg-open text-background" : "bg-muted text-muted-foreground hover:bg-muted/80"
+                    }`}
+                  >
+                    {p === "All" ? t({ message: "Anywhere", context: "open work filter: every place" }) : placeWords[p]}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
+      )}
+
       {/*
        * Propose-your-own CTA. It used to sit at the end of the hero, and on a
        * phone that put it at y772 to y820 in a 375x812 Safari viewport, where
@@ -426,52 +475,6 @@ export default function Quests() {
         </section>
       )}
 
-      {/* The season goal and the place, the two filters goal threads add
-          (decision 5). Outside the sticky bar too, for the same slim phone row. */}
-      {(threadedGoals.length > 0 || placesUsed.length > 0 || activeGoal !== "All") && (
-        <section className="pt-6 bg-background" aria-label={t({ message: "Filter by season goal and place", context: "open work filters" })}>
-          <div className="container max-w-7xl space-y-1">
-            {(threadedGoals.length > 0 || activeGoal !== "All") && (
-              <div className="flex gap-2 items-center overflow-x-auto flex-nowrap" data-scroll-contain role="group" aria-label={t({ message: "Season goal", context: "open work filter row" })}>
-                <Target className="w-4 h-4 text-muted-foreground flex-shrink-0" aria-hidden="true" />
-                {[{ id: "All", text: t({ message: "Every goal", context: "open work filter: all season goals" }) }, ...threadedGoals].map((g) => (
-                  <button
-                    key={g.id}
-                    type="button"
-                    aria-pressed={activeGoal === g.id}
-                    data-goal-filter={g.id}
-                    onClick={() => setActiveGoal(g.id)}
-                    className={`px-3 min-h-[44px] min-w-[44px] inline-flex items-center justify-center whitespace-nowrap flex-shrink-0 rounded-full text-xs font-medium transition-colors ${
-                      activeGoal === g.id ? "bg-open text-background" : "bg-muted text-muted-foreground hover:bg-muted/80"
-                    }`}
-                  >
-                    {g.text}
-                  </button>
-                ))}
-              </div>
-            )}
-            {placesUsed.length > 0 && (
-              <div className="flex gap-2 items-center overflow-x-auto flex-nowrap" data-scroll-contain role="group" aria-label={t({ message: "Where it happens", context: "open work filter row" })}>
-                <span className="w-4 flex-shrink-0" aria-hidden="true" />
-                {(["All", ...placesUsed] as const).map((p) => (
-                  <button
-                    key={p}
-                    type="button"
-                    aria-pressed={activePlace === p}
-                    data-place-filter={p}
-                    onClick={() => setActivePlace(p)}
-                    className={`px-3 min-h-[44px] min-w-[44px] inline-flex items-center justify-center whitespace-nowrap flex-shrink-0 rounded-full text-xs font-medium transition-colors ${
-                      activePlace === p ? "bg-open text-background" : "bg-muted text-muted-foreground hover:bg-muted/80"
-                    }`}
-                  >
-                    {p === "All" ? t({ message: "Anywhere", context: "open work filter: every place" }) : placeWords[p]}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        </section>
-      )}
 
       {/* The open work, grouped by circle (decision 5): a clean list to scan. */}
       <section className="py-16 bg-background">

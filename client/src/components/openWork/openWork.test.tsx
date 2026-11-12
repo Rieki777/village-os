@@ -56,6 +56,12 @@ describe("FitsYouCard", () => {
     expect(screen.getAllByRole("link")).toHaveLength(1);
   });
 
+  it("a visitor is not told the card fits them", () => {
+    render(<FitsYouCard lead={{ quest: quest({ id: "q-well", circle: "Land" }), reason: "begin", fits: false, needed: false }} status="seed" goal={null} forYou={false} />);
+    expect(screen.queryByText(/Fits you/)).toBeNull();
+    expect(screen.getByText("A good place to start · Land")).toBeTruthy();
+  });
+
   it("says when it was chosen for a season goal that needs hands", () => {
     render(<FitsYouCard lead={{ quest: quest({ id: "q-tank" }), reason: "begin", fits: false, needed: true }} status="sprout" goal={WATER} />);
     expect(screen.getByText("It grows Clean water all year, and that goal needs hands this season.")).toBeTruthy();

@@ -292,7 +292,10 @@ export default function QuestDetail() {
               <span className="inline-flex items-center gap-3 text-sm text-muted-foreground ml-1">
                 {active > 0 && (
                   <span className="inline-flex items-center gap-1 font-medium text-teal-deep">
-                    <Users className="w-4 h-4" /> {active} in the field now
+                    <Users className="w-4 h-4" />{" "}
+                    {active === 1
+                      ? t({ message: "1 hand on this", context: "open work card: one person carries this quest now" })
+                      : t({ message: `${active} hands on this`, context: "open work card: people carrying this quest now" })}
                   </span>
                 )}
                 {done > 0 && (

@@ -13048,3 +13048,8 @@ msgstr "Trabajo abierto"
 msgctxt "open work: gated quests explained once"
 msgid "Some of this work opens as you walk the {ladder} or step into a role. Each card says what opens it."
 msgstr "Parte de este trabajo se abre a medida que recorres el {ladder} o asumes un rol. Cada tarjeta dice qué lo abre."
+
+#: client/src/components/openWork/FitsYouCard.tsx
+msgctxt "open work: the lead card for a visitor"
+msgid "A good place to start"
+msgstr "Un buen lugar para empezar"
