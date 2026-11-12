@@ -43,87 +43,28 @@ const cap = (
   opens: ProgressionCapability["opens"],
 ): ProgressionCapability => ({ key, label, held, opens }) as ProgressionCapability;
 
-describe("MaturityLadder", () => {
-  it("marks the rung you stand on with aria-current and no separator character", () => {
-    const { container } = render(
-      <MaturityLadder stages={stages} stageIndex={4} consentedQuests={5} />,
-    );
+describe("MaturityLadder (the prune: the walk so far, nothing ahead)", () => {
+  it("marks the stage you stand in with aria-current and no separator character", () => {
+    const { container } = render(<MaturityLadder stages={stages} stageIndex={4} />);
     const current = container.querySelectorAll('[aria-current="step"]');
     expect(current).toHaveLength(1);
     expect(current[0].textContent).toContain("Contributor");
-
-    // The old ladder joined rungs with a literal middle dot, which screen
-    // readers announce. Nothing in this list may reintroduce one.
     const list = container.querySelector("ol");
     expect(list?.textContent ?? "").not.toContain("·");
   });
 
-  it("says the distance to the next rung from the SERVED threshold", () => {
-    render(<MaturityLadder stages={stages} stageIndex={4} consentedQuests={5} />);
-    // 7 is the overlaid village number, so the distance is 2 and never 3.
-    expect(screen.getByText(/2 more consented quests and you reach Quest Seeker/)).toBeTruthy();
-    expect(screen.getByText(/of 7 consented so far/).textContent).toContain("5");
+  it("draws only the stages walked, never one ahead", () => {
+    const { container } = render(<MaturityLadder stages={stages} stageIndex={2} />);
+    const items = container.querySelectorAll("ol > li");
+    expect(items).toHaveLength(3);
+    expect(container.textContent).not.toContain("Member");
+    expect(container.textContent).not.toMatch(/ahead of you/);
   });
 
-  it("uses the singular when exactly one is left", () => {
-    render(<MaturityLadder stages={stages} stageIndex={4} consentedQuests={6} />);
-    expect(screen.getByText(/1 more consented quest and you reach Quest Seeker/)).toBeTruthy();
-  });
-
-  it("invents no count for a rung that counts nothing", () => {
-    // Standing at Immersant, the next rung is Member, earned by signing. There
-    // is no numerator for that, so no fraction may appear.
-    render(<MaturityLadder stages={stages} stageIndex={2} consentedQuests={4} />);
-    // Exactly once. It rendered twice before this test existed, because the
-    // box and a trailing paragraph both printed the same sentence.
-    expect(screen.getAllByText(/Opens when you sign the membership agreement/)).toHaveLength(1);
-    expect(screen.queryByText(/consented so far/)).toBeNull();
-    expect(screen.queryByText(/%/)).toBeNull();
-  });
-
-  it("draws the bar only where the rule has a denominator", () => {
-    // Contributor -> Quest Seeker is a quests rung: 5 of 7, so a bar is honest.
-    const { container: counted } = render(
-      <MaturityLadder stages={stages} stageIndex={4} consentedQuests={5} />,
-    );
-    const bar = counted.querySelector('[role="progressbar"]');
-    expect(bar).toBeTruthy();
-    expect(bar?.getAttribute("aria-valuenow")).toBe("5");
-    expect(bar?.getAttribute("aria-valuemax")).toBe("7");
-
-    // Immersant -> Member turns on a signature. There is no denominator, so
-    // there must be no bar at all.
-    const { container: uncounted } = render(
-      <MaturityLadder stages={stages} stageIndex={2} consentedQuests={4} />,
-    );
-    expect(uncounted.querySelector('[role="progressbar"]')).toBeNull();
-  });
-
-  it("clamps the bar when the threshold moved under a member's feet", () => {
-    // A village lowering its threshold can leave the count above the minimum.
-    const { container } = render(
-      <MaturityLadder stages={stages} stageIndex={4} consentedQuests={99} />,
-    );
-    const bar = container.querySelector('[role="progressbar"]');
-    expect(bar?.getAttribute("aria-valuenow")).toBe("7");
-    expect((bar?.firstElementChild as HTMLElement).style.width).toBe("100%");
-  });
-
-  it("says what the next rung pays only when it pays something different", () => {
-    // member(2) -> contributor(2): identical, so the clause stays away.
-    render(<MaturityLadder stages={stages} stageIndex={3} consentedQuests={0} />);
-    expect(screen.queryByText(/sending allowance/)).toBeNull();
-  });
-
-  it("names the rise in the allowance from the SERVED multiplier", () => {
-    // immersant(1) -> member(2), and the singular is handled.
-    render(<MaturityLadder stages={stages} stageIndex={2} consentedQuests={0} />);
-    expect(screen.getByText(/1 time the base now, and 2 times at Member/)).toBeTruthy();
-  });
-
-  it("says so plainly on the last rung instead of pointing at nothing", () => {
-    render(<MaturityLadder stages={stages} stageIndex={6} consentedQuests={9} />);
-    expect(screen.getByText(/last stage this village has named/)).toBeTruthy();
+  it("counts nothing toward a next rung and advertises no allowance", () => {
+    const { container } = render(<MaturityLadder stages={stages} stageIndex={4} />);
+    expect(container.querySelector('[role="progressbar"]')).toBeNull();
+    expect(container.textContent).not.toMatch(/more consented quest|consented so far|you reach|sending allowance|Stage \d|of \d+/);
   });
 });
 
@@ -236,12 +177,13 @@ describe("PowersMap", () => {
     expect(row.querySelectorAll("span")).toHaveLength(1);
   });
 
-  it("counts what is open, what is climbed and what is appointed, off the payload", () => {
-    render(<PowersMap catalogue={catalogue} stages={stages} stageIndex={3} />);
-    expect(screen.getByText(/of 5 open to you now/)).toBeTruthy();
-    expect(screen.getByText(/4 open by climbing, 1 by appointment/)).toBeTruthy();
-    const tally = screen.getByText(/of 5 open to you now/).querySelector("span");
-    expect(tally?.textContent).toBe("2");
+  it("keeps no tally and advertises no allowance (the prune)", () => {
+    const { container } = render(<PowersMap catalogue={catalogue} stages={stages} stageIndex={3} />);
+    const text = container.textContent ?? "";
+    expect(text).not.toMatch(/open to you now|open by climbing|by appointment\.|sending allowance/);
+    // Drawn as mycelium: a node per stage, walked, here and ahead.
+    expect(container.querySelectorAll('svg[data-node="walked"]')).toHaveLength(3);
+    expect(container.querySelectorAll('svg[data-node="here"]')).toHaveLength(1);
   });
 
   it("separates what the village entrusts from what is climbed", () => {

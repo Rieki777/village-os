@@ -34,10 +34,11 @@
  * every target clears 44px.
  */
 import { useState } from "react";
-import { CircleCheck, CircleMinus, CircleX, Loader2 } from "lucide-react";
+import { CircleCheck, CircleMinus, CircleX } from "lucide-react";
 import type { VoteChoice } from "@shared/governanceEngine";
 import InfoTip from "@/components/InfoTip";
 import type { Ballot } from "./governanceApi";
+import BreathingLoader from "@/components/natural/BreathingLoader";
 
 const CHOICES: Array<{ id: VoteChoice; label: string; icon: typeof CircleCheck; meaning: string }> = [
   { id: "yes", label: "Yes", icon: CircleCheck, meaning: "I am for this" },
@@ -195,7 +196,7 @@ export default function VoteWidget({
               }`}
             >
               {busy && chosen ? (
-                <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+                <BreathingLoader decorative size={16} />
               ) : (
                 <Icon className="w-4 h-4" aria-hidden="true" />
               )}

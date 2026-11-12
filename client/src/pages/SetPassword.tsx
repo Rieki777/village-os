@@ -6,6 +6,7 @@ import { m } from "framer-motion";
 import { KeyRound, CheckCircle2 } from "lucide-react";
 import { TOKEN_KEY } from "@/lib/gameApi";
 import { writeStored } from "@/lib/safeStorage";
+import { PROFILE_TODAY } from "@/lib/internalPath";
 import { PASSWORD_SET_STORAGE_BLOCKED, sessionWriteRefused } from "@/lib/signInStorage";
 
 /**
@@ -53,11 +54,9 @@ export default function SetPassword() {
         return;
       }
       setDone(true);
-      // Admins land on the admin panel; everyone else on their profile. This
-      // route is a member-reachable password reset now, and sending an
-      // ordinary member to /admin lands them on a refusal screen.
-      const isAdminUser = data.user?.role === "admin" || data.user?.role === "founder";
-      setTimeout(() => { window.location.href = isAdminUser ? "/admin" : "/profile"; }, 1200);
+      // Everyone lands on Profile Today, admins and founders too (Phase B,
+      // decision 1, client/src/lib/internalPath.ts); the panel is in the menu.
+      setTimeout(() => { window.location.href = PROFILE_TODAY; }, 1200);
     } catch (err: any) {
       setError(err?.message || "That didn't save. Try again.");
     }

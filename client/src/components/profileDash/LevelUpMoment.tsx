@@ -1,70 +1,47 @@
 /**
- * THE LEVEL-UP MOMENT: the approved design's full-screen "Stage reached"
- * (LevelUp board, Rye, 2026-10-30).
+ * A DOOR OPENED: the full-screen moment when a crossing opens something.
  *
  * It plays once per crossing. GameDashboard already claims the moment through
  * `claimMoment` (lib/celebrated.ts), keyed on the rung and the time it turned,
  * and hands the advance up here, so a reload never replays it and a second
  * tab never doubles it. Everything it says comes off `lastAdvance`, which is
- * `recordStageEvent`'s own diff: the abilities named are the keys that rung
+ * `recordStageEvent`'s own diff: the doors named are the keys that crossing
  * actually opened, never a list typed here.
  *
- * A dialog, so focus moves into it and Escape closes it.
+ * THE PRUNE (waves 1 and 2, display only, 11 Nov 2026). Nothing scores or
+ * ranks a person, so this names the DOOR and never the rung: no stage name in
+ * the heading, no "n of 12" seed, and no share line, because a crossing posted
+ * to the village is rank published. A fern unfurls round the portrait once,
+ * inside 1.6s, and reduced motion shows the open frond still. The stage ids,
+ * the gate and every floor are untouched; this is drawing only.
  *
- * THE BLOOM (game feel wave 2, 11 Nov 2026). The sparks and the "Stage
- * reached" flash are gone: the art direction bans bursts and level-up flashes.
- * The portrait now sits at the heart of a Seed of Life with one circle per
- * stage of the ladder. The circle of the stage just reached draws itself, and
- * when the ladder is whole the seed opens its petals, once, inside 1.6s.
- * Reduced motion shows the same seed, still and complete. The seed comes from
- * the nature kit through React.lazy, so it costs the profile nothing until a
- * stage is crossed.
+ * A dialog, so focus moves into it and Escape closes it.
  */
 import { Suspense, lazy, useEffect, useRef, useState } from "react";
-import { Trans, useLingui } from "@lingui/react/macro";
+import { Trans } from "@lingui/react/macro";
 import FramelessImg from "@/components/FramelessImg";
 import { capabilityLabel } from "@shared/capabilities";
+import { youCanNow } from "@shared/doorsOpened";
 import { playMoment } from "@/lib/sound";
 import type { StageAdvance } from "@/components/StageAdvanced";
-import { DEFAULT_LADDER_TITLE } from "@shared/villagePaths";
 
-const SeedOfLife = lazy(() => import("@/components/journey/nature/SeedOfLife"));
-
-/** Where the crossing sits on the ladder: one circle per stage, the reached one closed last. */
-export function seedOfStages(stages: ReadonlyArray<{ id: string }>, toStage: string): { total: number; walked: number } {
-  const total = Math.max(1, stages.length);
-  const at = stages.findIndex((s) => s.id === toStage);
-  return { total, walked: at >= 0 ? at + 1 : total };
-}
-
-const countWord = (n: number) =>
-  (["No", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten"][n] ?? String(n));
+const FernUnfurl = lazy(() => import("@/components/journey/nature/FernUnfurl"));
 
 export default function LevelUpMoment({
   advance,
-  stages,
   name,
   portrait,
   onClose,
-  ladderTitle,
 }: {
   advance: StageAdvance;
-  stages: ReadonlyArray<{ id: string; name: string }>;
-  /** The member's first name, for the line under the stage. */
+  /** The member's first name, for the line under the door. */
   name: string;
   /** The fronted character's art, or null for the initial. */
   portrait: { src: string | null; label: string } | null;
   onClose: () => void;
-  /** The ladder's name in this village's words (Admin, Paths & Stages). Absent reads as the platform's. */
-  ladderTitle?: string;
 }) {
-  const reached = stages.find((s) => s.id === advance.toStage)?.name ?? advance.toStage;
-  const gifts = advance.unlocked.map((key) => capabilityLabel(key));
-  const seed = seedOfStages(stages, advance.toStage);
-  const { t } = useLingui();
-  const { walked, total } = seed;
+  const doors = advance.unlocked.map((key) => youCanNow(capabilityLabel(key))).filter(Boolean);
   const closeRef = useRef<HTMLButtonElement>(null);
-  const [said, setSaid] = useState("");
   const [broken, setBroken] = useState(false);
 
   useEffect(() => {
@@ -78,25 +55,8 @@ export default function LevelUpMoment({
   }, [onClose]);
 
   const first = name.trim().split(/\s+/)[0] ?? name;
-  const line =
-    gifts.length > 0
-      ? `${first}, the village saw what you carried. ${countWord(gifts.length)} new ${gifts.length === 1 ? "ability is" : "abilities are"} yours.`
-      : `${first}, the village saw what you carried.`;
-
-  const share = async () => {
-    const text = `I reached ${reached} on our ${ladderTitle?.trim() || DEFAULT_LADDER_TITLE}.`;
-    try {
-      if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
-        await navigator.share({ text });
-        setSaid("Shared.");
-        return;
-      }
-      await navigator.clipboard.writeText(text);
-      setSaid("Copied. Paste it wherever the village talks.");
-    } catch {
-      setSaid("That didn't go through. Try again.");
-    }
-  };
+  const heading = doors[0] ? `${doors[0]}.` : `${first}, the village saw what you carried.`;
+  const rest = doors.slice(1);
 
   return (
     <div
@@ -106,20 +66,17 @@ export default function LevelUpMoment({
       className="sheet-night fixed inset-0 z-[70] flex flex-col items-center justify-center gap-5 overflow-y-auto bg-[radial-gradient(circle_at_50%_42%,var(--sheet-dash-glow,#2a3a22)_0%,var(--background)_45%,var(--sheet-dash-deep,#070d0a)_100%)] px-4 py-10 text-foreground"
     >
       <p className="relative m-0 text-xs font-semibold uppercase tracking-widest text-notice">
-        <Trans context="level-up moment eyebrow">A new stage</Trans>
+        {doors.length > 0 ? (
+          <Trans context="level-up moment eyebrow">A door opened</Trans>
+        ) : (
+          <Trans context="level-up moment eyebrow, nothing new opened">A new step on your walk</Trans>
+        )}
       </p>
 
-      <div className="relative grid size-64 place-items-center sm:size-80 lg:size-96">
-        <div className="absolute inset-0">
+      <div className="relative grid size-64 place-items-center sm:size-80 lg:size-96" data-testid="door-fern">
+        <div className="absolute inset-0 grid place-items-center opacity-80">
           <Suspense fallback={null}>
-            <SeedOfLife
-              total={seed.total}
-              walked={seed.walked}
-              drawFrom={seed.walked - 1}
-              bloom
-              size="fill"
-              label={t({ message: `${walked} of ${total} stages walked`, context: "level-up seed of life" })}
-            />
+            <FernUnfurl size="lg" />
           </Suspense>
         </div>
         <div className="relative size-28 overflow-hidden rounded-full border-2 border-notice bg-muted sm:size-36 lg:size-44">
@@ -133,20 +90,20 @@ export default function LevelUpMoment({
         </div>
       </div>
 
-      <h1 id="levelup-h" className="relative m-0 text-center font-display text-6xl leading-none sm:text-7xl lg:text-[84px]">
-        {reached}
+      <h1 id="levelup-h" className="relative m-0 max-w-3xl text-balance text-center font-display text-4xl leading-tight sm:text-5xl lg:text-6xl">
+        {heading}
       </h1>
-      <p className="relative m-0 max-w-xl text-center text-lg text-muted-foreground">{line}</p>
+      {doors.length > 0 ? (
+        <p className="relative m-0 max-w-xl text-center text-lg text-muted-foreground">
+          {first}, <Trans context="level-up moment, under the door">the village saw what you carried.</Trans>
+        </p>
+      ) : null}
 
-      {gifts.length > 0 ? (
-        <ul className="relative m-0 flex list-none flex-wrap justify-center gap-4 p-0">
-          {gifts.map((g) => (
-            <li
-              key={g}
-              className="flex w-56 flex-col gap-1.5 rounded-2xl border border-dash-gold-edge bg-card p-4 shadow-[0_0_30px_color-mix(in_srgb,var(--color-dash-gold)_15%,transparent)]"
-            >
-              <span className="text-[11px] uppercase tracking-[0.2em] text-dash-gold-lit">New ability</span>
-              <span className="text-[17px] font-medium">{g}</span>
+      {rest.length > 0 ? (
+        <ul className="relative m-0 flex list-none flex-col items-center gap-2 p-0">
+          {rest.map((g) => (
+            <li key={g} className="rounded-xl border border-border bg-card px-4 py-2 text-center text-base shadow-sm">
+              {g}.
             </li>
           ))}
         </ul>
@@ -154,24 +111,14 @@ export default function LevelUpMoment({
 
       <div className="relative mt-1 flex flex-wrap justify-center gap-3">
         <button
-          type="button"
-          onClick={share}
-          className="min-h-[52px] rounded-2xl bg-dash-gold px-7 text-base font-semibold text-dash-gold-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-        >
-          Share with the village
-        </button>
-        <button
           ref={closeRef}
           type="button"
           onClick={onClose}
-          className="min-h-[52px] rounded-2xl border border-border px-6 text-base font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+          className="min-h-[52px] rounded-2xl bg-dash-gold px-7 text-base font-semibold text-dash-gold-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
         >
           Back to my sheet
         </button>
       </div>
-      <p aria-live="polite" className="relative m-0 min-h-5 text-sm text-muted-foreground">
-        {said}
-      </p>
     </div>
   );
 }

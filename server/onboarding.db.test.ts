@@ -99,6 +99,22 @@ describe.skipIf(!configured)("onboarding against a real schema", () => {
     await pool.query("UPDATE app_config SET value = ? WHERE config_key = 'onboarding-path'", [JSON.stringify(DOC)]); // module-review-ok: put the document back
   });
 
+  it("each step names who it waits on: the owner role's name, the buddy's first name, nothing for the holder's own", async () => {
+    const [mine] = await servePaths(env(), "u-new");
+    const by = (k: string) => mine.items.find((i) => i.key === k)?.ownerName;
+    expect(by("welcome")).toBe("Welcomers");
+    expect(by("access")).toBe("Keys");
+    expect(by("gathering")).toBe("buddy");
+    expect(by("week")).toBe("");
+  });
+
+  it("a step may link to a page of this site, and the address is served as written", async () => {
+    await pool.query("UPDATE app_config SET value = ? WHERE config_key = 'onboarding-path'", [JSON.stringify({ ...DOC, phases: [...DOC.phases.slice(0, 2), { ...DOC.phases[2], items: [{ key: "week", title: "Your first full week", link: { label: "Open the steward training", href: "/training/steward" } }] }] })]); // module-review-ok: the village document on the scratch schema
+    const [mine] = await servePaths(env(), "u-new");
+    expect(mine.items.find((i) => i.key === "week")?.link).toEqual({ label: "Open the steward training", href: "/training/steward" });
+    await pool.query("UPDATE app_config SET value = ? WHERE config_key = 'onboarding-path'", [JSON.stringify(DOC)]); // module-review-ok: put the document back
+  });
+
   it("the Trail fact holds only while the holder has an open step", async () => {
     const [p] = await repo.pathsOfUser(pool, "u-new");
     expect(await hasOpenOnboardingItems(pool, "u-new", () => false)).toBe(true);

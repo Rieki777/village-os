@@ -21,10 +21,11 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { Link } from "wouter";
-import { Loader2, Send, X } from "lucide-react";
+import { Send, X } from "lucide-react";
 import { CANVAS_BLOCKS, type CanvasBlockId } from "@shared/governanceCanvas";
 import { authToken } from "@/lib/gameApi";
 import { Trans, useLingui } from "@lingui/react/macro";
+import BreathingLoader from "@/components/natural/BreathingLoader";
 
 const headers = (): Record<string, string> => {
   const t = authToken();
@@ -227,7 +228,7 @@ export default function CompanionPanel({ block, onClose }: { block: CanvasBlockI
             )}
           </div>
         ))}
-        {busy && <Loader2 className="w-4 h-4 animate-spin text-stone-500" aria-label={t`The guide is reading`} />}
+        {busy && <BreathingLoader size={16} label={t`The guide is reading`} />}
         {line && !notNow && (
           <div data-testid="companion-line" className="text-sm rounded-xl border border-teal-deep bg-white px-3 py-2 space-y-2">
             <p className="text-stone-900">{line.sentence}</p>

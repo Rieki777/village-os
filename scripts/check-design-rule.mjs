@@ -82,6 +82,7 @@ const PAGES = [
   "client/src/pages/SeatApplication.tsx",
   "client/src/pages/ResidentJourney.tsx",
   "client/src/pages/OpenProposal.tsx",
+  "client/src/pages/Training.tsx",
   // Decider calm (Phase D, decision 4): every page where people decide stands in the night world.
   "client/src/pages/Review.tsx",
   "client/src/pages/Decisions.tsx",
@@ -131,6 +132,9 @@ const JOURNEY = [
   "client/src/components/modules/ModuleGate.tsx",
   "client/src/components/admin/OnboardingPathEditor.tsx",
   "client/src/pages/RequestMembership.tsx",
+  // Profile Today (Phase B): our first 14 days and the week.
+  "client/src/components/today/FirstFourteenDays.tsx",
+  "client/src/components/today/WeekStrip.tsx",
   // Decider calm (Phase D, decision 4): what a decider reads and answers in, on the sheet's tokens.
   "client/src/components/roleProposal/CircleConsent.tsx",
   "client/src/components/governance/YourTurn.tsx",
@@ -204,8 +208,19 @@ const NATURE_KIT = [
   "client/src/components/journey/nature/MoonPhase.tsx",
   "client/src/components/journey/nature/RootStrip.tsx",
 ];
-/** A self-test names its own files; the gate itself also holds the kit. */
-const held = listFlag("--files") ? files : [...files, ...NATURE_KIT];
+/**
+ * THE QUIET STATES (Phase B, lane B3): the shared loader, the empty states and
+ * the 404, each in the night world with one door. Kept apart from JOURNEY and
+ * NATURE_KIT for the same reason the kit is: a lane adding pages never meets it.
+ */
+const QUIET_STATES = [
+  "client/src/components/quiet/QuietEmpty.tsx",
+  "client/src/components/quiet/OffTheTrail.tsx",
+  "client/src/components/natural/QuietLoading.tsx",
+  "client/src/pages/NotFound.tsx",
+];
+/** A self-test names its own files; the gate itself also holds the kit and the quiet states. */
+const held = listFlag("--files") ? files : [...files, ...NATURE_KIT, ...QUIET_STATES];
 
 /** Comments out: block comments across lines first, then each line's `//` tail. */
 function linesOf(src, ext) {

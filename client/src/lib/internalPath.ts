@@ -44,3 +44,23 @@ export function internalPath(raw: unknown): string | null {
   if (parsed.origin !== PROBE || parsed.pathname.startsWith("//")) return null;
   return `${parsed.pathname}${parsed.search}${parsed.hash}`;
 }
+
+/**
+ * WHERE A MEMBER LANDS AFTER SIGNING IN (Phase B, the lead's decision 1,
+ * 11 Nov 2026): Profile Today, for everyone. A founder or an admin lands there
+ * too; the panel is one tap away in the menu. On a phone the profile opens on
+ * its Today tab (profileDash/ProfileTabs.tsx).
+ *
+ * A sign-in that started on a members-only page still goes back there (R36),
+ * through `internalPath`, so a crafted link cannot bounce anybody offsite.
+ * Every sign-in door reads this one place: the password form, the Google
+ * return and the set-password page. It lives in this file because the sign-in
+ * page is on the first page: a new module there regroups the boot chunks.
+ */
+
+export const PROFILE_TODAY = "/profile";
+
+/** The page to land on: the `next` a sign-in started from, when it is ours, else Profile Today. */
+export function afterSignIn(next: unknown): string {
+  return internalPath(next) ?? PROFILE_TODAY;
+}

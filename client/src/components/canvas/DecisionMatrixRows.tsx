@@ -24,7 +24,6 @@
  * sentence saying so is printed with the rows. No count of rows is shown.
  */
 import { useCallback, useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
 import { msg } from "@lingui/core/macro";
 import type { MessageDescriptor } from "@lingui/core";
 import { Trans, useLingui } from "@lingui/react/macro";
@@ -32,6 +31,7 @@ import { authToken } from "@/lib/gameApi";
 import { readingDate } from "@/lib/canvasCopy";
 import { readFailure, refusalText, type MatrixRowView, type MatrixRowsPayload } from "@/lib/canvasFramesCopy";
 import { parseMatrixRow } from "@shared/canvasFrames";
+import BreathingLoader from "@/components/natural/BreathingLoader";
 
 const headers = (): Record<string, string> => {
   const t = authToken();
@@ -131,7 +131,7 @@ export function DecisionMatrixRows({
         </div>
       ) : !data ? (
         <p className="text-stone-600">
-          <Loader2 className="w-4 h-4 animate-spin inline mr-2" />
+          <BreathingLoader decorative size={16} className="mr-2 align-middle" />
           <Trans>Reading the village's rows</Trans>
         </p>
       ) : (

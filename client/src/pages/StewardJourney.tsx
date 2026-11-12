@@ -25,7 +25,7 @@ import { useEffect, useRef, useState } from "react";
  * layout and the doors, which go to fixed places in the app.
  *
  * ONE FLOW (build list section 8, 11 Nov 2026): the first steps everyone
- * takes, the fork into two tracks, the role path, and the founding team's
+ * takes, the fork into two paths, the role path, and the founding team's
  * invitation as the page's one main act. The page speaks in the founding
  * team's register: quieter, larger display type, gold rules, geometry only as
  * structure, one cluster of fireflies on the one main act, and no game words.
@@ -139,7 +139,7 @@ export default function StewardJourney() {
         </div>
       )}
 
-      {/* 2. The fork: two tracks off the same first steps. */}
+      {/* 2. The fork: two paths off the same first steps. */}
       {page && <TwoTracks section={page.tracks} here="steward" />}
 
       {/* 3. The role path, ending with the invitation onto the resident path. */}

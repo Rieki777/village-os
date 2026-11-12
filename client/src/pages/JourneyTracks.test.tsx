@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
 /**
- * TWO TRACKS OFF THE SAME FIRST STEPS (build list 8.6, 11 Nov 2026).
+ * TWO PATHS OFF THE SAME FIRST STEPS (build list 8.6, 11 Nov 2026).
  *
  * The steward and resident pages share their first steps and the fork, both
  * written once on the steward page's words. What is held here: the resident
  * page shows the steward page's first steps and not its exceptions line (that
  * line stands in front of a role application), a tick on one page shows on the
- * other, each page marks its own track in the fork, and a village's own words
+ * other, each page marks its own path in the fork, and a village's own words
  * for the first steps reach both pages.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -126,7 +126,7 @@ describe("the resident page shares the steward page's first steps", () => {
     expect(document.querySelector("#first-steps")).toBeNull();
   });
 
-  it("grows a seed for the resident track, and draws no filling bar", async () => {
+  it("grows a seed for the resident path, and draws no filling bar", async () => {
     show(ResidentJourney);
     await screen.findByText(/steps completed/);
     expect(document.querySelector("#home-path .nk-life")).not.toBeNull();

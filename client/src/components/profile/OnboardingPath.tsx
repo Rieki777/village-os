@@ -25,6 +25,8 @@ import {
   TILE,
 } from "@/components/journey/look";
 import { readLink, type CheckinAnswers, type PathItemState } from "@shared/onboardingPath";
+import FirstFourteenDays, { StepLink } from "@/components/today/FirstFourteenDays";
+import { showsStrip, splitSteps } from "@/components/today/fourteenDays";
 
 /** "2026-11-24" as "24 November". A date that does not read as one comes back as it was. */
 export function humanDate(iso: string): string {
@@ -48,6 +50,8 @@ export const ONBOARDING_WORDS = {
   tick: "Mark done",
   doneWhen: "Done when:",
   due: (d: number) => `by day ${d}`,
+  withOwner: (name: string) => `With ${name}.`,
+  later: "After the first fourteen days",
   checkins: "Check-ins",
   checkinOpen: (d: number) => `File your day ${d} check-in`,
   filed: (d: number) => `Day ${d} filed`,
@@ -72,7 +76,8 @@ interface Served {
   day: number;
   buddyName: string;
   mine: boolean;
-  items: Array<PathItemState & { mayTick: boolean }>;
+  /** `ownerName`: who a step waits on (server/lib/onboarding.ts); absent on an older server. */
+  items: Array<PathItemState & { mayTick: boolean; ownerName?: string }>;
   openCount: number;
   checkinsDue: number[];
   checkins: Array<{
@@ -86,7 +91,7 @@ interface Served {
 const FIELD = `${FIELD_LOOK} mt-1 min-h-11`;
 
 /** A step's link, read again here so only an https address ever becomes an href. */
-const linkOf = (it: PathItemState) => readLink(it.link);
+const linkOf = (it: Pick<PathItemState, "link">) => readLink(it.link);
 
 function CheckinForm({
   pathId,
@@ -209,17 +214,24 @@ function PathCard({
         typeof out.error === "string" ? out.error : ONBOARDING_WORDS.failed
       );
   }
+  // Someone newly seated reads their first fourteen days as a strip of days;
+  // the list below keeps only what comes after them (Phase B, decision 1).
+  const strip = showsStrip(p);
+  const listed = strip ? splitSteps(p.items).later : p.items;
   return (
-    <section aria-labelledby={`onb-${p.id}`} className={CARD}>
+    <section aria-labelledby={`onb-${p.id}`} className={CARD} data-onboarding-path="">
       <p className={EYEBROW}>{p.title}</p>
       <h2 id={`onb-${p.id}`} className={`${H2} mt-1`}>
         {p.mine
           ? ONBOARDING_WORDS.heading(p.roleName)
           : ONBOARDING_WORDS.holderOf(p.roleName)}
       </h2>
-      <p className="mt-2 text-foreground">
-        {ONBOARDING_WORDS.line(p.day, humanDate(p.dueOn))}
-      </p>
+      {/* The strip says the day and each step's date itself. */}
+      {!strip && (
+        <p className="mt-2 text-foreground">
+          {ONBOARDING_WORDS.line(p.day, humanDate(p.dueOn))}
+        </p>
+      )}
       <p className="mt-1 text-foreground">
         {p.buddyName
           ? ONBOARDING_WORDS.buddy(p.buddyName)
@@ -230,7 +242,15 @@ function PathCard({
           ? ONBOARDING_WORDS.open(p.openCount)
           : ONBOARDING_WORDS.allDone}
       </p>
-      {phasesOf(p.items).map(ph => (
+      {strip && (
+        <div className="mt-5">
+          <FirstFourteenDays path={p} onTick={(key) => void tick(key)} linkOf={linkOf} />
+        </div>
+      )}
+      {strip && listed.length > 0 && (
+        <p className={`${EYEBROW} mt-6`}>{ONBOARDING_WORDS.later}</p>
+      )}
+      {phasesOf(listed).map(ph => (
         <div key={ph.name} className="mt-4">
           <h3 className="font-display text-lg font-bold text-card-foreground">
             {ph.name}{" "}
@@ -256,17 +276,16 @@ function PathCard({
                   <span>
                     {it.title}
                     <span className="block text-sm font-normal text-muted-foreground">
+                      {it.ownerName ? `${ONBOARDING_WORDS.withOwner(it.ownerName)} ` : ""}
                       {ONBOARDING_WORDS.doneWhen} {it.doneWhen} (
                       {ONBOARDING_WORDS.due(it.dueDay)})
                     </span>
                   </span>
                 </span>
                 {linkOf(it) && (
-                  // Opens in a new tab and never hands the new page this one:
-                  // noopener drops window.opener, noreferrer drops the Referer.
-                  <a href={linkOf(it)!.href} target="_blank" rel="noopener noreferrer" className={BTN_SECONDARY}>
-                    {linkOf(it)!.label}
-                  </a>
+                  // A page of this site opens in place; an https address opens in a
+                  // new tab with noopener and noreferrer (StepLink).
+                  <StepLink link={linkOf(it)!} />
                 )}
                 {!it.doneAt && it.mayTick && (
                   <button
@@ -329,9 +348,15 @@ export default function OnboardingPath({ onDay }: { onDay?: (day: number | null)
         if (res.ok && Array.isArray(out.paths)) {
           setPaths(out.paths);
           onDay?.(ownDay(out.paths));
-        } else setFailed(true);
+        } else {
+          setFailed(true);
+          onDay?.(null);
+        }
       })
-      .catch(() => setFailed(true));
+      .catch(() => {
+        setFailed(true);
+        onDay?.(null);
+      });
   }, [onDay]);
   useEffect(() => load(), [load]);
 

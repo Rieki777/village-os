@@ -2,12 +2,13 @@
 // an offer to work with the village, and a self-proposed quest. Both talk to
 // /api/assistant/proposal with a `kind`, so the two flows stay in step.
 import { useEffect, useRef, useState } from "react";
-import { Sparkles, Loader2, CheckCircle2, ArrowRight, Send } from "lucide-react";
+import { Sparkles, CheckCircle2, ArrowRight, Send } from "lucide-react";
 import { sendProposal, ProposalKind } from "@/lib/proposals";
 import type { IdeaReceipt } from "@shared/questIdeas";
 import MicButton from "@/components/MicButton";
 import { scrollBehavior } from "@/components/natural/scrollBehavior";
 import { fillGuideName, guideNameAtSentenceStart } from "@shared/guideName";
+import BreathingLoader from "@/components/natural/BreathingLoader";
 
 interface ChatMsg { role: "user" | "assistant"; content: string }
 
@@ -135,7 +136,7 @@ export default function GuideChat({
         {thinking && (
           <div className="flex justify-start">
             <div className="bg-stone-100 text-stone-600 rounded-2xl px-4 py-2.5 text-sm flex items-center gap-2">
-              <Loader2 className="w-4 h-4 animate-spin" /> {guideNameAtSentenceStart(assistantName)} is thinking…
+              <BreathingLoader decorative size={16} /> {guideNameAtSentenceStart(assistantName)} is thinking…
             </div>
           </div>
         )}

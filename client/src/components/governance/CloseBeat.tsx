@@ -23,10 +23,11 @@
  * (`evaluateBallot`, shared/governanceEngine), so the two cannot disagree.
  */
 import { useState } from "react";
-import { Loader2, Scale } from "lucide-react";
+import { Scale } from "lucide-react";
 import { evaluateBallot, type BallotOutcome } from "@shared/governanceEngine";
 import { pctText, weightText } from "./voteBars";
 import type { Ballot } from "./governanceApi";
+import BreathingLoader from "@/components/natural/BreathingLoader";
 
 /**
  * WHAT CLOSING DOES, and why there are two sets of words.
@@ -214,7 +215,7 @@ export default function CloseBeat({
           onClick={submit}
           className="inline-flex min-h-[44px] items-center gap-2 rounded-lg bg-teal-deep px-5 text-sm font-semibold text-white hover:bg-teal-deep-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
         >
-          {busy && <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />}
+          {busy && <BreathingLoader decorative size={16} />}
           Close it and record this
         </button>
         <button
