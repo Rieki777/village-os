@@ -340,7 +340,7 @@ export default function GratitudeWall() {
               {/* The phone's web: a full-bleed band above the words. */}
               {wall && wall.length > 0 && (
                 <section aria-labelledby="web-phone-h" className="-mx-4 mb-8 border-y border-border bg-card/40 px-2 py-4 lg:hidden">
-                  <h2 id="web-phone-h" className={`${EYEBROW} px-2 font-sans text-open`}>{t({ message: "The web this moon", context: "thanks web heading" })}</h2>
+                  <h2 id="web-phone-h" className={`${EYEBROW} px-2 text-open`}>{t({ message: "The web this moon", context: "thanks web heading" })}</h2>
                   {web("mx-auto mt-2 max-w-sm")}
                   <p className={`${HINT} px-2 text-center`}>
                     {t({ message: "Faces sit in alphabetical order, and nobody sees how many threads anyone holds.", context: "thanks web: how to read it" })}
@@ -391,7 +391,7 @@ export default function GratitudeWall() {
             {/* The desktop's persistent side: the web, then the composer under it. */}
             <aside className="contents lg:sticky lg:top-6 lg:block lg:max-h-[calc(100svh-3rem)] lg:space-y-6 lg:overflow-y-auto lg:pb-2">
               <section aria-labelledby="web-desk-h" className="hidden rounded-2xl border border-border bg-card p-6 shadow-sm lg:block">
-                <h2 id="web-desk-h" className={`${EYEBROW} font-sans text-open`}>{t({ message: "The web this moon", context: "thanks web heading" })}</h2>
+                <h2 id="web-desk-h" className={`${EYEBROW} text-open`}>{t({ message: "The web this moon", context: "thanks web heading" })}</h2>
                 {web("mt-3")}
                 <p className={`${HINT} mt-2`}>
                   {t({ message: "Hover a thanks and its thread lights. Faces sit in alphabetical order, and nobody sees how many threads anyone holds.", context: "thanks web: how to read it, desktop" })}
@@ -432,7 +432,7 @@ export default function GratitudeWall() {
                       )}
                     </div>
                     <div className="mb-4 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-                      <h2 id="carry-h" className={`${EYEBROW} font-sans`}>{t({ message: "Carry a thanks", context: "thanks composer heading" })}</h2>
+                      <h2 id="carry-h" className={`${EYEBROW}`}>{t({ message: "Carry a thanks", context: "thanks composer heading" })}</h2>
                       {/*
                         The allowance: what the member holds to give this cycle.
                         `flex-wrap` and a gap, because at 390px the heading and
