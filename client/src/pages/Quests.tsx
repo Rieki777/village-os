@@ -1,7 +1,6 @@
 import Layout from "@/components/Layout";
-import { BTN_PRIMARY, H1, RING, WORLD } from "@/components/journey/look";
-import WorkPayBlock from "@/components/WorkPayBlock";
-import { Link } from "wouter";
+import { BTN_PRIMARY, EYEBROW, H1, RING, WORLD } from "@/components/journey/look";
+import { Link, useLocation } from "wouter";
 import { m } from "framer-motion";
 import {
   ArrowRight,
@@ -26,7 +25,7 @@ import InfoTip from "@/components/InfoTip";
 import QuestCard, { iconFor, QuestPoster } from "@/components/QuestCard";
 import {
   currentClaims,
-  nextQuestFor,
+  leadQuestFor,
   relativeWhen,
   revealedFrom,
   ringFor,
@@ -40,6 +39,9 @@ import MaiaTypeLine from "@/components/geneKeys/MaiaTypeLine";
 import RootsFilterToggle from "@/components/roots/RootsFilterToggle";
 import { useRootsFilter } from "@/components/roots/useRootsFilter";
 import { useLingui } from "@lingui/react/macro";
+import { meadowBeds, plantFor } from "@/lib/questMeadow";
+import QuestMeadow from "@/components/questMeadow/QuestMeadow";
+import MeadowPanel from "@/components/questMeadow/MeadowPanel";
 
 /*
  * The bare "?" is a 16px circle set inside a sentence, so its box cannot grow
@@ -226,17 +228,29 @@ export default function Quests() {
   const inFlight = claimList.filter(
     (c) => (c.status === "claimed" || c.status === "submitted") && questById.has(c.questId),
   );
-  const suggestion = useMemo(
-    () => (user && quests.length ? nextQuestFor(quests, claimList) : null),
-    [user, quests, claimList],
+  /*
+   * THE MEADOW (Phase C, decision 5). The whole board, one bed per circle, each
+   * quest a seed, a bud or a flower by its own life signs. It draws every
+   * quest: the filters below narrow the list, never the field the village
+   * tends. A quest that fits your roots leads, and the panel opens on it.
+   */
+  const beds = useMemo(() => meadowBeds(quests, signs?.perQuest), [quests, signs]);
+  const rootsKey = roots.mine.join(",");
+  const lead = useMemo(
+    () => (quests.length ? leadQuestFor(quests, claimList, roots.mine) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [quests, claimList, rootsKey],
   );
+  const [chosenId, setChosenId] = useState<string | null>(null);
+  const chosen = (chosenId ? questById.get(chosenId) : null) ?? lead?.quest ?? quests[0] ?? null;
+  const [, navigate] = useLocation();
   const now = new Date();
 
   return (
     <Layout>
       <div className={WORLD}>
       {/* Hero */}
-      <section className="py-10 md:py-24">
+      <section className="py-10 md:py-16">
         <div className="container">
           <m.div
             initial={{ opacity: 0, y: 20 }}
@@ -267,75 +281,81 @@ export default function Quests() {
         </div>
       </section>
 
-      {/* Your journey: what you hold now, or the gentlest place to begin.
-          Signed-out visitors see nothing here; the board speaks for itself. */}
-      {user && (inFlight.length > 0 || suggestion) && (
+      {/* Your journey: what you hold now. The gentlest place to begin is the
+          meadow's own lead, just below. Signed-out visitors see nothing here. */}
+      {user && inFlight.length > 0 && (
         <section className="pb-4 bg-background">
           <div className="container max-w-7xl">
             <div className="bg-card border border-border rounded-2xl p-5 sm:p-6 shadow-sm">
               <h2 className="font-display text-lg font-bold text-foreground mb-4 flex items-center gap-2">
                 <Sprout className="w-5 h-5 text-notice" />
-                {inFlight.length > 0 ? "Pick up where you left off" : "A good first quest"}
+                Pick up where you left off
               </h2>
-              {inFlight.length > 0 ? (
-                <ul className="grid sm:grid-cols-2 gap-3">
-                  {inFlight.map((c) => {
-                    const q = questById.get(c.questId)!;
-                    const Icon = iconFor(q.icon);
-                    return (
-                      <li key={c.id}>
-                        <Link
-                          href={`/quests/${q.id}`}
-                          className="flex items-center gap-3 rounded-xl border border-border p-3 hover:border-notice hover:shadow-sm transition-all"
-                        >
-                          <QuestPoster quest={q} className="w-14 h-14 rounded-xl shrink-0">
-                            <Icon className="absolute inset-0 m-auto w-6 h-6 text-white" />
-                          </QuestPoster>
-                          <span className="min-w-0 flex-1">
-                            <span className="block font-semibold text-sm text-foreground truncate">
-                              {q.title}
-                            </span>
-                            <span className="block text-xs text-muted-foreground">
-                              {c.status === "claimed"
-                                ? "In progress. Turn in your work when it's done."
-                                : "Turned in. Waiting on the circle's yes."}
-                            </span>
+              <ul className="grid sm:grid-cols-2 gap-3">
+                {inFlight.map((c) => {
+                  const q = questById.get(c.questId)!;
+                  const Icon = iconFor(q.icon);
+                  return (
+                    <li key={c.id}>
+                      <Link
+                        href={`/quests/${q.id}`}
+                        className="flex items-center gap-3 rounded-xl border border-border p-3 hover:border-notice hover:shadow-sm transition-all"
+                      >
+                        <QuestPoster quest={q} className="w-14 h-14 rounded-xl shrink-0">
+                          <Icon className="absolute inset-0 m-auto w-6 h-6 text-white" />
+                        </QuestPoster>
+                        <span className="min-w-0 flex-1">
+                          <span className="block font-semibold text-sm text-foreground truncate">
+                            {q.title}
                           </span>
-                          <ArrowRight className="w-4 h-4 text-notice shrink-0" />
-                        </Link>
-                      </li>
-                    );
-                  })}
-                </ul>
-              ) : suggestion ? (
-                <Link
-                  href={`/quests/${suggestion.quest.id}`}
-                  className="flex items-center gap-3 rounded-xl border border-border p-3 hover:border-notice hover:shadow-sm transition-all"
-                >
-                  <QuestPoster quest={suggestion.quest} className="w-14 h-14 rounded-xl shrink-0">
-                    {(() => {
-                      const Icon = iconFor(suggestion.quest.icon);
-                      return <Icon className="absolute inset-0 m-auto w-6 h-6 text-white" />;
-                    })()}
-                  </QuestPoster>
-                  <span className="min-w-0 flex-1">
-                    <span className="block font-semibold text-sm text-foreground truncate">
-                      {suggestion.quest.title}
-                    </span>
-                    <span className="block text-xs text-muted-foreground">
-                      {suggestion.quest.subtitle ?? "A gentle way in. See the first step."}
-                    </span>
-                    {/* What it pays, before it is taken on (Rye, 2026-10-30). */}
-                    {suggestion.quest.pay && (
-                      <span className="mt-1 block text-xs">
-                        <WorkPayBlock pay={suggestion.quest.pay} />
-                      </span>
-                    )}
-                  </span>
-                  <ArrowRight className="w-4 h-4 text-notice shrink-0" />
-                </Link>
-              ) : null}
-              {!inFlight.length && suggestion ? <MaiaTypeLine className="mt-3" /> : null}
+                          <span className="block text-xs text-muted-foreground">
+                            {c.status === "claimed"
+                              ? "In progress. Turn in your work when it's done."
+                              : "Turned in. Waiting on the circle's yes."}
+                          </span>
+                        </span>
+                        <ArrowRight className="w-4 h-4 text-notice shrink-0" />
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* THE MEADOW. Phone: the beds are one band to swipe, the panel under it.
+          Desktop: the field beside a panel that stays (lg:sticky). */}
+      {beds.length > 0 && chosen && (
+        <section className="pb-6 pt-2 bg-background" aria-labelledby="meadow-title">
+          <div className="container max-w-7xl">
+            <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
+              <div className="min-w-0">
+                <p className={EYEBROW}>{t({ message: "Quests this moon", context: "quest meadow eyebrow" })}</p>
+                <h2 id="meadow-title" className="mt-1 font-display text-2xl font-bold text-foreground sm:text-3xl">
+                  {t({ message: "The meadow", context: "quest meadow heading" })}
+                </h2>
+                <p className="mt-2 mb-4 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+                  {t`Every open quest is a seed. When someone carries it, a bud. Done this moon, a flower. One bed for each circle.`}
+                </p>
+                <QuestMeadow
+                  beds={beds}
+                  selectedId={chosen.id}
+                  onSelect={setChosenId}
+                  onOpen={(id) => navigate(`/quests/${id}`)}
+                />
+              </div>
+              <div className="lg:sticky lg:top-28">
+                <MeadowPanel
+                  quest={chosen}
+                  state={plantFor(signs?.perQuest?.[chosen.id])}
+                  lead={!!lead && lead.quest.id === chosen.id}
+                  fits={!!lead?.fits}
+                  stages={stages}
+                  footer={user ? <MaiaTypeLine className="mt-3" /> : null}
+                />
+              </div>
             </div>
           </div>
         </section>

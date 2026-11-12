@@ -52,8 +52,15 @@ export interface BoardQuest {
   isExample?: boolean;
 }
 
+/** One quest's life signs. `moon` (consents since this moon began) is absent from an older server. */
+export interface QuestSigns {
+  active: number;
+  done: number;
+  moon?: number;
+}
+
 export interface FieldSigns {
-  perQuest: Record<string, { active: number; done: number }>;
+  perQuest: Record<string, QuestSigns>;
   recent: { questId: string; questTitle: string; name: string; when: string | null }[];
 }
 
@@ -206,27 +213,39 @@ export function currentClaims<
 export interface QuestSuggestion {
   quest: BoardQuest;
   reason: "continue" | "begin";
+  /**
+   * The quest carries at least one of the member's own roots. Only a tagged
+   * quest can fit: an untagged one is open to every hand and says nothing
+   * about whether it suits anyone, so it never claims to.
+   */
+  fits: boolean;
+}
+
+/** Whether a quest is tagged with at least one of these roots. */
+export function fitsRoots(
+  q: Pick<BoardQuest, "archetypes">,
+  mine: readonly string[] | null | undefined,
+): boolean {
+  const roots = q.archetypes ?? [];
+  return !!mine?.length && roots.some((k) => mine.includes(k));
 }
 
 /**
- * The one suggestion the board makes. Priorities, in order:
- *   1. a quest the member already holds (claimed or submitted) — finishing
- *      beats starting, always;
- *   2. the gentlest open, ungated quest they have not touched: Beginner
- *      before Intermediate before Advanced, then board order.
- * Examples never suggest themselves, and a fully played board suggests
- * nothing: null means the caller renders no card, never an empty one.
+ * The one quest the meadow leads with (Phase C, decision 5: "a quest that
+ * fits your roots leads"). Priorities, in order:
+ *   1. an open, ungated quest the member has not touched that carries one of
+ *      their roots;
+ *   2. then the gentlest: Beginner before Intermediate before Advanced;
+ *   3. then board order.
+ * Roots only ever reorder what is already open to everyone: a root is a lens
+ * and never a gate (shared/archetypeRoots.ts). Examples never lead, and a
+ * fully played board leads with nothing.
  */
-export function nextQuestFor(
+export function leadQuestFor(
   quests: BoardQuest[],
   claims: ClaimLike[],
+  mine: readonly string[] = [],
 ): QuestSuggestion | null {
-  const byId = new Map(quests.map((q) => [q.id, q]));
-  for (const c of claims) {
-    if (c.status !== "claimed" && c.status !== "submitted") continue;
-    const q = byId.get(c.questId);
-    if (q) return { quest: q, reason: "continue" };
-  }
   const touched = new Set(
     claims.filter((c) => c.status !== "declined").map((c) => c.questId),
   );
@@ -236,12 +255,36 @@ export function nextQuestFor(
     .filter((q) => statusIs(q, "open"))
     .filter((q) => !q.minStage && !q.requiresRole)
     .filter((q) => !touched.has(q.id))
+    .map((q) => ({ q, fits: fitsRoots(q, mine) }))
     .sort(
       (a, b) =>
-        (rank[a.difficulty ?? ""] ?? 1) - (rank[b.difficulty ?? ""] ?? 1) ||
-        (a.order ?? 0) - (b.order ?? 0),
+        Number(b.fits) - Number(a.fits) ||
+        (rank[a.q.difficulty ?? ""] ?? 1) - (rank[b.q.difficulty ?? ""] ?? 1) ||
+        (a.q.order ?? 0) - (b.q.order ?? 0),
     );
-  return open[0] ? { quest: open[0], reason: "begin" } : null;
+  return open[0] ? { quest: open[0].q, reason: "begin", fits: open[0].fits } : null;
+}
+
+/**
+ * The one suggestion the board makes. Priorities, in order:
+ *   1. a quest the member already holds (claimed or submitted) — finishing
+ *      beats starting, always;
+ *   2. the quest the meadow leads with (`leadQuestFor`).
+ * Examples never suggest themselves, and a fully played board suggests
+ * nothing: null means the caller renders no card, never an empty one.
+ */
+export function nextQuestFor(
+  quests: BoardQuest[],
+  claims: ClaimLike[],
+  mine: readonly string[] = [],
+): QuestSuggestion | null {
+  const byId = new Map(quests.map((q) => [q.id, q]));
+  for (const c of claims) {
+    if (c.status !== "claimed" && c.status !== "submitted") continue;
+    const q = byId.get(c.questId);
+    if (q) return { quest: q, reason: "continue", fits: fitsRoots(q, mine) };
+  }
+  return leadQuestFor(quests, claims, mine);
 }
 
 /**

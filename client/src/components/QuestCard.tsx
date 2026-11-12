@@ -22,8 +22,11 @@ import type { QuestClaim } from "@/lib/gameApi";
 import WorkPayBlock from "@/components/WorkPayBlock";
 import RootTags from "@/components/roots/RootTags";
 import {
-  gateLabel, questScene, sceneGradient, statusIs, type BoardQuest,
+  gateLabel, questScene, sceneGradient, statusIs, type BoardQuest, type QuestSigns,
 } from "@/lib/questBoard";
+import { plantFor } from "@/lib/questMeadow";
+import { PlantGlyph } from "@/components/questMeadow/Plant";
+import { usePlantWords } from "@/components/questMeadow/plantWords";
 
 export const QUEST_ICONS: Record<string, React.ElementType> = {
   Users, Sprout, ChefHat, TreePine, BookOpen, Home, Camera, Baby, Laptop,
@@ -112,11 +115,15 @@ export default function QuestCard({
 }: {
   quest: BoardQuest;
   claim?: QuestClaim;
-  signs?: { active: number; done: number };
+  signs?: QuestSigns;
   stages?: { id: string; name: string }[] | null;
   priority?: boolean;
 }) {
   const Icon = iconFor(quest.icon);
+  // The quest as a plant in the meadow: seed, bud or flower (lib/questMeadow.ts).
+  // It describes the work, from the village's own life signs.
+  const plant = plantFor(signs);
+  const plantWords = usePlantWords();
   const chip = claim && claim.status !== "declined" ? CLAIM_CHIP[claim.status] : null;
   const gate = gateLabel(quest, stages);
   const active = signs?.active ?? 0;
@@ -213,6 +220,11 @@ export default function QuestCard({
               {gate}
             </p>
           )}
+
+          <p className="inline-flex items-center gap-1.5 text-xs text-muted-foreground" data-plant={plant}>
+            <PlantGlyph state={plant} className="size-5" />
+            {plantWords[plant].long}
+          </p>
 
           <div className="mt-auto pt-2 flex items-center justify-between text-sm font-semibold text-notice">
             <span>See the quest</span>

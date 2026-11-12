@@ -508,6 +508,24 @@ export async function holder(w, ctx) {
     await sw.click();
   });
   await w.look("quests-by-roots");
+  // The quest meadow (Phase C, decision 5): one bed per circle, each quest a
+  // seed, a bud or a flower. A tap on a plant opens it in the panel beside
+  // (desktop) or under (phone) the field. The rehearsal's starter quests are
+  // all examples, and an example never leads, so this walks the choosing and
+  // leaves the lead to the meadow's own tests.
+  await w.step("walk the quest meadow and choose a plant", async () => {
+    const field = page.getByRole("group", { name: /The meadow: every quest/ });
+    await field.waitFor();
+    const plants = field.locator("button[data-quest]");
+    if ((await plants.count()) < 2) throw new Error("the meadow drew fewer than two plants");
+    if (!(await field.locator("figure[data-bed]").count())) throw new Error("the meadow drew no bed");
+    const second = plants.nth(1);
+    const id = await second.getAttribute("data-quest");
+    await second.click();
+    await page.locator(`[data-meadow-panel="${id}"]`).waitFor();
+    if ((await second.getAttribute("aria-pressed")) !== "true") throw new Error("the chosen plant is not marked as chosen");
+  });
+  await w.look("quest-meadow", { next: page.getByRole("link", { name: /Open this quest/ }) });
 }
 
 export const PERSONAS = [

@@ -12646,3 +12646,98 @@ msgstr ""
 #~ msgctxt "open proposal review"
 #~ msgid "1 goal for your first moon"
 #~ msgstr "1 meta para tu primera luna"
+
+#: client/src/components/questMeadow/MeadowPanel.tsx
+#: client/src/components/questMeadow/QuestMeadow.tsx
+msgctxt "quest meadow: the bed for quests with no circle"
+msgid "Open to every circle"
+msgstr "Abierta a todos los círculos"
+
+#: client/src/components/questMeadow/QuestMeadow.tsx
+msgctxt "quest meadow, the field"
+msgid "The meadow: every quest, one bed per circle"
+msgstr "El prado: todas las misiones, un cantero por círculo"
+
+#: client/src/components/questMeadow/QuestMeadow.tsx
+msgctxt "quest meadow: one plant, named by its quest, its circle and its state"
+msgid "{title}, {name}. {state}"
+msgstr "{title}, {name}. {state}"
+
+#: client/src/components/questMeadow/QuestMeadow.tsx
+msgctxt "quest meadow legend"
+msgid "What the plants mean"
+msgstr "Qué significa cada planta"
+
+#: client/src/components/questMeadow/plantWords.ts
+msgctxt "quest meadow: an open quest nobody carries yet"
+msgid "Seed"
+msgstr "Semilla"
+
+#: client/src/components/questMeadow/plantWords.ts
+msgctxt "quest meadow: an open quest"
+msgid "Seed: nobody carries it yet"
+msgstr "Semilla: nadie la lleva todavía"
+
+#: client/src/components/questMeadow/plantWords.ts
+msgctxt "quest meadow: a quest somebody carries now"
+msgid "In bud"
+msgstr "En botón"
+
+#: client/src/components/questMeadow/plantWords.ts
+msgctxt "quest meadow: a carried quest"
+msgid "In bud: someone carries it now"
+msgstr "En botón: alguien la lleva ahora"
+
+#: client/src/components/questMeadow/plantWords.ts
+msgctxt "quest meadow: a quest done this moon"
+msgid "Flowered"
+msgstr "Floreció"
+
+#: client/src/components/questMeadow/plantWords.ts
+msgctxt "quest meadow: a quest done this moon"
+msgid "Flowered this moon"
+msgstr "Floreció esta luna"
+
+#: client/src/components/questMeadow/MeadowPanel.tsx
+msgctxt "quest meadow panel: the lead quest carries the member's roots"
+msgid "One that fits your roots"
+msgstr "Una que crece de tus raíces"
+
+#: client/src/components/questMeadow/MeadowPanel.tsx
+msgctxt "quest meadow panel: the gentlest open quest"
+msgid "A good place to begin"
+msgstr "Un buen lugar para empezar"
+
+#: client/src/components/questMeadow/MeadowPanel.tsx
+msgctxt "quest meadow panel: the one act"
+msgid "Open this quest"
+msgstr "Abrir esta misión"
+
+#: client/src/components/questMeadow/MeadowPanel.tsx
+msgctxt "quest meadow panel"
+msgid "The quest you chose"
+msgstr "La misión que elegiste"
+
+#: client/src/components/questMeadow/MeadowPanel.tsx
+msgctxt "quest meadow panel: desktop keyboard hint"
+msgid "Arrow keys walk the meadow. Enter opens a quest."
+msgstr "Con las flechas recorres el prado. Enter abre una misión."
+
+#: client/src/pages/Quests.tsx
+msgctxt "quest meadow eyebrow"
+msgid "Quests this moon"
+msgstr "Misiones esta luna"
+
+#: client/src/pages/Quests.tsx
+msgctxt "quest meadow heading"
+msgid "The meadow"
+msgstr "El prado"
+
+#: client/src/pages/Quests.tsx
+msgid "Every open quest is a seed. When someone carries it, a bud. Done this moon, a flower. One bed for each circle."
+msgstr "Cada misión abierta es una semilla. Cuando alguien la lleva, un botón. Hecha esta luna, una flor. Un cantero para cada círculo."
+
+#: client/src/components/GameDashboard.tsx
+msgctxt "profile quests card: the door to the board"
+msgid "Walk the quest meadow"
+msgstr "Recorrer el prado de misiones"

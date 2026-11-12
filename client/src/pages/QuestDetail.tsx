@@ -32,6 +32,9 @@ import WorkChatButton from "@/components/messages/WorkChatButton";
 import QuestCard, { difficultyColors, iconFor, QuestPoster } from "@/components/QuestCard";
 import NeedChips, { type NeedTag } from "@/components/NeedChips";
 import NeedTagPicker from "@/components/admin/NeedTagPicker";
+import { PlantGlyph } from "@/components/questMeadow/Plant";
+import { usePlantWords } from "@/components/questMeadow/plantWords";
+import { plantFor } from "@/lib/questMeadow";
 import { useLadderTitle } from "@/hooks/useVillagePaths";
 import {
   currentClaims, gateFix, gateLabel, relativeWhen, statusIs,
@@ -124,6 +127,9 @@ export default function QuestDetail() {
   const claim = quest ? claims[quest.id] : undefined;
   const questSigns = quest ? signs?.perQuest?.[quest.id] : undefined;
   const active = questSigns?.active ?? 0;
+  // Where this quest stands in the board's meadow: a seed, a bud or a flower.
+  const plant = plantFor(questSigns);
+  const plantWords = usePlantWords();
   const done = questSigns?.done ?? 0;
   const completions = useMemo(
     () => (quest && signs ? signs.recent.filter((r) => r.questId === quest.id) : []),
@@ -246,6 +252,11 @@ export default function QuestDetail() {
           <div className="flex flex-wrap items-center gap-2.5 mt-4">
             {/* What the quest is worth and pays, or to inquire (0265). */}
             <WorkPayBlock pay={quest.pay} />
+            {/* The quest as the meadow draws it. It describes the work, never a person. */}
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-muted text-muted-foreground text-sm" data-plant={plant}>
+              <PlantGlyph state={plant} className="size-5" />
+              {plantWords[plant].long}
+            </span>
             {quest.duration && (
               <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-muted text-muted-foreground text-sm">
                 <Clock className="w-4 h-4" />

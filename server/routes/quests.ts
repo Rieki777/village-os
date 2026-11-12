@@ -62,6 +62,7 @@ import type { LimitState } from "../repos/rateHits";
 import { stageIndex } from "../../shared/gameConfig";
 import { stageName } from "../lib/villagePaths";
 import { sceneStopsFor } from "../../shared/questScenes";
+import { cycleBoundsFor } from "../../shared/lunar";
 import { cleanCrewName } from "../lib/crews";
 import { recordEvent } from "../lib/events";
 import { EXAMPLE_REFUSAL_BODY, afterExampleKept, isExampleRow, onRealItemPublished } from "../lib/examples";
@@ -262,11 +263,13 @@ export function register(app: Express, deps: Deps): void {
     // filtered in JavaScript to produce a count map and eight rows. That is a
     // full scan of quest_claims per page view, and quest pages are public, so
     // a crawler walking the board paid it once per quest.
+    // `moon` per quest counts the consents since this moon's new moon, which
+    // is what draws a quest as a flower on the board's meadow.
     const [counts, recent] = await Promise.all([
-      claimsRepo.fieldCounts(),
+      claimsRepo.fieldCounts(cycleBoundsFor(new Date()).startsAt),
       claimsRepo.recentConsented(8),
     ]);
-    const perQuest: Record<string, { active: number; done: number }> = {};
+    const perQuest: Record<string, { active: number; done: number; moon: number }> = {};
     counts.forEach((slot, questId) => {
       perQuest[questId] = slot;
     });
