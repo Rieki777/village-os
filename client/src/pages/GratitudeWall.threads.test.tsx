@@ -128,3 +128,45 @@ describe("the gratitude wall as threads", () => {
     expect(screen.queryByTestId("lantern")).toBeNull();
   });
 });
+
+/**
+ * THE MOBILE PASS, batch 157: the allowance tip said a raw "{0}"; on an empty
+ * wall the phone's "Carry a thanks" door pointed at `#send` and opened
+ * nothing, beside a second "Carry a thanks" act; and the "?" was a 16px mark.
+ */
+describe("the wall on a phone", () => {
+  beforeEach(() => {
+    vi.stubGlobal("matchMedia", (q: string) => ({ matches: false, media: q, addEventListener() {}, removeEventListener() {} }));
+  });
+
+  it("never renders a raw placeholder, in the words or in a tip", async () => {
+    const { container } = page();
+    await waitFor(() => expect(screen.getAllByTestId("thread-card")).toHaveLength(3));
+    expect(container.innerHTML).not.toMatch(/\{\d+\}/);
+    const tips = Array.from(document.querySelectorAll("[role=tooltip]")).map((e) => e.textContent ?? "");
+    expect(tips.some((x) => x.startsWith("Each cycle every member receives an allowance to send."))).toBe(true);
+    for (const x of tips) expect(x).not.toMatch(/\{\d+\}/);
+  });
+
+  it("on an empty wall, offers one Carry a thanks, and it opens the sheet", async () => {
+    wall = [];
+    page();
+    await waitFor(() => expect(screen.getByText("No thanks on the wall yet")).toBeTruthy());
+    const named = (role: "button" | "link") => screen.queryAllByRole(role, { name: "Carry a thanks" });
+    expect(named("link")).toHaveLength(0);
+    const doors = named("button");
+    expect(doors).toHaveLength(1);
+    expect(doors[0].closest("[data-quiet='empty']")).toBeTruthy();
+    expect(screen.getByTestId("composer").getAttribute("data-sheet")).toBe("closed");
+    fireEvent.click(doors[0]);
+    await waitFor(() => expect(screen.getByTestId("composer").getAttribute("data-sheet")).toBe("open"));
+  });
+
+  it("gives the allowance's ? a 44px box", async () => {
+    page();
+    await waitFor(() => expect(screen.getAllByTestId("thread-card")).toHaveLength(3));
+    fireEvent.click(screen.getAllByRole("button", { name: "Carry a thanks" })[0]);
+    const mark = await screen.findByRole("button", { name: "How the allowance works" });
+    expect(mark.className).toMatch(/(min-)?(h|size)-11\b/);
+  });
+});

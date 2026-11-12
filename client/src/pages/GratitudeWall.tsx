@@ -262,6 +262,12 @@ export default function GratitudeWall() {
   const budget = me?.gratitude.budget;
 
   const openSheet = useCallback(() => setSheetOpen(true), []);
+  // Said outside the <Trans> above: a `t` nested in a Trans prop reached the
+  // page as a raw "{0}". One plain line, no placeholder.
+  const allowanceTip = t({
+    message: "Each cycle every member receives an allowance to send. Sending is thanks for real contributions, never pay, and the wall keeps every word.",
+    context: "thanks wall: the currency tooltip",
+  });
   const closeSheet = useCallback(() => {
     setSheetOpen(false);
     carryButton.current?.focus();
@@ -332,7 +338,7 @@ export default function GratitudeWall() {
                 {/* What sending is, said once: thanks, never pay. */}
                 <p className={`${HINT} mt-3 max-w-prose`}>
                   <Trans context="thanks wall: what a thanks becomes">
-                    Every thanks here also carries <InfoTip tip={t({ message: `Each cycle every member receives an allowance of ${currency.toLowerCase()} to send. Sending is thanks for real contributions, never pay, and the wall keeps every word.`, context: "thanks wall: the currency tooltip" })}>{currency.toLowerCase()}</InfoTip> to the person it names.
+                    Every thanks here also carries <InfoTip tip={allowanceTip}>{currency.toLowerCase()}</InfoTip> to the person it names.
                   </Trans>
                 </p>
               </header>
@@ -358,7 +364,13 @@ export default function GratitudeWall() {
                   <QuietEmpty
                     drawing="ring"
                     title={t`No thanks on the wall yet`}
-                    door={user ? { label: t({ message: "Carry a thanks", context: "empty thanks wall: door to the thank-you form" }), href: "#send" } : undefined}
+                    door={
+                      user
+                        ? asSheet
+                          ? { label: t({ message: "Carry a thanks", context: "empty thanks wall: door to the thank-you form" }), onClick: openSheet }
+                          : { label: t({ message: "Carry a thanks", context: "empty thanks wall: door to the thank-you form" }), href: "#send" }
+                        : undefined
+                    }
                     className="justify-center"
                   >
                     {t`The wall is waiting for its first appreciation.`}
@@ -443,7 +455,7 @@ export default function GratitudeWall() {
                           <Trans context="thanks composer: the allowance left this cycle">
                             <span className="font-semibold text-card-foreground">{budget.remaining}</span> of {budget.total} left to give this cycle
                           </Trans>
-                          <InfoTip tip={t({ message: "Your allowance refills when the cycle turns. Sending moves it from your allowance to the person you thank; it never costs you anything you earned.", context: "thanks composer: the allowance tooltip" })} label={t({ message: "How the allowance works", context: "thanks composer: tooltip label" })} />
+                          <InfoTip tip={t({ message: "Your allowance refills when the cycle turns. Sending moves it from your allowance to the person you thank; it never costs you anything you earned.", context: "thanks composer: the allowance tooltip" })} label={t({ message: "How the allowance works", context: "thanks composer: tooltip label" })} tapBox />
                         </span>
                       ) : budget && budget.total <= 0 ? (
                         <span className="text-xs italic text-muted-foreground">
@@ -569,8 +581,9 @@ export default function GratitudeWall() {
                     )}
                   </div>
 
-                  {/* The phone's one next act, within thumb reach. Gone while the sheet is open. */}
-                  {asSheet && !sheetOpen && (
+                  {/* The phone's one next act, within thumb reach. Gone while the sheet is open, and on an
+                      empty wall, whose own door opens the sheet: one "Carry a thanks" per screen. */}
+                  {asSheet && !sheetOpen && !(wall && wall.length === 0) && (
                     <div className="fixed inset-x-0 bottom-[calc(var(--tabbar-h)+0.75rem)] z-50 flex justify-center px-24 lg:hidden">
                       <Fireflies count={5} block>
                         <button

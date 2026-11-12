@@ -13602,11 +13602,10 @@ msgctxt "thanks wall: the list of threads"
 msgid "The thanks, newest first"
 msgstr "Las gracias, las más nuevas primero"
 
-#. placeholder {0}: currency.toLowerCase()
 #: client/src/pages/GratitudeWall.tsx
 msgctxt "thanks wall: the currency tooltip"
-msgid "Each cycle every member receives an allowance of {0} to send. Sending is thanks for real contributions, never pay, and the wall keeps every word."
-msgstr "Cada ciclo, cada persona recibe una asignación de {0} para enviar. Enviar es agradecer contribuciones reales, nunca un pago, y el muro guarda cada palabra."
+msgid "Each cycle every member receives an allowance to send. Sending is thanks for real contributions, never pay, and the wall keeps every word."
+msgstr "Cada ciclo, cada persona recibe una asignación para enviar. Enviar es agradecer contribuciones reales, nunca un pago, y el muro guarda cada palabra."
 
 #: client/src/pages/GratitudeWall.tsx
 msgctxt "thanks composer: close the sheet"
