@@ -106,6 +106,22 @@ async function stoneNext(page, want) {
   }
 }
 
+/**
+ * About you comes in three short panes (design G2, M7): You, Your story, Who can
+ * speak for you. Continue walks them in turn; the background-check tick is on the
+ * last one, ticked once it shows.
+ */
+async function throughAbout(page, consent) {
+  for (let i = 0; i < 4; i++) {
+    const now = await page.getAttribute("form[data-open-proposal]", "data-stone-now");
+    if (now !== "about") return;
+    await check(page, consent);
+    await stoneNext(page);
+  }
+  const now = await page.getAttribute("form[data-open-proposal]", "data-stone-now");
+  if (now === "about") throw new Error(`held on About you: ${(await alerts(page)).join(" | ").slice(0, 240)}`);
+}
+
 /** The first value item on Your value: what it brings, how we know it is done, and the season goal it serves. */
 async function valueItem(page, what, doneWhen, goal) {
   const list = page.locator("[data-goals-list]");
@@ -190,8 +206,7 @@ export async function neighbour(w, ctx) {
     await page.fill("#propose-name", "Lucía Mora");
     await page.fill("#propose-email", email);
     await page.fill("#propose-why", "Vivo río arriba y camino la quebrada desde niña.");
-    await check(page, /agree to the background check|acepto la verificación de antecedentes/i);
-    await stoneNext(page, "value");
+    await throughAbout(page, /agree to the background check|acepto la verificación de antecedentes/i);
     await page.fill("#propose-aim", "Que el agua y la tierra se lean cada luna.");
     await valueItem(page, "Caminar la quebrada con los vecinos", "cuando tengamos el primer mapa del agua", /Clean water all year/);
     await stoneNext(page, "terms");
@@ -281,8 +296,7 @@ export async function professional(w, ctx) {
     await page.fill("#propose-name", "Ana Whitfield");
     await page.fill("#propose-email", email);
     await page.fill("#propose-why", "Fifteen years keeping the books for cooperatives; I want my craft to hold a living place.");
-    await check(page, /agree to the background check/i);
-    await stoneNext(page, "value");
+    await throughAbout(page, /agree to the background check/i);
     await page.fill("#propose-aim", "One set of numbers every member trusts, by the end of the season.");
     await valueItem(page, "Publish the first weekly view of our money", "every circle has read it", /Clear and trusted money/);
     await stoneNext(page, "terms");
@@ -441,7 +455,10 @@ export async function steward(w, ctx) {
   await w.step("adopt", async () => {
     const know = page.getByLabel(/I know, and I want to adopt anyway/i);
     if (await know.count()) await know.check();
-    const adopt = page.getByRole("button", { name: /Adopt for the village/i }).first();
+    // A second width's walk finds the role's places taken by the first: adopting is then for when one opens, chosen on purpose.
+    const forASeat = page.getByLabel(/Adopt them for when a place opens/i);
+    if (await forASeat.count()) await forASeat.check();
+    const adopt = page.getByRole("button", { name: /^Adopt/i }).first();
     await adopt.scrollIntoViewIfNeeded();
     if (await adopt.isDisabled()) throw new Error("adopt is disabled");
     await adopt.click();

@@ -21,7 +21,7 @@ import { OPEN_AI_DRAFTS, OPEN_WORDS } from "@shared/openProposals";
 import { ATTACHMENT_WORDS } from "@shared/proposalAttachments";
 import { draftKey } from "@/components/fireflyPath/applyDraft";
 
-import { SETUP, fillValue, pressNext, sendNow, stoneNow, walk } from "@/test/proposeStones";
+import { SETUP, fillValue, paneNow, pressNext, pressOnce, sendNow, stoneNow, walk } from "@/test/proposeStones";
 
 vi.mock("@/components/Layout", () => ({ default: ({ children }: { children: React.ReactNode }) => <div>{children}</div> }));
 const auth = vi.hoisted(() => ({ user: null as null | { name: string; email: string } }));
@@ -295,7 +295,7 @@ describe("the six steps", () => {
     fireEvent.click(screen.getByRole("button", { name: "Back" }));
     expect(stoneNow()).toBe("about");
     expect((screen.getByLabelText(OPEN_WORDS.whyLabel) as HTMLTextAreaElement).value).toBe("The gate is always shut.");
-    fireEvent.click(screen.getByRole("button", { name: "Step 3: Your value" }));
+    fireEvent.click(within(document.querySelector("[data-step-mark]") as HTMLElement).getByRole("button", { name: "Step 3: Your value" }));
     expect(stoneNow()).toBe("value");
     expect((screen.getByLabelText(OPEN_WORDS.aimLabel) as HTMLInputElement).value).toBe("The gate opens at dawn.");
     // A step not reached yet is no button.
@@ -313,10 +313,16 @@ describe("the six steps", () => {
     fillAbout();
     fireEvent.keyDown(screen.getByLabelText(OPEN_WORDS.whyLabel), { key: "Enter" });
     expect(stoneNow()).toBe("about");
+    // About you walks its three panes first (M7), then moves on.
     fireEvent.keyDown(nameBox, { key: "Enter" });
+    expect(stoneNow()).toBe("about");
+    expect(paneNow()).toBe(1);
+    fireEvent.submit(form);
+    fireEvent.submit(form);
     expect(stoneNow()).toBe("value");
     fireEvent.keyDown(form, { key: "ArrowLeft" });
     expect(stoneNow()).toBe("about");
+    expect(paneNow()).toBe(2);
     fireEvent.submit(form);
     expect(stoneNow()).toBe("value");
     fireEvent.keyDown(form, { key: "ArrowLeft" });
@@ -729,5 +735,102 @@ describe("the review step's words (batch 158)", () => {
     await screen.findByLabelText(LETTER.intent);
     expect(document.body.textContent).toContain("It takes effect once you confirm your address");
     expect(document.body.textContent).not.toMatch(/way of signing/);
+  });
+});
+
+/*
+ * DESIGN G2 (the go-live design pass, 12 Nov 2026): the desk's three columns (D-06) and About you in
+ * three short panes (M7). jsdom draws every class, so the desk-only and phone-only parts are found by
+ * their markers and their `lg:` classes; the rendered page is checked in the rehearsal at 390 and 1280.
+ */
+describe("design G2: the desk and the panes", () => {
+  const LFS = { ...FORM, roles: [{ id: "r-lfs", name: "Lead Finance Steward", circle: "Anchor Circle", aim: "Money kept true.", terms: { words: { term: "We renew together each cycle.", allowance: "A small allowance for tools." }, commitmentPct: 100 } }] };
+
+  it("D-06: the path stands in its own column on a desk, a passed step marked with a check and a way back", async () => {
+    await applyFor();
+    pressNext();
+    fillAbout();
+    pressNext();
+    expect(stoneNow()).toBe("value");
+    const trail = document.querySelector("[data-step-trail]") as HTMLElement;
+    expect(trail.closest("aside")?.className).toContain("lg:block");
+    const states = Array.from(trail.querySelectorAll("li")).map((li) => li.getAttribute("data-trail-state"));
+    expect(states).toEqual(["passed", "passed", "here", "ahead", "ahead", "ahead"]);
+    expect(trail.querySelector('[data-trail-state="passed"] svg')).not.toBeNull();
+    fireEvent.click(within(trail).getByRole("button", { name: "Step 1: Get to know us" }));
+    expect(stoneNow()).toBe("know");
+    // The phone's stepper is the one inside the card, and it steps aside on a desk.
+    expect((document.querySelector("[data-step-mark]") as HTMLElement).parentElement?.className).toContain("lg:hidden");
+  });
+
+  it("D-06: the bar rests at the card's foot on a desk, names Enter, and the arrow-keys sentence is gone", async () => {
+    await applyFor();
+    const bar = document.querySelector("[data-stone-bar]") as HTMLElement;
+    expect(bar.className).toContain("lg:static");
+    expect(bar.querySelector("[data-enter-hint]")?.textContent).toBe("Enterto continue");
+    expect(document.body.textContent).not.toMatch(/arrow keys/i);
+  });
+
+  it("D-06: the rail holds the role and how rewards work, beside every step", async () => {
+    await applyFor();
+    const rail = document.querySelector("[data-rewards-beside]") as HTMLElement;
+    expect(rail.closest("aside")).toBe(document.querySelector("[data-role-beside]")?.closest("aside"));
+    expect(rail.textContent).toContain("How rewards work");
+    expect(Array.from(rail.querySelectorAll("dd")).map((d) => d.textContent)).toEqual(["40%", "55%", "5%"]);
+    // On the terms step the shape the phone reads steps aside on a desk.
+    expect((document.querySelector("[data-comp-shape]") as HTMLElement).parentElement?.className).toContain("lg:hidden");
+  });
+
+  it("D-06: each written term is one row with a two-part I accept / Let's talk control", async () => {
+    await applyFor("r-lfs", LFS);
+    const term = document.querySelector('[data-term="term"]') as HTMLElement;
+    expect(term.className).toContain("sm:grid-cols-[6rem_minmax(0,1fr)_auto]");
+    expect(term.className).not.toContain("bg-muted");
+    // The terms step is not stood on yet, so its parts are found with hidden ones included.
+    const group = within(term).getByRole("radiogroup", { name: "Term", hidden: true });
+    const halves = within(group).getAllByRole("radio", { hidden: true });
+    expect(halves).toHaveLength(2);
+    expect(halves.map((r) => r.closest("label")?.textContent)).toEqual(["I accept", "Let's talk"]);
+    fireEvent.click(within(group).getByLabelText("Let's talk"));
+    expect(screen.getByLabelText("What you would like to talk about: Term")).toBeTruthy();
+  });
+
+  it("M7: About you is three short panes, one at a time, and Continue walks them before the next step", async () => {
+    await applyFor();
+    pressOnce();
+    expect(stoneNow()).toBe("about");
+    const panes = () => Array.from(document.querySelectorAll<HTMLElement>("[data-about-pane]")).map((p) => !p.hidden);
+    expect(panes()).toEqual([true, false, false]);
+    expect(within(document.querySelector("[data-stone-bar]") as HTMLElement).getByRole("button", { name: "Continue to Your story" })).toBeTruthy();
+    // The first pane holds you until its own fields are answered, and asks nothing of the later panes yet.
+    pressOnce();
+    expect(paneNow()).toBe(0);
+    expect(document.querySelector("[data-problems]")?.textContent).not.toMatch(/background check/);
+    fillAbout();
+    pressOnce();
+    expect(panes()).toEqual([false, true, false]);
+    expect(screen.getByLabelText("Your Human Design or Gene Keys (optional)").closest("[data-about-pane]")?.getAttribute("data-about-pane")).toBe("1");
+    pressOnce();
+    expect(panes()).toEqual([false, false, true]);
+    expect(document.querySelector("[data-references]")?.closest("[data-about-pane]")?.getAttribute("data-about-pane")).toBe("2");
+    expect(document.querySelector('[data-about-panes] [aria-current="step"]')?.textContent).toBe("3 Who can speak for you");
+    // Back walks the panes too, then Continue leaves the step from the last one.
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    expect(paneNow()).toBe(1);
+    pressOnce();
+    pressOnce();
+    expect(stoneNow()).toBe("value");
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    expect(stoneNow()).toBe("about");
+    expect(paneNow()).toBe(2);
+  });
+
+  it("M7: walking on, a gap in a later pane holds you on that pane", async () => {
+    await applyFor();
+    await completeAll();
+    fireEvent.click(screen.getByLabelText(/agree to the background check/i));
+    walk();
+    expect(stoneNow()).toBe("about");
+    expect(paneNow()).toBe(2);
   });
 });

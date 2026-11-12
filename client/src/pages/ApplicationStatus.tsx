@@ -17,7 +17,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "wouter";
 import Layout from "@/components/Layout";
-import { CARD, CARD_FEATURED, DOOR, EYEBROW, H1, H2, TILE, WORLD } from "@/components/journey/look";
+import { BTN_SECONDARY, CARD, CARD_FEATURED, DOOR, EYEBROW, H1, H2, LINK, TILE, WORLD } from "@/components/journey/look";
 import { ArrowRight, Check } from "lucide-react";
 import { SeedOfLife } from "@/components/journey/nature";
 import NextAct from "@/components/path/NextAct";
@@ -171,6 +171,30 @@ export function ChangedTerms({ offer, answerUrl, onSaved }: { offer: ServedOffer
   );
 }
 
+/**
+ * What happens at each step still ahead, and roughly when, set under its stone (D-07). The path's
+ * labels are the page's own words for each step; a conversation's line shows on the first one only.
+ */
+export function stepHints(
+  labels: readonly string[],
+  said: { received: string; review: string; invitation: string; decision: string; consent: string; firstCycle: string; conversationWith: (role: string, minutes: number) => string },
+  steps: ReadonlyArray<{ key: string; when: string }>,
+): Array<{ key: string; when: string } | null> {
+  const byLabel: Record<string, string> = { [said.received]: "received", [said.review]: "review", [said.invitation]: "invitation", [said.decision]: "decision", [said.consent]: "decision", [said.firstCycle]: "first_cycle" };
+  const talk = said.conversationWith("\u0000", 0).split("\u0000")[0];
+  let talked = false;
+  return labels.map((label) => {
+    let key = byLabel[label] ?? null;
+    if (!key && talk && label.startsWith(talk)) {
+      if (talked) return null;
+      talked = true;
+      key = "conversations";
+    }
+    const step = key ? steps.find((x) => x.key === key) : undefined;
+    return step ? { key: step.key, when: step.when } : null;
+  });
+}
+
 export default function ApplicationStatus() {
   const { t, i18n } = useLingui();
   const params = useParams<{ ref: string }>();
@@ -245,6 +269,9 @@ export default function ApplicationStatus() {
       : null;
   const pathSaid = path ? sayPath(path, lang) : null;
   const termsWait = !!s?.offer && s.offer.mayAnswer && s.offer.open > 0;
+  /** A founding application: our review comes before the conversations (Phase A). Its page is the quiet register. */
+  const founding = !!s?.reviewFirst;
+  const hints = founding && s?.outcome == null && view ? stepHints(view.path.map((p) => p.label), w.status, applicantSteps(lang, typeof s?.replyDays === "number" ? s.replyDays : 7)).map((h, i) => (view.path[i].state === "done" ? null : h)) : null;
 
   return (
     <Layout>
@@ -280,10 +307,16 @@ export default function ApplicationStatus() {
                 </div>
                 <section aria-label={w.status.nextLabel} className={`sel-rise ${CARD_FEATURED}`}>
                   <p className={EYEBROW}>{view.stepWords}</p>
-                  <p className="mt-1 text-lg text-foreground">{view.move}</p>
+                  {!(founding && s.outcome === "adopted") && <p className="mt-1 text-lg text-foreground">{view.move}</p>}
                   {byDay && <p className="mt-1 text-foreground">{w.status.by(byDay)}</p>}
                   {s.outcome == null && typeof s.replyDays === "number" && <p className="mt-1 text-foreground" data-reply-promise="">{w.replyPromise(s.replyDays)}</p>}
-                  {s.outcome === "adopted" && <p className="mt-2 font-medium text-notice">{t({ message: `The circle said yes. Your seed is whole.`, context: "applicant's application status, adoption" })}</p>}
+                  {s.outcome === "adopted" && (
+                    <p className="mt-2 font-medium text-notice" data-adopted-line="">
+                      {founding
+                        ? t({ message: `The circle said yes. We'd love you on the team. Your invitation to make your account is in your email.`, context: "applicant's application status, adoption" })
+                        : t({ message: `The circle said yes. We'd love you on the team.`, context: "applicant's application status, adoption" })}
+                    </p>
+                  )}
                 </section>
               </div>
               <div className="space-y-6">
@@ -327,11 +360,12 @@ export default function ApplicationStatus() {
             {/* The path as stepping stones: the line fills down to where you stand, one stone after another, and the
                 stone you are on answers with a ring on the water. Reduce motion: the filled path, at once. */}
             {/* Phone: the guide button rides the right edge, so the steps keep a gutter clear of it (verify item 7). */}
-            <ol className="jw-trail-v pr-16 md:pr-0" data-motion={still ? "still" : "live"}>
+            {/* A founding application's steps carry what happens at each, and roughly when (D-07): one list, never two. */}
+            <ol className="jw-trail-v pr-16 md:pr-0" data-motion={still ? "still" : "live"} data-what-happens-next={hints ? "" : undefined}>
               {view.path.map((p, i) => (
                 <li
                   key={i}
-                  className="sel-rise flex min-h-[52px] items-center gap-3 py-1"
+                  className={`sel-rise flex min-h-[52px] gap-3 py-1 ${hints?.[i] ? "items-start" : "items-center"}`}
                   data-path-state={p.state}
                   aria-current={p.state === "now" ? "step" : undefined}
                   style={{ animationDelay: `${i * 80}ms`, ["--jw-delay" as string]: `${i * 80}ms` }}
@@ -339,25 +373,18 @@ export default function ApplicationStatus() {
                   <span className="jw-stone flex w-11 shrink-0 justify-center" data-state={p.state === "done" ? "done" : p.state === "now" ? "here" : "ahead"} aria-hidden="true">
                     <span className="jw-stone-face !m-0">{p.state === "done" ? <Check className="size-4" /> : p.state === "now" ? i + 1 : ""}</span>
                   </span>
-                  <span className={p.state === "later" ? "text-muted-foreground" : p.state === "now" ? "font-bold text-foreground" : "font-medium text-foreground"}>{p.label}</span>
+                  <span className={`grid gap-0.5 ${hints?.[i] ? "pt-2.5" : ""}`}>
+                    <span className={p.state === "later" ? "text-muted-foreground" : p.state === "now" ? "font-bold text-foreground" : "font-medium text-foreground"}>{p.label}</span>
+                    {hints?.[i] && (
+                      <span className="text-sm text-muted-foreground" data-applicant-step={hints[i]!.key}>
+                        {hints[i]!.when}
+                      </span>
+                    )}
+                  </span>
                   <span className="sr-only">{p.state === "done" ? w.status.stateDone : p.state === "now" ? w.status.stateNow : w.status.stateLater}</span>
                 </li>
               ))}
             </ol>
-            {/* What happens next, and roughly when: the one list of the applicant's steps (shared/applicantWords.ts APPLICANT_STEPS). */}
-            {s.reviewFirst && s.outcome == null && (
-              <section aria-labelledby="what-happens-next" className={TILE} data-what-happens-next="">
-                <h2 id="what-happens-next" className="font-display text-xl font-bold text-foreground">{w.status.nextLabel}</h2>
-                <dl className="mt-2 grid gap-2">
-                  {applicantSteps(lang, typeof s.replyDays === "number" ? s.replyDays : 7).map((st) => (
-                    <div key={st.key} data-applicant-step={st.key}>
-                      <dt className="font-semibold text-foreground">{st.name}</dt>
-                      <dd className="text-sm text-muted-foreground">{st.when}</dd>
-                    </div>
-                  ))}
-                </dl>
-              </section>
-            )}
             {view.references && (
               <p className="text-sm text-muted-foreground" data-references-given="">{view.references}</p>
             )}
@@ -377,7 +404,14 @@ export default function ApplicationStatus() {
               <section aria-labelledby="while-you-wait" className={CARD} data-while-you-wait="">
                 <h2 id="while-you-wait" className={H2}>{w.status.wait.heading}</h2>
                 <p className="mt-1 text-foreground">{t({ message: `None of this is required. These are open doors to meet us.`, context: "applicant's application status, while you wait" })}</p>
-                {/* The one next act wears the fireflies; while changed terms wait above, that panel is the act and these are plain doors. */}
+                {/* The one next act wears the fireflies; while changed terms wait above, that panel is the act and these are plain doors.
+                    A founding application is quiet while it waits (D-07): no gold act, the role to read again, and the events. */}
+                {founding ? (
+                  <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-3" data-founding-wait="">
+                    <a className={BTN_SECONDARY} href="/roles">{t({ message: `Read the role again`, context: "applicant's application status, while you wait" })}</a>
+                    {eventsOn && <a className={`${LINK} inline-flex min-h-11 items-center text-sm`} href="/events">{w.status.wait.events}</a>}
+                  </div>
+                ) : (
                 <div className="mt-3 grid gap-2">
                   {path && pathSaid && !termsWait ? (
                     <div data-path-step={path.state}>
@@ -392,6 +426,7 @@ export default function ApplicationStatus() {
                   {eventsOn && <a className={DOOR} href="/events">{w.status.wait.events}<ArrowRight className="size-4 shrink-0" aria-hidden="true" /></a>}
                   <a className={DOOR} href="/roles">{t({ message: `Read the roles again`, context: "applicant's application status, while you wait" })}<ArrowRight className="size-4 shrink-0" aria-hidden="true" /></a>
                 </div>
+                )}
               </section>
             )}
               </div>

@@ -27,8 +27,25 @@ export const fillGoals = fillValue;
 /** The step the form stands on: know, about, value, terms, first or review. */
 export const stoneNow = () => document.querySelector("[data-open-proposal]")?.getAttribute("data-stone-now") ?? null;
 
-/** Press Continue once. */
-export const pressNext = () => fireEvent.click(document.querySelector("[data-stone-next]") as HTMLElement);
+/** The About you pane the form stands on (0, 1 or 2), or null on any other step. */
+export const paneNow = () => {
+  const v = document.querySelector("[data-open-proposal]")?.getAttribute("data-about-pane-now");
+  return v == null ? null : Number(v);
+};
+
+/** Press Continue once, a whole step at a time: About you's three panes are walked through, unless one holds you there. */
+export const pressNext = () => {
+  const press = () => fireEvent.click(document.querySelector("[data-stone-next]") as HTMLElement);
+  if (stoneNow() !== "about") return press();
+  for (let i = 0; i < 3 && stoneNow() === "about"; i++) {
+    const before = paneNow();
+    press();
+    if (paneNow() === before && stoneNow() === "about") return;
+  }
+};
+
+/** Press Continue exactly once, pane by pane. */
+export const pressOnce = () => fireEvent.click(document.querySelector("[data-stone-next]") as HTMLElement);
 
 /** Walk on with Continue until Review & submit, or until a step holds you there (its gaps are then listed). */
 export const walk = () => {
