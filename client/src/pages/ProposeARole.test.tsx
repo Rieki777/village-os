@@ -691,3 +691,31 @@ describe("the confirmation link", () => {
     expect(screen.getByRole("link", { name: "Apply again" }).getAttribute("href")).toBe("/propose-a-role");
   });
 });
+
+describe("on a phone with the keyboard up (M2, batch 158)", () => {
+  it("keeps one bar at the bottom: the tab bar steps out while the application is open", async () => {
+    await applyFor();
+    expect(document.querySelector("form[data-open-proposal]")?.hasAttribute("data-hides-tabbar-phone")).toBe(true);
+  });
+
+  it("lifts the step bar above the keyboard, and lets it down when the keyboard closes", async () => {
+    class FakeViewport extends EventTarget {
+      height = 800;
+      offsetTop = 0;
+    }
+    const vv = new FakeViewport();
+    vi.stubGlobal("visualViewport", vv);
+    Object.defineProperty(window, "innerHeight", { configurable: true, value: 800 });
+    await applyFor();
+    const bar = document.querySelector("[data-stone-bar]") as HTMLElement;
+    expect(bar.getAttribute("data-keyboard")).toBeNull();
+    expect(bar.className).toContain("bottom-[calc(var(--stone-kb,0px)");
+    vv.height = 460;
+    vv.dispatchEvent(new Event("resize"));
+    await waitFor(() => expect(bar.getAttribute("data-keyboard")).toBe("open"));
+    expect(bar.style.getPropertyValue("--stone-kb")).toBe("340px");
+    vv.height = 800;
+    vv.dispatchEvent(new Event("resize"));
+    await waitFor(() => expect(bar.getAttribute("data-keyboard")).toBeNull());
+  });
+});
