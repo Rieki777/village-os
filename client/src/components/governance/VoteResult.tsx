@@ -65,7 +65,7 @@ import {
 } from "./voteBars";
 
 const MARK_ICON = { met: Check, short: X, none: Minus } as const;
-const MARK_TONE = { met: "text-sage", short: "text-coral", none: "text-stone-500" } as const;
+const MARK_TONE = { met: "text-open", short: "text-destructive", none: "text-muted-foreground" } as const;
 
 /**
  * A new moon with nobody yet decided is NOT zero percent agreement, and
@@ -111,11 +111,11 @@ function Heading({
   const Mark = MARK_ICON[mark];
   return (
     <div className="flex items-baseline justify-between gap-2">
-      <span className="text-sm font-semibold text-stone-800">
+      <span className="text-sm font-semibold text-foreground">
         {title}
         <InfoTip tip={tip} label={`What ${title.toLowerCase()} means`} />
       </span>
-      <span className="flex items-center gap-1.5 text-sm font-bold tabular-nums text-stone-900">
+      <span className="flex items-center gap-1.5 text-sm font-bold tabular-nums text-foreground">
         <Mark className={`w-4 h-4 ${MARK_TONE[mark]}`} aria-hidden="true" />
         {value}
       </span>
@@ -178,13 +178,13 @@ export default function VoteResult({
           {consent ? (
             <>
               <Heading title="Objections" tip={CONSENT_TIP} mark={objections.mark} value={null} />
-              <div className="mt-3 flex items-start gap-3 rounded-lg border border-stone-200 bg-stone-50 px-3 py-3">
+              <div className="mt-3 flex items-start gap-3 rounded-lg border border-border bg-muted px-3 py-3">
                 <ObjectionMark
                   className={`mt-0.5 w-5 h-5 shrink-0 ${MARK_TONE[objections.mark]}`}
                   aria-hidden="true"
                 />
-                <p className="text-sm text-stone-700 leading-relaxed">
-                  {objections.reading}. <span className="text-stone-500">Consent is decided by what stands in the way, so it carries no percentage of agreement.</span>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  {objections.reading}. <span className="text-muted-foreground">Consent is decided by what stands in the way, so it carries no percentage of agreement.</span>
                 </p>
               </div>
             </>
@@ -193,9 +193,9 @@ export default function VoteResult({
               <Heading title="Agreement" tip={UNITY_TIP} mark={unity.mark} value={unityValueText(unity)} />
               <div className="mt-3 flex items-center gap-4">
                 <UnityMoon bar={unity} size={96} />
-                <p className="text-xs text-stone-600 leading-relaxed">
+                <p className="text-xs text-muted-foreground leading-relaxed">
                   {unity.reading}.{" "}
-                  <span className="text-stone-500">
+                  <span className="text-muted-foreground">
                     {weightText(tallies.yesW)} yes, {weightText(tallies.noW)} no.
                   </span>
                 </p>
@@ -220,13 +220,13 @@ export default function VoteResult({
               detail={fieldDetail}
             />
           </div>
-          <p className="mt-2 text-xs text-stone-600 leading-relaxed">
-            {quorum.reading}. <span className="text-stone-500">{fieldDetail}</span>
+          <p className="mt-2 text-xs text-muted-foreground leading-relaxed">
+            {quorum.reading}. <span className="text-muted-foreground">{fieldDetail}</span>
           </p>
         </div>
       </div>
 
-      <p className="border-t border-stone-100 pt-3 text-xs text-stone-500 leading-relaxed">
+      <p className="border-t border-border pt-3 text-xs text-muted-foreground leading-relaxed">
         {consent ? ONE_PICTURE : TWO_PICTURES}
       </p>
     </div>
@@ -269,8 +269,8 @@ export function VoteResultMini({
         // it. What stands in the moon's place is the thing that DOES decide
         // it, with a mark beside it so it is never colour alone.
         <div className="flex flex-col leading-tight">
-          <span className="text-[11px] font-medium text-stone-600">Objections decide this one</span>
-          <span className="flex items-center gap-1 text-xs font-bold text-stone-900">
+          <span className="text-xs font-medium text-muted-foreground">Objections decide this one</span>
+          <span className="flex items-center gap-1 text-xs font-bold text-foreground">
             <ObjectionMark className={`w-3 h-3 ${MARK_TONE[objections.mark]}`} aria-hidden="true" />
             {standingObjections > 0
               ? `${standingObjections} standing`
@@ -281,8 +281,8 @@ export function VoteResultMini({
         <div className="flex items-center gap-2">
           <UnityMoon bar={unity} size={36} />
           <div className="flex flex-col leading-tight">
-            <span className="text-[11px] font-medium text-stone-600">Agreement</span>
-            <span className="flex items-center gap-1 text-xs font-bold tabular-nums text-stone-900">
+            <span className="text-xs font-medium text-muted-foreground">Agreement</span>
+            <span className="flex items-center gap-1 text-xs font-bold tabular-nums text-foreground">
               <UnityMark className={`w-3 h-3 ${MARK_TONE[unity.mark]}`} aria-hidden="true" />
               {unityValueText(unity)}
             </span>
@@ -302,8 +302,8 @@ export function VoteResultMini({
           />
         </div>
         <div className="flex flex-col leading-tight">
-          <span className="text-[11px] font-medium text-stone-600">Participation</span>
-          <span className="flex items-center gap-1 text-xs font-bold tabular-nums text-stone-900">
+          <span className="text-xs font-medium text-muted-foreground">Participation</span>
+          <span className="flex items-center gap-1 text-xs font-bold tabular-nums text-foreground">
             <QuorumMark className={`w-3 h-3 ${MARK_TONE[quorum.mark]}`} aria-hidden="true" />
             {pctText(quorum.valuePct)}
           </span>

@@ -35,9 +35,9 @@ import { CircleCheck, CircleSlash, Clock, Loader2 } from "lucide-react";
 import type { StewardSlate as StewardSlateData } from "./governanceApi";
 
 const ANSWER_STYLE: Record<StewardSlateData["members"][number]["answer"], string> = {
-  accepted: "border-sage bg-sage-light text-sage",
-  declined: "border-stone-400 bg-stone-100 text-stone-700",
-  waiting: "border-stone-300 bg-white text-stone-600",
+  accepted: "border-open bg-open/10 text-open",
+  declined: "border-border bg-muted text-muted-foreground",
+  waiting: "border-border bg-card text-muted-foreground",
 };
 
 const ANSWER_ICON: Record<StewardSlateData["members"][number]["answer"], typeof CircleCheck> = {
@@ -75,9 +75,9 @@ export default function StewardSlate({
 
   if (slate.members.length === 0) {
     return (
-      <section className="rounded-xl border border-stone-200 bg-white p-5">
-        <h2 className="text-base font-bold text-stone-900">The steward role</h2>
-        <p className="mt-1 text-sm text-stone-600 leading-relaxed">
+      <section className="rounded-xl border border-border bg-card p-5">
+        <h2 className="text-base font-bold text-foreground">The steward role</h2>
+        <p className="mt-1 text-sm text-muted-foreground leading-relaxed">
           This proposal names nobody for the steward role, so the village starts with it empty. That stops nothing:
           decisions land at their landing time either way, and the village can vote anybody into the role whenever it
           likes.
@@ -87,9 +87,9 @@ export default function StewardSlate({
   }
 
   return (
-    <section className="rounded-xl border border-stone-200 bg-white p-5">
-      <h2 className="text-base font-bold text-stone-900">Who carries the steward role</h2>
-      <p className="mt-1 text-sm text-stone-600 leading-relaxed">
+    <section className="rounded-xl border border-border bg-card p-5">
+      <h2 className="text-base font-bold text-foreground">Who carries the steward role</h2>
+      <p className="mt-1 text-sm text-muted-foreground leading-relaxed">
         {slate.proposedBy
           ? `${slate.proposedBy} opened this vote and chose this list. Voting yes is voting for it as well as for starting the Game.`
           : "This list was chosen when the vote opened. Voting yes is voting for it as well as for starting the Game."}{" "}
@@ -105,9 +105,9 @@ export default function StewardSlate({
               key={m.id}
               className={`flex items-center justify-between gap-3 rounded-lg border px-3 py-2.5 ${ANSWER_STYLE[m.answer]}`}
             >
-              <span className="text-sm font-semibold text-stone-900">
+              <span className="text-sm font-semibold text-foreground">
                 {m.name}
-                {m.mine && <span className="ml-1 text-xs font-normal text-stone-600">(you)</span>}
+                {m.mine && <span className="ml-1 text-xs font-normal text-muted-foreground">(you)</span>}
               </span>
               <span className="flex items-center gap-1.5 text-sm">
                 <Icon className="h-4 w-4" aria-hidden="true" />
@@ -121,7 +121,7 @@ export default function StewardSlate({
       {/* THE COUNT THE VILLAGE IS ACTUALLY VOTING ON, said in words so nobody
           has to add up a list of chips. A slate everybody declined is the one
           state a member most needs before they vote, and it is one sentence. */}
-      <p className="mt-3 text-sm text-stone-600 leading-relaxed">
+      <p className="mt-3 text-sm text-muted-foreground leading-relaxed">
         {accepted === 0 && declined === slate.members.length
           ? "Everybody named has declined, so this vote seats nobody and the role starts empty."
           : accepted === 0
@@ -130,10 +130,10 @@ export default function StewardSlate({
       </p>
 
       {mine && slate.open && (
-        <div className="mt-4 border-t border-stone-100 pt-4">
+        <div className="mt-4 border-t border-border pt-4">
           {mine.answer === "declined" ? (
             <>
-              <p className="text-sm text-stone-700 leading-relaxed">
+              <p className="text-sm text-muted-foreground leading-relaxed">
                 You declined the steward role, and the village can see that. You can change your mind until this vote
                 closes.
               </p>
@@ -141,7 +141,7 @@ export default function StewardSlate({
                 type="button"
                 disabled={busy}
                 onClick={() => void onAnswer(true)}
-                className="mt-2 inline-flex min-h-[44px] items-center gap-2 rounded-lg border-2 border-stone-300 bg-white px-4 py-2.5 text-sm font-semibold text-stone-800 hover:border-stone-400 hover:bg-stone-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep focus-visible:ring-offset-2 disabled:opacity-60"
+                className="mt-2 inline-flex min-h-[44px] items-center gap-2 rounded-lg border-2 border-border bg-card px-4 py-2.5 text-sm font-semibold text-foreground hover:border-border hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
               >
                 {busy && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
                 <span>I have changed my mind</span>
@@ -149,7 +149,7 @@ export default function StewardSlate({
             </>
           ) : (
             <>
-              <p className="text-sm text-stone-700 leading-relaxed">
+              <p className="text-sm text-muted-foreground leading-relaxed">
                 This proposal names you. Accepting happens with your vote, above. If you do not want the role, say so
                 here and the village sees your answer.
               </p>
@@ -157,7 +157,7 @@ export default function StewardSlate({
                 type="button"
                 disabled={busy}
                 onClick={() => void onAnswer(false)}
-                className="mt-2 inline-flex min-h-[44px] items-center gap-2 rounded-lg border-2 border-coral bg-white px-4 py-2.5 text-sm font-semibold text-coral hover:bg-red-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep focus-visible:ring-offset-2 disabled:opacity-60"
+                className="mt-2 inline-flex min-h-[44px] items-center gap-2 rounded-lg border-2 border-destructive bg-card px-4 py-2.5 text-sm font-semibold text-destructive hover:bg-destructive/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
               >
                 {busy && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
                 <span>Decline the steward role</span>

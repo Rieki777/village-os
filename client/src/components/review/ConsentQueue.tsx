@@ -170,7 +170,7 @@ export default function ConsentQueue({ claims, refused, error, headers, onChange
                   href={href}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-sm text-teal-deep underline break-all block mt-1"
+                  className="text-sm text-notice underline break-all block mt-1"
                 >
                   {c.artifactUrl}
                 </a>

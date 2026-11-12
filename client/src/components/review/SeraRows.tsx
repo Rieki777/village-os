@@ -69,7 +69,7 @@ function NestedWords({ n }: { n: number }) {
 /** One row on the phone: tick, sentence, where it came from, its flags, and what it offers. */
 export function RowCard({ ctx, d, nested }: { ctx: Ctx; d: ListedDifference; nested: ListedDifference[] }) {
   return (
-    <article data-sera-row={d.key} tabIndex={-1} className={`${card} pt-3 pr-3 pb-3 pl-1 flex gap-1 focus-visible:outline-2 focus-visible:outline-teal-deep`}>
+    <article data-sera-row={d.key} tabIndex={-1} className={`${card} pt-3 pr-3 pb-3 pl-1 flex gap-1 focus-visible:outline-2 focus-visible:outline-ring`}>
       {d.kind === "pay" ? <span className="min-w-[44px] shrink-0" /> : <RowTick d={d} acts={ctx.acts} />}
       <div className="flex flex-col gap-1.5 min-w-0 flex-1">
         <p className="text-[15px] leading-snug font-medium text-foreground [overflow-wrap:anywhere]">{d.words.sentence}</p>
@@ -108,7 +108,7 @@ export function CompactRow({ ctx, d, selected, onSelect, inset }: { ctx: Ctx; d:
       tabIndex={-1}
       // Any focus inside the row selects it, so the pane always shows the row the keys act on (review 8).
       onFocus={() => !selected && onSelect()}
-      className={`bg-card rounded-[10px] flex ${selected ? "border-2 border-teal-deep" : "border border-border"}${inset ? " ml-6" : ""} focus-visible:outline-2 focus-visible:outline-teal-deep`}
+      className={`bg-card rounded-[10px] flex ${selected ? "border-2 border-notice" : "border border-border"}${inset ? " ml-6" : ""} focus-visible:outline-2 focus-visible:outline-ring`}
     >
       {inset || d.kind === "pay" ? <span className="w-8 shrink-0" /> : <RowTick d={d} acts={ctx.acts} compact />}
       <button

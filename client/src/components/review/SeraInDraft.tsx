@@ -107,7 +107,7 @@ export function InDraftCard({ group, onChanged, say, acts }: { group: InDraftGro
             <span>{item.answer === "edited" && item.value ? <EditedWords item={item} /> : item.sentence}</span>
             {item.changed && (
               <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                <span className="rounded-md bg-amber-light text-amber-ink px-2 py-0.5 text-[13px] font-semibold">
+                <span className="rounded-lg bg-notice/10 text-notice px-2 py-0.5 text-[13px] font-semibold">
                   {item.now ? <Trans context="sera answers">Changed since it was taken</Trans> : <Trans context="sera answers">No longer suggested</Trans>}
                 </span>
                 {item.now && (

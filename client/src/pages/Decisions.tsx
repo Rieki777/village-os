@@ -32,7 +32,7 @@
  * which holds those same rows, and the headings were four words apart. The
  * trail is one list now and it marks the reader's rows; see `WeightRecord`.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "wouter";
 import { PenLine, Scale } from "lucide-react";
 import Layout from "@/components/Layout";
@@ -55,6 +55,9 @@ import {
   type WeightRecord as WeightRecordData,
 } from "@/components/governance/governanceApi";
 import { quorumPctOf } from "@shared/governanceEngine";
+import { BTN_NOTICE, BTN_SECONDARY, EYEBROW, H1, LEDE, WORLD } from "@/components/journey/look";
+import YourTurn from "@/components/governance/YourTurn";
+import { byArrival } from "@/components/governance/deciderOrder";
 
 /**
  * How much of the record one read buys. The route's own default, stated here
@@ -138,10 +141,14 @@ export default function Decisions() {
     const open = all.filter((b) => b.status === "open");
     const expired = open.filter((b) => Date.parse(b.closesAt) <= now);
     const running = open.filter((b) => Date.parse(b.closesAt) > now);
+    // Open votes read in the order they opened, oldest first (decider calm):
+    // the one that has waited longest is read first, and nothing is ordered by
+    // a count. The record keeps its own order, by the year it was settled.
+    const opened = (b: BallotCard) => b.opensAt;
     return {
-      mine: running.filter((b) => b.myWeight !== null && !b.myVote),
-      awaitingClose: expired,
-      running: running.filter((b) => !(b.myWeight !== null && !b.myVote)),
+      mine: byArrival(running.filter((b) => b.myWeight !== null && !b.myVote), opened),
+      awaitingClose: byArrival(expired, opened),
+      running: byArrival(running.filter((b) => !(b.myWeight !== null && !b.myVote)), opened),
       decided: all.filter((b) => b.status !== "open"),
     };
   }, [ballots]);
@@ -150,27 +157,26 @@ export default function Decisions() {
 
   return (
     <Layout>
-      <section className="bg-teal-band text-white py-10">
-        <div className="container max-w-6xl px-4">
-          <div className="flex flex-wrap items-end justify-between gap-4">
-            <div>
-              <span className="text-amber-on-band text-sm font-medium uppercase tracking-widest">The village decides</span>
-              <h1 className="mt-1 font-display text-3xl font-bold sm:text-4xl">Decisions</h1>
-              <p className="mt-2 max-w-2xl text-white leading-relaxed">
-                Every vote this village is holding, and every one it has held. Votes stay changeable until they close,
-                and nothing closes on a timer.
-              </p>
-            </div>
-            <Link
-              href="/propose"
-              className="inline-flex min-h-[44px] items-center gap-2 rounded-lg bg-white px-5 font-semibold text-teal-band hover:bg-cream focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-teal-band"
-            >
-              <PenLine className="w-4 h-4" aria-hidden="true" />
-              Start a proposal
-            </Link>
+      <div className={WORLD}>
+      {/* DECIDER CALM (Phase D, decision 4). The night world and nothing louder:
+          the old band hero is gone, the page keeps its words, and the one light
+          on it marks a vote that waits on the reader. */}
+      <header className="container max-w-6xl px-4 pt-8 sm:pt-12">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <p className={EYEBROW}>The village decides</p>
+            <h1 className={`${H1} mt-1`}>Decisions</h1>
+            <p className={`${LEDE} mt-2`}>
+              Every vote this village is holding, and every one it has held. Votes stay changeable until they close,
+              and nothing closes on a timer.
+            </p>
           </div>
+          <Link href="/propose" className={BTN_SECONDARY}>
+            <PenLine className="w-4 h-4" aria-hidden="true" />
+            Start a proposal
+          </Link>
         </div>
-      </section>
+      </header>
 
       <div className="container max-w-6xl px-4 py-8">
         {!user ? (
@@ -195,22 +201,19 @@ export default function Decisions() {
           <div className="lg:grid lg:grid-cols-[1fr_20rem] lg:gap-8">
             <div className="min-w-0 space-y-10">
               {problem && (
-                <p role="alert" className="rounded-lg bg-red-50 px-4 py-3 text-sm font-medium text-coral">
+                <p role="alert" className="rounded-lg bg-destructive/10 px-4 py-3 text-sm font-medium text-destructive">
                   {problem}
                 </p>
               )}
 
               {ballots.length === 0 && (
-                <div className="rounded-xl border-2 border-dashed border-stone-300 p-8 text-center">
-                  <h2 className="text-lg font-bold text-stone-900">Nothing is being decided right now</h2>
-                  <p className="mx-auto mt-2 max-w-md text-stone-600 leading-relaxed">
+                <div className="rounded-xl border-2 border-dashed border-border p-8 text-center">
+                  <h2 className="text-lg font-bold text-foreground">Nothing is being decided right now</h2>
+                  <p className="mx-auto mt-2 max-w-md text-muted-foreground leading-relaxed">
                     That is a real state, not an empty page. When somebody takes a proposal to a vote, it appears here
                     with a clock on it.
                   </p>
-                  <Link
-                    href="/propose"
-                    className="mt-5 inline-flex min-h-[44px] items-center gap-2 rounded-lg bg-teal-deep px-5 font-semibold text-white hover:bg-teal-deep-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep focus-visible:ring-offset-2"
-                  >
+                  <Link href="/propose" className={`${BTN_NOTICE} mt-5`}>
                     <PenLine className="w-4 h-4" aria-hidden="true" />
                     Start one
                   </Link>
@@ -222,6 +225,11 @@ export default function Decisions() {
                 blurb="You are on the roll for these and have not voted yet."
                 ballots={groups.mine}
                 emptyNote={ballots.length > 0 ? "You have voted in everything that is open to you." : null}
+                turn={
+                  groups.mine[0] ? (
+                    <YourTurn to={`/decisions/${groups.mine[0].id}`} label="Open the one that has waited longest" />
+                  ) : null
+                }
               />
               <Group
                 title="Waiting to be closed"
@@ -242,11 +250,11 @@ export default function Decisions() {
                     type="button"
                     onClick={() => void readMore()}
                     disabled={readingMore}
-                    className="min-h-[44px] rounded-lg border border-stone-300 px-5 text-sm font-semibold text-stone-700 hover:bg-stone-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep focus-visible:ring-offset-2 disabled:opacity-60"
+                    className="min-h-[44px] rounded-lg border border-border px-5 text-sm font-semibold text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
                   >
                     {readingMore ? "Reading earlier decisions…" : "Show earlier decisions"}
                   </button>
-                  <p className="mt-1.5 text-sm text-stone-600 leading-relaxed">
+                  <p className="mt-1.5 text-sm text-muted-foreground leading-relaxed">
                     The record goes back as far as the village does.
                   </p>
                 </div>
@@ -260,22 +268,22 @@ export default function Decisions() {
                   where it is, the reader's rows included and marked. */}
               {record && <WeightRecord record={record} mine={standing?.history ?? []} />}
               <TurnoutCard ballots={ballots} />
-              <div className="rounded-xl border border-stone-200 bg-white p-4">
-                <h3 className="flex items-center gap-2 text-base font-bold text-stone-900">
-                  <Scale className="w-4 h-4 text-teal-deep" aria-hidden="true" />
+              <div className="rounded-xl border border-border bg-card p-4">
+                <h3 className="flex items-center gap-2 text-base font-bold text-foreground">
+                  <Scale className="w-4 h-4 text-notice" aria-hidden="true" />
                   How this works
                   <InfoTip
                     tip="A proposal gathers support first. Once it has enough, someone opens a ballot, which freezes who may vote and how much each vote weighs."
                     label="How a decision travels"
                   />
                 </h3>
-                <p className="mt-2 text-sm text-stone-600 leading-relaxed">
+                <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
                   Thresholds and weights freeze the moment a ballot opens, so nothing anyone changes later can rewrite a
                   vote in flight.
                 </p>
                 <Link
                   href="/governance"
-                  className="mt-3 inline-flex min-h-[44px] items-center text-sm font-semibold text-teal-deep hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
+                  className="mt-3 inline-flex min-h-[44px] items-center text-sm font-semibold text-notice hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   Read how the village governs
                 </Link>
@@ -283,6 +291,7 @@ export default function Decisions() {
             </aside>
           </div>
         )}
+      </div>
       </div>
     </Layout>
   );
@@ -293,19 +302,23 @@ function Group({
   blurb,
   ballots,
   emptyNote,
+  turn,
 }: {
   title: string;
   blurb: string;
   ballots: BallotCard[];
   emptyNote?: string | null;
+  /** The one lit door on the page, for the group that waits on the reader. */
+  turn?: ReactNode;
 }) {
   if (ballots.length === 0 && !emptyNote) return null;
   return (
     <section>
-      <h2 className="font-display text-xl font-bold text-stone-900">{title}</h2>
-      <p className="mt-0.5 text-sm text-stone-600 leading-relaxed">{blurb}</p>
+      <h2 className="font-display text-xl font-bold text-foreground">{title}</h2>
+      <p className="mt-0.5 text-sm text-muted-foreground leading-relaxed">{blurb}</p>
+      {turn && <div className="mt-3">{turn}</div>}
       {ballots.length === 0 ? (
-        <p className="mt-3 rounded-lg border border-stone-200 bg-white px-4 py-3 text-sm text-stone-600">{emptyNote}</p>
+        <p className="mt-3 rounded-lg border border-border bg-card px-4 py-3 text-sm text-muted-foreground">{emptyNote}</p>
       ) : (
         <div className="mt-3 space-y-3">
           {ballots.map((b) => (
@@ -358,13 +371,13 @@ function Chronicle({ ballots }: { ballots: BallotCard[] }) {
 
   return (
     <section>
-      <h2 className="font-display text-xl font-bold text-stone-900">What the village has decided</h2>
-      <p className="mt-0.5 text-sm text-stone-600 leading-relaxed">
+      <h2 className="font-display text-xl font-bold text-foreground">What the village has decided</h2>
+      <p className="mt-0.5 text-sm text-muted-foreground leading-relaxed">
         The record, by the year the village settled each one. Each carries the sentence it closed with.
       </p>
       {years.map(([year, list]) => (
         <div key={year} className="mt-5">
-          <h3 className="border-b border-stone-200 pb-1 font-display text-lg font-bold text-stone-800">{year}</h3>
+          <h3 className="border-b border-border pb-1 font-display text-lg font-bold text-foreground">{year}</h3>
           <div className="mt-3 space-y-3">
             {list.map((b) => (
               <DecisionCard key={b.id} ballot={b} />
@@ -414,8 +427,8 @@ function TurnoutCard({ ballots }: { ballots: BallotCard[] }) {
     decided.reduce((sum, b) => sum + quorumPctOf(b.tallies, b.totalWeight), 0) / decided.length;
   const votes = `${decided.length} closed ${decided.length === 1 ? "vote" : "votes"}`;
   return (
-    <div className="rounded-xl border border-stone-200 bg-white p-4">
-      <h3 className="text-base font-bold text-stone-900">How much the village turns out</h3>
+    <div className="rounded-xl border border-border bg-card p-4">
+      <h3 className="text-base font-bold text-foreground">How much the village turns out</h3>
       <div className="mt-3">
         <QuorumField
           valuePct={average}
@@ -425,7 +438,7 @@ function TurnoutCard({ ballots }: { ballots: BallotCard[] }) {
           detail="Each silhouette is a twentieth of the weight on the roll."
         />
       </div>
-      <p className="mt-2 text-sm text-stone-600 leading-relaxed">
+      <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
         Across {votes}, an average of {Math.round(average)}% of the village's weight has spoken.
       </p>
     </div>

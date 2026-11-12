@@ -52,9 +52,9 @@ export default function MyStanding({ standing }: { standing: Standing }) {
   const zero = standing.eligible && standing.weight === 0;
 
   return (
-    <section className="rounded-xl border border-stone-200 bg-white p-4">
-      <h3 className="flex items-center gap-2 text-base font-bold text-stone-900">
-        <Scale className="w-4 h-4 text-teal-deep" aria-hidden="true" />
+    <section className="rounded-xl border border-border bg-card p-4">
+      <h3 className="flex items-center gap-2 text-base font-bold text-foreground">
+        <Scale className="w-4 h-4 text-notice" aria-hidden="true" />
         Your weight
         <InfoTip
           tip="Weight is how much a vote counts. It is read when a ballot opens and frozen there, so a later change never rewrites a vote in flight."
@@ -69,7 +69,7 @@ export default function MyStanding({ standing }: { standing: Standing }) {
            no other place in the product to learn that. `deniedByWarning` is
            the server saying which. R56: it is stated once, flatly, with
            nothing in it about what she should have done. */
-        <p className="mt-2 text-sm text-stone-600 leading-relaxed">
+        <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
           {standing.deniedByWarning
             ? "A warning on your account is holding voting back for as long as it stands."
             : "You cannot vote in this village yet. Voting opens at the member stage."}
@@ -77,16 +77,16 @@ export default function MyStanding({ standing }: { standing: Standing }) {
       ) : (
         <>
           <p className="mt-2 flex items-baseline gap-2">
-            <span className="text-3xl font-bold tabular-nums text-stone-900">{weightText(standing.weight)}</span>
-            <span className="text-sm text-stone-600">{MODE_LABEL[standing.mode]}</span>
+            <span className="text-3xl font-bold tabular-nums text-foreground">{weightText(standing.weight)}</span>
+            <span className="text-sm text-muted-foreground">{MODE_LABEL[standing.mode]}</span>
           </p>
-          <p className="mt-1.5 text-sm text-stone-600 leading-relaxed">{standing.why}</p>
+          <p className="mt-1.5 text-sm text-muted-foreground leading-relaxed">{standing.why}</p>
 
           {/* The same silhouette a decision's participation field is built
               from, so the vocabulary is learned once. It is here because this
               is the card that answers "what is my weight worth", and the field
               is where a member sees weight spent. */}
-          <p className="mt-2.5 flex items-start gap-2 text-xs text-stone-500 leading-relaxed">
+          <p className="mt-2.5 flex items-start gap-2 text-xs text-muted-foreground leading-relaxed">
             <CrowdFigure size={22} className="mt-0.5" />
             <span>
               On a decision, the row of silhouettes fills by weight and never by heads, so this number is the share of
@@ -95,7 +95,7 @@ export default function MyStanding({ standing }: { standing: Standing }) {
           </p>
 
           {zero && (
-            <p className="mt-3 rounded-lg bg-amber-light px-3 py-2 text-sm text-gold leading-relaxed">
+            <p className="mt-3 rounded-lg bg-notice/10 px-3 py-2 text-sm text-notice leading-relaxed">
               You hold no weight, so a vote from you would count for nothing. That is a decision somebody made, and it
               has a reason on the record. Ask a steward for it.
             </p>

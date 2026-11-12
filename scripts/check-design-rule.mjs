@@ -82,6 +82,10 @@ const PAGES = [
   "client/src/pages/SeatApplication.tsx",
   "client/src/pages/ResidentJourney.tsx",
   "client/src/pages/OpenProposal.tsx",
+  // Decider calm (Phase D, decision 4): every page where people decide stands in the night world.
+  "client/src/pages/Review.tsx",
+  "client/src/pages/Decisions.tsx",
+  "client/src/pages/Decision.tsx",
 ];
 
 /** Every file the joining journey draws with, pages included. */
@@ -119,7 +123,7 @@ const JOURNEY = [
   "client/src/components/alignment/RegisterEntry.tsx",
   "client/src/components/alignment/AlignButton.tsx",
   "client/src/components/alignment/ConfidentialityCard.tsx",
-  // The decider and holder side of a proposal (audit M11). CircleConsent.tsx joins once its two classes are on tokens.
+  // The decider and holder side of a proposal (audit M11). CircleConsent.tsx joined with decider calm, below.
   "client/src/components/openProposal/AboutYou.tsx",
   "client/src/components/openProposal/MembershipAtApplication.tsx",
   "client/src/components/openProposal/ProposalAttachments.tsx",
@@ -127,6 +131,29 @@ const JOURNEY = [
   "client/src/components/modules/ModuleGate.tsx",
   "client/src/components/admin/OnboardingPathEditor.tsx",
   "client/src/pages/RequestMembership.tsx",
+  // Decider calm (Phase D, decision 4): what a decider reads and answers in, on the sheet's tokens.
+  "client/src/components/roleProposal/CircleConsent.tsx",
+  "client/src/components/governance/YourTurn.tsx",
+  "client/src/components/governance/DecisionCard.tsx",
+  "client/src/components/governance/DecisionOutcome.tsx",
+  "client/src/components/governance/VoteWidget.tsx",
+  "client/src/components/governance/VoteResult.tsx",
+  "client/src/components/governance/VoteClock.tsx",
+  "client/src/components/governance/VoterRoll.tsx",
+  "client/src/components/governance/ObjectionPanel.tsx",
+  "client/src/components/governance/CloseBeat.tsx",
+  "client/src/components/governance/StewardSlate.tsx",
+  "client/src/components/governance/TransferCeremony.tsx",
+  "client/src/components/governance/LandingClock.tsx",
+  "client/src/components/governance/QuorumField.tsx",
+  "client/src/components/governance/MyStanding.tsx",
+  "client/src/components/governance/WeightRecord.tsx",
+  "client/src/components/governance/ExportByVote.tsx",
+  "client/src/components/review/ConsentQueue.tsx",
+  "client/src/components/review/OwedPostings.tsx",
+  "client/src/components/review/OwedCancels.tsx",
+  "client/src/components/review/AgentProposalsCard.tsx",
+  "client/src/components/review/QuestProposalCard.tsx",
 ];
 
 const listFlag = (name) => flag(name)?.split(",").filter(Boolean);

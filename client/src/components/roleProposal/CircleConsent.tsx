@@ -32,6 +32,10 @@ import { CONSENT_WORDS, OBJECTION_MAX, TALLY_WORDS, tallyWords, type ConsentAnsw
 import { answerConsent, type ConsentAnswerOut, type ConsentOut } from "./proposalApi";
 import { ADOPTED_HEADING, STATE_HEADINGS } from "./proposalWords";
 import { H2, INPUT, LEDE, PANEL, PRIMARY, SECONDARY } from "./parts";
+import { Vesica } from "@/components/journey/nature";
+
+/** What a screen reader hears for the two circles meeting. */
+export const CONSENT_SEAL = "The circle consented";
 
 const NO_ROLES = { asked: [] as string[], consented: [] as string[], objected: [] as string[] };
 
@@ -58,19 +62,38 @@ export function ConsentTally({ consent }: { consent: ConsentOut }) {
 }
 
 /** Where it stands, for any reader: the heading, the sentence (or the decision record), the tally and the reasons. */
-export function ConsentSummary({ consent, decided, headingId }: { consent: ConsentOut; decided: string | null; headingId?: string }) {
+export function ConsentSummary({
+  consent,
+  decided,
+  headingId,
+  seal = false,
+}: {
+  consent: ConsentOut;
+  decided: string | null;
+  headingId?: string;
+  /**
+   * Decider calm: draw two circles meeting once the whole circle has consented.
+   * Off by default, so a page that only reports where it stands draws nothing new.
+   */
+  seal?: boolean;
+}) {
   const own = useId();
   const id = headingId ?? `${own}-consent`;
+  // The vesica means a consent reached (sitewide plan): only the state where the circle consented, never one still open.
+  const met = seal && consent.state === "consented";
   return (
     <section aria-labelledby={id} className={`${PANEL} grid gap-3`} data-consent-summary={decided ? "adopted" : consent.state}>
       <h2 id={id} className={H2}>
         {CONSENT_WORDS.heading}
       </h2>
-      <div className="grid gap-1">
-        <p className="font-semibold text-foreground" data-state-heading="">
-          {decided ? ADOPTED_HEADING : STATE_HEADINGS[consent.state]}
-        </p>
-        <p className="text-foreground">{decided ?? consent.words}</p>
+      <div className={met ? "flex items-start gap-4" : "grid gap-1"}>
+        {met && <Vesica met label={CONSENT_SEAL} size="sm" className="mt-1" />}
+        <div className="grid gap-1">
+          <p className="font-semibold text-foreground" data-state-heading="">
+            {decided ? ADOPTED_HEADING : STATE_HEADINGS[consent.state]}
+          </p>
+          <p className="text-foreground">{decided ?? consent.words}</p>
+        </div>
       </div>
       <ConsentTally consent={consent} />
       {consent.objections.length > 0 && (
@@ -144,7 +167,7 @@ export default function CircleConsent({ applicationId, consent: given, decided, 
 
   return (
     <div className="grid gap-3" data-circle-consent={decided ? "adopted" : consent.state}>
-      <ConsentSummary consent={consent} decided={decided} />
+      <ConsentSummary consent={consent} decided={decided} seal />
 
       {mayAnswer && !objecting && (
         <div className={`${PANEL} grid gap-3`} data-consent-ask="">
@@ -203,7 +226,7 @@ export default function CircleConsent({ applicationId, consent: given, decided, 
           </p>
           {/* The refusal sits under the box it is about. */}
           {error && (
-            <p id={errorId} role="alert" className="text-sm font-medium text-coral">
+            <p id={errorId} role="alert" className="text-sm font-medium text-destructive">
               {error}
             </p>
           )}
@@ -235,7 +258,7 @@ export default function CircleConsent({ applicationId, consent: given, decided, 
       )}
 
       {error && !(mayAnswer && objecting) && (
-        <p role="alert" className="text-sm font-medium text-coral">
+        <p role="alert" className="text-sm font-medium text-destructive">
           {error}
         </p>
       )}

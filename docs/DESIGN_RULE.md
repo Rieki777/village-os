@@ -16,7 +16,8 @@ confidentiality and membership align cards), `/register`, `/set-password`, `/ver
 profile, `/approvals`, `/role-measures` and `/quests`, the membership align step inside the proposal form
 (`MembershipAtApplication`), `RoleCardBridge`, the signed-out card (`SignInDoors` in `ModuleGate`, whose two doors now
 take `BTN_PRIMARY` and `BTN_SECONDARY` on every page that shows them), Admin's onboarding path editor and
-`/request-membership`. A page joins by being
+`/request-membership`, and the pages where people decide (`/review`, `/decisions`, `/decisions/:id`,
+with what they render: the vote, the roll, the round, the outcome and the review queue's cards). A page joins by being
 added to `JOURNEY` (and `PAGES`, for a page) in the script, once it passes.
 `node scripts/check-design-rule.mjs --report` lists what the rule would flag everywhere else.
 
@@ -135,6 +136,26 @@ through `React.lazy`, and never from the app shell, so none of it reaches the fi
 | `<Vesica met>` for a threshold crossed | a lock icon flipping open | two circles meeting, each still whole |
 | `<MoonPhase date>` | a decorative moon in a fixed phase | the real sky, computed, no network |
 | `useReducedMotion` rendering the still drawing | `animation-duration: 1ms` on a bloom | the member still sees what was celebrated |
+
+## Decider calm (12 Nov 2026)
+
+The pages where people decide (`/review`, `/approvals`, `/role-applications/:id`, `/decisions`,
+`/decisions/:id`, `/open-proposals/:id`) are kept calm on purpose, in the founding register. They
+change what a decider sees and never what a decision does: votes, consent rules, approvals, money
+and pay are exactly as they were.
+
+- **The night world and almost nothing else.** No growth, moss, meadow or bloom beside an applicant
+  or a vote, nothing that could read as a grade.
+- **One light: your turn.** `YourTurn` (`components/governance/YourTurn.tsx`) draws the fireflies on
+  a door that leads to the vote or the round, shown only when the server says the reader is asked
+  and has not answered. **Never on an answer:** a light on Yes, Consent or Accept leans the reader
+  toward it. On a phone the door is a bar under the thumb; from `lg` up it sits beside the words.
+- **Two circles meet once, for a consent reached.** A `Vesica` on a decision the village made by
+  consent and on a circle that consented, never on a vote still open or a majority count.
+- **Arrival order only.** What waits on a decider reads oldest first (`byArrival`,
+  `components/governance/deciderOrder.ts`), never by a count, a score or a guess at importance.
+- **Phone and desktop.** A desktop shows the person's words at reading width beside the round, so
+  nobody decides without the words in view; a phone reads them one after the other.
 
 ## Phone and desktop, each at its best (11 Nov 2026)
 

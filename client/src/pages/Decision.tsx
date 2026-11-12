@@ -52,6 +52,9 @@ import { ExportDelivery } from "@/components/governance/ExportByVote";
 import { ROLE_APPLICATION } from "@shared/seatApplications";
 import { useCatalyst } from "@/lib/gameApi";
 import { weightText } from "@/components/governance/voteBars";
+import YourTurn from "@/components/governance/YourTurn";
+import { Vesica } from "@/components/journey/nature";
+import { BTN_NOTICE, H1, H2, WORLD } from "@/components/journey/look";
 import {
   answerNomination,
   castVote,
@@ -305,15 +308,17 @@ export default function Decision() {
   if (missing) {
     return (
       <Layout>
+        <div className={WORLD}>
         <div className="container max-w-2xl px-4 py-16 text-center">
-          <h1 className="font-display text-3xl font-bold text-stone-900">No such decision</h1>
-          <p className="mt-2 text-stone-600">It may have been withdrawn, or the link may be wrong.</p>
+          <h1 className={H2}>No such decision</h1>
+          <p className="mt-2 text-muted-foreground">It may have been withdrawn, or the link may be wrong.</p>
           <Link
             href="/decisions"
-            className="mt-6 inline-flex min-h-[44px] items-center rounded-lg bg-teal-deep px-5 font-semibold text-white hover:bg-teal-deep-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep focus-visible:ring-offset-2"
+            className={`${BTN_NOTICE} mt-6`}
           >
             Everything the village is deciding
           </Link>
+        </div>
         </div>
       </Layout>
     );
@@ -322,8 +327,10 @@ export default function Decision() {
   if (!ballot) {
     return (
       <Layout>
+        <div className={WORLD}>
         <div className="flex justify-center py-24">
           <BreathingLoader label="Opening the decision" />
+        </div>
         </div>
       </Layout>
     );
@@ -335,35 +342,48 @@ export default function Decision() {
   // A stranger's roll arrives empty (R098), so the server's count is the count.
   const stranger = ballot.viewerTier === "stranger";
   const votedCount = stranger ? ballot.votedCount ?? 0 : ballot.votes.length;
+  /*
+   * THE READER'S TURN (decider calm): open, still inside its period, on the
+   * roll, and not yet voted. The only place a light goes on this page, and it
+   * goes on a door to the vote, never on one answer. It decides nothing: the
+   * vote widget below is exactly the one it was.
+   */
+  const myTurn = open && !expired && !!user && inRoll && !ballot.myVote;
+  /*
+   * TWO CIRCLES MEET, ONCE: a decision the village made by consent. Only a
+   * consent ballot that carried, never a vote still open and never a majority
+   * count, because the vesica means "a consent reached" (sitewide plan).
+   */
+  const consented = ballot.status === "passed" && ballot.method === "consent";
 
   return (
     <Layout>
-      <div className="container max-w-6xl px-4 py-8">
+      <div className={WORLD}>
+      {/* A phone keeps room at the bottom for the bar under the thumb when it is the reader's turn. */}
+      <div className={`container max-w-6xl px-4 py-8${myTurn ? " pb-32 lg:pb-8" : ""}`}>
         <Link
           href="/decisions"
-          className="inline-flex min-h-[44px] items-center gap-1.5 text-sm font-medium text-stone-600 hover:text-teal-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
+          className="inline-flex min-h-[44px] items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-notice focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <ArrowLeft className="w-4 h-4" aria-hidden="true" />
           Every decision
         </Link>
 
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <span className="rounded-full bg-stone-100 px-2.5 py-0.5 text-xs font-medium text-stone-700">
+          <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
             {subjectNoun(ballot.subjectType)}
           </span>
-          <span className="text-xs text-stone-600">
+          <span className="text-xs text-muted-foreground">
             Decided by {ballot.method}
             <InfoTip tip={METHOD_TIP[ballot.method] ?? UNKNOWN_METHOD_TIP} label="What this method means" />
           </span>
-          <span className="text-xs text-stone-600">
+          <span className="text-xs text-muted-foreground">
             {ballot.electorateCount} on the roll, {weightText(ballot.totalWeight)} weight between them
             <InfoTip tip={WEIGHT_MODE_TIP[ballot.weightMode] ?? UNKNOWN_WEIGHT_TIP} label="How weight was decided" />
           </span>
         </div>
 
-        <h1 className="mt-2 font-display text-3xl font-bold leading-tight text-stone-900 sm:text-4xl">
-          {ballot.title}
-        </h1>
+        <h1 className={`${H1} mt-2 max-w-4xl`}>{ballot.title}</h1>
 
         {open && (
           <p className="mt-2">
@@ -386,11 +406,11 @@ export default function Decision() {
              carry: two elements on one page in different tenses about the
              same ballot, and the live-sounding one on top. The fact that
              settles it is already here. */
-          <div className="mt-3 rounded-lg border border-stone-200 bg-cream px-4 py-3">
-            <p className="text-sm font-semibold text-stone-900">
+          <div className="mt-3 rounded-lg border border-border bg-muted px-4 py-3">
+            <p className="text-sm font-semibold text-foreground">
               {open ? "The village is being asked, and nothing more" : "The village was asked, and nothing more"}
             </p>
-            <p className="mt-0.5 text-sm text-stone-700 leading-relaxed">
+            <p className="mt-0.5 text-sm text-muted-foreground leading-relaxed">
               {open
                 ? "This vote runs on the real engine, with the real roll and the real weights, and closing it changes nothing on its own. What it produces is an answer the village can act on, or not."
                 : "This vote ran on the real engine, with the real roll and the real weights, and closing it changed nothing on its own. What it produced is an answer the village can act on, or not."}
@@ -399,7 +419,7 @@ export default function Decision() {
         )}
 
         {problem && (
-          <p role="alert" className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm font-medium text-coral">
+          <p role="alert" className="mt-4 rounded-lg bg-destructive/10 px-4 py-3 text-sm font-medium text-destructive">
             {problem}
           </p>
         )}
@@ -410,7 +430,7 @@ export default function Decision() {
         {withdrawn !== null && (
           <p
             role="status"
-            className="mt-4 rounded-lg border border-stone-200 bg-cream px-4 py-3 text-sm text-stone-800 leading-relaxed"
+            className="mt-4 rounded-lg border border-border bg-muted px-4 py-3 text-sm text-foreground leading-relaxed"
           >
             {withdrawn === 0
               ? "This vote is called off. Nobody had voted, so no vote was thrown away, and the subject can go to a vote again whenever it is ready."
@@ -421,6 +441,13 @@ export default function Decision() {
         <div className="mt-6 lg:grid lg:grid-cols-[1fr_20rem] lg:gap-8">
           <div className="min-w-0 space-y-6">
             <PriorAttempts attempts={chronicle?.priorAttempts ?? []} />
+
+            {consented && (
+              <div className="flex items-center gap-4 rounded-2xl border border-border bg-card p-4 shadow-sm" data-consent-reached="">
+                <Vesica met label="The village consented" size="sm" />
+                <p className="text-sm text-foreground">The village consented. Nobody named a reason to stop it.</p>
+              </div>
+            )}
 
             {!open && (
               <DecisionOutcome
@@ -469,9 +496,9 @@ export default function Decision() {
                 leave the numbers in the outcome card with nothing to read them
                 against. The heading changes because a decided question is not
                 a live one. */}
-            <section className="rounded-xl border border-stone-200 bg-white p-5">
-              <h2 className="text-base font-bold text-stone-900">{open ? "Where it stands" : "How it landed"}</h2>
-              <p className="mt-0.5 text-sm text-stone-600 leading-relaxed">
+            <section className="rounded-xl border border-border bg-card p-5">
+              <h2 className="text-base font-bold text-foreground">{open ? "Where it stands" : "How it landed"}</h2>
+              <p className="mt-0.5 text-sm text-muted-foreground leading-relaxed">
                 {!open
                   ? "The measurements this closed on. They are frozen here, exactly as the close route read them."
                   : ballot.method === "consent"
@@ -500,6 +527,7 @@ export default function Decision() {
             {slate && <StewardSlate slate={slate} onAnswer={onAnswerNomination} busy={busy} />}
 
             {open && user && (
+              <div id="your-answer" className="scroll-mt-24 rounded-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
               <VoteWidget
                 ballot={ballot}
                 onVote={onVote}
@@ -513,6 +541,7 @@ export default function Decision() {
                     : undefined
                 }
               />
+              </div>
             )}
 
             {ballot.method === "consent" && (
@@ -541,9 +570,9 @@ export default function Decision() {
                 proposer is somebody and hiding it from them would leave the
                 decision waiting forever. */}
             {open && user && !closing && (expired || !!standing?.mayDecide) && (
-              <section className="rounded-xl border border-stone-200 bg-stone-50 p-4">
-                <h2 className="text-base font-bold text-stone-900">Closing this</h2>
-                <p className="mt-1 text-sm text-stone-600 leading-relaxed">
+              <section className="rounded-xl border border-border bg-muted p-4">
+                <h2 className="text-base font-bold text-foreground">Closing this</h2>
+                <p className="mt-1 text-sm text-muted-foreground leading-relaxed">
                   {expired
                     ? `The voting period has ended and this is waiting for a person. Its proposer, anyone who may decide proposals, or ${catalyst.aName} can close it.`
                     : "The period is still running, and closing it early is yours to do as someone who decides proposals."}{" "}
@@ -552,7 +581,7 @@ export default function Decision() {
                 <button
                   type="button"
                   onClick={() => setClosing(true)}
-                  className="mt-3 min-h-[44px] rounded-lg border border-teal-deep px-5 text-sm font-semibold text-teal-deep hover:bg-teal-deep/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep focus-visible:ring-offset-2"
+                  className="mt-3 min-h-[44px] rounded-lg border border-notice px-5 text-sm font-semibold text-notice hover:bg-notice/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   Close this decision
                 </button>
@@ -579,13 +608,13 @@ export default function Decision() {
                 who this is for and closes the panel; nobody meets the rule
                 for the first time as a refusal. */}
             {open && user && !closing && (!!standing?.mayDecide || ballot.votes.length === 0) && (
-              <section className="rounded-xl border border-stone-200 bg-white p-4">
-                <h2 className="text-base font-bold text-stone-900">Calling this off</h2>
-                <p className="mt-1 text-sm text-stone-600 leading-relaxed">
+              <section className="rounded-xl border border-border bg-card p-4">
+                <h2 className="text-base font-bold text-foreground">Calling this off</h2>
+                <p className="mt-1 text-sm text-muted-foreground leading-relaxed">
                   A vote opened by mistake can be called off. It decides nothing, records why, and leaves the subject
                   free to go to a vote again straight away.
                 </p>
-                <p className="mt-2 text-sm text-stone-700 leading-relaxed">
+                <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
                   {ballot.votes.length === 0
                     ? "Nobody has voted yet, so whoever opened this can call it off and no vote is thrown away."
                     : `${ballot.votes.length} ${ballot.votes.length === 1 ? "member has" : "members have"} already voted. Calling it off discards ${ballot.votes.length === 1 ? "that vote" : "those votes"}, so it takes somebody who decides proposals or ${catalyst.aName}. Closing it and recording the outcome keeps them.`}
@@ -594,16 +623,16 @@ export default function Decision() {
                   <button
                     type="button"
                     onClick={() => setWithdrawing(true)}
-                    className="mt-3 min-h-[44px] rounded-lg border border-stone-300 px-5 text-sm font-semibold text-stone-700 hover:bg-stone-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
+                    className="mt-3 min-h-[44px] rounded-lg border border-border px-5 text-sm font-semibold text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     Call this vote off
                   </button>
                 ) : (
                   <div className="mt-3">
-                    <label htmlFor="withdraw-reason" className="block text-sm font-semibold text-stone-900">
+                    <label htmlFor="withdraw-reason" className="block text-sm font-semibold text-foreground">
                       Why is it being called off?
                     </label>
-                    <p className="mt-0.5 text-xs text-stone-600 leading-relaxed">
+                    <p className="mt-0.5 text-xs text-muted-foreground leading-relaxed">
                       The roll was told this vote was open and will be told it is not. This sentence is what they read.
                     </p>
                     <textarea
@@ -613,21 +642,21 @@ export default function Decision() {
                       maxLength={4000}
                       onChange={(e) => setWithdrawReason(e.target.value)}
                       placeholder="Opened against the wrong draft. The corrected one goes to a vote today."
-                      className="mt-2 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
+                      className="mt-2 w-full rounded-lg border border-border px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     />
                     <div className="mt-3 flex flex-wrap gap-2">
                       <button
                         type="button"
                         disabled={busy}
                         onClick={onWithdraw}
-                        className="inline-flex min-h-[44px] items-center rounded-lg bg-coral px-5 text-sm font-semibold text-white hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-coral focus-visible:ring-offset-2 disabled:opacity-60"
+                        className="inline-flex min-h-[44px] items-center rounded-lg bg-destructive px-5 text-sm font-semibold text-destructive-foreground hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive disabled:opacity-60"
                       >
                         Call it off
                       </button>
                       <button
                         type="button"
                         onClick={() => setWithdrawing(false)}
-                        className="min-h-[44px] rounded-lg border border-stone-300 px-5 text-sm font-medium text-stone-700 hover:bg-stone-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
+                        className="min-h-[44px] rounded-lg border border-border px-5 text-sm font-medium text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       >
                         Leave it running
                       </button>
@@ -638,9 +667,9 @@ export default function Decision() {
             )}
 
             {stranger ? (
-              <section className="rounded-xl border border-stone-200 bg-white p-4">
-                <h3 className="text-base font-bold text-stone-900">Who may vote</h3>
-                <p className="mt-1 text-sm text-stone-600">
+              <section className="rounded-xl border border-border bg-card p-4">
+                <h3 className="text-base font-bold text-foreground">Who may vote</h3>
+                <p className="mt-1 text-sm text-muted-foreground">
                   {ballot.electorateCount} {ballot.electorateCount === 1 ? "member" : "members"} may vote, and {votedCount}{" "}
                   {votedCount === 1 ? "has" : "have"} spoken. Members who sign in read who they are and how each one voted.
                 </p>
@@ -662,25 +691,25 @@ export default function Decision() {
                 a village voting on a quest payout is not owed a blank box
                 where somebody else's judgement would be. */}
             {ballot.purposeAlignment && (
-              <section className="rounded-xl border border-stone-200 bg-white p-4">
-                <h2 className="flex items-center gap-2 text-base font-bold text-stone-900">
-                  <Compass className="w-4 h-4 text-teal-deep" aria-hidden="true" />
+              <section className="rounded-xl border border-border bg-card p-4">
+                <h2 className="flex items-center gap-2 text-base font-bold text-foreground">
+                  <Compass className="w-4 h-4 text-notice" aria-hidden="true" />
                   How this serves the village's purpose
                   <InfoTip
                     tip="The person who opened this vote wrote one line on how it serves the governing purpose statement. It was written before the vote opened and stays on the record afterwards."
                     label="Why this is here"
                   />
                 </h2>
-                <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-stone-800">
+                <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-foreground">
                   {ballot.purposeAlignment}
                 </p>
               </section>
             )}
 
             {/* The document, exactly as it was when the ballot opened. */}
-            <section className="rounded-xl border border-stone-200 bg-white p-4">
-              <h2 className="flex items-center gap-2 text-base font-bold text-stone-900">
-                <FileText className="w-4 h-4 text-teal-deep" aria-hidden="true" />
+            <section className="rounded-xl border border-border bg-card p-4">
+              <h2 className="flex items-center gap-2 text-base font-bold text-foreground">
+                <FileText className="w-4 h-4 text-notice" aria-hidden="true" />
                 What is being voted on
                 <InfoTip
                   tip="This document was snapshotted when the ballot opened and cannot change while it runs. What is voted on is what was checked."
@@ -688,19 +717,19 @@ export default function Decision() {
                 />
               </h2>
               {stranger ? (
-                <p className="mt-2 text-sm text-stone-600">Members read the document once they sign in.</p>
+                <p className="mt-2 text-sm text-muted-foreground">Members read the document once they sign in.</p>
               ) : (
               <button
                 type="button"
                 aria-expanded={showDoc}
                 onClick={() => setShowDoc((v) => !v)}
-                className="mt-2 min-h-[44px] rounded-lg border border-stone-300 px-4 text-sm font-medium text-stone-700 hover:bg-stone-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
+                className="mt-2 min-h-[44px] rounded-lg border border-border px-4 text-sm font-medium text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 {showDoc ? "Hide the document" : "Read the document"}
               </button>
               )}
               {showDoc && (
-                <pre className="mt-3 max-h-[28rem] overflow-auto whitespace-pre-wrap rounded-lg bg-stone-50 p-4 font-sans text-sm leading-relaxed text-stone-800">
+                <pre className="mt-3 max-h-[28rem] overflow-auto whitespace-pre-wrap rounded-lg bg-muted p-4 text-sm leading-relaxed text-foreground">
                   {ballot.docMarkdown}
                 </pre>
               )}
@@ -709,7 +738,7 @@ export default function Decision() {
               {ballot.subjectType === ROLE_APPLICATION && ballot.subjectRef && (
                 <Link
                   href={`/role-applications/${encodeURIComponent(ballot.subjectRef)}`}
-                  className="mt-3 flex min-h-[44px] items-center text-sm font-semibold text-teal-deep hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
+                  className="mt-3 flex min-h-[44px] items-center text-sm font-semibold text-notice hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   Read the application
                 </Link>
@@ -718,37 +747,45 @@ export default function Decision() {
           </div>
 
           <aside className="mt-8 space-y-6 lg:mt-0">
+            {myTurn && (
+              <YourTurn
+                shape="sticky"
+                to="#your-answer"
+                line="You are on the roll and have not voted yet."
+                label="Give my answer"
+              />
+            )}
             {standing && <MyStanding standing={standing} />}
-            <div className="rounded-xl border border-stone-200 bg-white p-4">
-              <h3 className="flex items-center gap-2 text-base font-bold text-stone-900">
-                <Scale className="w-4 h-4 text-teal-deep" aria-hidden="true" />
+            <div className="rounded-xl border border-border bg-card p-4">
+              <h3 className="flex items-center gap-2 text-base font-bold text-foreground">
+                <Scale className="w-4 h-4 text-notice" aria-hidden="true" />
                 This vote's own rules
               </h3>
               <dl className="mt-2 space-y-2 text-sm">
                 <div className="flex justify-between gap-3">
-                  <dt className="text-stone-600">Agreement needed</dt>
-                  <dd className="font-semibold tabular-nums text-stone-900">
+                  <dt className="text-muted-foreground">Agreement needed</dt>
+                  <dd className="font-semibold tabular-nums text-foreground">
                     {ballot.method === "consent" ? "no objections" : `${ballot.unityPct}%`}
                   </dd>
                 </div>
                 <div className="flex justify-between gap-3">
-                  <dt className="text-stone-600">Turnout needed</dt>
-                  <dd className="font-semibold tabular-nums text-stone-900">{ballot.quorumPct}%</dd>
+                  <dt className="text-muted-foreground">Turnout needed</dt>
+                  <dd className="font-semibold tabular-nums text-foreground">{ballot.quorumPct}%</dd>
                 </div>
                 <div className="flex justify-between gap-3">
-                  <dt className="text-stone-600">Opened</dt>
-                  <dd className="text-stone-900">
+                  <dt className="text-muted-foreground">Opened</dt>
+                  <dd className="text-foreground">
                     {new Date(ballot.opensAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
                   </dd>
                 </div>
                 <div className="flex justify-between gap-3">
-                  <dt className="text-stone-600">Period ends</dt>
-                  <dd className="text-stone-900">
+                  <dt className="text-muted-foreground">Period ends</dt>
+                  <dd className="text-foreground">
                     {new Date(ballot.closesAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
                   </dd>
                 </div>
               </dl>
-              <p className="mt-3 border-t border-stone-100 pt-3 text-xs text-stone-500 leading-relaxed">
+              <p className="mt-3 border-t border-border pt-3 text-xs text-muted-foreground leading-relaxed">
                 These numbers froze when this ballot opened. Changing the village's settings now does nothing to this
                 vote, open or closed.
               </p>
@@ -759,6 +796,7 @@ export default function Decision() {
             {record && <WeightRecord record={record} mine={standing?.history ?? []} />}
           </aside>
         </div>
+      </div>
       </div>
     </Layout>
   );
@@ -789,9 +827,9 @@ export default function Decision() {
 function PriorAttempts({ attempts }: { attempts: PriorAttempt[] }) {
   if (attempts.length === 0) return null;
   return (
-    <section className="rounded-xl border border-stone-200 bg-cream p-4">
-      <h2 className="text-base font-bold text-stone-900">The village has decided this before</h2>
-      <p className="mt-0.5 text-sm text-stone-600 leading-relaxed">
+    <section className="rounded-xl border border-border bg-muted p-4">
+      <h2 className="text-base font-bold text-foreground">The village has decided this before</h2>
+      <p className="mt-0.5 text-sm text-muted-foreground leading-relaxed">
         Earlier votes on this same question, each with the sentence it closed with.
       </p>
       <ol className="mt-3 space-y-2">
@@ -799,15 +837,15 @@ function PriorAttempts({ attempts }: { attempts: PriorAttempt[] }) {
           const word = DECISION_OUTCOME_COPY[p.status]?.word ?? null;
           const on = p.closedAt ?? p.opensAt;
           return (
-            <li key={p.id} className="border-l-2 border-stone-300 pl-3">
+            <li key={p.id} className="border-l-2 border-border pl-3">
               <Link
                 href={`/decisions/${p.id}`}
-                className="text-sm font-semibold text-teal-deep hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
+                className="text-sm font-semibold text-notice hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 {word ? `${word}, ` : ""}
                 {new Date(on).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" })}
               </Link>
-              {p.outcomeNote && <p className="text-sm text-stone-700 leading-relaxed">{p.outcomeNote}</p>}
+              {p.outcomeNote && <p className="text-sm text-muted-foreground leading-relaxed">{p.outcomeNote}</p>}
             </li>
           );
         })}

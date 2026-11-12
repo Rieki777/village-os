@@ -116,7 +116,7 @@ function CrossingCard({ ballot, t, fresh }: { ballot: Ballot; t: PowerFacts; fre
   return (
     <section
       className={`relative overflow-hidden rounded-xl border-2 p-5 ${
-        crossed ? "border-sage bg-sage-light" : "border-stone-200 bg-cream"
+        crossed ? "border-open bg-open/10" : "border-border bg-muted"
       }`}
     >
       {/* The daybreak sits in the corner and the words keep out of its way.
@@ -139,7 +139,7 @@ function CrossingCard({ ballot, t, fresh }: { ballot: Ballot; t: PowerFacts; fre
             sit across, so they keep clear of it and nothing below is indented
             by a decoration. */}
         <div className={fresh && crossed ? "pr-28 sm:pr-32" : ""}>
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-stone-900/5 px-3 py-1 text-xs font-bold uppercase tracking-wide text-stone-700">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-3 py-1 text-xs font-bold uppercase tracking-wide text-muted-foreground">
             <Handshake className="w-3.5 h-3.5" aria-hidden="true" />
             {crossed ? "It crossed over" : "The village asks to hold this"}
           </span>
@@ -147,30 +147,30 @@ function CrossingCard({ ballot, t, fresh }: { ballot: Ballot; t: PowerFacts; fre
           {/* THE POWER. The title and the sentence both come from the registry
               the gate itself reads, so what a member is told a holder could do
               is what a holder can actually do. */}
-          <h2 className="mt-3 font-display text-xl font-bold leading-snug text-stone-900">
+          <h2 className="mt-3 font-display text-xl font-bold leading-snug text-foreground">
             {t.title ?? t.capability}
           </h2>
         </div>
         {t.consequence ? (
-          <p className="mt-1 text-sm text-stone-800 leading-relaxed">
+          <p className="mt-1 text-sm text-foreground leading-relaxed">
             Whoever holds this can {t.consequence}.
           </p>
         ) : (
-          <p className="mt-1 text-sm text-stone-700 leading-relaxed">
+          <p className="mt-1 text-sm text-muted-foreground leading-relaxed">
             This build has no sentence for what {t.capability} opens. The vote and the record below are unaffected.
           </p>
         )}
-        {t.surface && <p className="mt-1 text-sm text-stone-700 leading-relaxed">Where it is used: {t.surface}.</p>}
+        {t.surface && <p className="mt-1 text-sm text-muted-foreground leading-relaxed">Where it is used: {t.surface}.</p>}
 
-        <dl className="mt-4 space-y-3 border-t border-stone-900/10 pt-3 text-sm">
+        <dl className="mt-4 space-y-3 border-t border-border pt-3 text-sm">
           {/* WHO HAS IT TODAY. Null means nobody has taken it on, and the
               scaffolding is carrying it. That is a plain fact about a young
               village and about an old one, and it reads the same for both. */}
           <div>
-            <dt className="text-xs font-semibold uppercase tracking-wide text-stone-600">
+            <dt className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               {crossed ? "Before this vote" : "Who looks after it today"}
             </dt>
-            <dd className="mt-0.5 text-stone-900 leading-relaxed">
+            <dd className="mt-0.5 text-foreground leading-relaxed">
               {t.heldNow && !crossed ? (
                 <>
                   {t.heldNow.roleName ?? t.heldNow.roleId} holds it,{" "}
@@ -184,13 +184,13 @@ function CrossingCard({ ballot, t, fresh }: { ballot: Ballot; t: PowerFacts; fre
           </div>
 
           <div>
-            <dt className="text-xs font-semibold uppercase tracking-wide text-stone-600">
+            <dt className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               {crossed ? "Who looks after it now" : "Who the village is asked to give it to"}
             </dt>
-            <dd className="mt-0.5 text-stone-900 leading-relaxed">
+            <dd className="mt-0.5 text-foreground leading-relaxed">
               {toWhom}
               {t.toRoleName === null && (
-                <span className="text-stone-700">
+                <span className="text-muted-foreground">
                   {" "}
                   (this role has been retired since the vote opened, so nobody is seated to act on it)
                 </span>
@@ -202,10 +202,10 @@ function CrossingCard({ ballot, t, fresh }: { ballot: Ballot; t: PowerFacts; fre
               who voted is owed the same words on the day and on the
               anniversary, because those words are what they voted for. */}
           <div>
-            <dt className="text-xs font-semibold uppercase tracking-wide text-stone-600">
+            <dt className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               {crossed ? "What changed that day" : "What changes on the day it crosses"}
             </dt>
-            <dd className="mt-0.5 text-stone-900 leading-relaxed">
+            <dd className="mt-0.5 text-foreground leading-relaxed">
               {catalyst.aNameCap} who is not seated in {toWhom} stops passing this gate by being {catalyst.aName}. They
               can still act on it, and every time they do, the village is told and the act goes on the village's own
               record. Handing it back is the same kind of act, in the open.
@@ -217,7 +217,7 @@ function CrossingCard({ ballot, t, fresh }: { ballot: Ballot; t: PowerFacts; fre
             four things the harm metric asks for, each read from something
             that was written down. */}
         {crossed && (
-          <p className="mt-4 rounded-lg border border-sage/40 bg-white/60 px-4 py-3 text-sm text-stone-900 leading-relaxed">
+          <p className="mt-4 rounded-lg border border-open/40 bg-card/60 px-4 py-3 text-sm text-foreground leading-relaxed">
             {toWhom} has looked after this since {crossedOn ?? "the day this vote closed"}, by a vote of the whole
             village{ballot.closedBy ? `, closed by ${ballot.closedBy}` : ""}.
             {ballot.outcomeNote ? ` The village's words on it: ${ballot.outcomeNote}` : ""}
@@ -230,7 +230,7 @@ function CrossingCard({ ballot, t, fresh }: { ballot: Ballot; t: PowerFacts; fre
             reachable from this component, so the shape of the record is what
             says it: a carried ballot with no crossing row against its id. */}
         {!open && !crossed && ballot.status === "passed" && (
-          <p className="mt-4 rounded-lg border border-stone-300 bg-white px-4 py-3 text-sm text-stone-900 leading-relaxed">
+          <p className="mt-4 rounded-lg border border-border bg-card px-4 py-3 text-sm text-foreground leading-relaxed">
             The village said yes, and this power has not moved. Nothing is lost: the ask stands on the record with
             every word and every vote, and it can be taken up again.
             {t.roleCarriesIt
@@ -244,7 +244,7 @@ function CrossingCard({ ballot, t, fresh }: { ballot: Ballot; t: PowerFacts; fre
             only be reached by a key that stopped being movable while a vote
             was running. */}
         {!t.movable && (
-          <p className="mt-4 rounded-lg border border-stone-300 bg-white px-4 py-3 text-sm text-stone-900 leading-relaxed">
+          <p className="mt-4 rounded-lg border border-border bg-card px-4 py-3 text-sm text-foreground leading-relaxed">
             This platform does not move {t.capability}. A vote here records what the village wants, and the power
             stays where it is until the platform can carry it across.
           </p>
@@ -285,41 +285,41 @@ function GrantCard({ ballot, t }: { ballot: Ballot; t: PowerFacts }) {
   const toWhom = t.toRoleName ?? t.toRoleId;
 
   return (
-    <section className="relative overflow-hidden rounded-xl border-2 border-stone-200 bg-cream p-5">
+    <section className="relative overflow-hidden rounded-xl border-2 border-border bg-muted p-5">
       <div className="relative">
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-stone-900/5 px-3 py-1 text-xs font-bold uppercase tracking-wide text-stone-700">
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-3 py-1 text-xs font-bold uppercase tracking-wide text-muted-foreground">
           <KeyRound className="w-3.5 h-3.5" aria-hidden="true" />
           {open ? "The village is asked" : "A power for a role"}
         </span>
 
-        <h2 className="mt-3 font-display text-xl font-bold leading-snug text-stone-900">
+        <h2 className="mt-3 font-display text-xl font-bold leading-snug text-foreground">
           {t.title ?? t.capability}
         </h2>
 
         {t.consequence ? (
-          <p className="mt-1 text-sm text-stone-800 leading-relaxed">
+          <p className="mt-1 text-sm text-foreground leading-relaxed">
             Whoever carries this can {t.consequence}.
           </p>
         ) : (
-          <p className="mt-1 text-sm text-stone-700 leading-relaxed">
+          <p className="mt-1 text-sm text-muted-foreground leading-relaxed">
             This build has no sentence for what {t.capability} opens. The vote and the record below are unaffected.
           </p>
         )}
-        {t.surface && <p className="mt-1 text-sm text-stone-700 leading-relaxed">Where it is used: {t.surface}.</p>}
+        {t.surface && <p className="mt-1 text-sm text-muted-foreground leading-relaxed">Where it is used: {t.surface}.</p>}
 
-        <dl className="mt-4 space-y-3 border-t border-stone-900/10 pt-3 text-sm">
+        <dl className="mt-4 space-y-3 border-t border-border pt-3 text-sm">
           <div>
             {/* The tense follows the vote. A carried grant reading "who the
                 village is asked to give it to" over a row that already says
                 "what changed" is the page describing two different moments in
                 one card, which a screenshot caught and no gate could. */}
-            <dt className="text-xs font-semibold uppercase tracking-wide text-stone-600">
+            <dt className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               {carried ? "Who carries it now" : "Who the village is asked to give it to"}
             </dt>
-            <dd className="mt-0.5 text-stone-900 leading-relaxed">
+            <dd className="mt-0.5 text-foreground leading-relaxed">
               {toWhom}
               {t.toRoleName === null && (
-                <span className="text-stone-700">
+                <span className="text-muted-foreground">
                   {" "}
                   (this role has been retired since the vote opened, so nobody is seated to act on it)
                 </span>
@@ -332,10 +332,10 @@ function GrantCard({ ballot, t }: { ballot: Ballot; t: PowerFacts }) {
               village reading these two on consecutive days must be able to
               tell what each one changed. */}
           <div>
-            <dt className="text-xs font-semibold uppercase tracking-wide text-stone-600">
+            <dt className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               {carried ? "What changed" : "What changes if this carries"}
             </dt>
-            <dd className="mt-0.5 text-stone-900 leading-relaxed">
+            <dd className="mt-0.5 text-foreground leading-relaxed">
               Anybody seated in {toWhom} can do this. The admin panel keeps it too, so {catalyst.aName} can still do
               it and nothing about that changes here.
             </dd>
@@ -345,8 +345,8 @@ function GrantCard({ ballot, t }: { ballot: Ballot; t: PowerFacts }) {
               as a next step the village owes anybody. A grant that stands on
               its own forever is a whole answer. */}
           <div>
-            <dt className="text-xs font-semibold uppercase tracking-wide text-stone-600">Why this comes first</dt>
-            <dd className="mt-0.5 text-stone-900 leading-relaxed">
+            <dt className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Why this comes first</dt>
+            <dd className="mt-0.5 text-foreground leading-relaxed">
               A role has to carry a power before the village can vote to hold it, because a holder that cannot act is
               not a holder. The village can go on to ask to hold this one, and it can leave it here. Both are whole
               answers.
@@ -358,7 +358,7 @@ function GrantCard({ ballot, t }: { ballot: Ballot; t: PowerFacts }) {
             grant leaves, so a carried vote reads its answer off that and never
             off the vote's own outcome. */}
         {carried && t.roleCarriesIt && (
-          <p className="mt-4 rounded-lg border border-stone-300 bg-white px-4 py-3 text-sm text-stone-900 leading-relaxed">
+          <p className="mt-4 rounded-lg border border-border bg-card px-4 py-3 text-sm text-foreground leading-relaxed">
             {toWhom} carries this today, by a vote of the whole village
             {ballot.closedBy ? `, closed by ${ballot.closedBy}` : ""}.
             {ballot.outcomeNote ? ` The village's words on it: ${ballot.outcomeNote}` : ""}
@@ -368,7 +368,7 @@ function GrantCard({ ballot, t }: { ballot: Ballot; t: PowerFacts }) {
         {/* IT CARRIED AND THE POWER IS NOT ON THE ROLE. The state a card must
             never paper over, and the honest reading of the same one fact. */}
         {carried && !t.roleCarriesIt && (
-          <p className="mt-4 rounded-lg border border-stone-300 bg-white px-4 py-3 text-sm text-stone-900 leading-relaxed">
+          <p className="mt-4 rounded-lg border border-border bg-card px-4 py-3 text-sm text-foreground leading-relaxed">
             The village said yes, and {toWhom} does not carry this today. Nothing is lost: the ask stands on the
             record with every word and every vote, and it can be taken up again.
           </p>
@@ -402,34 +402,34 @@ function ReturnCard({ ballot, t }: { ballot: Ballot; t: PowerFacts }) {
   const stillHeld = t.heldNow !== null;
 
   return (
-    <section className="relative overflow-hidden rounded-xl border-2 border-stone-200 bg-cream p-5">
+    <section className="relative overflow-hidden rounded-xl border-2 border-border bg-muted p-5">
       <div className="relative">
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-stone-900/5 px-3 py-1 text-xs font-bold uppercase tracking-wide text-stone-700">
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-3 py-1 text-xs font-bold uppercase tracking-wide text-muted-foreground">
           <Undo2 className="w-3.5 h-3.5" aria-hidden="true" />
           {open ? "The village asks to hand this back" : "A power handed back"}
         </span>
 
-        <h2 className="mt-3 font-display text-xl font-bold leading-snug text-stone-900">
+        <h2 className="mt-3 font-display text-xl font-bold leading-snug text-foreground">
           {t.title ?? t.capability}
         </h2>
 
         {t.consequence ? (
-          <p className="mt-1 text-sm text-stone-800 leading-relaxed">
+          <p className="mt-1 text-sm text-foreground leading-relaxed">
             Whoever holds this can {t.consequence}.
           </p>
         ) : (
-          <p className="mt-1 text-sm text-stone-700 leading-relaxed">
+          <p className="mt-1 text-sm text-muted-foreground leading-relaxed">
             This build has no sentence for what {t.capability} opens. The vote and the record below are unaffected.
           </p>
         )}
-        {t.surface && <p className="mt-1 text-sm text-stone-700 leading-relaxed">Where it is used: {t.surface}.</p>}
+        {t.surface && <p className="mt-1 text-sm text-muted-foreground leading-relaxed">Where it is used: {t.surface}.</p>}
 
-        <dl className="mt-4 space-y-3 border-t border-stone-900/10 pt-3 text-sm">
+        <dl className="mt-4 space-y-3 border-t border-border pt-3 text-sm">
           <div>
-            <dt className="text-xs font-semibold uppercase tracking-wide text-stone-600">
+            <dt className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               {carried && !stillHeld ? "Who looked after it" : "Who looks after it today"}
             </dt>
-            <dd className="mt-0.5 text-stone-900 leading-relaxed">
+            <dd className="mt-0.5 text-foreground leading-relaxed">
               {t.heldNow ? (
                 <>
                   {t.heldNow.roleName ?? t.heldNow.roleId},{" "}
@@ -443,10 +443,10 @@ function ReturnCard({ ballot, t }: { ballot: Ballot; t: PowerFacts }) {
           </div>
 
           <div>
-            <dt className="text-xs font-semibold uppercase tracking-wide text-stone-600">
+            <dt className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               {carried ? "What changed" : "What changes if this carries"}
             </dt>
-            <dd className="mt-0.5 text-stone-900 leading-relaxed">
+            <dd className="mt-0.5 text-foreground leading-relaxed">
               The admin panel carries this one again. {catalyst.aNameCap} passes this gate by being {catalyst.aName},
               and the village stops being told each time somebody acts on it. The role keeps the power itself, so the
               same people can still do it. What ends is the village holding it.
@@ -458,8 +458,8 @@ function ReturnCard({ ballot, t }: { ballot: Ballot; t: PowerFacts }) {
               again" on the way out is governing. It states the mechanism and
               asks the village for nothing. */}
           <div>
-            <dt className="text-xs font-semibold uppercase tracking-wide text-stone-600">And afterwards</dt>
-            <dd className="mt-0.5 text-stone-900 leading-relaxed">
+            <dt className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">And afterwards</dt>
+            <dd className="mt-0.5 text-foreground leading-relaxed">
               The village can ask for this one again whenever it wants to, on the same ceremony it used the first
               time. Handing a power back is one of the ordinary things a village does with a power.
             </dd>
@@ -467,7 +467,7 @@ function ReturnCard({ ballot, t }: { ballot: Ballot; t: PowerFacts }) {
         </dl>
 
         {carried && !stillHeld && (
-          <p className="mt-4 rounded-lg border border-stone-300 bg-white px-4 py-3 text-sm text-stone-900 leading-relaxed">
+          <p className="mt-4 rounded-lg border border-border bg-card px-4 py-3 text-sm text-foreground leading-relaxed">
             The admin panel has carried this one since this vote closed, by a decision of the whole village
             {ballot.closedBy ? `, closed by ${ballot.closedBy}` : ""}.
             {ballot.outcomeNote ? ` The village's words on it: ${ballot.outcomeNote}` : ""}
@@ -478,7 +478,7 @@ function ReturnCard({ ballot, t }: { ballot: Ballot; t: PowerFacts }) {
             transfer landed between this vote opening and closing, so the row
             the executor deleted was written again by something else. */}
         {carried && stillHeld && (
-          <p className="mt-4 rounded-lg border border-stone-300 bg-white px-4 py-3 text-sm text-stone-900 leading-relaxed">
+          <p className="mt-4 rounded-lg border border-border bg-card px-4 py-3 text-sm text-foreground leading-relaxed">
             The village said yes, and this village is holding this one today. The holding above is the live record,
             and this ask stands on the record beside it with every word and every vote.
           </p>

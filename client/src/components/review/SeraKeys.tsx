@@ -47,7 +47,7 @@ export function useKeysToggle(): [boolean, (on: boolean) => void] {
 export function KeysToggle({ on, set }: { on: boolean; set: (on: boolean) => void }) {
   return (
     <label className="hidden md:flex ml-auto items-center gap-2 min-h-[44px] text-sm text-muted-foreground cursor-pointer">
-      <input type="checkbox" data-keys-toggle checked={on} onChange={(e) => set(e.target.checked)} className="w-[18px] h-[18px] accent-teal-deep" />
+      <input type="checkbox" data-keys-toggle checked={on} onChange={(e) => set(e.target.checked)} className="w-[18px] h-[18px] accent-notice" />
       <Trans context="sera answers">Keyboard keys</Trans>
     </label>
   );
