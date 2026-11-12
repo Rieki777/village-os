@@ -13302,3 +13302,203 @@ msgstr "Parte de este trabajo se abre a medida que recorres el {ladder} o asumes
 msgctxt "open work: the lead card for a visitor"
 msgid "A good place to start"
 msgstr "Un buen lugar para empezar"
+
+#: client/src/components/QuestCard.tsx
+msgctxt "open work card: the quest's size beside the reader's own percent"
+msgid "Fits what you can give"
+msgstr "Encaja con lo que puedes dar"
+
+#: client/src/components/QuestCard.tsx
+msgctxt "open work card: the quest asks less than the reader can give"
+msgid "Easier"
+msgstr "Más ligera"
+
+#: client/src/components/QuestCard.tsx
+msgctxt "open work card: the quest asks more than the reader can give"
+msgid "Harder"
+msgstr "Más exigente"
+
+#: client/src/components/QuestCard.tsx
+msgctxt "open work card: how much of a person the quest asks"
+msgid "{commitment}% of you"
+msgstr "{commitment}% de ti"
+
+#: client/src/components/admin/QuestsTab.tsx
+msgctxt "admin quests: the percent of a person a quest asks"
+msgid "Commitment it asks (%)"
+msgstr "Compromiso que pide (%)"
+
+#: client/src/components/admin/QuestsTab.tsx
+msgctxt "admin quests: the commitment field placeholder"
+msgid "1 to 100"
+msgstr "De 1 a 100"
+
+#: client/src/components/roleEdit/RoleEditor.tsx
+msgctxt "role editor"
+msgid "Commitment it asks"
+msgstr "Compromiso que pide"
+
+#: client/src/components/roleEdit/RoleEditor.tsx
+msgctxt "role editor"
+msgid "Commitment it asks, in percent"
+msgstr "Compromiso que pide, en porcentaje"
+
+#: client/src/components/roleEdit/RoleEditor.tsx
+msgctxt "role editor"
+msgid "Is the whole commitment needed"
+msgstr "¿Hace falta todo el compromiso?"
+
+#: client/src/components/roleEdit/RoleEditor.tsx
+msgctxt "role editor: commitment"
+msgid "Flexible: less can work"
+msgstr "Flexible: con menos también funciona"
+
+#: client/src/components/roleEdit/RoleEditor.tsx
+msgctxt "role editor: commitment"
+msgid "Required: the role needs all of it"
+msgstr "Obligatorio: el rol lo necesita todo"
+
+#: client/src/components/roleEdit/RoleEditor.tsx
+msgctxt "role editor"
+msgid "A required role is hidden from members who say they can give less. Nothing that pays reads this."
+msgstr "Un rol obligatorio se oculta a quienes dicen que pueden dar menos. Nada que pague lee este dato."
+
+#: client/src/pages/Quests.tsx
+msgctxt "open work filter: quests that ask a quarter of a person or less"
+msgid "Light, up to 25%"
+msgstr "Ligera, hasta 25%"
+
+#: client/src/pages/Quests.tsx
+msgctxt "open work filter: quests that ask between a quarter and most of a person"
+msgid "Medium, 26 to 60%"
+msgstr "Media, de 26 a 60%"
+
+#: client/src/pages/Quests.tsx
+msgctxt "open work filter: quests that ask most of a person"
+msgid "Heavy, over 60%"
+msgstr "Exigente, más de 60%"
+
+#: client/src/pages/Quests.tsx
+msgctxt "open work filter row"
+msgid "Size, easier to harder"
+msgstr "Tamaño, de más ligera a más exigente"
+
+#: client/src/pages/Quests.tsx
+msgctxt "open work filter: every size"
+msgid "Any size"
+msgstr "Cualquier tamaño"
+
+#: client/src/pages/Quests.tsx
+msgctxt "open work: the board is ordered for the reader"
+msgid "Ordered by how well each fits the {memberPct}% you can give now."
+msgstr "Ordenadas según cuánto encaja cada una con el {memberPct}% que puedes dar ahora."
+
+#: client/src/pages/Quests.tsx
+msgctxt "open work: invite the reader to say their percent"
+msgid "Say how much you can give on your profile, and the work that fits comes first."
+msgstr "Di en tu perfil cuánto puedes dar, y el trabajo que encaja aparecerá primero."
+
+#: client/src/pages/Quests.tsx
+msgctxt "open work: change your percent"
+msgid "Change it"
+msgstr "Cambiarlo"
+
+#: client/src/pages/Quests.tsx
+msgctxt "open work: say your percent"
+msgid "Say it"
+msgstr "Decirlo"
+
+#: client/src/pages/Quests.tsx
+msgctxt "open work: the goal thread, none"
+msgid "No open quests grow this yet. Suggest one you feel this village is missing."
+msgstr "Todavía ninguna misión abierta hace crecer esto. Sugiere una que sientas que le falta a esta aldea."
+
+#: client/src/pages/Quests.tsx
+msgctxt "open work: the goal thread, none, the one door"
+msgid "Suggest a quest"
+msgstr "Sugerir una misión"
+
+#: client/src/pages/Roles.tsx
+msgctxt "roles page: required roles beyond the reader's percent, one"
+msgid "1 role needs more time than you have right now."
+msgstr "1 rol necesita más tiempo del que tienes ahora."
+
+#: client/src/pages/Roles.tsx
+msgctxt "roles page: required roles beyond the reader's percent, several"
+msgid "{beyondCount} roles need more time than you have right now."
+msgstr "{beyondCount} roles necesitan más tiempo del que tienes ahora."
+
+#: client/src/pages/Roles.tsx
+msgctxt "roles page: hide the roles beyond the reader's percent"
+msgid "Hide them again"
+msgstr "Ocultarlos otra vez"
+
+#: client/src/pages/Roles.tsx
+msgctxt "roles page: show the roles beyond the reader's percent"
+msgid "Show them anyway"
+msgstr "Mostrarlos de todos modos"
+
+#: client/src/components/commitment/CommitmentField.tsx
+msgctxt "commitment field: the period a member's word covers"
+msgid "This season"
+msgstr "Esta temporada"
+
+#: client/src/components/commitment/CommitmentField.tsx
+msgctxt "commitment field: the period a member's word covers"
+msgid "This moon"
+msgstr "Esta luna"
+
+#: client/src/components/commitment/CommitmentField.tsx
+msgctxt "commitment field: the period a member's word covers"
+msgid "This week"
+msgstr "Esta semana"
+
+#: client/src/components/commitment/CommitmentField.tsx
+msgctxt "commitment field: after saving"
+msgid "Saved. The open work and roles now fit this."
+msgstr "Guardado. El trabajo abierto y los roles ya se ajustan a esto."
+
+#: client/src/components/commitment/CommitmentField.tsx
+msgctxt "commitment field: heading"
+msgid "How much can you give right now?"
+msgstr "¿Cuánto puedes dar ahora mismo?"
+
+#: client/src/components/commitment/CommitmentField.tsx
+msgctxt "commitment field: what holds now"
+msgid "You said {nowPct}% from {nowFrom}. Change it whenever life changes."
+msgstr "Dijiste {nowPct}% desde {nowFrom}. Cámbialo cuando la vida cambie."
+
+#: client/src/components/commitment/CommitmentField.tsx
+msgctxt "commitment field: before a first word"
+msgid "Say it as a percent of yourself. The open work and the roles you see will fit it. Only you see this."
+msgstr "Dilo como un porcentaje de ti. El trabajo abierto y los roles que ves se ajustarán a ello. Solo tú lo ves."
+
+#: client/src/components/commitment/CommitmentField.tsx
+msgctxt "commitment field"
+msgid "Percent you can give"
+msgstr "Porcentaje que puedes dar"
+
+#: client/src/components/commitment/CommitmentField.tsx
+msgctxt "commitment field"
+msgid "The time this covers"
+msgstr "El tiempo que abarca"
+
+#: client/src/components/commitment/CommitmentField.tsx
+msgctxt "commitment field"
+msgid "A note for yourself (optional)"
+msgstr "Una nota para ti (opcional)"
+
+#: client/src/components/commitment/CommitmentField.tsx
+msgctxt "commitment field"
+msgid "Save"
+msgstr "Guardar"
+
+#: client/src/components/commitment/CommitmentField.tsx
+msgctxt "commitment field: the history"
+msgid "What you said before"
+msgstr "Lo que dijiste antes"
+
+#: client/src/components/commitment/CommitmentField.tsx
+msgctxt "commitment field: one earlier word"
+msgid "{pct}% from {from}, {period}"
+msgstr "{pct}% desde {from}, {period}"

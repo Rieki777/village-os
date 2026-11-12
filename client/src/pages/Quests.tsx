@@ -8,6 +8,7 @@ import {
   Calendar,
   Compass,
   Filter,
+  Gauge,
   Heart,
   Lightbulb,
   Sparkles,
@@ -44,6 +45,8 @@ import { goalOf, QUEST_PLACES } from "@shared/questThreads";
 import FitsYouCard from "@/components/openWork/FitsYouCard";
 import { usePlaceWords } from "@/components/openWork/placeWords";
 import { useQuestGoals } from "@/components/openWork/useQuestGoals";
+import { useMyCommitment } from "@/lib/useMyCommitment";
+import { orderByFit, questSizeOf, QUEST_SIZES, type QuestSize } from "@shared/commitment";
 
 /*
  * The bare "?" is a 16px circle set inside a sentence. Its button's own box is
@@ -102,9 +105,13 @@ export default function Quests() {
   const search = useSearch();
   const [activeGoal, setActiveGoal] = useState<string>(() => new URLSearchParams(search).get("goal") || "All");
   const [activePlace, setActivePlace] = useState<string>("All");
+  // Size (0383): easier to harder, by the percent of a person each quest asks.
+  const [activeSize, setActiveSize] = useState<QuestSize | "All">("All");
   const goals = useQuestGoals();
   const placeWords = usePlaceWords();
   const { user } = useAuth();
+  // What this member says they can give now (0383). It orders the board for them alone; it never ranks people.
+  const memberPct = useMyCommitment(!!user).pct;
   /*
    * WHAT HAPPENS TO THE VALUE TOKEN, IN THE FOUNDER'S OWN WORDS.
    *
@@ -180,7 +187,7 @@ export default function Quests() {
     difficulty: activeDifficulty,
     goal: activeGoal,
     place: activePlace,
-  });
+  }).filter((q) => activeSize === "All" || questSizeOf(q.commitmentPct) === activeSize);
   // The roots filter reads the WHOLE board, so "is anything tagged" is a fact
   // about the village and never about whichever circle chip is pressed.
   const byRoots = roots.apply(quests, (q) => q.archetypes);
@@ -193,7 +200,17 @@ export default function Quests() {
 
   // The open work list, grouped by circle (decision 5): circles in board order,
   // quests in board order inside each. Nothing is ranked by who did what.
-  const groups = useMemo(() => groupByCircle(filtered), [filtered]);
+  // Inside each circle, the quests that fit what the member can give come first (0383); with no word, board order.
+  const groups = useMemo(
+    () => groupByCircle(filtered).map((g) => ({ ...g, quests: orderByFit(g.quests, (q) => q.commitmentPct, memberPct) })),
+    [filtered, memberPct],
+  );
+  const sizesUsed = QUEST_SIZES.filter((z) => quests.some((q) => questSizeOf(q.commitmentPct) === z));
+  const sizeWords: Record<QuestSize, string> = {
+    light: t({ message: "Light, up to 25%", context: "open work filter: quests that ask a quarter of a person or less" }),
+    medium: t({ message: "Medium, 26 to 60%", context: "open work filter: quests that ask between a quarter and most of a person" }),
+    heavy: t({ message: "Heavy, over 60%", context: "open work filter: quests that ask most of a person" }),
+  };
 
   // The season goals the board can filter by: this season's goals that any
   // quest grows. The counts beside them are the village's (open quests), never a person's.
@@ -216,9 +233,9 @@ export default function Quests() {
   const rootsKey = roots.mine.join(",");
   const openGoalIds = goalList.filter((g) => !g.done).map((g) => g.id);
   const lead = useMemo(
-    () => (quests.length ? leadQuestFor(quests, claimList, roots.mine, openGoalIds) : null),
+    () => (quests.length ? leadQuestFor(quests, claimList, roots.mine, openGoalIds, memberPct) : null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [quests, claimList, rootsKey, openGoalIds.join(",")],
+    [quests, claimList, rootsKey, openGoalIds.join(","), memberPct],
   );
   const goalFor = (q: BoardQuest) => goalOf(q.goalId, goalList);
   const now = new Date();
@@ -378,7 +395,7 @@ export default function Quests() {
       {/* The season goal and the place, the two filters goal threads add
           (decision 5). Right under the sticky bar and outside it, so a phone
           keeps its slim sticky row. */}
-      {(threadedGoals.length > 0 || placesUsed.length > 0 || activeGoal !== "All") && (
+      {(threadedGoals.length > 0 || placesUsed.length > 0 || sizesUsed.length > 0 || activeGoal !== "All") && (
         <section className="pt-6 bg-background" aria-label={t({ message: "Filter by season goal and place", context: "open work filters" })}>
           <div className="container max-w-7xl space-y-1">
             {(threadedGoals.length > 0 || activeGoal !== "All") && (
@@ -418,6 +435,35 @@ export default function Quests() {
                   </button>
                 ))}
               </div>
+            )}
+            {sizesUsed.length > 0 && (
+              <div className="flex gap-2 items-center overflow-x-auto flex-nowrap" data-scroll-contain role="group" aria-label={t({ message: "Size, easier to harder", context: "open work filter row" })}>
+                <Gauge className="w-4 h-4 text-muted-foreground flex-shrink-0" aria-hidden="true" />
+                {(["All", ...sizesUsed] as const).map((z) => (
+                  <button
+                    key={z}
+                    type="button"
+                    aria-pressed={activeSize === z}
+                    data-size-filter={z}
+                    onClick={() => setActiveSize(z)}
+                    className={`px-3 min-h-[44px] min-w-[44px] inline-flex items-center justify-center whitespace-nowrap flex-shrink-0 rounded-full text-xs font-medium transition-colors ${
+                      activeSize === z ? "bg-open text-background" : "bg-muted text-muted-foreground hover:bg-muted/80"
+                    }`}
+                  >
+                    {z === "All" ? t({ message: "Any size", context: "open work filter: every size" }) : sizeWords[z]}
+                  </button>
+                ))}
+              </div>
+            )}
+            {user && (
+              <p className="pt-1 text-xs text-muted-foreground" data-member-pct={memberPct ?? ""}>
+                {memberPct !== null
+                  ? t({ message: `Ordered by how well each fits the ${memberPct}% you can give now.`, context: "open work: the board is ordered for the reader" })
+                  : t({ message: "Say how much you can give on your profile, and the work that fits comes first.", context: "open work: invite the reader to say their percent" })}{" "}
+                <Link href="/profile" className="min-h-11 font-medium text-notice underline underline-offset-2 hover:text-foreground">
+                  {memberPct !== null ? t({ message: "Change it", context: "open work: change your percent" }) : t({ message: "Say it", context: "open work: say your percent" })}
+                </Link>
+              </p>
             )}
           </div>
         </section>
@@ -486,11 +532,17 @@ export default function Quests() {
               <Target className="w-5 h-5 text-open" aria-hidden="true" />
               <p className="font-display text-xl font-bold text-foreground">
                 {chosenGoal.openQuests === 0
-                  ? t({ message: `No open quests grow ${goalName} yet`, context: "open work: the goal thread, none" })
+                  ? t({ message: "No open quests grow this yet. Suggest one you feel this village is missing.", context: "open work: the goal thread, none" })
                   : chosenGoal.openQuests === 1
                     ? t({ message: `1 open quest grows ${goalName}`, context: "open work: the goal thread, one" })
                     : t({ message: `${goalCount} open quests grow ${goalName}`, context: "open work: the goal thread, several" })}
               </p>
+              {chosenGoal.openQuests === 0 && (
+                <Link href="/propose-quest" className={BTN_PRIMARY} data-suggest-for-goal={chosenGoal.id}>
+                  {t({ message: "Suggest a quest", context: "open work: the goal thread, none, the one door" })}
+                  <ArrowRight className="w-4 h-4" aria-hidden="true" />
+                </Link>
+              )}
               <button
                 type="button"
                 onClick={() => setActiveGoal("All")}
@@ -530,6 +582,7 @@ export default function Quests() {
                         stages={stages}
                         goal={goalFor(quest)}
                         priority={gi === 0 && index === 0}
+                        memberPct={memberPct}
                       />
                     </m.div>
                   ))}
@@ -577,6 +630,7 @@ export default function Quests() {
                     setActiveDifficulty("All");
                     setActiveGoal("All");
                     setActivePlace("All");
+                    setActiveSize("All");
                   },
                 }}
                 className="max-w-3xl mx-auto mb-16 justify-center"

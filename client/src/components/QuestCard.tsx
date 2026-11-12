@@ -29,7 +29,8 @@ import { PlantGlyph } from "@/components/openWork/StatusMark";
 import { useStatusWords } from "@/components/openWork/statusWords";
 import { usePlaceWords } from "@/components/openWork/placeWords";
 import { useLingui } from "@lingui/react/macro";
-import { MapPin, Target } from "lucide-react";
+import { Gauge, MapPin, Target } from "lucide-react";
+import { questFit, type QuestFit } from "@shared/commitment";
 
 export const QUEST_ICONS: Record<string, React.ElementType> = {
   Users, Sprout, ChefHat, TreePine, BookOpen, Home, Camera, Baby, Laptop,
@@ -116,6 +117,7 @@ export default function QuestCard({
   stages,
   goal = null,
   priority = false,
+  memberPct = null,
 }: {
   quest: BoardQuest;
   claim?: QuestClaim;
@@ -124,6 +126,8 @@ export default function QuestCard({
   /** The season goal this quest grows, when the season still holds it (goal threads, decision 5). */
   goal?: { id: string; text: string } | null;
   priority?: boolean;
+  /** What the reader says they can give now (0383), or null. The card says whether the quest fits it, for them alone. */
+  memberPct?: number | null;
 }) {
   const { t } = useLingui();
   const Icon = iconFor(quest.icon);
@@ -136,6 +140,13 @@ export default function QuestCard({
   const placeWords = usePlaceWords();
   const chip = claim && claim.status !== "declined" ? CLAIM_CHIP[claim.status] : null;
   const gate = gateLabel(quest, stages);
+  const commitment = typeof quest.commitmentPct === "number" ? quest.commitmentPct : null;
+  const fit = questFit(commitment, memberPct);
+  const fitWords: Record<QuestFit, string> = {
+    fits: t({ message: "Fits what you can give", context: "open work card: the quest's size beside the reader's own percent" }),
+    easier: t({ message: "Easier", context: "open work card: the quest asks less than the reader can give" }),
+    harder: t({ message: "Harder", context: "open work card: the quest asks more than the reader can give" }),
+  };
   const active = signs?.active ?? 0;
   const done = signs?.done ?? 0;
 
@@ -203,6 +214,17 @@ export default function QuestCard({
               <span className="inline-flex items-center gap-1 text-muted-foreground">
                 <Clock className="w-3.5 h-3.5" />
                 {quest.duration}
+              </span>
+            )}
+            {commitment !== null && (
+              <span className="inline-flex items-center gap-1 text-muted-foreground" data-commitment-pct={commitment}>
+                <Gauge className="w-3.5 h-3.5" aria-hidden="true" />
+                {t({ message: `${commitment}% of you`, context: "open work card: how much of a person the quest asks" })}
+              </span>
+            )}
+            {fit && (
+              <span className={`px-2 py-0.5 rounded-full font-medium ${fit === "harder" ? "bg-muted text-muted-foreground" : "bg-open/15 text-open"}`} data-fit={fit}>
+                {fitWords[fit]}
               </span>
             )}
             {quest.place && (

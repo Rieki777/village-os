@@ -43,6 +43,9 @@ interface Form {
   alwaysChecked: boolean;
   /** Who may hold it (0374): "" is a card that has not said, which reads as either. */
   heldBy: "" | HeldBy;
+  /** The commitment the role asks (0383), a percent as typed; "" is not said. */
+  commitmentPct: string;
+  commitmentRequired: boolean;
   recruiting: boolean;
   track: string;
   whereWorked: string;
@@ -69,6 +72,8 @@ function formOf(s: EditorState): Form {
     listed: p.listed ?? true,
     alwaysChecked: p.alwaysChecked ?? false,
     heldBy: p.heldBy ?? "",
+    commitmentPct: typeof p.commitmentPct === "number" ? String(p.commitmentPct) : "",
+    commitmentRequired: p.commitmentRequired ?? false,
     recruiting: p.recruiting ?? false,
     track: p.track ?? "",
     whereWorked: p.whereWorked ?? "",
@@ -95,6 +100,8 @@ function bodyOf(f: Form, s: EditorState): SaveBody {
   if (has("listed")) parameters.listed = f.listed;
   if (has("alwaysChecked")) parameters.alwaysChecked = f.alwaysChecked;
   if (has("heldBy")) parameters.heldBy = f.heldBy || null;
+  if (has("commitmentPct")) parameters.commitmentPct = f.commitmentPct.trim() ? Number(f.commitmentPct) : null;
+  if (has("commitmentRequired")) parameters.commitmentRequired = f.commitmentRequired;
   if (has("track")) parameters.track = f.track || null;
   if (has("whereWorked")) parameters.whereWorked = f.whereWorked || null;
   if (has("languages")) parameters.languages = lines(f.languages);
@@ -289,6 +296,40 @@ export default function RoleEditor({ roleId, onClose, onSaved }: { roleId: strin
                 <option value="either">{t({ message: "A person or an agent", context: "role editor: who can hold a role" })}</option>
               </select>
               <p className="mt-1 text-xs text-muted-foreground"><Trans context="role editor">An agent is proposed by the member who keeps it, and the circle decides by consent, as for a person.</Trans></p>
+            </Frame>
+          )}
+          {has("commitmentPct") && (
+            <Frame label={t({ message: "Commitment it asks", context: "role editor" })} changed={form.commitmentPct !== start.commitmentPct || form.commitmentRequired !== start.commitmentRequired}>
+              <div className="flex flex-wrap items-center gap-3">
+                <label className="flex min-h-[44px] items-center gap-2">
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min={1}
+                    max={100}
+                    step={5}
+                    className={`${INPUT} w-24`}
+                    value={form.commitmentPct}
+                    onChange={(e) => set("commitmentPct", e.target.value)}
+                    aria-label={t({ message: "Commitment it asks, in percent", context: "role editor" })}
+                    data-role-commitment-pct=""
+                  />
+                  <span aria-hidden="true">%</span>
+                </label>
+                {has("commitmentRequired") && (
+                  <select
+                    className={INPUT}
+                    value={form.commitmentRequired ? "required" : "flexible"}
+                    onChange={(e) => set("commitmentRequired", e.target.value === "required")}
+                    aria-label={t({ message: "Is the whole commitment needed", context: "role editor" })}
+                    data-role-commitment-required=""
+                  >
+                    <option value="flexible">{t({ message: "Flexible: less can work", context: "role editor: commitment" })}</option>
+                    <option value="required">{t({ message: "Required: the role needs all of it", context: "role editor: commitment" })}</option>
+                  </select>
+                )}
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground"><Trans context="role editor">A required role is hidden from members who say they can give less. Nothing that pays reads this.</Trans></p>
             </Frame>
           )}
           <Frame label={t({ message: "Door", context: "role editor" })} changed={form.recruiting !== start.recruiting}>

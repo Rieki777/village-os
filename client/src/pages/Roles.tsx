@@ -30,6 +30,8 @@ import { agentProposalHref, proposeRoleHref } from "@/components/roleProposal/Qu
 import { useClassNames } from "@/components/power/useClassNames";
 import { useModule } from "@/modules/ModuleProvider";
 import { useAuth } from "@/contexts/AuthContext";
+import { useMyCommitment } from "@/lib/useMyCommitment";
+import { rolesWithinReach } from "@shared/commitment";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { isSeatState, type SeatStateWord, type SheetContext } from "@shared/roleSheet";
 import { fromOrgSeat, orgHolderName, seasonForSheet, seatHistoryShown } from "@shared/roleSheetInputs";
@@ -429,6 +431,9 @@ export default function Roles() {
   // Who may say what a seat is held for. The server refuses everybody else by
   // itself; this only decides whether the control is drawn.
   const { user } = useAuth();
+  // What this member says they can give now (0383): a role that needs more than that, and says it is required, waits behind one press.
+  const memberPct = useMyCommitment(!!user).pct;
+  const [showBeyond, setShowBeyond] = useState(false);
   const { t } = useLingui();
   const canTagNeeds = !!user && (user.role === "admin" || user.role === "founder");
   // "Show only what matches my roots": the same filter and rule the quests board runs.
@@ -544,7 +549,11 @@ export default function Roles() {
   // The roots filter hides only roles tagged with none of the reader's roots; a linked seat always shows.
   const byRoots = roots.apply(listedDirectory, (r) => (Array.isArray(r.raw?.archetypes) ? r.raw.archetypes : []));
   const rootKept = new Set(byRoots.shown.map((r) => r.id));
-  const directory = listedDirectory.filter((r) => r.id === linked || rootKept.has(r.id));
+  const rooted = listedDirectory.filter((r) => r.id === linked || rootKept.has(r.id));
+  // Filters work for the reader alone, never ranks anyone. A linked seat always shows.
+  const reach = rolesWithinReach(rooted, (r) => ({ commitmentPct: r.raw?.card?.commitmentPct ?? null, commitmentRequired: r.raw?.card?.commitmentRequired === true }), memberPct);
+  const beyondCount = reach.beyond.filter((r) => r.id !== linked).length;
+  const directory = showBeyond ? rooted : rooted.filter((r) => r.id === linked || !reach.beyond.includes(r));
   const rootsOffered = roots.available && byRoots.tagged;
   const groups: { title: string; subtitle: string; circleId: string | null; roles: RoleEntry[] }[] = [];
   for (const role of directory) {
@@ -676,7 +685,20 @@ export default function Roles() {
             {/* "Show only what matches my roots", offered only when some role carries roots. */}
             {rootsOffered && (
               <div className="mb-8">
-                <RootsFilterToggle filter={roots} total={listedDirectory.length} shown={directory.length} noun="roles" />
+                <RootsFilterToggle filter={roots} total={listedDirectory.length} shown={rooted.length} noun="roles" />
+              </div>
+            )}
+            {/* 0383: required roles that ask more than the reader can give now, held back with one door to show them. */}
+            {beyondCount > 0 && (
+              <div className="mb-8 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-border bg-card px-4 py-2 text-sm text-foreground" data-roles-beyond={beyondCount}>
+                <span>
+                  {beyondCount === 1
+                    ? t({ message: "1 role needs more time than you have right now.", context: "roles page: required roles beyond the reader's percent, one" })
+                    : t({ message: `${beyondCount} roles need more time than you have right now.`, context: "roles page: required roles beyond the reader's percent, several" })}
+                </span>
+                <button type="button" className="min-h-11 font-medium text-notice underline underline-offset-2 hover:text-foreground" onClick={() => setShowBeyond((v) => !v)} aria-pressed={showBeyond}>
+                  {showBeyond ? t({ message: "Hide them again", context: "roles page: hide the roles beyond the reader's percent" }) : t({ message: "Show them anyway", context: "roles page: show the roles beyond the reader's percent" })}
+                </button>
               </div>
             )}
             {/* The admin view: only a reader the server sent unlisted roles to has anything to switch on. */}
