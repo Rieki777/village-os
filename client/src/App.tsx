@@ -3,6 +3,8 @@ import { Toaster } from "@/components/ui/sonner";
 import BreakGlass from "@/components/BreakGlass";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
+import QuietLoading from "@/components/natural/QuietLoading";
+import { useLingui } from "@lingui/react/macro";
 import { Redirect, Route, Switch, useLocation } from "wouter";
 import { LazyMotion, MotionConfig } from "framer-motion";
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
@@ -258,21 +260,23 @@ const SessionRoom = lazyPage(() => import("./pages/SessionRoom"));
 const SessionSeason = lazyPage(() => import("./pages/SessionSeason"));
 
 /**
- * Shown while a page chunk arrives. Deliberately quiet: on a slow link this
- * appears for a second or two, and a spinner that shouts is worse than one
- * that waits. `min-h` holds the viewport so the footer does not jump up and
- * back down as the chunk lands.
+ * Shown while a page chunk arrives: the breathing leaf and a few words
+ * (components/natural/QuietLoading), never a spinning ring. Deliberately
+ * quiet: on a slow link this appears for a second or two. `min-h` holds the
+ * viewport so the footer does not jump up and back down as the chunk lands.
+ *
+ * It stands on the night ground (`world`), where nearly every member page
+ * now arrives, so a page does not flash light and then go dark as it lands.
+ *
+ * Two forms, because the first one shows BEFORE the language is known
+ * (LocaleRoot's own fallback, where no catalog is loaded and useLingui has no
+ * provider): that one says "Loading page" in the source language, as the old
+ * ring's hidden label did. Every later wait is inside the provider and speaks
+ * the visitor's language.
  */
 function PageLoading() {
-  return (
-    <div className="flex min-h-[60vh] items-center justify-center" role="status" aria-live="polite">
-      <span className="sr-only">Loading page</span>
-      <div
-        aria-hidden="true"
-        className="h-8 w-8 animate-spin rounded-full border-2 border-muted border-t-foreground/60"
-      />
-    </div>
-  );
+  const { t } = useLingui();
+  return <QuietLoading world label={t({ message: "Gathering your page", context: "loading: a page is on its way" })} />;
 }
 
 function Router() {
@@ -406,6 +410,9 @@ function Router() {
       <Route path="/good-neighbor" component={GoodNeighbor} />
       <Route path="/steward-rights" component={StewardRights} />
       <Route path="/resident-rights" component={ResidentRights} />
+      {/* One training page per track, each with its own words in Admin, Pages; /training chooses between them. */}
+      <Route path="/training/steward">{() => <Training track="steward" />}</Route>
+      <Route path="/training/resident">{() => <Training track="resident" />}</Route>
       <Route path="/training" component={Training} />
       <Route path="/governance" component={Governance} />
       {/* The live surfaces sit BESIDE the explainer, never inside it: /governance
@@ -479,7 +486,7 @@ function App() {
       <LazyMotion features={loadMotionFeatures}>
         <AuthProvider>
         {/* The visitor's language, before any page renders (internal spec i18n, US1). */}
-        <LocaleRoot fallback={<PageLoading />}>
+        <LocaleRoot fallback={<QuietLoading world />}>
         <ModuleProvider>
           <TooltipProvider>
             <Toaster />

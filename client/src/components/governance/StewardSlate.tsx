@@ -31,8 +31,9 @@
  * exactly the state somebody should be able to answer the moment they read it,
  * and a decline is recorded on the nomination's own row.
  */
-import { CircleCheck, CircleSlash, Clock, Loader2 } from "lucide-react";
+import { CircleCheck, CircleSlash, Clock } from "lucide-react";
 import type { StewardSlate as StewardSlateData } from "./governanceApi";
+import BreathingLoader from "@/components/natural/BreathingLoader";
 
 const ANSWER_STYLE: Record<StewardSlateData["members"][number]["answer"], string> = {
   accepted: "border-sage bg-sage-light text-sage",
@@ -143,7 +144,7 @@ export default function StewardSlate({
                 onClick={() => void onAnswer(true)}
                 className="mt-2 inline-flex min-h-[44px] items-center gap-2 rounded-lg border-2 border-stone-300 bg-white px-4 py-2.5 text-sm font-semibold text-stone-800 hover:border-stone-400 hover:bg-stone-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep focus-visible:ring-offset-2 disabled:opacity-60"
               >
-                {busy && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
+                {busy && <BreathingLoader decorative size={16} />}
                 <span>I have changed my mind</span>
               </button>
             </>
@@ -159,7 +160,7 @@ export default function StewardSlate({
                 onClick={() => void onAnswer(false)}
                 className="mt-2 inline-flex min-h-[44px] items-center gap-2 rounded-lg border-2 border-coral bg-white px-4 py-2.5 text-sm font-semibold text-coral hover:bg-red-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep focus-visible:ring-offset-2 disabled:opacity-60"
               >
-                {busy && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
+                {busy && <BreathingLoader decorative size={16} />}
                 <span>Decline the steward role</span>
               </button>
             </>

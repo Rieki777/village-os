@@ -2,7 +2,7 @@ import Layout from "@/components/Layout";
 import GoogleSignInButton from "@/components/auth/GoogleSignInButton";
 import { useGoogleSignInReturn } from "@/components/auth/useGoogleSignInReturn";
 import { useAuth } from "@/contexts/AuthContext";
-import { internalPath } from "@/lib/internalPath";
+import { afterSignIn } from "@/lib/internalPath";
 import { m } from "framer-motion";
 import { Heart, ArrowRight, Mail, Lock } from "lucide-react";
 import { useState } from "react";
@@ -31,7 +31,7 @@ export default function Login() {
       // A sign-in that started on a members-only page goes back there (R36).
       // Internal paths only (lib/internalPath.ts), so a crafted link cannot
       // bounce anyone offsite.
-      navigate(internalPath(new URLSearchParams(window.location.search).get("next")) ?? "/profile");
+      navigate(afterSignIn(new URLSearchParams(window.location.search).get("next")));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Sign-in didn't work. Check your email and password.");
     } finally {
@@ -174,7 +174,7 @@ export default function Login() {
                 no Google account. On a village that configured no Google
                 credentials this renders nothing at all.
               */}
-              <GoogleSignInButton next={internalPath(new URLSearchParams(window.location.search).get("next")) ?? "/profile"} />
+              <GoogleSignInButton next={afterSignIn(new URLSearchParams(window.location.search).get("next"))} />
             </form>
 
             <div className="mt-8 text-center">

@@ -167,3 +167,19 @@ export function capPetals<T>(items: readonly T[], cap: number): { shown: T[]; mo
   const c = Math.max(0, Math.floor(cap));
   return { shown: items.slice(0, c), more: Math.max(0, items.length - c) };
 }
+
+/**
+ * A TIER IS A FULLER PETAL, NEVER A NUMBER (the prune, wave 1, C15).
+ *
+ * A badge held more than once (an earned badge that stacks) draws its petal
+ * wider, one step per tier, up to four steps, so a long-kept practice reads as
+ * a fuller flower. No "x3" is printed anywhere a member reads. The length is
+ * left alone, so the flower's reach and its ring geometry do not move.
+ */
+export const FULLNESS_STEP = 0.18;
+export const FULLNESS_MAX_STEPS = 4;
+
+export function petalFullness(count: number | null | undefined): number {
+  const tiers = Math.floor(Number(count) || 1);
+  return 1 + FULLNESS_STEP * Math.min(FULLNESS_MAX_STEPS, Math.max(0, tiers - 1));
+}

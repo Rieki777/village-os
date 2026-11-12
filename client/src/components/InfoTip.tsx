@@ -126,9 +126,23 @@ interface InfoTipProps {
    * its own fixed size.
    */
   triggerClassName?: string;
+  /**
+   * The bare mark's own box at 44px (TAP_MIN), for a page whose phone layout
+   * is measured box by box (the /quests board, 12 Nov 2026). The circle stays
+   * 16px and sits in the middle; negative margins give the extra space back,
+   * so the sentence around it keeps its line and nothing moves.
+   */
+  tapBox?: boolean;
 }
 
-export default function InfoTip({ tip, children, label, className = "", triggerClassName = "" }: InfoTipProps) {
+/** The bare mark grown to a 44px box with its 16px footprint kept (`tapBox`). */
+export const BARE_TAP_BOX =
+  "group relative inline-flex items-center justify-center align-middle size-11 -my-3.5 -ml-2.5 -mr-3.5 rounded-full cursor-help select-none focus-visible:outline-none";
+/** The 16px circle drawn inside BARE_TAP_BOX. */
+const BARE_TAP_MARK =
+  "inline-flex items-center justify-center w-4 h-4 rounded-full border border-current/40 text-[10px] leading-none opacity-70 group-hover:opacity-100 group-focus-visible:opacity-100 group-focus-visible:ring-2 group-focus-visible:ring-teal-deep/60";
+
+export default function InfoTip({ tip, children, label, className = "", triggerClassName = "", tapBox = false }: InfoTipProps) {
   const tap = triggerClassName || WORDED_TAP;
   const padded = children != null && tap.includes(WORDED_TAP);
   const [open, setOpen] = useState(false);
@@ -240,7 +254,9 @@ export default function InfoTip({ tip, children, label, className = "", triggerC
         }}
         style={padded ? widenStyle(natural) : undefined}
         className={
-          bare
+          bare && tapBox
+            ? BARE_TAP_BOX
+            : bare
             // `before:-inset-1.5` grows the TOUCH TARGET and nothing else.
             // Measured on a real 390px phone: this control is 16 by 16 CSS
             // pixels, and WCAG 2.5.8 asks 24 by 24 at AA, so a thumb was being
@@ -252,7 +268,7 @@ export default function InfoTip({ tip, children, label, className = "", triggerC
             : `underline decoration-dotted decoration-1 underline-offset-4 cursor-help rounded-sm max-w-full text-left [overflow-wrap:anywhere] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep/60 ${tap}`
         }
       >
-        {bare ? <span aria-hidden="true">?</span> : children}
+        {bare ? <span aria-hidden="true" className={tapBox ? BARE_TAP_MARK : undefined}>?</span> : children}
       </button>
       <span
         id={id}
