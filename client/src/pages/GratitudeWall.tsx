@@ -459,10 +459,9 @@ export default function GratitudeWall() {
                         this line ran into each other with no space.
                       */}
                       {budget && budget.total > 0 ? (
-                        <span className="text-sm text-muted-foreground">
-                          <Trans context="thanks composer: the allowance left this cycle">
-                            <span className="font-semibold text-card-foreground">{budget.remaining}</span> of {budget.total} left to give this cycle
-                          </Trans>
+                        // D-24: a plain line, never a meter. The hearts below already show what is held.
+                        <span data-allowance-line="" className="text-sm text-muted-foreground">
+                          {t({ message: "Each cycle every member receives an allowance to send.", context: "thanks composer: the plain allowance line" })}
                           <InfoTip tip={t({ message: "Your allowance refills when the cycle turns. Sending moves it from your allowance to the person you thank; it never costs you anything you earned.", context: "thanks composer: the allowance tooltip" })} label={t({ message: "How the allowance works", context: "thanks composer: tooltip label" })} tapBox />
                         </span>
                       ) : budget && budget.total <= 0 ? (

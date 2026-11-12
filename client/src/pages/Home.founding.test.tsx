@@ -76,7 +76,8 @@ describe("the landing's first screen with the founding team on", () => {
     expect(map.className).not.toContain("bg-notice");
     // One gold act in the hero.
     expect(hero().querySelectorAll("a.bg-notice")).toHaveLength(1);
-    expect(hero().textContent).toContain("paid, multi-year roles");
+    expect(hero().textContent).toContain("paid roles that take the village from idea to home, season by season and intended for the long run");
+    expect(hero().textContent).not.toContain("multi-year");
   });
 
   it("leads the ways in with the founding card, on the gold edge", async () => {
@@ -97,7 +98,7 @@ describe("the landing's first screen with the founding team on", () => {
     const act = hero().querySelector('[data-hero-act="paths"]') as HTMLElement;
     expect(act.getAttribute("href")).toBe("#choose-path");
     expect(act.className).toContain("bg-notice");
-    expect(hero().textContent).not.toContain("paid, multi-year roles");
+    expect(hero().textContent).not.toContain("season by season");
     expect(document.querySelector('[data-way="founding"]')).toBeNull();
   });
 });

@@ -105,7 +105,8 @@ export default function FirstFourteenDays({
           role="group"
           aria-label={t({ message: `The fourteen days`, context: "first fourteen days strip, the days as a group" })}
           onKeyDown={onKey}
-          className="grid grid-cols-7 gap-0.5 max-sm:-mx-3 sm:gap-2"
+          // M15: on a phone a sideways strip of 44x56 tiles; seven to a row from `sm` up.
+          className="flex gap-1 overflow-x-auto max-sm:-mx-3 max-sm:px-3 max-sm:pb-1 sm:grid sm:grid-cols-7 sm:gap-2 sm:overflow-visible"
         >
           {strip.days.map((d) => {
             const titles = d.steps.map((s) => s.title).join(". ");
@@ -126,7 +127,7 @@ export default function FirstFourteenDays({
                 title={titles || undefined}
                 tabIndex={d.day === chosen ? 0 : -1}
                 onClick={() => setChosen(d.day)}
-                className={`flex min-h-11 flex-col items-center justify-center gap-1 rounded-xl border py-1.5 text-foreground hover:border-notice focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:min-h-16 ${
+                className={`flex min-h-14 min-w-11 shrink-0 flex-col items-center justify-center gap-1 rounded-xl border py-1.5 text-foreground hover:border-notice focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:min-h-16 ${
                   d.day === chosen ? "border-notice bg-muted" : d.today ? "border-notice/70" : "border-border"
                 } ${d.past && d.steps.length === 0 ? "opacity-60" : ""}`}
               >

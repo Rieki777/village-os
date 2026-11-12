@@ -230,7 +230,7 @@ function AskSomeone({ onSent }: { onSent: () => void }) {
 
   return (
     <form
-      className="space-y-3"
+      className="max-w-xl space-y-3"
       onSubmit={(e) => {
         e.preventDefault();
         void send();

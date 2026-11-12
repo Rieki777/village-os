@@ -356,15 +356,20 @@ export function ExamplesBanner({
   noun,
   layout = "mb-6 max-w-2xl mx-auto text-left",
   row = false,
-}: { moduleId: string; noun: string; layout?: string; row?: boolean }) {
+  tone = "day",
+}: { moduleId: string; noun: string; layout?: string; row?: boolean; tone?: "day" | "night" }) {
   const { showing, trigger } = useExamplesState(moduleId);
+  // D-13: on a night page the day amber is a light slab on the dark ground; the notice tokens hold the world.
+  const skin = tone === "night"
+    ? "border border-notice/40 bg-notice/10 text-foreground"
+    : "border border-amber-300/70 bg-amber-50 text-amber-900 dark:border-amber-500/40 dark:bg-amber-950/40 dark:text-amber-100";
   const headingId = `standing-examples-${moduleId}`;
   if (!showing && !row) return null;
   if (row) {
     return (
       <aside
         aria-labelledby={headingId}
-        className={`${layout} rounded-lg border border-amber-300/70 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-500/40 dark:bg-amber-950/40 dark:text-amber-100`}
+        className={`${layout} rounded-lg ${skin} px-4 py-3 text-sm`}
       >
         <p id={headingId} className="font-medium">This is a standing example.</p>
         <p className="mt-1 leading-relaxed">
@@ -381,7 +386,7 @@ export function ExamplesBanner({
     // before the label that explains it.
     <aside
       aria-labelledby={headingId}
-      className={`${layout} rounded-lg border border-amber-300/70 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-500/40 dark:bg-amber-950/40 dark:text-amber-100`}
+      className={`${layout} rounded-lg ${skin} px-4 py-3 text-sm`}
     >
       <p id={headingId} className="font-medium">These are standing examples.</p>
       <p className="mt-1 leading-relaxed">

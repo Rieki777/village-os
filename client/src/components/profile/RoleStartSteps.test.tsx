@@ -84,4 +84,34 @@ describe("the steps before a role starts, on the profile", () => {
     expect((await screen.findByRole("link", { name: "Align with Terms for Gate Keeper" })).getAttribute("href")).toBe("/aligned#t1");
     expect(onShown).toHaveBeenCalledWith(true);
   });
+
+  it("D-09: inside the path card, the step the card's own act opens is drawn once, not twice", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (url === "/api/profile/role-start-steps")
+          return json({ waiting: [{ applicationId: "sa-1", roles: ["Gate Keeper"], steps: [{ step: "membership", href: "/love-letter" }, { step: "terms", href: "/aligned/terms" }] }] });
+        return json({});
+      }),
+    );
+    render(<RoleStartSteps embedded skipHref="/love-letter" />);
+    // CONTROL: the other step still shows, so the box itself drew.
+    expect(await screen.findByRole("link", { name: START_WORDS.step.terms })).toBeTruthy();
+    expect(screen.queryByRole("link", { name: START_WORDS.step.membership })).toBeNull();
+  });
+
+  it("D-09: with only the card's own act waiting, no second box is drawn at all", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (url === "/api/profile/role-start-steps")
+          return json({ waiting: [{ applicationId: "sa-1", roles: ["Gate Keeper"], steps: [{ step: "membership", href: "/love-letter" }] }] });
+        return json({});
+      }),
+    );
+    const shown = vi.fn();
+    render(<RoleStartSteps embedded skipHref="/love-letter" onShown={shown} />);
+    await waitFor(() => expect(shown).toHaveBeenCalledWith(true));
+    expect(document.querySelector("[data-role-start-steps]")).toBeNull();
+  });
 });

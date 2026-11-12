@@ -444,7 +444,7 @@ export default function Profile() {
             {path ? (
               <div className={tabOf(["today", "roles"])}>
                 <YourPathCard path={path}>
-                  <RoleStartSteps embedded onShown={setStartStepsShown} />
+                  <RoleStartSteps embedded skipHref={path.step.href} onShown={setStartStepsShown} />
                   {!startStepsShown && <YourMoveCard embedded />}
                 </YourPathCard>
               </div>
