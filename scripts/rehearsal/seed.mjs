@@ -10,7 +10,7 @@
  *   - A founder, aligned with the membership letter, seated as the Welcome
  *     Steward: the steward who reads proposals and decides (persona 4).
  *   - The public pages on, with the platform's own words (no village's prose).
- *   - A season with four goals and the next one empty, and "this moon" open
+ *   - A season with four goals (one reached, so the commons shows moss) and the next one empty, and "this moon" open
  *     with a public link, so the open form has something to propose for.
  *   - Three circles and four roles. The Finance Steward carries written terms,
  *     so the counter-offer has something to change. Two seats each on the
@@ -105,7 +105,7 @@ export async function seedVillage({ base, dbUrl, adminPassword, log = () => {} }
           name: "Season of Roots",
           startsOn: civil(now - 60 * DAY),
           endsOn: civil(now + 60 * DAY),
-          goals: ["A thriving community", "Clean water all year", "Shared meals every week", "Clear and trusted money"].map((text) => ({ text, done: false })),
+          goals: ["A thriving community", "Clean water all year", "Shared meals every week", "Clear and trusted money"].map((text) => ({ text, done: text === "Shared meals every week" })),
         },
         { id: "season-2", name: "", startsOn: civil(now + 61 * DAY), endsOn: civil(now + 150 * DAY), goals: [] },
       ],

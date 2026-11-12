@@ -13106,6 +13106,61 @@ msgctxt "calendar moon view legend"
 msgid "What the marks mean"
 msgstr "Qué significan las marcas"
 
+#: client/src/components/commons/CommonsPanel.tsx
+#: client/src/components/roleDraft/SeasonGoals.tsx
+msgctxt "the commons drawing: what a screen reader hears"
+msgid "This season's {total} goals as circles. Moss has spread into the {reached} we have reached together. Each goal not reached yet holds a seed."
+msgstr "Las {total} metas de esta temporada como círculos. El musgo ha crecido en las {reached} que hemos alcanzado juntos. Cada meta que aún no alcanzamos guarda una semilla."
+
+#: client/src/components/commons/CommonsPanel.tsx
+msgctxt "the commons: the village's own count of goals reached"
+msgid "We have reached {reached} of {total} goals so far."
+msgstr "Hasta ahora hemos alcanzado {reached} de {total} metas."
+
+#: client/src/components/commons/CommonsPanel.tsx
+msgctxt "the commons: a goal the village has reached"
+msgid "Reached"
+msgstr "Alcanzada"
+
+#: client/src/components/commons/CommonsPanel.tsx
+msgctxt "the commons: fold the list"
+msgid "Show fewer goals"
+msgstr "Mostrar menos metas"
+
+#: client/src/components/commons/CommonsPanel.tsx
+msgctxt "the commons: unfold the list"
+msgid "Show all {total} goals"
+msgstr "Mostrar las {total} metas"
+
+#: client/src/components/commons/CommonsPanel.tsx
+msgctxt "the commons: what the moss means"
+msgid "The moss shows the village's work, never one person's."
+msgstr "El musgo muestra el trabajo del pueblo, nunca el de una persona."
+
+#: client/src/components/VillagePulse.tsx
+msgctxt "landing commons eyebrow"
+msgid "What we tend together"
+msgstr "Lo que cuidamos juntos"
+
+#: client/src/components/VillagePulse.tsx
+msgctxt "landing commons heading"
+msgid "The commons"
+msgstr "Lo común"
+
+#: client/src/components/VillagePulse.tsx
+msgctxt "landing commons lede"
+msgid "This season's goals, held by the whole village. Each circle is one goal, and moss spreads into it when we reach it together."
+msgstr "Las metas de esta temporada, sostenidas por todo el pueblo. Cada círculo es una meta, y el musgo crece en ella cuando la alcanzamos juntos."
+
+#: client/src/components/VillagePulse.tsx
+msgctxt "landing commons door"
+msgid "See the roles that tend these goals"
+msgstr "Ver los roles que cuidan estas metas"
+
+#: client/src/components/commons/CommonsPanel.tsx
+msgid "{count, plural, one {# open quest grows {text}} other {# open quests grow {text}}}"
+msgstr "{count, plural, one {# misión abierta hace crecer {text}} other {# misiones abiertas hacen crecer {text}}}"
+
 #: client/src/pages/Events.tsx
 msgctxt "calendar page: tip about moons"
 msgid "About the moons"
