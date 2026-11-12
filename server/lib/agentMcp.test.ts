@@ -218,7 +218,7 @@ describe("admin_request (check 52)", () => {
 
   it("is listed only for the admin scope", () => {
     expect(toolsFor(["moon.read", "tasks.write"]).map((t) => t.name)).not.toContain("admin_request");
-    expect(toolsFor(["admin"]).map((t) => t.name)).toEqual(["admin_request"]);
+    expect(toolsFor(["admin"]).map((t) => t.name)).toEqual(["admin_request", "propose_changes", "read_proposal_lessons"]);
   });
 
   it("reads an allowed path at once and records the call", async () => {

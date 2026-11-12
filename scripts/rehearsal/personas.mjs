@@ -1,5 +1,5 @@
 /**
- * The five made-up people, each walked once at 390 and once at 1280.
+ * The six made-up people, each walked once at 390 and once at 1280.
  *
  *   1. neighbour     A Spanish-speaking neighbour on a phone, sent a link on a
  *                    messaging app. The first link she taps is an old one and
@@ -21,6 +21,8 @@
  *                    profile in their first hour, where our first 14 days
  *                    show as a strip of days, then opens the steward
  *                    training from /training and marks a lesson done.
+ *   6. reviewer      The founder on the review page: an agent's batch of three
+ *                    proposed changes, one edited in place, accepted together.
  *
  * Each walk is a list of acts. An act that fails stops that walk, and the
  * summary names it. The words typed are invented and plain.
@@ -576,12 +578,88 @@ export async function holder(w, ctx) {
   await w.look("training-resident");
 }
 
+// ── 6. The reviewer ───────────────────────────────────────────────────────
+
+/**
+ * The founder on the review page (/admin/proposals): an agent's batch of three proposed changes waits; the founder
+ * reads each beside what is live, edits the role's aim in place (saved as a draft), selects the batch and accepts it.
+ */
+export async function reviewer(w, ctx) {
+  const auth = { authorization: `Bearer ${ctx.seed.founder}`, "content-type": "application/json" };
+  const call = async (method, route, body) => {
+    const res = await fetch(`${ctx.base}${route}`, { method, headers: auth, body: body === undefined ? undefined : JSON.stringify(body) });
+    return { status: res.status, json: await res.json().catch(() => null) };
+  };
+  let ids = [];
+  await w.step("an agent proposes a batch of three", async () => {
+    const minted = await call("POST", "/api/agent/tokens", { name: `review ${w.vp}`, scopes: ["admin"] });
+    if (minted.status !== 200) throw new Error(`no agent token: ${JSON.stringify(minted.json).slice(0, 200)}`);
+    const res = await fetch(`${ctx.base}/api/agent/v1/mcp`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${minted.json.token}`, "content-type": "application/json", accept: "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "tools/call",
+        params: {
+          name: "propose_changes",
+          arguments: {
+            batch: "Phase A content",
+            items: [
+              { kind: "page_content", target: { section: "page-home" }, body: { hero: { headline: "A village held by the people who live in it" } }, summary: "Reword the homepage headline so it says who holds the village." },
+              { kind: "role_card", target: { roleId: ctx.seed.roles.finance }, body: { words: { aim: "Our money is clear, trusted and shown every moon." } }, summary: "Give the Finance Steward card an aim that says the books are shown each moon." },
+              { kind: "faq_add", target: { pathway: "steward" }, body: { question: "How long does a first reply take?", answer: "We reply within a week, and the status page always says where your proposal stands." }, summary: "Add an FAQ for stewards on how long a first reply takes." },
+            ],
+          },
+        },
+      }),
+    });
+    const out = (await res.json()).result;
+    if (out?.isError) throw new Error(`the proposal was refused: ${JSON.stringify(out.structuredContent).slice(0, 240)}`);
+    ids = out.structuredContent.ids;
+  });
+  const page = await w.open();
+  await w.step("open the review page", async () => {
+    await w.goto("/admin/proposals");
+    await page.locator(`[data-proposal="${ids[1]}"]`).waitFor();
+  });
+  await w.look("review", { next: page.getByTestId("accept-selected") });
+  const edited = w.vp === "phone" ? "Our money is clear and trusted, and the books are open to every member each moon." : "Our money is clear and trusted, and every member can read the books, in plain words, each moon.";
+  await w.step("edit the role's aim in place", async () => {
+    const box = page.locator(`[data-proposal="${ids[1]}"] [data-field="words.aim"] textarea`);
+    await box.scrollIntoViewIfNeeded();
+    await box.fill(edited);
+    await page.getByText(/Edits saved/).first().waitFor({ timeout: 8000 });
+    const back = await call("GET", "/api/admin/proposals");
+    const draft = back.json?.changes?.find((c) => c.id === ids[1])?.draft;
+    if (draft?.words?.aim !== edited) throw new Error("the edit was not saved on the server");
+  });
+  await w.look("edited");
+  await w.step("select the batch and accept", async () => {
+    const all = page.getByLabel(/^Select all$/).first();
+    await all.scrollIntoViewIfNeeded();
+    await all.check();
+    await page.getByTestId("accept-selected").click();
+    await page.getByTestId("accept-outcome").waitFor({ timeout: 15_000 });
+    const said = (await page.getByTestId("accept-outcome").innerText()).trim();
+    if (!/^3 accepted/.test(said)) throw new Error(`not all three landed: ${said.slice(0, 240)}`);
+  });
+  await w.look("accepted");
+  await w.step("the role card says what was accepted", async () => {
+    const card = await call("GET", `/api/org/role-edit/${ctx.seed.roles.finance}`);
+    if (card.json?.state?.words?.aim !== edited) throw new Error(`the card reads: ${card.json?.state?.words?.aim}`);
+    const lessons = await call("GET", "/api/admin/proposals/lessons");
+    if (!JSON.stringify(lessons.json).includes(edited)) throw new Error("the lessons do not show the edit");
+  });
+}
+
 export const PERSONAS = [
   { id: "neighbour", run: neighbour, locale: "es-CR", member: null },
   { id: "professional", run: professional, locale: "en-GB", member: null },
   { id: "member", run: member, locale: "en-GB", member: (seed, vp) => (vp === "phone" ? seed.memberPhone : seed.memberDesktop) },
   { id: "steward", run: steward, locale: "en-GB", member: (seed) => seed.founder },
   { id: "holder", run: holder, locale: "en-GB", member: null },
+  { id: "reviewer", run: reviewer, locale: "en-GB", member: (seed) => seed.founder },
 ];
 
 export { PEOPLE };

@@ -2209,3 +2209,7 @@ Admin, Integrations has two new cards, `railway_project_token` (one Railway proj
 ## Profile Today and our first 14 days (Phase B, 2026-11-11, no migration)
 
 - No env var and nothing at boot. Every sign-in lands on Profile Today (`client/src/lib/internalPath.ts`). A newly seated holder sees the village's onboarding path as a strip of fourteen days; everyone else sees their week. The steps are village data, edited field by field in Admin, Org chart, Onboarding path (a step's link may now be a page of the site, such as `/training/steward`). Amora's whole first 14 days are `server/seeds/amora/onboarding-path-seed.json`, applied by hand there; it supersedes `onboarding-technical-operations-seed.json` and puts the Technical Operations conversation on day 3.
+
+## Proposed changes, reviewed on one page (migration 0379, 2026-11-12)
+
+- No env var and nothing to set. Migration 0379 adds `proposed_change_batches` and `proposed_changes` at boot. An admin's agent proposes through the connector's `propose_changes` (or `POST /api/admin/proposals`); a person reviews, edits and accepts on `/admin/proposals`, linked from Admin with a count, and each change runs through its own admin route as that person. What people edit before accepting is kept and read back by `read_proposal_lessons`.
