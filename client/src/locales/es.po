@@ -126,6 +126,12 @@ msgctxt "signing key"
 msgid "You asked for a new key at {askedAt}. It waits for another admin to co-sign it, until {lapsesAt}."
 msgstr ""
 
+#: client/src/App.tsx
+#: client/src/pages/NotFound.tsx
+msgctxt "loading: a page is on its way"
+msgid "Gathering your page"
+msgstr "Reuniendo tu página"
+
 #: client/src/components/roots/RootsFilterToggle.tsx
 msgctxt "roots filter count"
 msgid "Showing {shown} of {total} {noun}: the ones that grow from your roots, and the ones not tagged yet."
@@ -3002,7 +3008,7 @@ msgid "The harm you see"
 msgstr ""
 
 #: client/src/pages/ResidentJourney.tsx
-msgctxt "resident track ticked off"
+msgctxt "resident path ticked off"
 msgid "{walkedCount} of {stepCount} steps completed"
 msgstr ""
 
@@ -3929,6 +3935,10 @@ msgctxt "open proposal card"
 msgid "What this role asks"
 msgstr "Lo que pide este rol"
 
+#: client/src/components/quiet/OffTheTrail.tsx
+msgid "Back to the village"
+msgstr "Volver a la aldea"
+
 #: client/src/components/review/SeraBulk.tsx
 msgctxt "sera answers"
 msgid "Take {n}"
@@ -4039,6 +4049,11 @@ msgstr ""
 msgctxt "roles page, role link"
 msgid "Link to {seatName}"
 msgstr "Enlace a {seatName}"
+
+#: client/src/pages/Quests.tsx
+msgctxt "empty quest board: the one door"
+msgid "Propose a Quest"
+msgstr "Proponer una misión"
 
 #: client/src/pages/ProposeARole.tsx
 msgctxt "founding application check"
@@ -5311,6 +5326,10 @@ msgstr ""
 msgid "They have not chosen"
 msgstr "Todavía no ha elegido"
 
+#: client/src/pages/Quests.tsx
+msgid "The meadow is resting"
+msgstr "El prado descansa"
+
 #: client/src/pages/ProposeARole.tsx
 msgctxt "founding application draft"
 msgid "We kept your answers from last time. References and files are never saved, so add them again."
@@ -6351,6 +6370,10 @@ msgctxt "a canvas block is loading"
 msgid "Reading {name}"
 msgstr ""
 
+#: client/src/pages/GratitudeWall.tsx
+msgid "The wall is waiting for its first appreciation."
+msgstr "El muro espera su primer agradecimiento."
+
 #: client/src/components/roleDraft/IkigaiDoor.tsx
 msgid "This browser blocks saving, so your answers last for this visit only."
 msgstr "Este navegador bloquea el guardado, así que tus respuestas duran solo esta visita."
@@ -6598,6 +6621,10 @@ msgstr "Nuestra redacción para esta propuesta"
 #: client/src/components/roleDraft/HumanDesignStep.tsx
 msgid "Your type is {0}, with lines {1} and {2}."
 msgstr "Tu tipo es {0}, con las líneas {1} y {2}."
+
+#: client/src/pages/Quests.tsx
+msgid "No Quests posted yet. Post the first one."
+msgstr "Todavía no hay misiones publicadas. Publica la primera."
 
 #: client/src/pages/StewardJourney.tsx
 #~ msgctxt "steward front door"
@@ -8864,6 +8891,11 @@ msgstr ""
 msgid "The economy conserves: every token sums to zero, no drift, no illegal negatives."
 msgstr ""
 
+#: client/src/pages/Quests.tsx
+msgctxt "empty quest board: clears the circle and difficulty filters"
+msgid "Show every Quest"
+msgstr "Ver todas las misiones"
+
 #: client/src/components/ClosingPolicyCard.tsx
 msgid "Putting a change to the whole village opens a vote every member is rung about, and this account does not open those yet. Say what you would change to whoever keeps the exit policy."
 msgstr ""
@@ -8877,6 +8909,11 @@ msgctxt "the closing policy is being saved"
 msgid "Saving..."
 msgstr ""
 
+#: client/src/components/quiet/OffTheTrail.tsx
+msgctxt "404 page heading"
+msgid "Off the trail"
+msgstr "Fuera del sendero"
+
 #: client/src/pages/OpenProposal.tsx
 msgctxt "open proposal: an agent's proposal"
 msgid "It holds no live access token, so it reaches nothing through the village's connector today."
@@ -8886,6 +8923,10 @@ msgstr ""
 #~ msgctxt "open proposal section"
 #~ msgid "About you"
 #~ msgstr "Sobre ti"
+
+#: client/src/pages/Quests.tsx
+msgid "Nothing here with these filters"
+msgstr "Nada aquí con estos filtros"
 
 #: client/src/components/TimeZoneField.tsx
 msgctxt "time zone field"
@@ -9610,6 +9651,10 @@ msgstr ""
 msgctxt "sera changes"
 msgid "Small changes {nSmall}"
 msgstr ""
+
+#: client/src/components/quiet/OffTheTrail.tsx
+msgid "There is no page at this address. It may have moved, or it may never have existed. The land is still here, and the way home is short."
+msgstr "No hay ninguna página en esta dirección. Quizá se movió, o nunca existió. La tierra sigue aquí y el camino a casa es corto."
 
 #: client/src/components/openProposal/TermsWeOffer.tsx
 msgctxt "reviewer's terms panel for a proposal"
@@ -10572,6 +10617,11 @@ msgstr ""
 msgctxt "funding rounds"
 msgid "Too few chose"
 msgstr ""
+
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "empty thanks wall: door to the thank-you form"
+msgid "Carry a thanks"
+msgstr "Llevar unas gracias"
 
 #: client/src/components/approvals/ApprovalInbox.tsx
 msgid "That could not be done"
@@ -11630,6 +11680,10 @@ msgstr "Ningún idioma coincide"
 msgid "You can withdraw a pledge until choosing closes. Then it is firm and lowers what the pot pays. Nothing is collected yet."
 msgstr ""
 
+#: client/src/pages/GratitudeWall.tsx
+msgid "No thanks on the wall yet"
+msgstr "Todavía no hay gracias en el muro"
+
 #: client/src/components/canvas/CanvasBlockFrames.tsx
 msgid "Nothing the village runs speaks to {name} yet."
 msgstr ""
@@ -12043,6 +12097,10 @@ msgctxt "journal guide tasks"
 msgid "That task is no longer open on your list."
 msgstr ""
 
+#: client/src/pages/Quests.tsx
+msgid "No Quests match. Clear a filter to see more."
+msgstr "Ninguna misión coincide. Quita un filtro para ver más."
+
 #: client/src/pages/StewardJourney.tsx
 #~ msgid "Roles run from new moon to new moon. Each moon you and your circle agree what you will deliver, and we pay for the work delivered, never for hours."
 #~ msgstr "Los roles van de luna nueva a luna nueva. Cada luna, tú y tu círculo acuerdan lo que vas a entregar, y pagamos por el trabajo entregado, nunca por horas."
@@ -12446,6 +12504,10 @@ msgctxt "roles page archetypes"
 msgid "Start as {0}"
 msgstr "Empezar como “{0}”"
 
+#: client/src/pages/Quests.tsx
+msgid "The Quest Board didn't load. Reload to try again."
+msgstr "El tablero de misiones no cargó. Recarga para intentar de nuevo."
+
 #: client/src/components/openProposal/RoleCardBridge.tsx
 msgctxt "open proposal conversations"
 msgid "{minutes} minutes with {who}, the final approval"
@@ -12646,3 +12708,118 @@ msgstr ""
 #~ msgctxt "open proposal review"
 #~ msgid "1 goal for your first moon"
 #~ msgstr "1 meta para tu primera luna"
+
+#: client/src/components/today/FirstFourteenDays.tsx
+msgctxt "first fourteen days strip, which day it is"
+msgid "Day {0} of {total}"
+msgstr "Día {0} de {total}"
+
+#: client/src/components/today/FirstFourteenDays.tsx
+msgctxt "first fourteen days strip, the next step"
+msgid "Next: {0}"
+msgstr "Lo siguiente: {0}"
+
+#: client/src/components/today/FirstFourteenDays.tsx
+msgctxt "first fourteen days strip, who the next step is with and when"
+msgid "With {0}, by {nextDate}."
+msgstr "Con {0}, para el {nextDate}."
+
+#: client/src/components/today/FirstFourteenDays.tsx
+msgctxt "first fourteen days strip, when the next step is due"
+msgid "By {nextDate}."
+msgstr "Para el {nextDate}."
+
+#: client/src/components/today/FirstFourteenDays.tsx
+msgctxt "first fourteen days strip, all done"
+msgid "Every step of our first 14 days is walked. Welcome, truly."
+msgstr "Recorrimos cada paso de nuestros primeros 14 días. Te damos la bienvenida, de verdad."
+
+#: client/src/components/today/FirstFourteenDays.tsx
+msgctxt "first fourteen days strip, the days as a group"
+msgid "The fourteen days"
+msgstr "Los catorce días"
+
+#: client/src/components/today/FirstFourteenDays.tsx
+msgctxt "first fourteen days strip, a day's number in its name"
+msgid "day {0}"
+msgstr "día {0}"
+
+#: client/src/components/today/FirstFourteenDays.tsx
+msgctxt "first fourteen days strip, the day that is today"
+msgid "today"
+msgstr "hoy"
+
+#: client/src/components/today/FirstFourteenDays.tsx
+msgctxt "first fourteen days strip, the chosen day"
+msgid "Day {0}"
+msgstr "Día {0}"
+
+#: client/src/components/today/FirstFourteenDays.tsx
+msgctxt "first fourteen days strip, a day with no step"
+msgid "Nothing is due on this day. A day to settle in."
+msgstr "Nada vence este día. Un día para asentarte."
+
+#: client/src/components/today/FirstFourteenDays.tsx
+msgctxt "first fourteen days strip, who a step is with and when it is done"
+msgid "With {0}. Done when: {1}"
+msgstr "Con {0}. Hecho cuando: {1}"
+
+#: client/src/components/today/FirstFourteenDays.tsx
+msgctxt "first fourteen days strip, when a step is done"
+msgid "Done when: {0}"
+msgstr "Hecho cuando: {0}"
+
+#: client/src/components/today/FirstFourteenDays.tsx
+msgctxt "first fourteen days strip, tick a step"
+msgid "Mark done"
+msgstr "Marcar como hecho"
+
+#: client/src/components/today/WeekStrip.tsx
+msgctxt "week strip, a task due on a day"
+msgid "A task from your sessions is due"
+msgstr "Vence una tarea de tus sesiones"
+
+#: client/src/components/today/WeekStrip.tsx
+msgctxt "week strip, the new moon on a day"
+msgid "New moon"
+msgstr "Luna nueva"
+
+#: client/src/components/today/WeekStrip.tsx
+msgctxt "week strip, the full moon on a day"
+msgid "Full moon"
+msgstr "Luna llena"
+
+#: client/src/components/today/WeekStrip.tsx
+msgctxt "week strip, eyebrow"
+msgid "Your week"
+msgstr "Tu semana"
+
+#: client/src/components/today/WeekStrip.tsx
+msgctxt "week strip, heading"
+msgid "The next seven days"
+msgstr "Los próximos siete días"
+
+#: client/src/components/today/WeekStrip.tsx
+msgctxt "week strip, an empty week"
+msgid "Nothing is on the calendar for you this week."
+msgstr "No tienes nada en el calendario esta semana."
+
+#: client/src/components/today/WeekStrip.tsx
+msgctxt "week strip, the door when the week is empty"
+msgid "Open the calendar"
+msgstr "Abrir el calendario"
+
+#: client/src/components/today/WeekStrip.tsx
+msgctxt "week strip, the days as a group"
+msgid "The seven days"
+msgstr "Los siete días"
+
+#: client/src/components/today/WeekStrip.tsx
+msgctxt "week strip, the day that is today"
+msgid "today"
+msgstr "hoy"
+
+#: client/src/components/today/WeekStrip.tsx
+msgctxt "week strip, an empty day"
+msgid "Nothing on this day."
+msgstr "Nada este día."

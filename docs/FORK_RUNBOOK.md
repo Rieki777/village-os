@@ -2205,3 +2205,7 @@ Admin, Integrations has two new cards, `railway_project_token` (one Railway proj
 ## The founding-team application (Phase A, 2026-11-11, no migration)
 
 - No env var and nothing at boot. Four village settings under Admin, Game Mechanics, The founding team (`FOUNDING_KEYS` in `shared/foundingApplication.ts`) hold the application's own words at `/propose-a-role`: the ways to get to know us, the note beside them, the first cycle and the first conversations. Its terms step shows the role cards' pay shape (`org.pay_shape`, `org.pay_shape_at_risk`, `org.pay_shape_note`, in the same Admin category), reading "N%" until a village writes one. A new village sees neutral defaults; Amora's own values are `server/seeds/amora/founding-application-seed.json`, applied by hand.
+
+## Profile Today and our first 14 days (Phase B, 2026-11-11, no migration)
+
+- No env var and nothing at boot. Every sign-in lands on Profile Today (`client/src/lib/internalPath.ts`). A newly seated holder sees the village's onboarding path as a strip of fourteen days; everyone else sees their week. The steps are village data, edited field by field in Admin, Org chart, Onboarding path (a step's link may now be a page of the site, such as `/training/steward`). Amora's whole first 14 days are `server/seeds/amora/onboarding-path-seed.json`, applied by hand there; it supersedes `onboarding-technical-operations-seed.json` and puts the Technical Operations conversation on day 3.

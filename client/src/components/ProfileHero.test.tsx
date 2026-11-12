@@ -78,6 +78,20 @@ afterEach(() => {
 });
 
 describe("ProfileHero", () => {
+  it("wears no rung on the face, and draws moons on the land as a string of moons (the prune)", async () => {
+    routing(async (p) =>
+      p.includes("archetypes") ? ok(archetypes) : ok({ party, title: null, moonsOnTheLand: 20 }),
+    );
+    const { container } = draw();
+    expect(await screen.findByText(/The Steward/)).toBeTruthy();
+    expect(container.textContent).not.toMatch(/Stage \d|\d+\/\d+/);
+    const string = container.querySelector('[data-testid="moon-string"]');
+    expect(string).toBeTruthy();
+    // A year of moons at most; the words carry the rest.
+    expect(string!.querySelectorAll("svg")).toHaveLength(13);
+    expect(container.textContent).toContain("20 moons on the land");
+  });
+
   it("names the fronted character once the read lands", async () => {
     routing(async (p) =>
       p.includes("archetypes") ? ok(archetypes) : ok({ party, title: null, moonsOnTheLand: 3 }),
