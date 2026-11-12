@@ -276,22 +276,30 @@ export default function CircleCardView({
   circleId = "",
   mayPropose = false,
   reload = () => undefined,
+  omit = [],
+  arrange,
 }: {
   card: CircleCard;
   circleId?: string;
   /** A holder of a role in this circle, or an admin (`viewer.mayPropose`). */
   mayPropose?: boolean;
   reload?: () => void;
+  /** Sections another part of the page draws (the hearth draws the roles, the meeting and the adoption). */
+  omit?: readonly string[];
+  /**
+   * Where the parts go. Left out, the card stacks them as one column; the
+   * hearth page places the header and the rest in its own grid, inside this
+   * card's edit context, so "Propose new words" still reaches every word.
+   */
+  arrange?: (parts: { header: ReactNode; proposals: ReactNode; rest: ReactNode }) => ReactNode;
 }) {
   const [editing, setEditing] = useState(false);
   // A decided proposal's confirmation, kept here: adopting the last one empties the panel.
   const [decided, setDecided] = useState<string | null>(null);
   const { header } = card;
   const purpose = card.sections.find((s) => s.kind === "text");
-  return (
-    <CircleEditContext.Provider value={{ editing: mayPropose && editing, circleId, pending: card.pending ?? [], reload }}>
-    <div data-circle-card="" className="grid gap-4 sm:gap-6">
-      <section className={`${SECTION} grid gap-4`}>
+  const headerPart = (
+    <section className={`${SECTION} grid gap-4`}>
         {mayPropose ? (
           <div className="flex justify-end">
             <button type="button" onClick={() => setEditing((e) => !e)} aria-pressed={editing} className={QUIET_BUTTON}>
@@ -341,17 +349,29 @@ export default function CircleCardView({
         ) : null}
         {header.termsKey ? <p className="text-xs text-muted-foreground">{header.termsKey}</p> : null}
       </section>
-      {(card.proposals ?? []).length ? (
-        <ProposalsPanel proposals={card.proposals ?? []} reload={reload} onDone={setDecided} />
-      ) : decided ? (
-        <p role="status" className={`${SECTION} text-sm font-medium`}>
-          {decided}
-        </p>
-      ) : null}
-      {panels(card.sections.filter((s) => s.kind !== "text")).map((g) => (
-        <SectionPanel key={g[0]!.key} group={g} />
-      ))}
-    </div>
+  );
+  const proposalsPart =
+    (card.proposals ?? []).length ? (
+      <ProposalsPanel proposals={card.proposals ?? []} reload={reload} onDone={setDecided} />
+    ) : decided ? (
+      <p role="status" className={`${SECTION} text-sm font-medium`}>
+        {decided}
+      </p>
+    ) : null;
+  const restPart = panels(card.sections.filter((s) => s.kind !== "text" && !omit.includes(s.key))).map((g) => (
+    <SectionPanel key={g[0]!.key} group={g} />
+  ));
+  return (
+    <CircleEditContext.Provider value={{ editing: mayPropose && editing, circleId, pending: card.pending ?? [], reload }}>
+      {arrange ? (
+        arrange({ header: headerPart, proposals: proposalsPart, rest: <>{restPart}</> })
+      ) : (
+        <div data-circle-card="" className="grid gap-4 sm:gap-6">
+          {headerPart}
+          {proposalsPart}
+          {restPart}
+        </div>
+      )}
     </CircleEditContext.Provider>
   );
 }
