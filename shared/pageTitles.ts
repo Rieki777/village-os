@@ -122,6 +122,8 @@ export const PAGE_TITLES: Readonly<Record<string, string>> = {
   "/email": "Your email",
   "/village-email": "How the village emails",
   "/training": "Training",
+  "/training/steward": "Steward training",
+  "/training/resident": "Resident training",
   "/governance": "Governance",
   "/decisions": "Decisions",
   "/propose": "Start a proposal",

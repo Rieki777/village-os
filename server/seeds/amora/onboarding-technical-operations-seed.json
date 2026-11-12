@@ -1,5 +1,5 @@
 {
-  "_what": "One step to add to Amora's onboarding path document (Admin, Onboarding path, the `onboarding-path` document), in its first phase (days 1 to 14). The Technical Operations conversation left the interviews on 11 Nov 2026 (the lead's ruling) and became one of the first conversations after the hire. Add the object under `item` to the `items` of the phase whose days are 1 to 14; if the document names no phases yet, use `phase` whole as its first phase, which keeps the platform's three default steps beside it. Applied by a person; nothing loads this file.",
+  "_what": "SUPERSEDED by onboarding-path-seed.json (Phase B, 11 Nov 2026), which holds the whole of our first 14 days. Kept so a person who applied this one step knows what moved: the Technical Operations conversation is now due on day 3, after the lead's ruling that it happens on day 2 or 3 after the hire. Apply the whole document instead. Nothing loads this file.",
   "phase": {
     "key": "first-days",
     "name": "Your first days",
@@ -9,8 +9,8 @@
       { "key": "companion", "kind": "companion", "title": "Meet your role's companion", "owner": "holder", "dueDay": 7, "doneWhen": "You have made a first request" },
       { "key": "guide", "kind": "guide", "title": "Ask the guide three questions", "owner": "holder", "dueDay": 7, "doneWhen": "Three answers with sources" },
       { "key": "access", "kind": "access", "title": "Book your access", "owner": "access", "dueDay": 7, "doneWhen": "Your access session is booked" },
-      { "key": "technical-operations-conversation", "kind": "plain", "title": "A conversation with the Technical Operations Steward: the tools, systems and access your role runs on", "owner": "holder", "dueDay": 10, "doneWhen": "The conversation is held" }
+      { "key": "technical-operations-conversation", "kind": "plain", "title": "A conversation with the Technical Operations Steward: the tools, systems and access your role runs on", "owner": "holder", "dueDay": 3, "doneWhen": "The conversation is held" }
     ]
   },
-  "item": { "key": "technical-operations-conversation", "kind": "plain", "title": "A conversation with the Technical Operations Steward: the tools, systems and access your role runs on", "owner": "holder", "dueDay": 10, "doneWhen": "The conversation is held" }
+  "item": { "key": "technical-operations-conversation", "kind": "plain", "title": "A conversation with the Technical Operations Steward: the tools, systems and access your role runs on", "owner": "holder", "dueDay": 3, "doneWhen": "The conversation is held" }
 }

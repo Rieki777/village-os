@@ -40,10 +40,11 @@ export interface LazyRoute {
 /**
  * The routes App.tsx serves from a lazily loaded page, in declaration order.
  *
- * Reads the two shapes App.tsx uses, `const X = lazyPage(() => import("./pages/Y"))`
- * (or `brochurePage(...)`, or `lazy(...)`) and `<Route path="/p" component={X} />`.
- * A route whose component is eager (Home, Login, NotFound) is left out: it is
- * already in the main bundle.
+ * Reads the shapes App.tsx uses, `const X = lazyPage(() => import("./pages/Y"))`
+ * (or `brochurePage(...)`, or `lazy(...)`) and `<Route path="/p" component={X} />`,
+ * or a route that renders a lazy page with props, `<Route path="/p">{() => <X a="b" />}</Route>`
+ * (the two training pages, 12 Nov 2026). A route whose component is eager
+ * (Home, Login, NotFound, a Redirect) is left out: it is already in the main bundle.
  */
 export function lazyRoutesFromApp(appSource: string): LazyRoute[] {
   const loaders = new Map<string, string>();
@@ -51,9 +52,10 @@ export function lazyRoutesFromApp(appSource: string): LazyRoute[] {
   // Array.from, not for...of over the iterator: tsconfig.json sets no target.
   for (const m of Array.from(appSource.matchAll(decl))) loaders.set(m[1], m[2]);
   const routes: LazyRoute[] = [];
-  const route = /<Route\s+path=["']([^"']+)["']\s+component=\{(\w+)\}\s*\/>/g;
+  // One pass over both shapes, so the table keeps App.tsx's order (wouter takes the first match).
+  const route = /<Route\s+path=["']([^"']+)["'](?:\s+component=\{(\w+)\}\s*\/>|\s*>\s*\{\s*\(\)\s*=>\s*<(\w+)[\s/>])/g;
   for (const m of Array.from(appSource.matchAll(route))) {
-    const module = loaders.get(m[2]);
+    const module = loaders.get(m[2] ?? m[3]);
     if (module) routes.push({ path: m[1], module });
   }
   return routes;

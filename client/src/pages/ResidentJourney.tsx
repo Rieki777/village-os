@@ -45,9 +45,9 @@ import {
  * journey (shared/pageContent/journeys.ts). What stays here is the look: the
  * icons, handed out by position.
  *
- * ONE FLOW, TWO TRACKS (build list section 8, 11 Nov 2026). The first steps
+ * ONE FLOW, TWO PATHS (build list section 8, 11 Nov 2026). The first steps
  * and the fork into two paths are the steward page's sections, written once
- * there and shown here as well; this page's own steps are the resident track,
+ * there and shown here as well; this page's own steps are the resident path,
  * which always carries the village's early supporters step from its own list.
  * It stands in the same night world as the steward page, in the game's
  * playful register (docs/DESIGN_RULE.md).
@@ -140,7 +140,7 @@ export default function ResidentJourney() {
   const { t } = useLingui();
   const walkedCount = progress.doneCount;
   const stepCount = progress.total;
-  const seedLabel = t({ message: `${walkedCount} of ${stepCount} steps completed`, context: "resident track ticked off" });
+  const seedLabel = t({ message: `${walkedCount} of ${stepCount} steps completed`, context: "resident path ticked off" });
   // This village's own destinations. Blank hides the control that uses one.
   const { eventsUrl, mailTo } = useVillageLinks();
   const targets: TargetContext = { eventsUrl, mailTo, subject: "" };

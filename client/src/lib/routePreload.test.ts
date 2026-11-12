@@ -55,6 +55,13 @@ describe("lazyRoutesFromApp, against the real App.tsx", () => {
     expect(i("/decisions")).toBeLessThan(i("/decisions/:id"));
   });
 
+  it("reads a route that renders a lazy page with props, and leaves a redirect out", () => {
+    expect(of("/training/steward")).toBe("pages/Training");
+    expect(of("/training/resident")).toBe("pages/Training");
+    expect(of("/join")).toBeUndefined();
+    expect(of("/roles/draft")).toBeUndefined();
+  });
+
   it("reads the email pages, which import one module three ways", () => {
     expect(of("/email/preferences")).toBe("pages/EmailPages");
   });

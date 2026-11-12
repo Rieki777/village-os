@@ -182,6 +182,37 @@ export async function seedVillage({ base, dbUrl, adminPassword, log = () => {} }
   await call("PUT", "/api/admin/variables/org.review_before_conversations", { value: true }, F);
   await call("PUT", "/api/admin/variables/org.stay_close_name", { value: "Friends of the Village" }, F);
   await call("PUT", "/api/admin/variables/org.stay_close_link", { value: "/resident" }, F);
+  // Phase B: our first 14 days, the village's own data (Admin, Onboarding path). A holder's path opens
+  // when they are seated, and Profile Today draws it as a strip of days. Made-up words.
+  await call(
+    "PUT",
+    "/api/admin/onboarding-path",
+    {
+      doc: {
+        enabled: true,
+        title: "Our first 14 days",
+        phases: [
+          {
+            key: "first-14-days",
+            name: "Our first 14 days",
+            fromDay: 1,
+            toDay: 14,
+            items: [
+              { key: "welcome", title: "A welcome from the Welcome Steward", owner: "onboarding", dueDay: 1, doneWhen: "We have met and said welcome" },
+              { key: "technical-operations-conversation", title: "A conversation about the tools and access your role runs on", owner: "holder", dueDay: 3, doneWhen: "The conversation is held" },
+              { key: "meet-your-circle", title: "Meet your circle", owner: "holder", dueDay: 7, doneWhen: "You have sat with your circle once" },
+              { key: "community-training", title: "Community training", owner: "holder", dueDay: 10, doneWhen: "You have walked the steward training", link: { label: "Open the steward training", href: "/training/steward" } },
+              { key: "first-value-check-in", title: "Your first value check-in", owner: "holder", dueDay: 14, doneWhen: "We have looked together at the value you brought" },
+            ],
+          },
+        ],
+        circles: {},
+        owners: { onboarding: "Welcome Steward" },
+        checkins: [14],
+      },
+    },
+    F,
+  );
 
   // Two existing members, one per viewport.
   for (const key of ["memberPhone", "memberDesktop"]) {

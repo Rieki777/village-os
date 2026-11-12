@@ -1,0 +1,21 @@
+{
+  "hero": {
+    "eyebrow": "Community training",
+    "headline": "Learn together, grow together",
+    "intro": "Our training in NVC (Nonviolent Communication), authentic relating and the other practices we live by. Take each lesson at your own pace."
+  },
+  "lessons": {
+    "heading": "Your lessons",
+    "intro": "Each lesson opens in a new tab. Mark it done when you finish."
+  },
+  "door": {
+    "title": "Training for residents",
+    "line": "For everyone making a home in the village."
+  },
+  "close": {
+    "heading": "Already living these practices?",
+    "body": "You can also show us you already know and live them.",
+    "ctaLabel": "",
+    "ctaTarget": ""
+  }
+}

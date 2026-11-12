@@ -57,6 +57,7 @@ import { usePathLadders } from "@/hooks/usePathLadders";
 import { FIRST_DAYS } from "@shared/roleStartWords";
 import { PATH_MILESTONES } from "@shared/yourPath";
 import YourPathCard from "@/components/path/YourPathCard";
+import WeekStrip from "@/components/today/WeekStrip";
 import { SeedOfLife } from "@/components/journey/nature";
 import { rememberPath, type PathView } from "@/lib/usePath";
 import { lazy, Suspense, useEffect, useState } from "react";
@@ -157,7 +158,9 @@ export default function Profile() {
    * hour ago is not on a ladder yet.
    */
   const [startStepsShown, setStartStepsShown] = useState(false);
-  const [pathDay, setPathDay] = useState<number | null>(null);
+  /** The reader's own onboarding day: undefined until the path is read, null with none. */
+  const [pathDay, setPathDay] = useState<number | null | undefined>(undefined);
+  const eventsOn = useModuleOn("events");
 
   /**
    * The progression read, once for the page.
@@ -223,7 +226,14 @@ export default function Profile() {
    * read lands the page shows no rank at all, because a rank that flashes and
    * goes is still a rank shown.
    */
-  const firstDays = me ? (path ? path.fresh : startStepsShown || (pathDay !== null && pathDay <= FIRST_DAYS)) : true;
+  const firstDays = me ? (path ? path.fresh : startStepsShown || (typeof pathDay === "number" && pathDay <= FIRST_DAYS)) : true;
+  /**
+   * PROFILE TODAY'S ONE STRIP OF TIME (Phase B, decision 1). Someone newly
+   * seated reads their first fourteen days (drawn inside the onboarding card);
+   * everyone else reads their week. Nothing is drawn until the path is read,
+   * so a newly seated holder never sees the week flash and go.
+   */
+  const weekShown = pathDay !== undefined && !(typeof pathDay === "number" && pathDay >= 1 && pathDay <= FIRST_DAYS);
   /*
    * ONE READ, AND IT RE-READS FOR EVERYBODY.
    *
@@ -446,6 +456,11 @@ export default function Profile() {
             <div className={`empty:hidden ${tabOf(["today", "roles"])}`}>
               <Suspense fallback={null}><OnboardingPath onDay={setPathDay} /></Suspense>
             </div>
+            {weekShown ? (
+              <div className={tabOf("today")}>
+                <WeekStrip meetings={dash.meetings} taskDue={dash.tasks?.nextDue ?? null} eventsOn={eventsOn} />
+              </div>
+            ) : null}
             {/* The door to proposing. The next-season banner is one of the path's own rules now, so it is
                 drawn only where there is no path to say it. */}
             <div className={`flex flex-col gap-4 empty:hidden ${tabOf(["today", "roles"])}`}>

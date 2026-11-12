@@ -1,0 +1,24 @@
+{
+  "_what": "Amora's onboarding path document, whole (Phase B, the lead's decision 3, 11 Nov 2026): our first 14 days hold a welcome from the Human Operations & Onboarding Lead Steward, the Technical Operations conversation on day 3, meeting your circle, community training, and the first value check-in at day 14. Applied by a person through Admin, Org chart, Onboarding path (paste it into the JSON box, or PUT /api/admin/onboarding-path with { \"doc\": <this object without the _ keys> }). Saving replaces the village's document whole. Nothing loads this file. Paths already open keep their steps; new seatings get these. `owners.onboarding` must read exactly as the role's name on the org chart, or nobody can tick the welcome. The training link points at the steward training page (lane B5's /training/steward).",
+  "_switch": "`enabled` is true because the lead decided these 14 days on 11 Nov 2026. A village applying a copy for itself ticks it only once its circle has consented.",
+  "enabled": true,
+  "title": "Our first 14 days",
+  "phases": [
+    {
+      "key": "first-14-days",
+      "name": "Our first 14 days",
+      "fromDay": 1,
+      "toDay": 14,
+      "items": [
+        { "key": "welcome", "kind": "plain", "title": "A welcome from the Human Operations & Onboarding Lead Steward", "owner": "onboarding", "dueDay": 1, "doneWhen": "We have met and said welcome" },
+        { "key": "technical-operations-conversation", "kind": "plain", "title": "A conversation with the Technical Operations Steward: the tools, systems and access your role runs on", "owner": "holder", "dueDay": 3, "doneWhen": "The conversation is held" },
+        { "key": "meet-your-circle", "kind": "plain", "title": "Meet your circle", "owner": "holder", "dueDay": 7, "doneWhen": "You have sat with your circle once" },
+        { "key": "community-training", "kind": "plain", "title": "Community training", "owner": "holder", "dueDay": 10, "doneWhen": "You have walked the steward training", "link": { "label": "Open the steward training", "href": "/training/steward" } },
+        { "key": "first-value-check-in", "kind": "plain", "title": "Your first value check-in", "owner": "holder", "dueDay": 14, "doneWhen": "We have looked together at the value you brought in your first 14 days" }
+      ]
+    }
+  ],
+  "circles": {},
+  "owners": { "onboarding": "Human Operations & Onboarding Lead Steward" },
+  "checkins": [14]
+}
