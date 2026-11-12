@@ -765,8 +765,13 @@ export interface ClaimsRepo {
   consentedCount(userId: string): Promise<number>;
   /** One grouped query for listing N members (admin players view). */
   consentedCounts(): Promise<Map<string, number>>;
-  /** Per-quest life signs, aggregated in SQL. Examples excluded, both kinds. */
-  fieldCounts(): Promise<Map<string, { active: number; done: number }>>;
+  /**
+   * Per-quest life signs, aggregated in SQL. Examples excluded, both kinds.
+   * `moon` counts the consents at or after `since` (the board passes the start
+   * of this moon), so a quest done this moon can be drawn as a flower; with no
+   * `since` it is 0.
+   */
+  fieldCounts(since?: Date): Promise<Map<string, { active: number; done: number; moon: number }>>;
   /** The newest consented claims, capped. Examples excluded, both kinds. */
   recentConsented(limit: number): Promise<FieldCompletion[]>;
   /**
@@ -1150,17 +1155,24 @@ export function claimsRepo(pool: Pool): ClaimsRepo {
       return new Map(rows.map((r) => [String(r.user_id), Number(r.n)]));
     },
 
-    async fieldCounts() {
+    async fieldCounts(since) {
+      // The moon column rides in the same grouped read: one more SUM, no
+      // second scan. A missing or unreadable `since` counts nothing.
+      const from = since && !Number.isNaN(since.getTime()) ? since : null;
       const [rows] = await pool.query<RowDataPacket[]>(
-        `SELECT c.quest_id, c.status, COUNT(*) AS n ${REAL_CLAIM_JOIN} ` +
+        `SELECT c.quest_id, c.status, COUNT(*) AS n, ` +
+          `SUM(CASE WHEN ? IS NOT NULL AND c.consented_at >= ? THEN 1 ELSE 0 END) AS moon ${REAL_CLAIM_JOIN} ` +
           "AND c.status IN ('claimed','submitted','consented') GROUP BY c.quest_id, c.status",
+        [from, from],
       );
-      const out = new Map<string, { active: number; done: number }>();
+      const out = new Map<string, { active: number; done: number; moon: number }>();
       for (const r of rows) {
         const id = String(r.quest_id);
-        const slot = out.get(id) ?? { active: 0, done: 0 };
-        if (r.status === "consented") slot.done += Number(r.n ?? 0);
-        else slot.active += Number(r.n ?? 0);
+        const slot = out.get(id) ?? { active: 0, done: 0, moon: 0 };
+        if (r.status === "consented") {
+          slot.done += Number(r.n ?? 0);
+          slot.moon += Number(r.moon ?? 0);
+        } else slot.active += Number(r.n ?? 0);
         out.set(id, slot);
       }
       return out;

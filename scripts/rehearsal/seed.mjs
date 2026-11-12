@@ -21,6 +21,7 @@
  *   - Two existing members, one per viewport, made through invitations, so the
  *     member's proposal walk (persona 3) starts from a fresh draft each time.
  */
+import { createHash } from "node:crypto";
 import mysql from "mysql2/promise";
 
 const civil = (ms) => new Date(ms).toISOString().slice(0, 10);
@@ -142,6 +143,23 @@ export async function seedVillage({ base, dbUrl, adminPassword, log = () => {} }
     for (const [i, q] of quests.entries()) {
       await db.query("UPDATE quests SET archetypes = ?, archetypes_suggested = 0 WHERE id = ?", [JSON.stringify(cycle[i % cycle.length]), q.id]);
     }
+    // Goal threads (Phase C, decision 5): which season goal each quest grows
+    // and where it happens, the document a founder writes from a quest's own
+    // page. The starter quests are examples, which that route refuses, so the
+    // seed writes it here. A goal's id is the one its words derive
+    // (server/lib/seasonGoals.ts, goalIdFor).
+    const goalId = (text) => `g${createHash("sha1").update(text.trim(), "utf8").digest("hex").slice(0, 11)}`;
+    const threadGoals = ["Clean water all year", "Shared meals every week", "A thriving community"].map(goalId);
+    const places = ["land", "both", "remote"];
+    const threads = {};
+    for (const [i, q] of quests.entries()) {
+      if (i % 4 === 3) continue; // some quests name no goal yet
+      threads[q.id] = { goalId: threadGoals[i % threadGoals.length], place: places[i % places.length] };
+    }
+    await db.query(
+      "INSERT INTO app_config (config_key, value) VALUES ('quest-threads', ?) ON DUPLICATE KEY UPDATE value = VALUES(value)",
+      [JSON.stringify({ v: 1, quests: threads })],
+    );
     await db.query("UPDATE org_roles SET archetypes = ?, archetypes_suggested = 0 WHERE id = ?", [JSON.stringify(["researching", "catalyzing", "building"]), state.roles.finance]);
     await db.query("UPDATE org_roles SET archetypes = ?, archetypes_suggested = 0 WHERE id = ?", [JSON.stringify(["building", "researching"]), state.roles.land]);
   } finally {

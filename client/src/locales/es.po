@@ -13625,3 +13625,205 @@ msgstr "Te quedan <0>{0}</0> de {1} para dar este ciclo"
 msgctxt "thanks composer: the allowance tooltip"
 msgid "Your allowance refills when the cycle turns. Sending moves it from your allowance to the person you thank; it never costs you anything you earned."
 msgstr "Tu asignación se renueva cuando cambia el ciclo. Enviar la pasa de tu asignación a la persona que agradeces; nunca te cuesta nada de lo que ganaste."
+
+#: client/src/components/QuestCard.tsx
+msgctxt "open work card: people carrying this quest now"
+msgid "{active} hands on this"
+msgstr "{active} manos en esto"
+
+#: client/src/pages/Quests.tsx
+msgctxt "open work: clear the season goal filter"
+msgid "Show every goal"
+msgstr "Ver todas las metas"
+
+#: client/src/pages/Quests.tsx
+msgctxt "open work: the goal thread, one"
+msgid "1 open quest grows {goalName}"
+msgstr "1 misión abierta hace crecer {goalName}"
+
+#: client/src/components/openWork/statusWords.ts
+msgctxt "open work board: status mark, an open quest"
+msgid "Open: nobody carries it yet"
+msgstr "Abierta: nadie la lleva todavía"
+
+#: client/src/pages/Quests.tsx
+msgctxt "open work filter row"
+msgid "Season goal"
+msgstr "Meta de la temporada"
+
+#: client/src/components/QuestCard.tsx
+msgctxt "open work card: one person carries this quest now"
+msgid "1 hand on this"
+msgstr "1 mano en esto"
+
+#: client/src/components/openWork/QuestThreadPicker.tsx
+msgctxt "quest goal thread editor"
+msgid "This season has no goals yet. Add them in Admin, Season."
+msgstr "Esta temporada todavía no tiene metas. Agrégalas en Admin, Temporada."
+
+#: client/src/components/openWork/FitsYouCard.tsx
+msgctxt "open work: the one card chosen for the reader"
+msgid "Fits you"
+msgstr "Para ti"
+
+#: client/src/components/openWork/placeWords.ts
+msgctxt "open work: where a quest happens"
+msgid "On the land or remote"
+msgstr "En la tierra o a distancia"
+
+#: client/src/components/openWork/QuestThreadPicker.tsx
+msgctxt "quest goal thread editor: field"
+msgid "Season goal"
+msgstr "Meta de la temporada"
+
+#: client/src/pages/Quests.tsx
+msgctxt "open work filter: every place"
+msgid "Anywhere"
+msgstr "En cualquier lugar"
+
+#: client/src/components/openWork/statusWords.ts
+msgctxt "open work board: status mark, a carried quest"
+msgid "Underway: someone carries it"
+msgstr "En marcha: alguien la lleva"
+
+#: client/src/pages/Quests.tsx
+msgctxt "open work filter: all season goals"
+msgid "Every goal"
+msgstr "Todas las metas"
+
+#: client/src/pages/Quests.tsx
+msgctxt "open work board eyebrow"
+msgid "Quests"
+msgstr "Misiones"
+
+#: client/src/pages/Quests.tsx
+msgctxt "open work: the goal thread, none"
+msgid "No open quests grow {goalName} yet"
+msgstr "Todavía no hay misiones abiertas que hagan crecer {goalName}"
+
+#: client/src/pages/QuestDetail.tsx
+msgctxt "quest page: link to the board filtered to one season goal"
+msgid "See all the open work for this goal"
+msgstr "Ver todo el trabajo abierto para esta meta"
+
+#: client/src/components/openWork/statusWords.ts
+msgctxt "open work board: status mark, a quest done this moon"
+msgid "Done this moon"
+msgstr "Hecha esta luna"
+
+#: client/src/components/openWork/QuestThreadPicker.tsx
+msgctxt "quest goal thread editor: empty choice"
+msgid "Not said yet"
+msgstr "Sin decir todavía"
+
+#: client/src/pages/Quests.tsx
+msgctxt "open work filter row"
+msgid "Where it happens"
+msgstr "Dónde sucede"
+
+#: client/src/components/GameDashboard.tsx
+msgctxt "profile quests card: the door to the board"
+msgid "See the open work"
+msgstr "Ver el trabajo abierto"
+
+#: client/src/components/openWork/FitsYouCard.tsx
+msgctxt "open work: why the lead quest was chosen"
+msgid "It grows {goalText}, and that goal needs hands this season."
+msgstr "Hace crecer {goalText}, y esa meta necesita manos esta temporada."
+
+#: client/src/components/openWork/QuestThreadPicker.tsx
+msgctxt "quest goal thread editor"
+msgid "The goal this quest grows"
+msgstr "La meta que hace crecer esta misión"
+
+#: client/src/components/openWork/placeWords.ts
+msgctxt "open work: where a quest happens"
+msgid "On the land"
+msgstr "En la tierra"
+
+#: client/src/components/openWork/QuestThreadPicker.tsx
+msgctxt "quest goal thread editor: field"
+msgid "Where it happens"
+msgstr "Dónde sucede"
+
+#: client/src/components/openWork/QuestThreadPicker.tsx
+msgctxt "quest goal thread editor: button while saving"
+msgid "Saving"
+msgstr "Guardando"
+
+#: client/src/components/openWork/placeWords.ts
+msgctxt "open work: where a quest happens"
+msgid "Remote"
+msgstr "A distancia"
+
+#: client/src/components/openWork/QuestThreadPicker.tsx
+msgctxt "quest goal thread editor"
+msgid "That did not save. Try again."
+msgstr "No se guardó. Inténtalo de nuevo."
+
+#: client/src/components/openWork/FitsYouCard.tsx
+msgctxt "open work: the one act on the lead card"
+msgid "Take this on"
+msgstr "Tomar esto"
+
+#: client/src/components/openWork/FitsYouCard.tsx
+#: client/src/components/QuestCard.tsx
+#: client/src/pages/QuestDetail.tsx
+msgctxt "open work card: the season goal this quest grows"
+msgid "Grows: {goalText}"
+msgstr "Hace crecer: {goalText}"
+
+#: client/src/pages/Quests.tsx
+msgctxt "open work: the goal thread, several"
+msgid "{goalCount} open quests grow {goalName}"
+msgstr "{goalCount} misiones abiertas hacen crecer {goalName}"
+
+#: client/src/components/openWork/QuestThreadPicker.tsx
+msgctxt "quest goal thread editor: button"
+msgid "Save the thread"
+msgstr "Guardar el hilo"
+
+#: client/src/components/openWork/FitsYouCard.tsx
+msgctxt "open work: why the lead quest was chosen"
+msgid "A gentle place to begin."
+msgstr "Un lugar tranquilo para empezar."
+
+#: client/src/pages/Quests.tsx
+msgctxt "open work: the group for quests with no circle"
+msgid "Open to every circle"
+msgstr "Abierta a todos los círculos"
+
+#: client/src/components/openWork/QuestThreadPicker.tsx
+msgctxt "quest goal thread editor"
+msgid "Saved."
+msgstr "Guardado."
+
+#: client/src/components/openWork/QuestThreadPicker.tsx
+msgctxt "quest goal thread editor: empty choice"
+msgid "No goal yet"
+msgstr "Sin meta todavía"
+
+#: client/src/components/openWork/FitsYouCard.tsx
+msgctxt "open work: why the lead quest was chosen"
+msgid "It grows from your roots."
+msgstr "Crece de tus raíces."
+
+#: client/src/pages/Quests.tsx
+msgctxt "open work filters"
+msgid "Filter by season goal and place"
+msgstr "Filtrar por meta de la temporada y lugar"
+
+#: client/src/pages/Quests.tsx
+msgctxt "open work board heading"
+msgid "Open work"
+msgstr "Trabajo abierto"
+
+#: client/src/pages/Quests.tsx
+msgctxt "open work: gated quests explained once"
+msgid "Some of this work opens as you walk the {ladder} or step into a role. Each card says what opens it."
+msgstr "Parte de este trabajo se abre a medida que recorres el {ladder} o asumes un rol. Cada tarjeta dice qué lo abre."
+
+#: client/src/components/openWork/FitsYouCard.tsx
+msgctxt "open work: the lead card for a visitor"
+msgid "A good place to start"
+msgstr "Un buen lugar para empezar"

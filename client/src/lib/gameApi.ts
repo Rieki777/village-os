@@ -605,6 +605,8 @@ export interface QuestClaim {
   questTitle: string;
   status: "claimed" | "submitted" | "consented" | "declined";
   claimedAt: string;
+  /** When the circle consented (or declined) it; null while it is open. */
+  resolvedAt?: string | null;
   artifactUrl: string;
   note: string;
   /** What the witness granted for this piece of work. */

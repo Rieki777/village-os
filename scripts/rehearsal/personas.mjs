@@ -567,6 +567,24 @@ export async function holder(w, ctx) {
     await sw.click();
   });
   await w.look("quests-by-roots");
+  // The open work board (Phase C, decision 5): a plain list grouped by
+  // circle, each card naming the season goal it grows with a small status
+  // mark, and a goal filter that reads back the village's count of open
+  // quests for that goal (the commons links here as /quests?goal=<id>). The
+  // starter quests are examples, which never lead and never count, so the
+  // "Fits you" card and the count are the board's own tests' to prove.
+  await w.step("filter the open work by a season goal", async () => {
+    await page.getByRole("heading", { name: "Open work" }).waitFor();
+    if (!(await page.locator("[data-circle-group]").count())) throw new Error("the open work is not grouped by circle");
+    if (!(await page.locator("article [data-status]").count())) throw new Error("the cards carry no status mark");
+    const goal = page.locator("[data-goal-filter]:not([data-goal-filter=All])").first();
+    await goal.click();
+    await page.locator("[data-goal-thread]").waitFor();
+    const cards = await page.locator("[data-circle-group] article").count();
+    const growing = await page.locator("[data-circle-group] article [data-goal]").count();
+    if (!cards || cards !== growing) throw new Error(`the goal filter shows ${cards} cards, ${growing} of them growing that goal`);
+  });
+  await w.look("open-work-goal");
   // Two training pages (the lead, 11 Nov 2026): /training chooses, and each
   // path has its own page with its own words. A holder takes the steward one
   // and marks a lesson done; the record is the server's, so it is read back.
