@@ -1,19 +1,17 @@
 /**
- * A QUEST AS A PLANT: a seed, a bud or a flower (Phase C, decision 5).
+ * A QUEST'S STATUS MARK: a seed (open), a sprout (underway) or a flower (done
+ * this moon). Phase C, decision 5: the nature layer on the open work board is
+ * this small mark per card and never the layout.
  *
- * `PlantShape` is the drawing as an SVG group, standing on its own base at
- * (0, 0) and growing upward, so a bed can place it on its soil. `PlantGlyph`
- * is the same drawing in its own small box, for a card, a row or a legend.
- *
- * The meaning lives in lib/questMeadow.ts: the shape only draws a state it is
- * handed. Ink is the sheet's: muted for a seed, the living green for stems
- * and leaves, gold for a bud's tip and a flower's petals. Nothing loops; the
- * one motion is a hover lift the bed applies, inside reduced-motion's
- * no-preference.
+ * `PlantShape` is the drawing as an SVG group standing on its base at (0, 0);
+ * `PlantGlyph` is the same drawing in its own small box. The meaning lives in
+ * lib/questStatus.ts: the shape only draws a status it is handed. Ink is the
+ * sheet's: muted for a seed, the living green for a sprout, gold for a
+ * flower's petals. Still: nothing here moves.
  */
-import type { PlantState } from "@/lib/questMeadow";
+import type { QuestStatus } from "@/lib/questStatus";
 
-export function PlantShape({ state, scale = 1 }: { state: PlantState; scale?: number }) {
+export function PlantShape({ state, scale = 1 }: { state: QuestStatus; scale?: number }) {
   return (
     <g transform={`scale(${scale})`} data-plant={state} fill="none" strokeLinecap="round" strokeLinejoin="round">
       {state === "seed" && (
@@ -22,22 +20,13 @@ export function PlantShape({ state, scale = 1 }: { state: PlantState; scale?: nu
           <ellipse cx={0} cy={-3.5} rx={3.2} ry={4.4} stroke="currentColor" strokeWidth={1.2} />
         </g>
       )}
-      {state === "bud" && (
-        <>
-          <g className="text-open">
-            <path d="M0 2 Q-1 -6 0 -12" stroke="currentColor" strokeWidth={1.4} />
-            <path d="M0 -5 Q-6 -6 -7.5 -11" stroke="currentColor" strokeWidth={1.1} />
-            <path d="M0 -7 Q5 -8 6.5 -12" stroke="currentColor" strokeWidth={1.1} />
-          </g>
-          <path
-            className="text-notice"
-            d="M0 -12 Q-4.5 -16.5 0 -23 Q4.5 -16.5 0 -12Z"
-            fill="currentColor"
-            fillOpacity={0.22}
-            stroke="currentColor"
-            strokeWidth={1.2}
-          />
-        </>
+      {state === "sprout" && (
+        <g className="text-open">
+          <path d="M-6 2 Q0 -0.5 6 2" stroke="currentColor" strokeWidth={1} opacity={0.6} />
+          <path d="M0 2 L0 -10" stroke="currentColor" strokeWidth={1.4} />
+          <path d="M0 -6 Q-7 -8 -8.5 -14 Q-2.5 -13 0 -7.5" fill="currentColor" fillOpacity={0.22} stroke="currentColor" strokeWidth={1.1} />
+          <path d="M0 -8 Q6 -10.5 7.5 -16 Q2 -15 0 -9.5" fill="currentColor" fillOpacity={0.22} stroke="currentColor" strokeWidth={1.1} />
+        </g>
       )}
       {state === "flower" && (
         <>
@@ -70,7 +59,7 @@ export function PlantShape({ state, scale = 1 }: { state: PlantState; scale?: nu
 }
 
 /** One plant in its own small box. Decorative: the words beside it say what it is. */
-export function PlantGlyph({ state, className = "size-6" }: { state: PlantState; className?: string }) {
+export function PlantGlyph({ state, className = "size-6" }: { state: QuestStatus; className?: string }) {
   return (
     <svg viewBox="-13 -27 26 31" className={`shrink-0 ${className}`} aria-hidden="true" focusable="false">
       <PlantShape state={state} />

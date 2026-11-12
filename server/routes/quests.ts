@@ -87,6 +87,17 @@ import { payBadgeBoosts, payLineProblem, payableTokens, questPay, questPayRules,
 import { seasonallyDormantBadgeIds } from "../lib/seasonPatterns";
 import { defaultDisplayCurrency } from "../../shared/money";
 import { readWorkValueInput } from "../../shared/workValue";
+import { dbDocument } from "../repos/store-db";
+import {
+  checkThread,
+  EMPTY_THREADS,
+  openQuestsPerGoal,
+  QUEST_THREADS_KEY,
+  readThreads,
+  withThread,
+  type GoalLike,
+  type QuestThread,
+} from "../../shared/questThreads";
 
 /** The share-card raster. 1200x630 is what every major unfurler crops to. */
 export const OG_WIDTH = 1200;
@@ -127,6 +138,8 @@ type Deps = Pick<
   questNextStep(quest: QuestRecord, userId: string): Promise<ResolvedNextStep>;
   /** Whether quests may ask a minimum age; the village setting `quest.minimum_ages` when absent. */
   minimumAgesOn?: () => boolean;
+  /** The village's season calendar, for the goals a quest can grow (decision 5). Absent, no goal threads. */
+  seasonState?: AppDeps["seasonState"];
 };
 
 export function register(app: Express, deps: Deps): void {
@@ -155,6 +168,39 @@ export function register(app: Express, deps: Deps): void {
   // Whether quests may ask a minimum age (shared/ageBands.ts). The village setting, ships off.
   const minimumAgesOn: () => boolean = deps.minimumAgesOn ?? minimumAgesOnByDefault;
 
+  /*
+   * GOAL THREADS (Phase C, decision 5, shared/questThreads.ts). Which season
+   * goal each quest grows and where the work happens, one app_config
+   * document laid over the board. Read per request (one primary-key lookup),
+   * for the reason server/lib/villageMoon.ts gives: more than one process
+   * serves, and a cached copy would be wrong in every sibling after a write.
+   * A failed read draws the board without threads, never takes it down.
+   */
+  const threadsDoc = () => dbDocument(getPool(), QUEST_THREADS_KEY, EMPTY_THREADS as any);
+  async function loadThreads(): Promise<Record<string, QuestThread>> {
+    try {
+      const doc = threadsDoc();
+      await doc.load();
+      return readThreads(doc.get());
+    } catch {
+      return {};
+    }
+  }
+  /** This season's goals, with the ids 0298 gives them. None without a current season. */
+  function seasonGoals(): GoalLike[] {
+    try {
+      const goals = deps.seasonState?.()?.current?.goals;
+      if (!Array.isArray(goals)) return [];
+      return goals
+        .map((g: any) => ({ id: String(g?.id ?? ""), text: String(g?.text ?? "").trim(), done: !!g?.done }))
+        .filter((g) => g.id && g.text);
+    } catch {
+      return [];
+    }
+  }
+  const threadOf = (threads: Record<string, QuestThread>, id: string): QuestThread =>
+    threads[id] ?? { goalId: null, place: null };
+
   // Quests: public list
   /*
    * EVERY QUEST SAYS WHAT IT PAYS (Rye, 2026-10-21), worked out by the same
@@ -164,8 +210,9 @@ export function register(app: Express, deps: Deps): void {
    * then says to inquire.
    */
   app.get("/api/quests", async (_req, res) => {
-    const [quests, rules, boosts] = await Promise.all([questsRepo.all(), questPayRules(getPool()), questBadgeBoosts()]);
-    res.json(quests.map((q) => ({ ...q, pay: withPayBadges(questPay(q, rules), boosts) })));
+    const [quests, rules, boosts, threads] = await Promise.all([questsRepo.all(), questPayRules(getPool()), questBadgeBoosts(), loadThreads()]);
+    // `goalId` and `place` ride on every quest (decision 5's goal threads).
+    res.json(quests.map((q) => ({ ...q, ...threadOf(threads, q.id), pay: withPayBadges(questPay(q, rules), boosts) })));
   });
 
   /*
@@ -285,6 +332,19 @@ export function register(app: Express, deps: Deps): void {
   });
 
   /**
+   * OPEN QUESTS PER SEASON GOAL (public): this season's goals, each with the
+   * count of open quests that grow it ("12 open quests grow Clean water all
+   * year"). The count is the village's: it counts quests, and reads no claim,
+   * so no person is in it. Closed quests and standing examples never count.
+   * The commons links each goal to `/quests?goal=<id>`. Registered before
+   * `/api/quests/:id`, so the literal path wins.
+   */
+  app.get("/api/quests/goals", async (_req, res) => {
+    const [quests, threads] = await Promise.all([questsRepo.all(), loadThreads()]);
+    res.json({ goals: openQuestsPerGoal(quests, threads, seasonGoals()) });
+  });
+
+  /**
    * One quest, by id. The detail page used to pull the whole board and find
    * its quest on the client, which meant every deep link carried every other
    * quest's story, steps and tips. Registered AFTER /api/quests/field so the
@@ -339,7 +399,8 @@ export function register(app: Express, deps: Deps): void {
      */
     // What each quest pays, the same answer the board gives (see `/api/quests`).
     const [rules, boosts] = await Promise.all([questPayRules(getPool()), questBadgeBoosts()]);
-    const priced = { ...quest, pay: withPayBadges(questPay(quest, rules), boosts) };
+    const threads = await loadThreads();
+    const priced = { ...quest, ...threadOf(threads, quest.id), pay: withPayBadges(questPay(quest, rules), boosts) };
     const pricedRelated = related.map((q) => ({ ...q, pay: withPayBadges(questPay(q, rules), boosts) }));
     const viewer = await authedUser(req);
     if (!viewer) return res.json({ quest: priced, related: pricedRelated });
@@ -873,6 +934,31 @@ export function register(app: Express, deps: Deps): void {
     if (!checked.ok) return res.status(400).json({ error: checked.error, field: "roots" });
     if (!(await setQuestRoots(getPool(), id, checked.roots))) return res.status(404).json({ error: "Not found" });
     res.json({ id, roots: checked.roots });
+  });
+
+  /*
+   * THE GOAL A QUEST GROWS AND WHERE IT HAPPENS (decision 5). Its own write,
+   * like the roots one, so it never rides an unrelated edit. The goal must be
+   * on the current season (by id); either half may be cleared with null.
+   * Display only: the claim handler below reads none of it.
+   */
+  app.put("/api/admin/quests/:id/thread", async (req, res) => {
+    if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
+    const id = String(req.params.id);
+    if (await isExampleRow(getPool(), "quests", id)) return res.status(409).json(EXAMPLE_REFUSAL_BODY);
+    const quest = await questsRepo.byId(id);
+    if (!quest) return res.status(404).json({ error: "Not found" });
+    const checked = checkThread(req.body, seasonGoals().map((g) => g.id));
+    if (!checked.ok) return res.status(400).json({ error: checked.error, field: checked.field });
+    const doc = threadsDoc();
+    await doc.load();
+    await doc.put(withThread(doc.get(), id, checked.thread) as any);
+    const actor = (await authedUser(req))?.id ?? adminActor(req)?.id ?? null;
+    await recordEvent(getPool(), {
+      kind: "audit", text: `quest:thread:${id}`, actorUserId: actor,
+      entityType: "quest", entityRef: id, audience: "admin",
+    });
+    res.json({ id, ...checked.thread });
   });
 
   app.put("/api/admin/quests/:id/safety", async (req, res) => {

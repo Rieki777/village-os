@@ -18,7 +18,7 @@ import { Link, useRoute } from "wouter";
 import { useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft, CheckCircle2, ClipboardCheck, Clock, Compass, Footprints,
-  Lightbulb, ListChecks, Send, Sparkles, Sprout, Users,
+  Lightbulb, ListChecks, MapPin, Send, Sparkles, Sprout, Target, Users,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { CATALYST_FALLBACK, fetchGameMe, gameFetch, QuestClaim, useGameConfig, villageWord } from "@/lib/gameApi";
@@ -32,9 +32,14 @@ import WorkChatButton from "@/components/messages/WorkChatButton";
 import QuestCard, { difficultyColors, iconFor, QuestPoster } from "@/components/QuestCard";
 import NeedChips, { type NeedTag } from "@/components/NeedChips";
 import NeedTagPicker from "@/components/admin/NeedTagPicker";
-import { PlantGlyph } from "@/components/questMeadow/Plant";
-import { usePlantWords } from "@/components/questMeadow/plantWords";
-import { plantFor } from "@/lib/questMeadow";
+import { PlantGlyph } from "@/components/openWork/StatusMark";
+import { useStatusWords } from "@/components/openWork/statusWords";
+import { usePlaceWords } from "@/components/openWork/placeWords";
+import { useQuestGoals } from "@/components/openWork/useQuestGoals";
+import QuestThreadPicker from "@/components/openWork/QuestThreadPicker";
+import { statusFor } from "@/lib/questStatus";
+import { goalOf } from "@shared/questThreads";
+import { useLingui } from "@lingui/react/macro";
 import { useLadderTitle } from "@/hooks/useVillagePaths";
 import {
   currentClaims, gateFix, gateLabel, relativeWhen, statusIs,
@@ -127,9 +132,18 @@ export default function QuestDetail() {
   const claim = quest ? claims[quest.id] : undefined;
   const questSigns = quest ? signs?.perQuest?.[quest.id] : undefined;
   const active = questSigns?.active ?? 0;
-  // Where this quest stands in the board's meadow: a seed, a bud or a flower.
-  const plant = plantFor(questSigns);
-  const plantWords = usePlantWords();
+  // The board's status mark: seed (open), sprout (underway), flower (done this moon).
+  const status = statusFor(questSigns);
+  const statusWords = useStatusWords();
+  const placeWords = usePlaceWords();
+  const { t } = useLingui();
+  // The goal thread (decision 5): which season goal this quest grows.
+  const goals = useQuestGoals();
+  const [threadEdit, setThreadEdit] = useState<{ goalId: string | null; place: BoardQuest["place"] } | null>(null);
+  const goalId = threadEdit ? threadEdit.goalId : quest?.goalId ?? null;
+  const place = (threadEdit ? threadEdit.place : quest?.place) ?? null;
+  const goal = goalOf(goalId, goals ?? []);
+  const goalText = goal?.text ?? "";
   const done = questSigns?.done ?? 0;
   const completions = useMemo(
     () => (quest && signs ? signs.recent.filter((r) => r.questId === quest.id) : []),
@@ -252,11 +266,17 @@ export default function QuestDetail() {
           <div className="flex flex-wrap items-center gap-2.5 mt-4">
             {/* What the quest is worth and pays, or to inquire (0265). */}
             <WorkPayBlock pay={quest.pay} />
-            {/* The quest as the meadow draws it. It describes the work, never a person. */}
-            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-muted text-muted-foreground text-sm" data-plant={plant}>
-              <PlantGlyph state={plant} className="size-5" />
-              {plantWords[plant].long}
+            {/* The status mark. It describes the work, never a person. */}
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-muted text-muted-foreground text-sm" data-status={status}>
+              <PlantGlyph state={status} className="size-5" />
+              {statusWords[status]}
             </span>
+            {place && (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-muted text-muted-foreground text-sm" data-place={place}>
+                <MapPin className="w-4 h-4" aria-hidden="true" />
+                {placeWords[place]}
+              </span>
+            )}
             {quest.duration && (
               <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-muted text-muted-foreground text-sm">
                 <Clock className="w-4 h-4" />
@@ -289,6 +309,18 @@ export default function QuestDetail() {
               role gate above, and no tag reaches either. */}
           <NeedChips tags={needTags} className="mt-3" />
 
+          {/* The goal thread: the season goal this work grows, and how many open
+              quests grow it with this one (the village's count). */}
+          {goal && (
+            <p className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-foreground" data-goal={goal.id}>
+              <Target className="w-4 h-4 text-open" aria-hidden="true" />
+              <span className="font-medium">{t({ message: `Grows: ${goalText}`, context: "open work card: the season goal this quest grows" })}</span>
+              <Link href={`/quests?goal=${encodeURIComponent(goal.id)}`} className="font-medium text-notice underline underline-offset-2 hover:text-foreground">
+                {t({ message: "See all the open work for this goal", context: "quest page: link to the board filtered to one season goal" })}
+              </Link>
+            </p>
+          )}
+
           {quest.isExample && (
             <p className="mt-4 text-sm text-muted-foreground bg-amber/10 border border-amber/30 rounded-xl px-4 py-3">
               A standing example. It shows what a quest looks like here until the
@@ -299,6 +331,18 @@ export default function QuestDetail() {
           {/* The founder's own control, on the page the quest already has.
               client/src/pages/Admin.tsx is at its line ratchet, so the quest
               editor there cannot grow a picker; this is the door. */}
+          {iAmAdmin && !quest.isExample && (
+            <div className="mt-5">
+              <QuestThreadPicker
+                questId={quest.id}
+                goals={goals ?? []}
+                goalId={goalId}
+                place={place}
+                onSaved={setThreadEdit}
+              />
+            </div>
+          )}
+
           {iAmAdmin && (
             <div className="mt-5">
               <NeedTagPicker

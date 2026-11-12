@@ -1,6 +1,6 @@
 import Layout from "@/components/Layout";
 import { BTN_PRIMARY, EYEBROW, H1, RING, WORLD } from "@/components/journey/look";
-import { Link, useLocation } from "wouter";
+import { Link, useSearch } from "wouter";
 import { m } from "framer-motion";
 import {
   ArrowRight,
@@ -12,36 +12,36 @@ import {
   Sparkles,
   Star,
   Sprout,
+  Target,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useAuth, useOptionalAuth } from "@/contexts/AuthContext";
 import { fetchGameMe, QuestClaim, useGameConfig } from "@/lib/gameApi";
 import { pageVarsFrom } from "@shared/pageContent/vars";
 import { useTokenName, useTokensWord, useValueTokenName } from "@/hooks/useTokenNames";
-import { useLadderTitle } from "@/hooks/useVillagePaths";
 import { useValueConversion } from "@/lib/moneyClaims";
 import { ExamplesBanner } from "@/components/ExamplesBanner";
 import InfoTip from "@/components/InfoTip";
 import QuestCard, { iconFor, QuestPoster } from "@/components/QuestCard";
 import {
   currentClaims,
+  filterBoard,
+  groupByCircle,
   leadQuestFor,
   relativeWhen,
-  revealedFrom,
-  ringFor,
-  RING_ORDER,
   type BoardQuest,
   type FieldSigns,
-  type Ring,
 } from "@/lib/questBoard";
 import { memberDoorShown } from "@/lib/brochure";
 import MaiaTypeLine from "@/components/geneKeys/MaiaTypeLine";
 import RootsFilterToggle from "@/components/roots/RootsFilterToggle";
 import { useRootsFilter } from "@/components/roots/useRootsFilter";
 import { useLingui } from "@lingui/react/macro";
-import { meadowBeds, plantFor } from "@/lib/questMeadow";
-import QuestMeadow from "@/components/questMeadow/QuestMeadow";
-import MeadowPanel from "@/components/questMeadow/MeadowPanel";
+import { statusFor } from "@/lib/questStatus";
+import { goalOf, QUEST_PLACES } from "@shared/questThreads";
+import FitsYouCard from "@/components/openWork/FitsYouCard";
+import { usePlaceWords } from "@/components/openWork/placeWords";
+import { useQuestGoals } from "@/components/openWork/useQuestGoals";
 
 /*
  * The bare "?" is a 16px circle set inside a sentence, so its box cannot grow
@@ -55,28 +55,6 @@ import MeadowPanel from "@/components/questMeadow/MeadowPanel";
 const INFO_TIP_44 = "z-10 [&_button]:before:-inset-4";
 
 type Difficulty = "Beginner" | "Intermediate" | "Advanced";
-
-/**
- * What each ring is for, said once at the top of its section. The rings are
- * derived from the quests themselves (see ringFor), so a village that gates a
- * quest or retunes a difficulty moves it here without touching this file.
- */
-const RING_COPY: Record<Ring, { title: string; blurb: string }> = {
-  welcome: {
-    title: "Start here",
-    blurb:
-      "Open to everyone with a profile. Small enough to finish in an afternoon, and worth doing on its own.",
-  },
-  village: {
-    title: "The village",
-    blurb: "The everyday work the village runs on. Pick what fits your gift.",
-  },
-  further: {
-    title: "Further in",
-    blurb:
-      "These open as you walk the {ladder} or step into a role. Each one says what opens it.",
-  },
-};
 
 /**
  * S10: quests render from GET /api/quests — the server list with REAL ids.
@@ -110,12 +88,21 @@ export default function Quests() {
   const villageName = cfg?.project?.name ?? "the village";
   const eventsUrl = cfg?.project?.eventsUrl ?? "";
   const stages = cfg?.stages ?? [];
-  // The ladder's name in this village's words (Admin, Paths & Stages).
-  const ladder = useLadderTitle();
   const [activeCircle, setActiveCircle] = useState<string>("All");
   const [activeDifficulty, setActiveDifficulty] = useState<Difficulty | "All">(
     "All"
   );
+  // Goal threads (decision 5): `/quests?goal=<id>` opens the board on one
+  // season goal's open work. The commons links each goal here.
+  const search = useSearch();
+  const [activeGoal, setActiveGoal] = useState<string>(() => new URLSearchParams(search).get("goal") || "All");
+  useEffect(() => {
+    const g = new URLSearchParams(search).get("goal");
+    if (g) setActiveGoal(g);
+  }, [search]);
+  const [activePlace, setActivePlace] = useState<string>("All");
+  const goals = useQuestGoals();
+  const placeWords = usePlaceWords();
   const { user } = useAuth();
   /*
    * WHAT HAPPENS TO THE VALUE TOKEN, IN THE FOUNDER'S OWN WORDS.
@@ -187,11 +174,11 @@ export default function Quests() {
   // "Show only what matches my roots": on by default once the member has
   // picked roots on their profile, one press to turn off (components/roots).
   const roots = useRootsFilter(user?.id ?? null);
-  const byChips = quests.filter((q) => {
-    const circleMatch = activeCircle === "All" || q.circle === activeCircle;
-    const diffMatch =
-      activeDifficulty === "All" || q.difficulty === activeDifficulty;
-    return circleMatch && diffMatch;
+  const byChips = filterBoard(quests, {
+    circle: activeCircle,
+    difficulty: activeDifficulty,
+    goal: activeGoal,
+    place: activePlace,
   });
   // The roots filter reads the WHOLE board, so "is anything tagged" is a fact
   // about the village and never about whichever circle chip is pressed.
@@ -203,47 +190,36 @@ export default function Quests() {
   // that has tagged nothing yet has nothing to filter by.
   const rootsOffered = roots.available && byRoots.tagged;
 
-  // The filtered board, grouped into its rings. Filters apply inside a ring,
-  // so narrowing to one circle empties the rings it does not touch instead of
-  // flattening the whole page back into a wall.
-  const byRing = useMemo(() => {
-    const out: Record<Ring, BoardQuest[]> = { welcome: [], village: [], further: [] };
-    for (const q of filtered) out[ringFor(q)].push(q);
-    return out;
-  }, [filtered]);
+  // The open work list, grouped by circle (decision 5): circles in board order,
+  // quests in board order inside each. Nothing is ranked by who did what.
+  const groups = useMemo(() => groupByCircle(filtered), [filtered]);
 
-  // Progress counts read the WHOLE board, never the filtered view: "2 of 4
-  // walked" must not change because somebody tapped a circle chip.
-  const walkedIn = useMemo(() => {
-    const out: Record<Ring, number> = { welcome: 0, village: 0, further: 0 };
-    for (const q of quests) {
-      if (claims[q.id]?.status === "consented") out[ringFor(q)] += 1;
-    }
-    return out;
-  }, [quests, claims]);
-
-  const [expandedRings, setExpandedRings] = useState<Partial<Record<Ring, boolean>>>({});
+  // The season goals the board can filter by: this season's goals that any
+  // quest grows. The counts beside them are the village's (open quests), never a person's.
+  const goalList = goals ?? [];
+  const threadedGoals = goalList.filter((g) => quests.some((q) => q.goalId === g.id));
+  const chosenGoal = activeGoal === "All" ? null : goalOf(activeGoal, goalList);
+  const goalName = chosenGoal?.text ?? "";
+  const goalCount = chosenGoal?.openQuests ?? 0;
+  const placesUsed = QUEST_PLACES.filter((p) => p !== "both" && quests.some((q) => q.place === p || q.place === "both"));
 
   const questById = useMemo(() => new Map(quests.map((q) => [q.id, q])), [quests]);
   const inFlight = claimList.filter(
     (c) => (c.status === "claimed" || c.status === "submitted") && questById.has(c.questId),
   );
   /*
-   * THE MEADOW (Phase C, decision 5). The whole board, one bed per circle, each
-   * quest a seed, a bud or a flower by its own life signs. It draws every
-   * quest: the filters below narrow the list, never the field the village
-   * tends. A quest that fits your roots leads, and the panel opens on it.
+   * FITS YOU (decision 5): the one card the board leads with, chosen from the
+   * member's roots, then a season goal that still needs hands, then the
+   * gentlest open quest. Examples never lead.
    */
-  const beds = useMemo(() => meadowBeds(quests, signs?.perQuest), [quests, signs]);
   const rootsKey = roots.mine.join(",");
+  const openGoalIds = goalList.filter((g) => !g.done).map((g) => g.id);
   const lead = useMemo(
-    () => (quests.length ? leadQuestFor(quests, claimList, roots.mine) : null),
+    () => (quests.length ? leadQuestFor(quests, claimList, roots.mine, openGoalIds) : null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [quests, claimList, rootsKey],
+    [quests, claimList, rootsKey, openGoalIds.join(",")],
   );
-  const [chosenId, setChosenId] = useState<string | null>(null);
-  const chosen = (chosenId ? questById.get(chosenId) : null) ?? lead?.quest ?? quests[0] ?? null;
-  const [, navigate] = useLocation();
+  const goalFor = (q: BoardQuest) => goalOf(q.goalId, goalList);
   const now = new Date();
 
   return (
@@ -260,8 +236,9 @@ export default function Quests() {
             <div className={`${RING} mx-auto mb-6 size-16`}>
               <Compass className="size-7" aria-hidden="true" />
             </div>
-            <h1 className={`${H1} mb-4`}>
-              The Quest Board
+            <p className={EYEBROW}>{t({ message: "Quests", context: "open work board eyebrow" })}</p>
+            <h1 className={`${H1} mb-4 mt-2`}>
+              {t({ message: "Open work", context: "open work board heading" })}
             </h1>
             {/* R47: the Trail line leads, the reward word keeps its tooltip,
                 and the Lore line comes last, after the numbers. */}
@@ -325,38 +302,17 @@ export default function Quests() {
         </section>
       )}
 
-      {/* THE MEADOW. Phone: the beds are one band to swipe, the panel under it.
-          Desktop: the field beside a panel that stays (lg:sticky). */}
-      {beds.length > 0 && chosen && (
-        <section className="pb-6 pt-2 bg-background" aria-labelledby="meadow-title">
+      {/* FITS YOU: one card, one act (decision 5). Phone: one column, the act
+          full width under the thumb. Desktop: the words beside the act. */}
+      {lead && (
+        <section className="pb-6 pt-2 bg-background">
           <div className="container max-w-7xl">
-            <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
-              <div className="min-w-0">
-                <p className={EYEBROW}>{t({ message: "Quests this moon", context: "quest meadow eyebrow" })}</p>
-                <h2 id="meadow-title" className="mt-1 font-display text-2xl font-bold text-foreground sm:text-3xl">
-                  {t({ message: "The meadow", context: "quest meadow heading" })}
-                </h2>
-                <p className="mt-2 mb-4 max-w-2xl text-sm leading-relaxed text-muted-foreground">
-                  {t`Every open quest is a seed. When someone carries it, a bud. Done this moon, a flower. One bed for each circle.`}
-                </p>
-                <QuestMeadow
-                  beds={beds}
-                  selectedId={chosen.id}
-                  onSelect={setChosenId}
-                  onOpen={(id) => navigate(`/quests/${id}`)}
-                />
-              </div>
-              <div className="lg:sticky lg:top-28">
-                <MeadowPanel
-                  quest={chosen}
-                  state={plantFor(signs?.perQuest?.[chosen.id])}
-                  lead={!!lead && lead.quest.id === chosen.id}
-                  fits={!!lead?.fits}
-                  stages={stages}
-                  footer={user ? <MaiaTypeLine className="mt-3" /> : null}
-                />
-              </div>
-            </div>
+            <FitsYouCard
+              lead={lead}
+              status={statusFor(signs?.perQuest?.[lead.quest.id])}
+              goal={goalFor(lead.quest)}
+              footer={user ? <MaiaTypeLine className="mt-3" /> : null}
+            />
           </div>
         </section>
       )}
@@ -469,70 +425,106 @@ export default function Quests() {
         </section>
       )}
 
-      {/* The board, in rings. Each ring is a plain section with its own count,
-          so the page reads as a walk rather than as one long wall. */}
+      {/* The season goal and the place, the two filters goal threads add
+          (decision 5). Outside the sticky bar too, for the same slim phone row. */}
+      {(threadedGoals.length > 0 || placesUsed.length > 0 || activeGoal !== "All") && (
+        <section className="pt-6 bg-background" aria-label={t({ message: "Filter by season goal and place", context: "open work filters" })}>
+          <div className="container max-w-7xl space-y-1">
+            {(threadedGoals.length > 0 || activeGoal !== "All") && (
+              <div className="flex gap-2 items-center overflow-x-auto flex-nowrap" data-scroll-contain role="group" aria-label={t({ message: "Season goal", context: "open work filter row" })}>
+                <Target className="w-4 h-4 text-muted-foreground flex-shrink-0" aria-hidden="true" />
+                {[{ id: "All", text: t({ message: "Every goal", context: "open work filter: all season goals" }) }, ...threadedGoals].map((g) => (
+                  <button
+                    key={g.id}
+                    type="button"
+                    aria-pressed={activeGoal === g.id}
+                    data-goal-filter={g.id}
+                    onClick={() => setActiveGoal(g.id)}
+                    className={`px-3 min-h-[44px] min-w-[44px] inline-flex items-center justify-center whitespace-nowrap flex-shrink-0 rounded-full text-xs font-medium transition-colors ${
+                      activeGoal === g.id ? "bg-open text-background" : "bg-muted text-muted-foreground hover:bg-muted/80"
+                    }`}
+                  >
+                    {g.text}
+                  </button>
+                ))}
+              </div>
+            )}
+            {placesUsed.length > 0 && (
+              <div className="flex gap-2 items-center overflow-x-auto flex-nowrap" data-scroll-contain role="group" aria-label={t({ message: "Where it happens", context: "open work filter row" })}>
+                <span className="w-4 flex-shrink-0" aria-hidden="true" />
+                {(["All", ...placesUsed] as const).map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    aria-pressed={activePlace === p}
+                    data-place-filter={p}
+                    onClick={() => setActivePlace(p)}
+                    className={`px-3 min-h-[44px] min-w-[44px] inline-flex items-center justify-center whitespace-nowrap flex-shrink-0 rounded-full text-xs font-medium transition-colors ${
+                      activePlace === p ? "bg-open text-background" : "bg-muted text-muted-foreground hover:bg-muted/80"
+                    }`}
+                  >
+                    {p === "All" ? t({ message: "Anywhere", context: "open work filter: every place" }) : placeWords[p]}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
+      )}
+
+      {/* The open work, grouped by circle (decision 5): a clean list to scan. */}
       <section className="py-16 bg-background">
         <div className="container">
+          {/* The goal thread read back: how many open quests grow the chosen
+              goal. The village's count, from GET /api/quests/goals. */}
+          {chosenGoal && (
+            <div className="max-w-7xl mx-auto mb-8 flex flex-wrap items-center gap-x-3 gap-y-2" data-goal-thread={chosenGoal.id}>
+              <Target className="w-5 h-5 text-open" aria-hidden="true" />
+              <p className="font-display text-xl font-bold text-foreground">
+                {chosenGoal.openQuests === 0
+                  ? t({ message: `No open quests grow ${goalName} yet`, context: "open work: the goal thread, none" })
+                  : chosenGoal.openQuests === 1
+                    ? t({ message: `1 open quest grows ${goalName}`, context: "open work: the goal thread, one" })
+                    : t({ message: `${goalCount} open quests grow ${goalName}`, context: "open work: the goal thread, several" })}
+              </p>
+              <button
+                type="button"
+                onClick={() => setActiveGoal("All")}
+                className="min-h-11 text-sm font-medium text-notice underline underline-offset-2 hover:text-foreground"
+              >
+                {t({ message: "Show every goal", context: "open work: clear the season goal filter" })}
+              </button>
+            </div>
+          )}
           <div className="max-w-7xl mx-auto mb-16 space-y-14">
-            {RING_ORDER.map((ring) => {
-              const all = byRing[ring] ?? [];
-              if (all.length === 0) return null;
-              const meta = RING_COPY[ring];
-              const shown = expandedRings[ring]
-                ? all
-                : revealedFrom(all, user?.id ?? null, walkedIn[ring] ?? 0);
-              const hidden = all.length - shown.length;
-              return (
-                <div key={ring}>
-                  <div className="mb-5">
-                    <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                      <h2 className="font-display text-2xl font-bold text-foreground">
-                        {meta.title}
-                      </h2>
-                      {user && walkedIn[ring] > 0 && (
-                        <span className="text-sm font-medium text-notice">
-                          {walkedIn[ring]} of {all.length} walked
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-muted-foreground mt-1 max-w-2xl">
-                      {meta.blurb.replace("{ladder}", ladder)}
-                      {ring === "further" && (
-                        <InfoTip tip={`The ${ladder} is the membership ladder on your profile. Walking it, or holding a role, opens these quests.`} label="What opens these quests" className={INFO_TIP_44} />
-                      )}
-                    </p>
-                  </div>
-                  <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {shown.map((quest, index) => (
-                      <m.div
-                        key={quest.id}
-                        initial={{ opacity: 0, y: 20 }}
-                        whileInView={{ opacity: 1, y: 0 }}
-                        viewport={{ once: true }}
-                        transition={{ delay: Math.min(index, 5) * 0.04 }}
-                        className="h-full"
-                      >
-                        <QuestCard
-                          quest={quest}
-                          claim={claims[quest.id]}
-                          signs={signs?.perQuest?.[quest.id]}
-                          stages={stages}
-                          priority={ring === RING_ORDER[0] && index === 0}
-                        />
-                      </m.div>
-                    ))}
-                  </div>
-                  {hidden > 0 && (
-                    <button
-                      onClick={() => setExpandedRings((r) => ({ ...r, [ring]: true }))}
-                      className="mt-5 min-h-11 px-5 rounded-lg border border-border font-semibold text-notice hover:border-notice transition-colors"
+            {groups.map((group, gi) => (
+              <div key={group.circle ?? ""} data-circle-group={group.circle ?? ""}>
+                <h2 className="mb-5 font-display text-2xl font-bold text-foreground">
+                  {group.circle ?? t({ message: "Open to every circle", context: "open work: the group for quests with no circle" })}
+                </h2>
+                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {group.quests.map((quest, index) => (
+                    <m.div
+                      key={quest.id}
+                      initial={{ opacity: 0, y: 20 }}
+                      whileInView={{ opacity: 1, y: 0 }}
+                      viewport={{ once: true }}
+                      transition={{ delay: Math.min(index, 5) * 0.04 }}
+                      className="h-full"
                     >
-                      Show all {all.length}
-                    </button>
-                  )}
+                      <QuestCard
+                        quest={quest}
+                        claim={claims[quest.id]}
+                        signs={signs?.perQuest?.[quest.id]}
+                        stages={stages}
+                        goal={goalFor(quest)}
+                        priority={gi === 0 && index === 0}
+                      />
+                    </m.div>
+                  ))}
                 </div>
-              );
-            })}
+              </div>
+            ))}
           </div>
 
           {filtered.length === 0 && (

@@ -24,9 +24,12 @@ import RootTags from "@/components/roots/RootTags";
 import {
   gateLabel, questScene, sceneGradient, statusIs, type BoardQuest, type QuestSigns,
 } from "@/lib/questBoard";
-import { plantFor } from "@/lib/questMeadow";
-import { PlantGlyph } from "@/components/questMeadow/Plant";
-import { usePlantWords } from "@/components/questMeadow/plantWords";
+import { statusFor } from "@/lib/questStatus";
+import { PlantGlyph } from "@/components/openWork/StatusMark";
+import { useStatusWords } from "@/components/openWork/statusWords";
+import { usePlaceWords } from "@/components/openWork/placeWords";
+import { useLingui } from "@lingui/react/macro";
+import { MapPin, Target } from "lucide-react";
 
 export const QUEST_ICONS: Record<string, React.ElementType> = {
   Users, Sprout, ChefHat, TreePine, BookOpen, Home, Camera, Baby, Laptop,
@@ -111,19 +114,26 @@ export default function QuestCard({
   claim,
   signs,
   stages,
+  goal = null,
   priority = false,
 }: {
   quest: BoardQuest;
   claim?: QuestClaim;
   signs?: QuestSigns;
   stages?: { id: string; name: string }[] | null;
+  /** The season goal this quest grows, when the season still holds it (goal threads, decision 5). */
+  goal?: { id: string; text: string } | null;
   priority?: boolean;
 }) {
+  const { t } = useLingui();
   const Icon = iconFor(quest.icon);
-  // The quest as a plant in the meadow: seed, bud or flower (lib/questMeadow.ts).
-  // It describes the work, from the village's own life signs.
-  const plant = plantFor(signs);
-  const plantWords = usePlantWords();
+  // The status mark: seed (open), sprout (underway), flower (done this moon),
+  // from the village's own life signs (lib/questStatus.ts). It describes the
+  // work, and it is the only piece of the nature layer on the board.
+  const status = statusFor(signs);
+  const statusWords = useStatusWords();
+  const goalText = goal?.text ?? "";
+  const placeWords = usePlaceWords();
   const chip = claim && claim.status !== "declined" ? CLAIM_CHIP[claim.status] : null;
   const gate = gateLabel(quest, stages);
   const active = signs?.active ?? 0;
@@ -141,7 +151,7 @@ export default function QuestCard({
       aria-label={linkLabel}
     >
       <article className="h-full flex flex-col bg-card rounded-2xl border border-border shadow-sm overflow-hidden transition-shadow duration-300 group-hover:shadow-lg">
-        <QuestPoster quest={quest} className="aspect-[16/9]" priority={priority}>
+        <QuestPoster quest={quest} className="aspect-[5/2]" priority={priority}>
           <div className="absolute top-3 left-3 w-9 h-9 rounded-lg bg-white/20 backdrop-blur-sm flex items-center justify-center">
             <Icon className="w-5 h-5 text-white" />
           </div>
@@ -178,6 +188,14 @@ export default function QuestCard({
             )
           )}
 
+          {/* The goal thread: which season goal this work grows. */}
+          {goal && (
+            <p className="inline-flex items-start gap-1.5 text-sm font-medium text-foreground" data-goal={goal.id}>
+              <Target className="mt-0.5 w-4 h-4 shrink-0 text-open" aria-hidden="true" />
+              <span>{t({ message: `Grows: ${goalText}`, context: "open work card: the season goal this quest grows" })}</span>
+            </p>
+          )}
+
           <div className="flex flex-wrap items-center gap-2 text-xs">
             {/* What the quest is worth and pays, or to inquire (0265). Never Gratitude, which pays no quest. */}
             <WorkPayBlock pay={quest.pay} />
@@ -185,6 +203,12 @@ export default function QuestCard({
               <span className="inline-flex items-center gap-1 text-muted-foreground">
                 <Clock className="w-3.5 h-3.5" />
                 {quest.duration}
+              </span>
+            )}
+            {quest.place && (
+              <span className="inline-flex items-center gap-1 text-muted-foreground" data-place={quest.place}>
+                <MapPin className="w-3.5 h-3.5" aria-hidden="true" />
+                {placeWords[quest.place]}
               </span>
             )}
             {quest.difficulty && (
@@ -202,7 +226,9 @@ export default function QuestCard({
               {active > 0 && (
                 <span className="inline-flex items-center gap-1 font-medium text-open">
                   <Users className="w-3.5 h-3.5" />
-                  {active} in the field now
+                  {active === 1
+                    ? t({ message: "1 hand on this", context: "open work card: one person carries this quest now" })
+                    : t({ message: `${active} hands on this`, context: "open work card: people carrying this quest now" })}
                 </span>
               )}
               {done > 0 && (
@@ -221,9 +247,9 @@ export default function QuestCard({
             </p>
           )}
 
-          <p className="inline-flex items-center gap-1.5 text-xs text-muted-foreground" data-plant={plant}>
-            <PlantGlyph state={plant} className="size-5" />
-            {plantWords[plant].long}
+          <p className="inline-flex items-center gap-1.5 text-xs text-muted-foreground" data-status={status}>
+            <PlantGlyph state={status} className="size-5" />
+            {statusWords[status]}
           </p>
 
           <div className="mt-auto pt-2 flex items-center justify-between text-sm font-semibold text-notice">

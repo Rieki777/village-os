@@ -11,6 +11,7 @@
 import { hashString, sceneStopsFor, type SceneStop } from "@shared/questScenes";
 import type { StageRule } from "@shared/gameConfig";
 import type { WorkPay } from "@shared/workValue";
+import type { QuestPlace } from "@shared/questThreads";
 
 export interface BoardQuest {
   id: string;
@@ -50,6 +51,10 @@ export interface BoardQuest {
   tags?: string[];
   order?: number;
   isExample?: boolean;
+  /** The season goal this quest grows, by id (shared/questThreads.ts). Absent from an older server. */
+  goalId?: string | null;
+  /** Where the work happens. Absent from an older server. */
+  place?: QuestPlace | null;
 }
 
 /** One quest's life signs. `moon` (consents since this moon began) is absent from an older server. */
@@ -219,6 +224,8 @@ export interface QuestSuggestion {
    * about whether it suits anyone, so it never claims to.
    */
   fits: boolean;
+  /** The quest grows a season goal that is not done yet: this season's need. */
+  needed: boolean;
 }
 
 /** Whether a quest is tagged with at least one of these roots. */
@@ -231,12 +238,13 @@ export function fitsRoots(
 }
 
 /**
- * The one quest the meadow leads with (Phase C, decision 5: "a quest that
- * fits your roots leads"). Priorities, in order:
- *   1. an open, ungated quest the member has not touched that carries one of
- *      their roots;
- *   2. then the gentlest: Beginner before Intermediate before Advanced;
- *   3. then board order.
+ * The one "fits you" quest the open work board leads with (Phase C,
+ * decision 5). Among the open, ungated quests the member has not touched:
+ *   1. one that carries one of their roots;
+ *   2. then one that grows a season goal not yet done (this season's need,
+ *      `openGoalIds`);
+ *   3. then the gentlest: Beginner before Intermediate before Advanced;
+ *   4. then board order.
  * Roots only ever reorder what is already open to everyone: a root is a lens
  * and never a gate (shared/archetypeRoots.ts). Examples never lead, and a
  * fully played board leads with nothing.
@@ -245,6 +253,7 @@ export function leadQuestFor(
   quests: BoardQuest[],
   claims: ClaimLike[],
   mine: readonly string[] = [],
+  openGoalIds: readonly string[] = [],
 ): QuestSuggestion | null {
   const touched = new Set(
     claims.filter((c) => c.status !== "declined").map((c) => c.questId),
@@ -255,21 +264,22 @@ export function leadQuestFor(
     .filter((q) => statusIs(q, "open"))
     .filter((q) => !q.minStage && !q.requiresRole)
     .filter((q) => !touched.has(q.id))
-    .map((q) => ({ q, fits: fitsRoots(q, mine) }))
+    .map((q) => ({ q, fits: fitsRoots(q, mine), needed: !!q.goalId && openGoalIds.includes(q.goalId) }))
     .sort(
       (a, b) =>
         Number(b.fits) - Number(a.fits) ||
+        Number(b.needed) - Number(a.needed) ||
         (rank[a.q.difficulty ?? ""] ?? 1) - (rank[b.q.difficulty ?? ""] ?? 1) ||
         (a.q.order ?? 0) - (b.q.order ?? 0),
     );
-  return open[0] ? { quest: open[0].q, reason: "begin", fits: open[0].fits } : null;
+  return open[0] ? { quest: open[0].q, reason: "begin", fits: open[0].fits, needed: open[0].needed } : null;
 }
 
 /**
  * The one suggestion the board makes. Priorities, in order:
  *   1. a quest the member already holds (claimed or submitted) — finishing
  *      beats starting, always;
- *   2. the quest the meadow leads with (`leadQuestFor`).
+ *   2. the "fits you" quest the board leads with (`leadQuestFor`).
  * Examples never suggest themselves, and a fully played board suggests
  * nothing: null means the caller renders no card, never an empty one.
  */
@@ -277,14 +287,15 @@ export function nextQuestFor(
   quests: BoardQuest[],
   claims: ClaimLike[],
   mine: readonly string[] = [],
+  openGoalIds: readonly string[] = [],
 ): QuestSuggestion | null {
   const byId = new Map(quests.map((q) => [q.id, q]));
   for (const c of claims) {
     if (c.status !== "claimed" && c.status !== "submitted") continue;
     const q = byId.get(c.questId);
-    if (q) return { quest: q, reason: "continue", fits: fitsRoots(q, mine) };
+    if (q) return { quest: q, reason: "continue", fits: fitsRoots(q, mine), needed: !!q.goalId && openGoalIds.includes(q.goalId) };
   }
-  return leadQuestFor(quests, claims, mine);
+  return leadQuestFor(quests, claims, mine, openGoalIds);
 }
 
 /**
@@ -364,4 +375,59 @@ export function relativeWhen(iso: string | null | undefined, now: Date): string 
   if (days <= 0) return "today";
   if (days === 1) return "yesterday";
   return `${days} days ago`;
+}
+
+/** The board's filters (decision 5). "All" means the filter is off. */
+export interface BoardFilters {
+  circle: string;
+  difficulty: string;
+  /** A season goal id, or "All". */
+  goal: string;
+  /** "land", "remote", or "All". A quest that happens in both places matches either. */
+  place: string;
+}
+
+export const NO_FILTERS: BoardFilters = { circle: "All", difficulty: "All", goal: "All", place: "All" };
+
+/** Narrow the board by its chips. Keeps the board's order: a filter narrows, it never re-ranks. */
+export function filterBoard<T extends Pick<BoardQuest, "circle" | "difficulty" | "goalId" | "place">>(
+  quests: readonly T[],
+  f: BoardFilters,
+): T[] {
+  return quests.filter(
+    (q) =>
+      (f.circle === "All" || q.circle === f.circle) &&
+      (f.difficulty === "All" || q.difficulty === f.difficulty) &&
+      (f.goal === "All" || q.goalId === f.goal) &&
+      (f.place === "All" || q.place === f.place || q.place === "both"),
+  );
+}
+
+export interface CircleGroup<T> {
+  /** The circle's own name, or null for quests that name none. */
+  circle: string | null;
+  quests: T[];
+}
+
+/**
+ * The open work list, grouped by circle: circles in the order the board first
+ * meets them, quests in board order inside each, and quests with no circle
+ * together at the end. Nothing is ranked by who carried what.
+ */
+export function groupByCircle<T extends Pick<BoardQuest, "circle">>(quests: readonly T[]): CircleGroup<T>[] {
+  const groups = new Map<string, CircleGroup<T>>();
+  const loose: T[] = [];
+  for (const q of quests) {
+    const c = String(q.circle ?? "").trim();
+    if (!c) {
+      loose.push(q);
+      continue;
+    }
+    const g = groups.get(c) ?? { circle: c, quests: [] };
+    g.quests.push(q);
+    groups.set(c, g);
+  }
+  const out = Array.from(groups.values());
+  if (loose.length) out.push({ circle: null, quests: loose });
+  return out;
 }

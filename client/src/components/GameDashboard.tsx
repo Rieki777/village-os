@@ -9,8 +9,8 @@ import StageAdvanced from "@/components/StageAdvanced";
 import { claimMoment } from "@/lib/celebrated";
 import { onProfileRefresh } from "@/lib/profileRefresh";
 import { formatTokenAmount } from "@/lib/tokenAmount";
-import { claimPlant } from "@/lib/questMeadow";
-import { PlantGlyph } from "@/components/questMeadow/Plant";
+import { claimStatus } from "@/lib/questStatus";
+import { PlantGlyph } from "@/components/openWork/StatusMark";
 
 const CLAIM_STATUS: Record<string, { label: string; cls: string }> = {
   claimed: { label: "In progress", cls: "bg-notice/10 text-notice" },
@@ -292,10 +292,10 @@ export default function GameDashboard({
                     className="flex items-center justify-between gap-2 text-sm group"
                   >
                     <span className="flex min-w-0 items-center gap-2">
-                      {/* The work as the board's meadow draws it: a bud in hand, a flower
-                          done this moon, nothing for an older finish (lib/questMeadow.ts). */}
+                      {/* The board's status mark: a sprout in hand, a flower done this
+                          moon, nothing for an older finish (lib/questStatus.ts). */}
                       {(() => {
-                        const plant = claimPlant(q);
+                        const plant = claimStatus(q);
                         return plant ? <PlantGlyph state={plant} className="size-5" /> : <span className="size-5 shrink-0" aria-hidden="true" />;
                       })()}
                       <span className="text-card-foreground truncate group-hover:text-notice transition-colors">
@@ -311,7 +311,7 @@ export default function GameDashboard({
             </ul>
           )}
           <Link href="/quests" className="inline-flex items-center gap-1.5 text-sm font-semibold text-foreground underline underline-offset-2 hover:text-notice transition-colors">
-            {t({ message: "Walk the quest meadow", context: "profile quests card: the door to the board" })} <ArrowRight className="w-4 h-4" />
+            {t({ message: "See the open work", context: "profile quests card: the door to the board" })} <ArrowRight className="w-4 h-4" />
           </Link>
         </div>
       </div>

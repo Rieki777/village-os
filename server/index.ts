@@ -18391,7 +18391,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
   // /api/quests/field only wins over /api/quests/:id because it comes first.
   registerQuestRoutes(app, {
     isAdmin, authedUser, adminActor, getPool, uploadsDir: UPLOADS_DIR, members,
-    questsRepo, claimsRepo, crewsRepo, firstName, notify, stageOf, loadRoles,
+    questsRepo, claimsRepo, crewsRepo, firstName, notify, stageOf, loadRoles, seasonState,
     roleIdsFor, currentPatternId, questConsentRecipients, overLimit, clientIp, projectCurrency: () => mergedConfig().project.fiatCurrency,
     // The share-card raster reads the guard's third answer for itself: it is
     // the one route here that rasters for an anonymous caller, so it refuses
