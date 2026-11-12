@@ -1,5 +1,10 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+/* Three small component sheets ride the main stylesheet: each was its own sub-1 KB file costing a whole
+   4 KB block of the block-charged dist budget (batch 158). Their rules are scoped to their own classes. */
+@import "./components/commons/commons.css";
+@import "./components/calendar/print.css";
+@import "./components/map/hearths.css";
 /* Tests are not shipped, so a class only a test names is not generated. */
 @source not "./**/*.test.ts";
 @source not "./**/*.test.tsx";

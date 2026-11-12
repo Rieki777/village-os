@@ -20,7 +20,7 @@ import type { CSSProperties } from "react";
 import { useReducedMotion } from "@/components/natural/useReducedMotion";
 import { fx } from "@/components/journey/nature/geometry";
 import { PETALS, VIEW, commonsLayout, mossDots, mossShare } from "./commonsGeometry";
-import "./commons.css";
+// Its stylesheet rides the main one (index.css), saving a 4 KB block of the dist budget.
 
 export interface CommonsGoal {
   id: string;

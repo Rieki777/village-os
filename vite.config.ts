@@ -290,13 +290,18 @@ function guardBootSet(): Plugin {
  * - Two or more importers. A module with one importer already rides in that
  *   importer's chunk, so grouping it saves nothing and only grows the group.
  */
-const SMALL_MODULE_BYTES = 9000;
+const SMALL_MODULE_BYTES = 12000;
 /**
  * The modules the entry imports statically, worked out on the first call and
  * kept for the rest of the build. `vite build` is one build per process here;
  * a `--watch` rebuild would read a stale set and only lose some grouping.
  */
 let eagerModules: Set<string> | null = null;
+/** The brochure pages' words: leaf modules with no imports of their own (see "page-copy" below). */
+const PAGE_COPY = /shared[\\/]pageContent[\\/](team|circles|opportunities|masterPlan|loveLetter|training|howWeCreate)\.ts$/;
+/** A route page, and the size under which it rides the "smallpages" chunk below. */
+const SMALL_PAGE = /client[\\/]src[\\/]pages[\\/][^\\/]+\.tsx$/;
+const SMALL_PAGE_BYTES = 7500;
 /** The natural interface kit, grouped into its own chunk below. */
 const NATURAL_KIT = /components[\\/]natural[\\/]|lib[\\/]celebrated|shared[\\/]capabilities/;
 /**
@@ -335,6 +340,7 @@ function smallGroupOf(id: string, info: ModuleInfoOf, eager: Set<string>): Small
     !eager.has(id) &&
     m.importers.length >= 2 &&
     !NATURAL_KIT.test(id) &&
+    !PAGE_COPY.test(id) &&
     !m.importers.some((by) => NATURAL_KIT.test(by)) &&
     m.importedIds.every((dep) => {
       if (dep.includes("node_modules") || eager.has(dep)) return true;
@@ -473,6 +479,24 @@ export default defineConfig({
               eagerModules.add(m);
               for (const dep of getModuleInfo(m)?.importedIds ?? []) stack.push(dep);
             }
+          }
+          /*
+           * THE PAGES' OWN COPY, one chunk (batch 158). Each brochure page's
+           * words (shared/pageContent/<page>.ts) are a leaf module of 1 to 4 KB
+           * shared by its page and the admin's page editor, so rollup gave each
+           * its own file and a whole 4 KB block. Grouped, they ride one file. Only
+           * lazy ones: whatever the first page already carries stays where it is.
+           */
+          if (PAGE_COPY.test(id) && !eagerModules.has(id)) return "page-copy";
+          /*
+           * SMALL LAZY PAGES, one chunk (batch 158). A route that is a few
+           * hundred lines (the password pages, a short list) was its own 2 to 4
+           * KB file and a whole 4 KB block. Nothing imports a page but the
+           * router's React.lazy, so the group can never be imported back.
+           */
+          if (SMALL_PAGE.test(id) && !eagerModules.has(id)) {
+            const code = getModuleInfo(id)?.code;
+            if (code && code.length < SMALL_PAGE_BYTES) return "smallpages";
           }
           return smallGroupOf(id, getModuleInfo, eagerModules) ?? undefined;
         },

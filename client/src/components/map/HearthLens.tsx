@@ -25,7 +25,7 @@ import { useReducedMotion } from "@/components/natural/useReducedMotion";
 import { useRest } from "@/components/journey/nature/useRest";
 import { fx } from "@/components/journey/nature/geometry";
 import { hearthLights, hearthThreads, threadPath, type Disc } from "./hearthGeometry";
-import "./hearths.css";
+// Its stylesheet rides the main one (index.css), saving a 4 KB block of the dist budget.
 
 export interface HearthLensProps {
   layout: NestedLayout;
