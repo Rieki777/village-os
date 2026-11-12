@@ -21,13 +21,21 @@ import { countdown, tickMsFor } from "./voteBars";
 export default function VoteClock({
   closesAt,
   className = "",
+  calm = false,
 }: {
   closesAt: string;
   className?: string;
+  /**
+   * Decider calm (Phase D): a date and no countdown. The pages where people
+   * decide say when a vote closes and never tick toward it; nothing here hurries
+   * a decision. The band on the home page keeps its clock.
+   */
+  calm?: boolean;
 }) {
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
+    if (calm) return;
     let timer: ReturnType<typeof setTimeout>;
     const schedule = () => {
       const { remainingMs } = countdown(closesAt, Date.now());
@@ -38,7 +46,7 @@ export default function VoteClock({
     };
     schedule();
     return () => clearTimeout(timer);
-  }, [closesAt]);
+  }, [closesAt, calm]);
 
   const c = countdown(closesAt, now);
   const closedOn = new Date(closesAt).toLocaleDateString(undefined, {
@@ -52,6 +60,15 @@ export default function VoteClock({
       <span className={`inline-flex items-center gap-1.5 text-sm text-muted-foreground ${className}`}>
         <Clock className="w-4 h-4" aria-hidden="true" />
         <span>Voting ended {closedOn}</span>
+      </span>
+    );
+  }
+
+  if (calm) {
+    return (
+      <span className={`inline-flex items-center gap-1.5 text-sm text-muted-foreground ${className}`} data-vote-clock="calm">
+        <Clock className="w-4 h-4" aria-hidden="true" />
+        <span>Open until {closedOn}</span>
       </span>
     );
   }

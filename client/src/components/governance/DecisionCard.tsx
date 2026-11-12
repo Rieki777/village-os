@@ -107,7 +107,7 @@ export default function DecisionCard({ ballot }: { ballot: BallotCardData }) {
 
       <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3">
         <span className="flex items-center gap-3">
-          {open && <VoteClock closesAt={ballot.closesAt} />}
+          {open && <VoteClock calm closesAt={ballot.closesAt} />}
           {mine && MineIcon ? (
             <span className={`inline-flex items-center gap-1.5 text-sm font-medium ${mine.tone}`}>
               <MineIcon className="w-4 h-4" aria-hidden="true" />

@@ -142,6 +142,14 @@ describe("/decisions/:id, one decision", () => {
     expect(container.querySelector(".sheet-night")).toBeTruthy();
   });
 
+  it("says when the vote closes as a date, with no countdown ticking toward it", async () => {
+    open();
+    render(<Decision />);
+    await screen.findByRole("heading", { name: "Keep the orchard gate open on market days" });
+    expect(document.querySelector('[data-vote-clock="calm"]')?.textContent).toMatch(/^Open until /);
+    expect(screen.queryByText(/ left$/)).toBeNull();
+  });
+
   it("lights one door to the vote when the reader is on the roll and has not voted, and never an answer", async () => {
     open();
     render(<Decision />);

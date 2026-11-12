@@ -389,7 +389,7 @@ export default function Decision() {
 
         {open && (
           <p className="mt-2">
-            <VoteClock closesAt={ballot.closesAt} />
+            <VoteClock calm closesAt={ballot.closesAt} />
           </p>
         )}
 
@@ -447,7 +447,7 @@ export default function Decision() {
             {consented && (
               <div className="flex items-center gap-4 rounded-2xl border border-border bg-card p-4 shadow-sm" data-consent-reached="">
                 <Vesica met label={t({ message: "The village consented", context: "decision: a consent reached" })} size="sm" />
-                <p className="text-sm text-foreground"><Trans context="decision: a consent reached">The village consented. Nobody named a reason to stop it.</Trans></p>
+                <p className="flex-1 text-sm text-foreground"><Trans context="decision: a consent reached">The village consented. Nobody named a reason to stop it.</Trans></p>
               </div>
             )}
 

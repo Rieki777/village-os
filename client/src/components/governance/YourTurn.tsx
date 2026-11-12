@@ -11,8 +11,8 @@
  *
  * Two shapes, one element, so the lights are only ever in one place:
  *   "door"    an inline door, where it is placed.
- *   "sticky"  on a phone, a bar fixed under the thumb at the bottom of the
- *             screen; from `lg` up, the same door sits where it is placed (the
+ *   "sticky"  on a phone, a bar fixed under the thumb, just above the tab
+ *             bar; from `lg` up, the same door sits where it is placed (the
  *             decider's side panel), in view beside the words.
  *
  * Callers decide WHEN it shows (the reader is asked and has not answered); this
@@ -66,7 +66,7 @@ export default function YourTurn({ to, label, line, shape = "door", className = 
 
   const placed =
     shape === "sticky"
-      ? "fixed inset-x-0 bottom-0 z-30 border-t border-border bg-card px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 shadow-sm lg:static lg:z-auto lg:rounded-2xl lg:border lg:p-5"
+      ? "fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom,0px))] z-40 border-t md:bottom-0 border-border bg-card px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 shadow-sm lg:static lg:z-auto lg:rounded-2xl lg:border lg:p-5"
       : "";
   return (
     <div className={`${placed} ${className}`.trim()} data-your-turn={shape}>
