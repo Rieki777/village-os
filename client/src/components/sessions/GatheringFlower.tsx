@@ -100,6 +100,7 @@ export default function GatheringFlower({
               }
               stroke="currentColor"
               strokeWidth={on ? 1.2 : 0.7}
+              strokeOpacity={on ? 1 : 0.45}
               fill={on ? "currentColor" : "none"}
               fillOpacity={on ? 0.06 : undefined}
             />
