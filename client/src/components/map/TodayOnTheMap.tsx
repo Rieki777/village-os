@@ -14,7 +14,15 @@
 import { Trans, useLingui } from "@lingui/react/macro";
 import { Link } from "wouter";
 import type { HearthsPayload } from "@shared/mapLight";
-import { EYEBROW, LINK, TILE } from "@/components/journey/look";
+import { TILE } from "@/components/journey/look";
+
+/*
+ * The map sits in the circle lens, whose ground re-declares the tokens but not
+ * `notice`: the gold eyebrow and link measured under 4.5:1 there (axe, in the
+ * rehearsal), so this card speaks in the lens's own inks.
+ */
+const EYEBROW = "text-xs font-semibold uppercase tracking-widest text-muted-foreground";
+const LINK = "font-medium text-foreground underline underline-offset-2 hover:text-muted-foreground";
 
 /** Where the member's own setting lives: the profile's settings, at the control itself. */
 export const MY_LIGHT_HREF = "/profile#map-light";

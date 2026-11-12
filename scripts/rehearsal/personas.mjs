@@ -587,7 +587,14 @@ export async function holder(w, ctx) {
     await box.waitFor();
     if (await box.isChecked()) throw new Error("a new member's light on the map should be off until they choose it");
     await box.scrollIntoViewIfNeeded();
-    await box.check();
+    // A click, then wait: the switch follows the server's answer, so it turns
+    // on only once the save lands (check() wants the state to change at once).
+    await box.click();
+    await page.waitForFunction(
+      () => (document.querySelector("[data-map-light-setting] input[type=checkbox]"))?.checked === true,
+      null,
+      { timeout: 10_000 },
+    );
     // Asked of the server as the holder, so a switch that only looked on cannot pass.
     const token = await page.evaluate(() => localStorage.getItem("village-auth-token"));
     for (let i = 0; i < 10; i++) {
