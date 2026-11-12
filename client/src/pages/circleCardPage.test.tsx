@@ -196,7 +196,7 @@ describe("the circle hearth", () => {
     village();
     render(<CircleCardPage />);
     await waitFor(() => expect(document.querySelectorAll("[data-tend]")).toHaveLength(2));
-    expect([...document.querySelectorAll("[data-tend]")].map((e) => e.getAttribute("data-tend"))).toEqual(["bud", "seed"]);
+    expect(Array.from(document.querySelectorAll("[data-tend]")).map((e) => e.getAttribute("data-tend"))).toEqual(["bud", "seed"]);
     expect(document.body.textContent).not.toContain("Kitchen work");
     await screen.findByText("We plant garlic in the new moon.");
     const decided = document.querySelector("[data-hearth-decided]")!;

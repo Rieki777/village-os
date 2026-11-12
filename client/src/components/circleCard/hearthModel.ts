@@ -96,7 +96,8 @@ const onRing = (deg: number, radius: number): Point => ({
 
 /** The first letter of a role's name, for its stone. */
 export function initialOf(name: string): string {
-  const m = /\p{L}|\p{N}/u.exec(name.trim());
+  // The first mark that is neither space nor punctuation (no unicode flag: the base config targets ES5).
+  const m = /[^\s.,;:!?'"()[\]{}\-·_/]/.exec(name.trim());
   return m ? m[0].toLocaleUpperCase() : "·";
 }
 
