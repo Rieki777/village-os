@@ -73,6 +73,8 @@ import {
 } from "../lib/messaging";
 import { effectiveLifecycle } from "../lib/modules";
 import { linksForSubject, unlinkSubject } from "../lib/needs";
+import { register as registerMemberCommitment } from "./memberCommitment";
+import { readCommitmentPct } from "../../shared/commitment";
 import { keepExampleQuest, questClosed, setQuestRoots, type QuestRecord } from "../repos/quests";
 import { listArchetypeRows } from "../repos/archetypes";
 import { villageId } from "../lib/economy";
@@ -165,6 +167,9 @@ export function register(app: Express, deps: Deps): void {
     limitState,
     projectCurrency,
   } = deps;
+  // What a member says they can give (0383): the Open work board reads it to
+  // order quests for them, so it is served beside the board. Store and display only.
+  registerMemberCommitment(app, { authedUser, getPool, overLimit });
   // Whether quests may ask a minimum age (shared/ageBands.ts). The village setting, ships off.
   const minimumAgesOn: () => boolean = deps.minimumAgesOn ?? minimumAgesOnByDefault;
 
@@ -712,12 +717,30 @@ export function register(app: Express, deps: Deps): void {
     return true;
   };
 
+  /**
+   * The commitment a quest asks (0383), when a save carries it: a whole
+   * percent from 1 to 100, or null to clear it. Refused with the sentence
+   * otherwise, so a typo never stores a guess. Answers and returns false on a
+   * refusal; on success the body holds the read value.
+   */
+  const commitmentIsFine = (body: Record<string, unknown>, res: express.Response): boolean => {
+    if (body.commitmentPct === undefined) return true;
+    const read = readCommitmentPct(body.commitmentPct);
+    if (!read.ok) {
+      res.status(400).json({ error: read.problem });
+      return false;
+    }
+    body.commitmentPct = read.value;
+    return true;
+  };
+
   app.post("/api/admin/quests", async (req, res) => {
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
     const { title } = req.body ?? {};
     if (!title) return res.status(400).json({ error: "Missing title" });
     if (rejectOffsiteImage(req.body?.imageUrl, res)) return;
     const body: Record<string, unknown> = { ...(req.body ?? {}) };
+    if (!commitmentIsFine(body, res)) return;
     const valued = await checkedQuestValue(body, res, { required: true });
     if (!valued) return;
     const count = (await questsRepo.all()).length;
@@ -752,6 +775,7 @@ export function register(app: Express, deps: Deps): void {
     // checked first. Clearing a value on an existing quest is allowed, and its
     // card then says to inquire.
     const body: Record<string, unknown> = { ...(req.body ?? {}) };
+    if (!commitmentIsFine(body, res)) return;
     const valued = await checkedQuestValue(body, res, { required: false });
     if (!valued) return;
     const updated = await questsRepo.update(req.params.id, (q: any) => {
@@ -784,6 +808,7 @@ export function register(app: Express, deps: Deps): void {
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
     if (rejectOffsiteImage(req.body?.imageUrl, res)) return;
     const body: Record<string, unknown> = { ...(req.body ?? {}) };
+    if (!commitmentIsFine(body, res)) return;
     const valued = await checkedQuestValue(body, res, { required: true });
     if (!valued) return;
     const kept = await keepExampleQuest(getPool(), String(req.params.id), (q: any) => {

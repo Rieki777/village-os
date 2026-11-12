@@ -54,6 +54,8 @@ const PUBLIC_CARD_KEYS = [
   "whereWorked", "languages", "reviewAfterDays", "publicPay", "alwaysChecked", "commitmentPct",
   // 0374: who may hold it, public at every tier like the rest of the card.
   "heldBy", "agentMayHold",
+  // 0383: whether the role needs its whole commitment, public like the percent beside it.
+  "commitmentRequired",
 ].sort();
 
 describe("the public pay range", () => {

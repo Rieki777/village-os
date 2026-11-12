@@ -26,6 +26,7 @@ import {
 // The ordered conversations live in shared/interviewerRoles.ts, shared with the interview lane.
 export * from "./interviewerRoles";
 import { HELD_BY, HELD_BY_LABEL, readHeldBy, type HeldBy } from "./agentHolders";
+import { readCommitmentPct, storedCommitmentPct } from "./commitment";
 import { TRACKS as ROLE_TRACKS, PAID_TRACKS, readTrack, type Track as RoleTrack } from "./roleTracks";
 
 // ── Track ────────────────────────────────────────────────────────────────────
@@ -63,6 +64,14 @@ export interface RoleParams {
   alwaysChecked: boolean;
   /** Who may hold it (0374, shared/agentHolders.ts). Null: the card has not said, which reads as either. */
   heldBy: HeldBy | null;
+  /**
+   * The commitment the role asks, a whole percent from 1 to 100, as a stored
+   * value (0383). Null: not said here, and the card falls back to the terms on
+   * offer. Store and display only: no pay code reads it.
+   */
+  commitmentPct: number | null;
+  /** The role needs the whole of that commitment (0383). False: it is flexible. */
+  commitmentRequired: boolean;
 }
 
 export const ROLE_PARAM_KEYS = [
@@ -80,6 +89,8 @@ export const ROLE_PARAM_KEYS = [
   "bookingUrl",
   "alwaysChecked",
   "heldBy",
+  "commitmentPct",
+  "commitmentRequired",
 ] as const satisfies readonly (keyof RoleParams)[];
 export type RoleParamKey = (typeof ROLE_PARAM_KEYS)[number];
 
@@ -99,6 +110,8 @@ export const ROLE_PARAM_COLUMNS: Record<RoleParamKey, string> = {
   bookingUrl: "booking_url",
   alwaysChecked: "always_checked",
   heldBy: "held_by",
+  commitmentPct: "commitment_pct",
+  commitmentRequired: "commitment_required",
 };
 
 export const ROLE_PARAM_LABELS: Record<RoleParamKey, string> = {
@@ -116,6 +129,8 @@ export const ROLE_PARAM_LABELS: Record<RoleParamKey, string> = {
   bookingUrl: "Booking link",
   alwaysChecked: "Always background-checked",
   heldBy: HELD_BY_LABEL,
+  commitmentPct: "Commitment it asks",
+  commitmentRequired: "Commitment required",
 };
 
 // ── Parsing ──────────────────────────────────────────────────────────────────
@@ -233,6 +248,11 @@ export function parseRoleParams(body: unknown): Parsed<Partial<RoleParams>> {
     const h = o.heldBy === null || o.heldBy === "" ? null : readHeldBy(o.heldBy);
     problems.push(put("heldBy", h === null && o.heldBy !== null && o.heldBy !== "" ? bad<HeldBy | null>(`Who can hold it is one of: ${HELD_BY.join(", ")}.`) : ok(h)));
   }
+  if (o.commitmentPct !== undefined) {
+    const c = readCommitmentPct(o.commitmentPct);
+    problems.push(put("commitmentPct", c.ok ? ok(c.value) : bad<number | null>(c.problem)));
+  }
+  if (o.commitmentRequired !== undefined) problems.push(put("commitmentRequired", typeof o.commitmentRequired === "boolean" ? ok(o.commitmentRequired) : bad<boolean>("Say whether the role needs its whole commitment.")));
   const first = problems.find((p): p is string => !!p);
   return first ? bad(first) : ok(value);
 }
@@ -249,7 +269,7 @@ export function roleParamColumns(value: Partial<RoleParams>): Array<[string, str
   for (const key of ROLE_PARAM_KEYS) {
     if (!(key in value)) continue;
     const v = value[key];
-    const bound = v === null || v === undefined ? (key === "alwaysChecked" ? 0 : null) : typeof v === "boolean" ? (v ? 1 : 0) : Array.isArray(v) ? JSON.stringify(v) : (v as string | number);
+    const bound = v === null || v === undefined ? (key === "alwaysChecked" || key === "commitmentRequired" ? 0 : null) : typeof v === "boolean" ? (v ? 1 : 0) : Array.isArray(v) ? JSON.stringify(v) : (v as string | number);
     out.push([ROLE_PARAM_COLUMNS[key], bound]);
   }
   return out;
@@ -283,6 +303,8 @@ export function roleParamsFromRow(r: Record<string, unknown>): RoleParams {
     bookingUrl: url.ok ? url.value : null,
     alwaysChecked: r.always_checked === 1 || r.always_checked === true || r.always_checked === "1",
     heldBy: readHeldBy(r.held_by),
+    commitmentPct: storedCommitmentPct(r.commitment_pct),
+    commitmentRequired: r.commitment_required === 1 || r.commitment_required === true || r.commitment_required === "1",
   };
 }
 

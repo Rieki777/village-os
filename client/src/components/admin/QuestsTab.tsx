@@ -198,6 +198,8 @@ export default function QuestsTab({ password }: { password: string }) {
               stepsText: listToLines(q.steps),
               tipsText: listToLines(q.tips),
               payDraft: draftFrom(q, offered ?? [], currency),
+              // 0383: the commitment it asks, as typed. "" is not sized.
+              commitmentText: typeof q.commitmentPct === "number" ? String(q.commitmentPct) : "",
             };
             const d = draft[q.id] ?? base;
             // The dirty check projects every editable field, story layer
@@ -208,7 +210,7 @@ export default function QuestsTab({ password }: { password: string }) {
                 t: x.title, de: x.description, pv: x.payDraft, s: x.status, c: x.circle,
                 su: x.subtitle ?? "", st: x.story ?? "", fs: x.firstStep ?? "",
                 dv: x.deliverable ?? "", iu: x.imageUrl ?? "", im: x.impact ?? "",
-                di: x.difficulty ?? "", du: x.duration ?? "",
+                di: x.difficulty ?? "", du: x.duration ?? "", cp: x.commitmentText ?? "",
                 sl: stepsText, tl: tipsText,
               });
             const dirty =
@@ -296,6 +298,10 @@ export default function QuestsTab({ password }: { password: string }) {
                     <label className="text-xs text-gray-500">Time it takes
                       <input value={d.duration ?? ""} onChange={(e) => setDraft({ ...draft, [q.id]: { ...d, duration: e.target.value } })} placeholder="90 minutes, Two mornings, Flexible" className={`${inputCls} w-full mt-1`} />
                     </label>
+                    {/* 0383: how much of a person it asks, 1 to 100. The Open work board sizes and orders by it. Nothing that pays reads it. */}
+                    <label className="text-xs text-muted-foreground"><Trans context="admin quests: the percent of a person a quest asks">Commitment it asks (%)</Trans>
+                      <input type="number" inputMode="numeric" min={1} max={100} step={5} value={d.commitmentText ?? ""} onChange={(e) => setDraft({ ...draft, [q.id]: { ...d, commitmentText: e.target.value } })} placeholder={t({ message: "1 to 100", context: "admin quests: the commitment field placeholder" })} className={`${inputCls} w-full mt-1`} data-quest-commitment-pct={q.id} />
+                    </label>
                     <label className="text-xs text-gray-500">Subtitle
                       <input value={d.subtitle ?? ""} onChange={(e) => setDraft({ ...draft, [q.id]: { ...d, subtitle: e.target.value } })} className={`${inputCls} w-full mt-1`} />
                     </label>
@@ -375,7 +381,7 @@ export default function QuestsTab({ password }: { password: string }) {
                           status: d.status, circle: d.circle,
                           subtitle: d.subtitle ?? "", story: d.story ?? "", firstStep: d.firstStep ?? "",
                           deliverable: d.deliverable ?? "", imageUrl: d.imageUrl ?? "",
-                          difficulty: d.difficulty ?? "", duration: d.duration ?? "", impact: d.impact ?? "",
+                          difficulty: d.difficulty ?? "", duration: d.duration ?? "", impact: d.impact ?? "", commitmentPct: String(d.commitmentText ?? "").trim() || null,
                           steps: linesToList(d.stepsText ?? ""), tips: linesToList(d.tipsText ?? ""),
                         });
                         if (r) {
@@ -404,7 +410,7 @@ export default function QuestsTab({ password }: { password: string }) {
                         status: d.status, circle: d.circle,
                         subtitle: d.subtitle ?? "", story: d.story ?? "", firstStep: d.firstStep ?? "",
                         deliverable: d.deliverable ?? "", imageUrl: d.imageUrl ?? "",
-                        difficulty: d.difficulty ?? "", duration: d.duration ?? "", impact: d.impact ?? "",
+                        difficulty: d.difficulty ?? "", duration: d.duration ?? "", impact: d.impact ?? "", commitmentPct: String(d.commitmentText ?? "").trim() || null,
                         steps: linesToList(d.stepsText ?? ""), tips: linesToList(d.tipsText ?? ""),
                       }, "PUT");
                       if (r) { toast.success("Saved"); setDraft({ ...draft, [q.id]: undefined }); load(); }
