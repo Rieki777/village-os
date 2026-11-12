@@ -1,6 +1,6 @@
 import { Link, useLocation } from "wouter";
 import { m, AnimatePresence } from "framer-motion";
-import { TreePine, Menu, X, User, LogOut, ChevronDown } from "lucide-react";
+import { TreePine, Menu, X, User, LogOut, ChevronDown, ExternalLink } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { LanguagePicker } from "@/i18n/LanguagePicker";
@@ -361,13 +361,16 @@ export default function Layout({ children }: LayoutProps) {
             )}
 
             {siteUrl && (
+              /* Edged, never gold (D-01): it leaves the app, so it is not the
+                 page's main act, and the arrow says it opens elsewhere. */
               <a
                 href={siteUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="px-3 xl:px-4 py-2 bg-amber text-foreground rounded-lg font-medium hover:bg-amber/90 transition-colors text-sm whitespace-nowrap"
+                className="inline-flex min-h-11 items-center gap-1.5 px-3 py-2 border border-white/50 text-white rounded-lg font-medium hover:bg-white/10 transition-colors text-sm whitespace-nowrap"
               >
                 <Trans context="site header">Main Site</Trans>
+                <ExternalLink aria-hidden="true" className="w-3.5 h-3.5" />
               </a>
             )}
           </div>
@@ -503,9 +506,10 @@ export default function Layout({ children }: LayoutProps) {
                     href={siteUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="block px-4 py-2 bg-amber text-foreground rounded-lg font-medium hover:bg-amber/90 transition-colors text-center mt-3"
+                    className="mt-3 flex min-h-11 items-center justify-center gap-1.5 px-4 py-2 border border-white/50 text-white rounded-lg font-medium hover:bg-white/10 transition-colors"
                   >
                     <Trans context="site header">Main Site</Trans>
+                    <ExternalLink aria-hidden="true" className="w-4 h-4" />
                   </a>
                 )}
               </div>
@@ -518,7 +522,10 @@ export default function Layout({ children }: LayoutProps) {
       {/* Main Content */}
       {/* R47: the Trail, a member's one next step, on every page. */}
       <NextStepTrail />
-      <main id="main" tabIndex={-1} className="flex-1 min-h-svh">
+      {/* The shortcuts button floats over the page's bottom-right corner on a
+          phone. The page ends with room for it, so it never sits on the last
+          words (go-live pass, M4). Founding pages draw no button (MobileFab). */}
+      <main id="main" tabIndex={-1} className="flex-1 min-h-svh max-md:pb-[var(--fab-clear)]">
         {children}
       </main>
 

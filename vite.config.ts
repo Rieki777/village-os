@@ -213,6 +213,36 @@ function routeChunkPreload(): Plugin {
 }
 
 /**
+ * PRELOAD THE SHEET'S DISPLAY FACE (go-live pass, M11).
+ *
+ * Every page in the night world sets its headings in the sheet's carved face
+ * (Marcellus, `--sheet-font-display`), and the browser only asks for the file
+ * once the stylesheet has parsed and a heading needs it, so a phone painted
+ * the hero in a fallback face and swapped it late. The file is hashed, so it
+ * cannot be named in index.html by hand: this finds it in the bundle and adds
+ * one preload link. One woff2 of about 30 KB, and nothing on the JS budgets.
+ */
+const PRELOADED_FACE = /^assets\/marcellus-latin-400-normal-[\w-]+\.woff2$/;
+function preloadDisplayFace(): Plugin {
+  let base = "/";
+  return {
+    name: "preload-display-face",
+    apply: "build",
+    configResolved(config) {
+      base = config.base;
+    },
+    transformIndexHtml: {
+      order: "post",
+      handler(_html, ctx) {
+        const file = Object.keys(ctx.bundle ?? {}).find((f) => PRELOADED_FACE.test(f));
+        if (!file) return;
+        return [{ tag: "link", attrs: { rel: "preload", as: "font", type: "font/woff2", href: base + file, crossorigin: "anonymous" }, injectTo: "head-prepend" }];
+      },
+    },
+  };
+}
+
+/**
  * FAIL THE BUILD, BY NAME, WHEN A LAZY-ONLY MODULE JOINS THE FIRST PAGE.
  *
  * The size budgets (scripts/check-dist-budget.mjs) say the first page got
@@ -361,7 +391,7 @@ const longCopy = new CopyCollector();
 const LONG_COPY_PARTS = path.resolve(import.meta.dirname, "dist", "i18n", "parts", "en");
 
 export default defineConfig({
-  plugins: [linguiMacros(longCopy), splitLongCopy(longCopy, LONG_COPY_PARTS), react(), tailwindcss(), serveGroundsInDev(), dropLegacyWoffFallback(), useUnhintedFonts(), routeChunkPreload(), guardBootSet()],
+  plugins: [linguiMacros(longCopy), splitLongCopy(longCopy, LONG_COPY_PARTS), react(), tailwindcss(), serveGroundsInDev(), dropLegacyWoffFallback(), useUnhintedFonts(), routeChunkPreload(), preloadDisplayFace(), guardBootSet()],
   resolve: {
     alias: {
       "@": path.resolve(import.meta.dirname, "client", "src"),

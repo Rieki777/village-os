@@ -805,7 +805,7 @@ msgstr ""
 #: client/src/pages/Roles.tsx
 msgctxt "roles page button"
 msgid "Browse the open roles"
-msgstr ""
+msgstr "Ver los roles abiertos"
 
 #: client/src/pages/ApplicationStatus.tsx
 msgctxt "applicant's application status, adoption"
@@ -1899,7 +1899,7 @@ msgstr ""
 #: client/src/components/path/RootLine.tsx
 msgctxt "your path, the strip under the header"
 msgid "Your path"
-msgstr ""
+msgstr "Tu camino"
 
 #: client/src/pages/Roles.tsx
 msgctxt "roles page, intro word with a tooltip"
@@ -2480,7 +2480,7 @@ msgstr ""
 #: client/src/pages/Roles.tsx
 msgctxt "roles page, other ways to join"
 msgid "Other ways to join"
-msgstr ""
+msgstr "Otras formas de unirte"
 
 #: client/src/components/openProposal/RoleCardBridge.tsx
 msgid "The confidentiality agreement is not promised"
@@ -4321,7 +4321,7 @@ msgstr ""
 #: client/src/components/roleCard/FoundingTeam.tsx
 msgctxt "founding team, no role open"
 msgid "Choose a role to read it in full."
-msgstr ""
+msgstr "Elige un rol para leerlo completo."
 
 #: client/src/components/seasonPlans/RoleCarryOn.tsx
 msgid "Filed. The village renews filed roles together."
@@ -4740,7 +4740,7 @@ msgstr ""
 #: client/src/components/path/RootLine.tsx
 msgctxt "your path, the strip under the header"
 msgid "The chapters of your path"
-msgstr ""
+msgstr "Los capítulos de tu camino"
 
 #: client/src/components/seasonPlans/RoleCarryOn.tsx
 msgid "Waiting to be given"
@@ -5695,7 +5695,7 @@ msgstr ""
 #: client/src/components/roleCard/FoundingTeam.tsx
 msgctxt "founding team list"
 msgid "The founding roles"
-msgstr ""
+msgstr "Los roles fundadores"
 
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "the reason for a change request"
@@ -7358,7 +7358,7 @@ msgstr "Este navegador bloquea el guardado, así que tus respuestas duran solo e
 #: client/src/pages/Roles.tsx
 msgctxt "roles page, other ways to join"
 msgid "Propose a new role"
-msgstr ""
+msgstr "Propón un nuevo rol"
 
 #: client/src/components/review/SeraOnReview.tsx
 msgctxt "sera changes"
@@ -7847,7 +7847,7 @@ msgstr ""
 #: client/src/components/roleCard/FullRoleCard.tsx
 msgctxt "full role card heading"
 msgid "Why it matters"
-msgstr ""
+msgstr "Por qué importa"
 
 #: client/src/pages/ExitPolicy.tsx
 msgid "A village that designs its exits before it needs them can afford to welcome people wholeheartedly. This is how departure works here."
@@ -8073,7 +8073,7 @@ msgstr ""
 #: client/src/pages/Roles.tsx
 msgctxt "roles page, other ways to join"
 msgid "Take a quest, alone or with others"
-msgstr ""
+msgstr "Toma una misión, sola o con otras personas"
 
 #: client/src/components/admin/RoleCharacterTags.tsx
 msgctxt "admin role roots"
@@ -8400,7 +8400,7 @@ msgstr ""
 #: client/src/pages/Roles.tsx
 msgctxt "roles page, other ways to join"
 msgid "Not every way in is a founding role. Each of these is open now."
-msgstr ""
+msgstr "No toda forma de entrar es un rol fundador. Cada una de estas está abierta ahora."
 
 #: client/src/components/admin/AgentPathTree.tsx
 msgctxt "agent paths, who confirms"
@@ -8797,7 +8797,7 @@ msgstr ""
 #: client/src/pages/Roles.tsx
 msgctxt "roles page, opens a role's full card"
 msgid "Read the full card"
-msgstr ""
+msgstr "Leer la ficha completa"
 
 #: client/src/components/admin/QuestSafetyEditor.tsx
 msgctxt "admin quest safety"
@@ -9093,7 +9093,7 @@ msgstr "Encuentra tu lugar en el juego"
 #: client/src/components/roleCard/FoundingTeam.tsx
 msgctxt "founding team section heading"
 msgid "Join the founding team"
-msgstr ""
+msgstr "Únete al equipo fundador"
 
 #. placeholder {0}: row.work
 #: client/src/components/roots/RootPicker.tsx
@@ -11117,7 +11117,7 @@ msgstr "Cada ciclo, cada persona recibe una asignación para enviar. Enviar es a
 #: client/src/pages/YourPath.tsx
 msgctxt "your path, the seed drawing"
 msgid "Your path: {0} of {1} steps walked"
-msgstr ""
+msgstr "Tu camino: {0} de {1} pasos recorridos"
 
 #: client/src/components/review/SeraDifferences.tsx
 msgctxt "sera changes"
@@ -11210,7 +11210,7 @@ msgstr ""
 #: client/src/pages/Roles.tsx
 msgctxt "roles page, empty directory"
 msgid "The roles open now are the founding roles above."
-msgstr ""
+msgstr "Los roles abiertos ahora son los roles fundadores de arriba."
 
 #: client/src/components/review/SeraBulk.tsx
 msgctxt "sera answers"
@@ -11249,7 +11249,7 @@ msgstr ""
 #: client/src/pages/Roles.tsx
 msgctxt "roles page, steward switch for unlisted roles"
 msgid "Show the {unlistedCount} roles visitors do not see (admin view)"
-msgstr ""
+msgstr "Mostrar los {unlistedCount} roles que las visitas no ven (vista de administración)"
 
 #: client/src/components/review/SeraDifferences.tsx
 msgctxt "sera changes"
@@ -11455,7 +11455,7 @@ msgstr "Confirmas tu correo dentro de 48 horas."
 #: client/src/components/path/RootLine.tsx
 msgctxt "your path, the strip under the header"
 msgid "See your whole path"
-msgstr ""
+msgstr "Ver todo tu camino"
 
 #: client/src/components/canvas/CanvasPublicLines.tsx
 msgid "The line could not be saved just now."
@@ -11502,7 +11502,7 @@ msgstr ""
 #: client/src/components/roleCard/FullRoleCard.tsx
 msgctxt "full role card: the one act"
 msgid "Apply for this role"
-msgstr ""
+msgstr "Postúlate a este rol"
 
 #: client/src/pages/StructureReview.tsx
 msgid "Pick one. Nothing is decided for you."
@@ -12696,7 +12696,7 @@ msgstr ""
 #: client/src/pages/Roles.tsx
 msgctxt "roles page, conflict steps heading"
 msgid "How we evolve through conflict"
-msgstr ""
+msgstr "Cómo crecemos a través del conflicto"
 
 #: client/src/pages/RoleDraft.tsx
 #~ msgctxt "role draft button label"
@@ -12919,7 +12919,7 @@ msgstr ""
 #: client/src/components/roleCard/FoundingTeam.tsx
 msgctxt "founding team section eyebrow"
 msgid "Founding team"
-msgstr ""
+msgstr "Equipo fundador"
 
 #: client/src/components/admin/LetterDraftsPanel.tsx
 msgctxt "drafted letters"
@@ -12994,7 +12994,7 @@ msgstr "Hecho"
 #: client/src/components/roleCard/FoundingTeam.tsx
 msgctxt "founding team section lede"
 msgid "We are building our team of people who will lead each domain of the village from the foundation through to completion."
-msgstr ""
+msgstr "Estamos formando el equipo de personas que guiarán cada ámbito de la aldea, desde los cimientos hasta su culminación."
 
 #: client/src/components/admin/AgentsPanel.tsx
 msgctxt "agent paths"
@@ -13496,7 +13496,7 @@ msgstr ""
 #: client/src/pages/Roles.tsx
 msgctxt "roles page, other ways to join"
 msgid "Propose is for a role we do not list. Tell us the role you see, and the village decides."
-msgstr ""
+msgstr "Proponer es para un rol que no aparece en la lista. Cuéntanos el rol que ves, y la aldea decide."
 
 #: client/src/components/circleCard/Hearth.tsx
 msgctxt "circle hearth, the drawing"
@@ -14541,3 +14541,73 @@ msgstr ""
 msgctxt "roles page, other ways to join"
 msgid "Become a Founding Seeder"
 msgstr "Hazte Sembrador Fundador"
+
+#: client/src/pages/Home.tsx
+msgctxt "landing hero main act"
+msgid "Join the founding team"
+msgstr "Únete al equipo fundador"
+
+#: client/src/pages/Home.tsx
+msgctxt "landing hero, the founding team line"
+msgid "We're forming the founding team now: paid, multi-year roles that take the village from idea to home."
+msgstr "Estamos formando el equipo fundador: roles remunerados, de varios años, que llevan la aldea de la idea al hogar."
+
+#: client/src/pages/Home.tsx
+msgctxt "landing hero second act"
+msgid "Explore the map"
+msgstr "Explora el mapa"
+
+#: client/src/pages/Home.tsx
+msgctxt "landing, the ways in heading when the paths are hidden"
+msgid "Ways in"
+msgstr "Formas de entrar"
+
+#: client/src/pages/Home.tsx
+msgctxt "landing, founding team card eyebrow"
+msgid "Paid roles"
+msgstr "Roles remunerados"
+
+#: client/src/pages/Home.tsx
+msgctxt "landing, founding team card title"
+msgid "Founding team"
+msgstr "Equipo fundador"
+
+#: client/src/pages/Home.tsx
+msgctxt "landing, founding team card body"
+msgid "Lead a whole domain of the village, from the foundation through to completion."
+msgstr "Guía todo un ámbito de la aldea, desde los cimientos hasta su culminación."
+
+#: client/src/pages/Home.tsx
+msgctxt "landing, founding team card door"
+msgid "See the open roles"
+msgstr "Ver los roles abiertos"
+
+#: client/src/components/mobile/MobileTabBar.tsx
+msgctxt "bottom tab bar"
+msgid "Home"
+msgstr "Inicio"
+
+#: client/src/components/mobile/MobileTabBar.tsx
+msgctxt "bottom tab bar"
+msgid "Quests"
+msgstr "Misiones"
+
+#: client/src/components/mobile/MobileTabBar.tsx
+msgctxt "bottom tab bar"
+msgid "Circles"
+msgstr "Círculos"
+
+#: client/src/components/mobile/MobileTabBar.tsx
+msgctxt "bottom tab bar"
+msgid "More"
+msgstr "Más"
+
+#: client/src/components/mobile/MobileTabBar.tsx
+msgctxt "bottom tab bar"
+msgid "Bottom navigation"
+msgstr "Navegación inferior"
+
+#: client/src/pages/StewardJourney.tsx
+msgctxt "steward hero, the main act"
+msgid "See the founding roles"
+msgstr "Ver los roles fundadores"

@@ -80,7 +80,10 @@ export default function StewardJourney() {
               transition={{ duration: 0.6 }}
             />
           ) : null}
-          <div className="absolute inset-0 bg-gradient-to-r from-background via-background/90 to-background/60" />
+          {/* The scrim holds the left 60% dark, where the words are, so the lede
+              reads on a busy photograph (D-11); the land stays open on the right,
+              and a phone, where the words run full width, gets it dark throughout. */}
+          <div className="absolute inset-0 bg-gradient-to-r from-background from-0% via-background/95 via-60% to-background/50 max-sm:to-background/90" />
         </div>
 
         <div className="container relative z-10">
@@ -99,10 +102,21 @@ export default function StewardJourney() {
               />
             </h1>
             <div className="mb-6 h-px w-24 bg-notice/60" aria-hidden="true" />
-            <p className={`text-xl text-muted-foreground leading-relaxed mb-8 break-words${waiting}`}>
+            <p className={`max-w-[38em] text-xl text-foreground/90 leading-relaxed mb-8 break-words${waiting}`}>
               <Emphasized text={hero?.intro ?? ""} />
             </p>
             <div className="flex flex-wrap gap-4">
+              {/* THE ONE GOLD ACT IS IN THE HERO (D-11). The founding team's
+                  invitation sat about 3,000px down on a desktop while the hero
+                  held two edged buttons. It takes the reader to the band below,
+                  which keeps the full invitation and its fireflies. A phone
+                  already pins that act under the thumb, so it is not drawn twice. */}
+              {foundingAct && (
+                <a href="#founding-team" className={`${BTN_PRIMARY} hidden text-base sm:inline-flex`} data-hero-act="founding">
+                  <Trans context="steward hero, the main act">See the founding roles</Trans>
+                  <ArrowRight className="h-5 w-5" aria-hidden="true" />
+                </a>
+              )}
               {heroPrimary && (
                 <JourneyLink action={heroPrimary.action} className={BTN_SECONDARY}>
                   {heroPrimary.label}
@@ -187,7 +201,7 @@ export default function StewardJourney() {
                               {step.stage}
                             </span>
                           </div>
-                          <p className="mt-1 break-words text-sm text-muted-foreground">{step.description}</p>
+                          <p className="mt-1 max-w-[62ch] break-words text-base leading-relaxed text-muted-foreground">{step.description}</p>
                           {stepPoints(step).length > 0 && (
                             <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-muted-foreground">
                               {stepPoints(step).map((point, i) => (
