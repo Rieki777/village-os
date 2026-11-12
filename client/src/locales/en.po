@@ -255,6 +255,11 @@ msgstr "Not now"
 msgid "The role goal it moves"
 msgstr "The role goal it moves"
 
+#: client/src/pages/Home.tsx
+msgctxt "landing, the ways in heading when the paths are hidden"
+msgid "Ways in"
+msgstr "Ways in"
+
 #: client/src/components/openProposal/RoleCardBridge.tsx
 msgid "The village has not set its goals for this season yet. You can still propose: say in your aim what you would bring."
 msgstr "The village has not set its goals for this season yet. You can still propose: say in your aim what you would bring."
@@ -729,6 +734,11 @@ msgstr "{agent} answered at {askedAt}."
 msgid "Readings and tools picked for {name} are not built yet."
 msgstr "Readings and tools picked for {name} are not built yet."
 
+#: client/src/components/mobile/MobileTabBar.tsx
+msgctxt "bottom tab bar"
+msgid "Home"
+msgstr "Home"
+
 #: client/src/components/governance/ExportByVote.tsx
 msgid "The village authorised one copy for the steward this vote names. It has not been downloaded yet."
 msgstr "The village authorised one copy for the steward this vote names. It has not been downloaded yet."
@@ -1107,6 +1117,11 @@ msgstr "The helper stays off until your village decides to use AI in Admin. Whoe
 msgctxt "new role from a card"
 msgid "Circle"
 msgstr "Circle"
+
+#: client/src/pages/Home.tsx
+msgctxt "landing hero main act"
+msgid "Join the founding team"
+msgstr "Join the founding team"
 
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "the value of a setting once changed"
@@ -1825,6 +1840,11 @@ msgstr "Only the people who decide this proposal see these. No AI reads them. Th
 #: client/src/components/journey/EconomicsView.tsx
 msgid "Turn modules on in <0>the Module Library</0>."
 msgstr "Turn modules on in <0>the Module Library</0>."
+
+#: client/src/components/mobile/MobileTabBar.tsx
+msgctxt "bottom tab bar"
+msgid "Quests"
+msgstr "Quests"
 
 #: client/src/components/Layout.tsx
 #~ msgid "Sign in"
@@ -7182,6 +7202,11 @@ msgctxt "notebook row, who shared it"
 msgid ", from {0}"
 msgstr ", from {0}"
 
+#: client/src/pages/Home.tsx
+msgctxt "landing hero second act"
+msgid "Explore the map"
+msgstr "Explore the map"
+
 #: client/src/components/review/SeraDifferences.tsx
 msgctxt "sera answers"
 msgid "Tick all shown"
@@ -8236,6 +8261,11 @@ msgstr "Remove this practice"
 #: client/src/pages/ExitPolicy.tsx
 msgid "Anything you want the stewards to know (optional)"
 msgstr "Anything you want the stewards to know (optional)"
+
+#: client/src/components/mobile/MobileTabBar.tsx
+msgctxt "bottom tab bar"
+msgid "Bottom navigation"
+msgstr "Bottom navigation"
 
 #: client/src/components/GameDashboard.tsx
 msgctxt "profile quests card: the door to the board"
@@ -9863,6 +9893,11 @@ msgctxt "role draft link"
 msgid "Roles page"
 msgstr "Roles page"
 
+#: client/src/components/mobile/MobileTabBar.tsx
+msgctxt "bottom tab bar"
+msgid "Circles"
+msgstr "Circles"
+
 #: client/src/components/admin/AgentPathTree.tsx
 msgctxt "agent paths"
 msgid "Remove"
@@ -9886,6 +9921,11 @@ msgstr "Circle: {0}. "
 #: client/src/components/companion/CompanionPanel.tsx
 msgid "The guide never changes the canvas. To change an answer, suggest it under Say on the block. <0>Your profile</0> holds anything it drafted for you."
 msgstr "The guide never changes the canvas. To change an answer, suggest it under Say on the block. <0>Your profile</0> holds anything it drafted for you."
+
+#: client/src/pages/Home.tsx
+msgctxt "landing, founding team card title"
+msgid "Founding team"
+msgstr "Founding team"
 
 #: client/src/components/canvas/ConflictAgreementEditor.tsx
 msgid "The vote is open until {closes}. Every member on the roll has been told."
@@ -10085,6 +10125,11 @@ msgstr "The rough cost must be a number."
 msgctxt "role editor"
 msgid "Saving"
 msgstr "Saving"
+
+#: client/src/pages/Home.tsx
+msgctxt "landing, founding team card eyebrow"
+msgid "Paid roles"
+msgstr "Paid roles"
 
 #: client/src/pages/Quests.tsx
 msgctxt "open work filter: quests that ask most of a person"
@@ -10337,6 +10382,11 @@ msgstr "The roles list is catching its breath. Please refresh in a moment."
 msgid "Carry on into the next moon?"
 msgstr "Carry on into the next moon?"
 
+#: client/src/pages/Home.tsx
+msgctxt "landing, founding team card body"
+msgid "Lead a whole domain of the village, from the foundation through to completion."
+msgstr "Lead a whole domain of the village, from the foundation through to completion."
+
 #: client/src/i18n/LanguagePicker.tsx
 msgctxt "language picker"
 msgid "Now in {announced}"
@@ -10393,6 +10443,11 @@ msgstr "Your idea was not shared. Try again."
 #: client/src/components/notebook/NotebookAdd.tsx
 msgid "Pick a file to add."
 msgstr "Pick a file to add."
+
+#: client/src/pages/Home.tsx
+msgctxt "landing, founding team card door"
+msgid "See the open roles"
+msgstr "See the open roles"
 
 #: client/src/components/map/MapLightSetting.tsx
 msgctxt "map light setting"
@@ -10775,6 +10830,11 @@ msgstr "Contacts outside the village"
 #~ msgctxt "open proposal keys"
 #~ msgid "Enter moves on. When the cursor is not in a field, the arrow keys walk between stones."
 #~ msgstr "Enter moves on. When the cursor is not in a field, the arrow keys walk between stones."
+
+#: client/src/pages/StewardJourney.tsx
+msgctxt "steward hero, the main act"
+msgid "See the founding roles"
+msgstr "See the founding roles"
 
 #: client/src/components/review/SeraActs.tsx
 msgctxt "sera answers"
@@ -11551,6 +11611,11 @@ msgstr "Consequences, and how to appeal"
 msgctxt "agent paths"
 msgid "No words yet"
 msgstr "No words yet"
+
+#: client/src/pages/Home.tsx
+msgctxt "landing hero, the founding team line"
+msgid "We're forming the founding team now: paid, multi-year roles that take the village from idea to home."
+msgstr "We're forming the founding team now: paid, multi-year roles that take the village from idea to home."
 
 #: client/src/pages/ProposeARole.tsx
 #~ msgctxt "open proposal companion"
@@ -12627,6 +12692,11 @@ msgstr "The role asks {pct}% of your commitment"
 #: client/src/components/admin/AiAgentsApprovalPanel.tsx
 msgid "Record the Anchor's approval"
 msgstr "Record the Anchor's approval"
+
+#: client/src/components/mobile/MobileTabBar.tsx
+msgctxt "bottom tab bar"
+msgid "More"
+msgstr "More"
 
 #: client/src/pages/ProposeARole.tsx
 #~ msgctxt "open proposal stones"

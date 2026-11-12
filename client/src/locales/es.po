@@ -255,6 +255,11 @@ msgstr ""
 msgid "The role goal it moves"
 msgstr "La meta del rol que impulsa"
 
+#: client/src/pages/Home.tsx
+msgctxt "landing, the ways in heading when the paths are hidden"
+msgid "Ways in"
+msgstr "Formas de entrar"
+
 #: client/src/components/openProposal/RoleCardBridge.tsx
 msgid "The village has not set its goals for this season yet. You can still propose: say in your aim what you would bring."
 msgstr "La aldea todavía no ha fijado sus metas para esta temporada. Igual puedes proponerte: cuenta en tu propósito lo que traerías."
@@ -730,6 +735,11 @@ msgstr ""
 msgid "Readings and tools picked for {name} are not built yet."
 msgstr ""
 
+#: client/src/components/mobile/MobileTabBar.tsx
+msgctxt "bottom tab bar"
+msgid "Home"
+msgstr "Inicio"
+
 #: client/src/components/governance/ExportByVote.tsx
 msgid "The village authorised one copy for the steward this vote names. It has not been downloaded yet."
 msgstr ""
@@ -1109,6 +1119,11 @@ msgstr ""
 msgctxt "new role from a card"
 msgid "Circle"
 msgstr ""
+
+#: client/src/pages/Home.tsx
+msgctxt "landing hero main act"
+msgid "Join the founding team"
+msgstr "Únete al equipo fundador"
 
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "the value of a setting once changed"
@@ -1823,6 +1838,11 @@ msgstr "Solo las personas que deciden esta propuesta ven esto. Ninguna IA lo lee
 #: client/src/components/journey/EconomicsView.tsx
 msgid "Turn modules on in <0>the Module Library</0>."
 msgstr ""
+
+#: client/src/components/mobile/MobileTabBar.tsx
+msgctxt "bottom tab bar"
+msgid "Quests"
+msgstr "Misiones"
 
 #: client/src/components/Layout.tsx
 #, fuzzy
@@ -7176,6 +7196,11 @@ msgctxt "notebook row, who shared it"
 msgid ", from {0}"
 msgstr ""
 
+#: client/src/pages/Home.tsx
+msgctxt "landing hero second act"
+msgid "Explore the map"
+msgstr "Explora el mapa"
+
 #: client/src/components/review/SeraDifferences.tsx
 msgctxt "sera answers"
 msgid "Tick all shown"
@@ -8228,6 +8253,11 @@ msgstr ""
 #: client/src/pages/ExitPolicy.tsx
 msgid "Anything you want the stewards to know (optional)"
 msgstr ""
+
+#: client/src/components/mobile/MobileTabBar.tsx
+msgctxt "bottom tab bar"
+msgid "Bottom navigation"
+msgstr "Navegación inferior"
 
 #: client/src/components/GameDashboard.tsx
 msgctxt "profile quests card: the door to the board"
@@ -9850,6 +9880,11 @@ msgctxt "role draft link"
 msgid "Roles page"
 msgstr "Página de roles"
 
+#: client/src/components/mobile/MobileTabBar.tsx
+msgctxt "bottom tab bar"
+msgid "Circles"
+msgstr "Círculos"
+
 #: client/src/components/admin/AgentPathTree.tsx
 msgctxt "agent paths"
 msgid "Remove"
@@ -9873,6 +9908,11 @@ msgstr ""
 #: client/src/components/companion/CompanionPanel.tsx
 msgid "The guide never changes the canvas. To change an answer, suggest it under Say on the block. <0>Your profile</0> holds anything it drafted for you."
 msgstr ""
+
+#: client/src/pages/Home.tsx
+msgctxt "landing, founding team card title"
+msgid "Founding team"
+msgstr "Equipo fundador"
 
 #: client/src/components/canvas/ConflictAgreementEditor.tsx
 msgid "The vote is open until {closes}. Every member on the roll has been told."
@@ -10068,6 +10108,11 @@ msgstr ""
 msgctxt "role editor"
 msgid "Saving"
 msgstr ""
+
+#: client/src/pages/Home.tsx
+msgctxt "landing, founding team card eyebrow"
+msgid "Paid roles"
+msgstr "Roles remunerados"
 
 #: client/src/pages/Quests.tsx
 msgctxt "open work filter: quests that ask most of a person"
@@ -10320,6 +10365,11 @@ msgstr "La lista de roles está tomando aire. Por favor, recarga la página en u
 msgid "Carry on into the next moon?"
 msgstr ""
 
+#: client/src/pages/Home.tsx
+msgctxt "landing, founding team card body"
+msgid "Lead a whole domain of the village, from the foundation through to completion."
+msgstr "Guía todo un ámbito de la aldea, desde los cimientos hasta su culminación."
+
 #: client/src/i18n/LanguagePicker.tsx
 #, fuzzy
 msgctxt "language picker"
@@ -10377,6 +10427,11 @@ msgstr ""
 #: client/src/components/notebook/NotebookAdd.tsx
 msgid "Pick a file to add."
 msgstr ""
+
+#: client/src/pages/Home.tsx
+msgctxt "landing, founding team card door"
+msgid "See the open roles"
+msgstr "Ver los roles abiertos"
 
 #: client/src/components/map/MapLightSetting.tsx
 msgctxt "map light setting"
@@ -10759,6 +10814,11 @@ msgstr ""
 #~ msgctxt "open proposal keys"
 #~ msgid "Enter moves on. When the cursor is not in a field, the arrow keys walk between stones."
 #~ msgstr "Intro avanza. Cuando el cursor no está en un campo, las flechas te mueven entre las piedras."
+
+#: client/src/pages/StewardJourney.tsx
+msgctxt "steward hero, the main act"
+msgid "See the founding roles"
+msgstr "Ver los roles fundadores"
 
 #: client/src/components/review/SeraActs.tsx
 msgctxt "sera answers"
@@ -11534,6 +11594,11 @@ msgstr ""
 msgctxt "agent paths"
 msgid "No words yet"
 msgstr ""
+
+#: client/src/pages/Home.tsx
+msgctxt "landing hero, the founding team line"
+msgid "We're forming the founding team now: paid, multi-year roles that take the village from idea to home."
+msgstr "Estamos formando el equipo fundador: roles remunerados, de varios años, que llevan la aldea de la idea al hogar."
 
 #: client/src/pages/ProposeARole.tsx
 #~ msgctxt "open proposal companion"
@@ -12612,6 +12677,11 @@ msgstr "El rol pide el {pct}% de tu compromiso"
 #: client/src/components/admin/AiAgentsApprovalPanel.tsx
 msgid "Record the Anchor's approval"
 msgstr ""
+
+#: client/src/components/mobile/MobileTabBar.tsx
+msgctxt "bottom tab bar"
+msgid "More"
+msgstr "Más"
 
 #: client/src/pages/ProposeARole.tsx
 #~ msgctxt "open proposal stones"
@@ -14541,73 +14611,3 @@ msgstr ""
 msgctxt "roles page, other ways to join"
 msgid "Become a Founding Seeder"
 msgstr "Hazte Sembrador Fundador"
-
-#: client/src/pages/Home.tsx
-msgctxt "landing hero main act"
-msgid "Join the founding team"
-msgstr "Únete al equipo fundador"
-
-#: client/src/pages/Home.tsx
-msgctxt "landing hero, the founding team line"
-msgid "We're forming the founding team now: paid, multi-year roles that take the village from idea to home."
-msgstr "Estamos formando el equipo fundador: roles remunerados, de varios años, que llevan la aldea de la idea al hogar."
-
-#: client/src/pages/Home.tsx
-msgctxt "landing hero second act"
-msgid "Explore the map"
-msgstr "Explora el mapa"
-
-#: client/src/pages/Home.tsx
-msgctxt "landing, the ways in heading when the paths are hidden"
-msgid "Ways in"
-msgstr "Formas de entrar"
-
-#: client/src/pages/Home.tsx
-msgctxt "landing, founding team card eyebrow"
-msgid "Paid roles"
-msgstr "Roles remunerados"
-
-#: client/src/pages/Home.tsx
-msgctxt "landing, founding team card title"
-msgid "Founding team"
-msgstr "Equipo fundador"
-
-#: client/src/pages/Home.tsx
-msgctxt "landing, founding team card body"
-msgid "Lead a whole domain of the village, from the foundation through to completion."
-msgstr "Guía todo un ámbito de la aldea, desde los cimientos hasta su culminación."
-
-#: client/src/pages/Home.tsx
-msgctxt "landing, founding team card door"
-msgid "See the open roles"
-msgstr "Ver los roles abiertos"
-
-#: client/src/components/mobile/MobileTabBar.tsx
-msgctxt "bottom tab bar"
-msgid "Home"
-msgstr "Inicio"
-
-#: client/src/components/mobile/MobileTabBar.tsx
-msgctxt "bottom tab bar"
-msgid "Quests"
-msgstr "Misiones"
-
-#: client/src/components/mobile/MobileTabBar.tsx
-msgctxt "bottom tab bar"
-msgid "Circles"
-msgstr "Círculos"
-
-#: client/src/components/mobile/MobileTabBar.tsx
-msgctxt "bottom tab bar"
-msgid "More"
-msgstr "Más"
-
-#: client/src/components/mobile/MobileTabBar.tsx
-msgctxt "bottom tab bar"
-msgid "Bottom navigation"
-msgstr "Navegación inferior"
-
-#: client/src/pages/StewardJourney.tsx
-msgctxt "steward hero, the main act"
-msgid "See the founding roles"
-msgstr "Ver los roles fundadores"
