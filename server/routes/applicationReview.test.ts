@@ -405,7 +405,7 @@ describe.skipIf(!configured)("application review, on a real schema", () => {
       const before = await call("GET", `/api/application-status/${id}?token=${token}`, undefined, null);
       expect(before.body.status.mode, "an empty mode reads as one at a time").toBe("split");
       expect(before.body.status.booking).toMatch(/^After the invitation, you book each conversation at times you choose, in this order: Channel Role first, then /);
-      expect(before.body.status.booking).toContain("You may book them back to back if you like.");
+      expect(before.body.status.booking).toContain("Each one opens once the one before it is written up.");
       expect(before.body.status.booking).not.toMatch(/one block|split/);
       // The old request is still answered (expand-only), and the story does not change with it.
       const split = await call("POST", `/api/application-status/${id}/split?token=${token}`, {}, null);
@@ -415,6 +415,25 @@ describe.skipIf(!configured)("application review, on a real schema", () => {
       expect(after.body.status.booking).toBe(before.body.status.booking);
       // CONTROL: a wrong token cannot split, and the visitor path never reveals copy to a stranger.
       expect((await call("POST", `/api/application-status/${id}/split?token=nope`, {}, null)).status).toBe(404);
+    });
+
+    it("offers the open conversation's own booking link, in order, and our letter with times where a role has none", async () => {
+      await q("UPDATE org_roles SET booking_url = ? WHERE id = ?", ["https://calendar.example.test/channel", roleA]);
+      try {
+        const { id, confirm } = await confirmed("booklink@example.test");
+        const token = new URL(`${ORIGIN}${confirm.statusPath}`).searchParams.get("token");
+        const first = await call("GET", `/api/application-status/${id}?token=${token}`, undefined, null);
+        expect(first.body.status.bookNow).toEqual({ role: "Channel Role", url: "https://calendar.example.test/channel" });
+        // The next conversation opens only once the first is written up, and then offers its own role's way in.
+        await score(id, Number((await interviews(id))[0].id), IA.id);
+        const second = await call("GET", `/api/application-status/${id}?token=${token}`, undefined, null);
+        expect(second.body.status.bookNow).toEqual({ role: "Data Role", url: null });
+        // Control: an http link is not a booking link.
+        await q("UPDATE org_roles SET booking_url = ? WHERE id = ?", ["http://calendar.example.test/data", roleB]);
+        expect((await call("GET", `/api/application-status/${id}?token=${token}`, undefined, null)).body.status.bookNow.url).toBeNull();
+      } finally {
+        await q("UPDATE org_roles SET booking_url = NULL WHERE id IN (?, ?)", [roleA, roleB]);
+      }
     });
 
     it("stays as booked once a conversation has been held", async () => {

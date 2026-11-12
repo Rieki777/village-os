@@ -179,7 +179,7 @@ describe("Join the founding team", () => {
     expect(within(card).getByTestId("paid-role-line").textContent).toBe("This is a paid role");
     expect(within(card).getByRole("heading", { name: "Ideal background" })).toBeTruthy();
     expect(within(card).getByRole("heading", { name: "Qualities we're looking for" })).toBeTruthy();
-    expect(within(card).getByRole("heading", { name: "AI support" })).toBeTruthy();
+    expect(within(card).getByRole("heading", { name: "Digital Companion" })).toBeTruthy();
     expect(card.textContent).toContain("Heron");
     // Everything the editor holds: the words under the editor's own headings.
     for (const h of ["Why it matters", "What I look after", "What I can decide on my own", "What you can count on me for", "What I do regularly", "Bring me", "Not mine to hold", "Holding this role well"]) {

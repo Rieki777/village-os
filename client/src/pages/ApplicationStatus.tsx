@@ -40,6 +40,8 @@ interface Served {
   path: Array<{ label: string; state: "done" | "now" | "later" }>;
   booking: string | null;
   mode: "block" | "split";
+  /** The conversation open now and its role's booking link (12 Nov 2026). */
+  bookNow?: { role: string; url: string | null } | null;
   outcome?: "adopted" | "declined" | "withdrawn" | null;
   replyDays?: number;
   /** A count only: how many references the applicant gave (shared/proposalAbout.ts). */
@@ -363,6 +365,12 @@ export default function ApplicationStatus() {
               <section aria-label={w.status.booking.label} className={TILE}>
                 {/* One story whatever the role's conversationMode holds: the applicant books each conversation at times they choose, in order. */}
                 <p className="text-foreground">{view.booking.text}</p>
+                {view.booking.book && "url" in view.booking.book && (
+                  <a href={view.booking.book.url} target="_blank" rel="noopener noreferrer" className={`mt-3 ${DOOR}`} data-book-now="">
+                    {view.booking.book.label}
+                  </a>
+                )}
+                {view.booking.book && "text" in view.booking.book && <p className="mt-2 text-sm text-muted-foreground" data-book-write="">{view.booking.book.text}</p>}
               </section>
             )}
             {s.outcome == null && (

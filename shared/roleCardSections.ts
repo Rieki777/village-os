@@ -82,7 +82,7 @@ export type SectionKey = (typeof SECTION_KEYS)[number];
 export const SECTION_WORDS = {
   idealBackground: "Ideal background",
   qualities: "Qualities we're looking for",
-  aiSupport: "AI support",
+  aiSupport: "Digital Companion",
   aiCompanionLabel: "Companion",
   paid: "This is a paid role",
   payShape: "How pay works",

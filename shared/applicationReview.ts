@@ -103,15 +103,15 @@ export function parseConversationMode(raw: unknown): ConversationMode {
  * The line about how the conversations are booked, in English, for the status
  * read and the reviewer's panel. ONE STORY (lead, 12 Nov 2026: "we invite you
  * to book conversation times"): after the invitation the applicant books each
- * conversation at times they choose, in the role's order, back to back if they
- * like. The applicant's own page says the same in their language
+ * conversation at times they choose, in the role's order, each opening once the
+ * one before it is written up. The applicant's own page says the same in their language
  * (`status.booking.order` in shared/applicantWords.ts, held equal by a test).
  */
 export function bookingWords(roleNamesInOrder: readonly string[]): string {
   const roles = roleNamesInOrder;
   return roles.length <= 1
     ? `After the invitation, you book the conversation${roles[0] ? ` with ${roles[0]}` : ""} at a time you choose.`
-    : `After the invitation, you book each conversation at times you choose, in this order: ${roles[0]} first, then ${roles.slice(1).join(", then ")}. You may book them back to back if you like.`;
+    : `After the invitation, you book each conversation at times you choose, in this order: ${roles[0]} first, then ${roles.slice(1).join(", then ")}. Each one opens once the one before it is written up.`;
 }
 
 // ── The interviewers a role names ───────────────────────────────────────────

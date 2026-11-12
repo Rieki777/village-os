@@ -913,7 +913,7 @@ export default function ProposeARole() {
             {/* STEP 5: your first day. The first cycle, the first conversations, and when you could begin. */}
             <section {...panel(4)}>
               {heading(4)}
-              <FirstDayFacts setup={setup} />
+              <FirstDayFacts setup={setup} firstConversation={role.conversations?.[0]?.role ?? null} />
               <div className={`${GOLD_RULE} pt-6`}>
                 <Practicalities value={practical} onChange={setPractical} />
               </div>

@@ -4636,7 +4636,7 @@ msgstr "Ese enlace venció o ya se usó. Envía tu solicitud de nuevo y abre el 
 
 #: client/src/components/roleEdit/SectionsFields.tsx
 msgctxt "role editor"
-msgid "What the AI companion does for this role"
+msgid "What the Digital Companion does for this role"
 msgstr ""
 
 #: client/src/pages/RoleDraft.tsx
@@ -13113,3 +13113,15 @@ msgstr ""
 #~ msgctxt "open proposal review"
 #~ msgid "1 goal for your first moon"
 #~ msgstr "1 meta para tu primera luna"
+
+# needs-native-review: new words, 12 Nov 2026
+#: client/src/components/fireflyPath/ApplySteps.tsx
+msgctxt "founding application first day"
+msgid "Your first conversation"
+msgstr "Tu primera conversación"
+
+# needs-native-review: new words, 12 Nov 2026
+#: client/src/components/fireflyPath/ApplySteps.tsx
+msgctxt "founding application first day"
+msgid "With {firstConversation}. Once we invite you, you book it at a time you choose, through the booking link in your invitation, or we'll write to you with times."
+msgstr "Con {firstConversation}. Cuando te invitemos, la reservas en el horario que elijas, con el enlace de reserva de tu invitación, o te escribiremos con horarios."

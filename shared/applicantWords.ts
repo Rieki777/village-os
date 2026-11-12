@@ -56,7 +56,8 @@ export interface ApplicantMessages {
     firstReplyTitle: string;
     firstReply(roles: string): string;
     conversationTitle: string;
-    conversation(roles: string, withRole: string | null, minutes: number | null): string;
+    /** The next conversation has opened: book it through the role's link, or we write with times. */
+    conversation(roles: string, withRole: string | null, minutes: number | null, bookingUrl: string | null): string;
     consentTitle: string;
     consent(roles: string): string;
     termsTitle: string;
@@ -79,6 +80,11 @@ export interface ApplicantMessages {
     conversation(role: string, minutes: number): string;
     total(minutes: number): string;
     booking: string;
+    /** The first conversation's own way in: the interviewing role's booking link, or our letter with times. */
+    bookFirst(role: string, url: string): string;
+    writeFirst(role: string): string;
+    /** Only when there is more than one: the later ones open in order. */
+    laterOpen: string;
     after: string;
   };
 
@@ -174,10 +180,14 @@ export interface ApplicantMessages {
       /**
        * The one booking story (lead, 12 Nov 2026: "we invite you to book conversation times"):
        * after the invitation the applicant books each conversation at times they choose, in the
-       * role's order, back to back if they like. Told the same whatever the role's
-       * `conversationMode` holds, which old cards may still carry.
+       * role's order. Each opens once the one before it is written up (the in-order gating), so
+       * "back to back" is not offered. Told the same whatever the role's `conversationMode` holds,
+       * which old cards may still carry.
        */
       order(roles: readonly string[]): string;
+      /** The conversation open now: its role's booking link, or our letter with times. */
+      bookNow(role: string): string;
+      writeNow(role: string): string;
     };
     references: {
       none: string;
@@ -241,7 +251,7 @@ const en: ApplicantMessages = {
     firstReplyTitle: "We have taken up your proposal",
     firstReply: (roles) => `The role that welcomes people has taken up your proposal to hold ${roles} and will write to you so you can book a time that suits you.`,
     conversationTitle: "We would love to talk with you",
-    conversation: (roles, withRole, minutes) => `The next step on your proposal to hold ${roles} is a conversation${withRole ? ` with ${withRole}` : ""}${minutes ? `, about ${minutes} minutes` : ""}. We'll write to you so you can book it at a time you choose.`,
+    conversation: (roles, withRole, minutes, bookingUrl) => `The next step on your proposal to hold ${roles} is a conversation${withRole ? ` with ${withRole}` : ""}${minutes ? `, about ${minutes} minutes` : ""}. ${bookingUrl ? `Book it at a time you choose: ${bookingUrl}` : "We'll write to you with times."}`,
     consentTitle: "The circle is weighing your proposal",
     consent: (roles) => `The conversations are written up, and the circle is now doing its process for your proposal to hold ${roles}. Watch your email or status page for next steps.`,
     termsTitle: "The terms for your proposal changed",
@@ -262,7 +272,10 @@ const en: ApplicantMessages = {
     conversationsIntro: "The conversations, in order:",
     conversation: (role, minutes) => `${role}, ${minutes} minutes`,
     total: (minutes) => `About ${minutes} minutes in all.`,
-    booking: "We'll write to you so you can book each conversation at times you choose, in the order above. You may book them back to back if you like.",
+    booking: "You book each conversation at times you choose, in the order above.",
+    bookFirst: (role, url) => `Book your first conversation, with ${role}, here: ${url}`,
+    writeFirst: (role) => `We'll write to you with times for your first conversation, with ${role}.`,
+    laterOpen: "Each later conversation opens once the one before it is written up, and you book it the same way.",
     after: "After the last conversation, the circle decides by consent, and we write to you with its answer.",
   },
 
@@ -369,7 +382,9 @@ const en: ApplicantMessages = {
       order: (roles) =>
         roles.length <= 1
           ? `After the invitation, you book the conversation${roles[0] ? ` with ${roles[0]}` : ""} at a time you choose.`
-          : `After the invitation, you book each conversation at times you choose, in this order: ${roles[0]} first, then ${roles.slice(1).join(", then ")}. You may book them back to back if you like.`,
+          : `After the invitation, you book each conversation at times you choose, in this order: ${roles[0]} first, then ${roles.slice(1).join(", then ")}. Each one opens once the one before it is written up.`,
+      bookNow: (role) => `Book your conversation with ${role}`,
+      writeNow: (role) => `We'll write to you with times for your conversation with ${role}.`,
     },
     references: {
       none: "You gave no references, so we run a background check. You agreed to it when you proposed. We cover its cost, and we contact no one before our first conversation with you.",
@@ -416,7 +431,7 @@ const es: ApplicantMessages = {
     firstReplyTitle: "Hemos recibido tu propuesta",
     firstReply: (roles) => `El rol que da la bienvenida a las personas ha recibido tu propuesta para ocupar ${roles} y te escribirá para que reserves un momento que te convenga.`, // needs-native-review: new words, 12 Nov 2026
     conversationTitle: "Nos encantaría conversar contigo",
-    conversation: (roles, withRole, minutes) => `El siguiente paso de tu propuesta para ocupar ${roles} es una conversación${withRole ? ` con ${withRole}` : ""}${minutes ? `, de unos ${minutes} minutos` : ""}. Te escribiremos para que la reserves en el horario que elijas.`, // needs-native-review: new words, 12 Nov 2026
+    conversation: (roles, withRole, minutes, bookingUrl) => `El siguiente paso de tu propuesta para ocupar ${roles} es una conversación${withRole ? ` con ${withRole}` : ""}${minutes ? `, de unos ${minutes} minutos` : ""}. ${bookingUrl ? `Resérvala en el horario que elijas: ${bookingUrl}` : "Te escribiremos con horarios."}`, // needs-native-review: new words, 12 Nov 2026
     consentTitle: "El círculo está considerando tu propuesta", // check: "círculo" is the village's term for circle
     consent: (roles) => `Las conversaciones ya están escritas, y ahora el círculo sigue su proceso para tu propuesta de ocupar ${roles}. Revisa tu correo o la página de tu estado para los siguientes pasos.`, // needs-native-review: new words, 12 Nov 2026
     termsTitle: "Cambiaron las condiciones de tu propuesta",
@@ -438,7 +453,10 @@ const es: ApplicantMessages = {
     conversationsIntro: "Las conversaciones, en orden:",
     conversation: (role, minutes) => `${role}, ${minutes} minutos`,
     total: (minutes) => `Unos ${minutes} minutos en total.`,
-    booking: "Te escribiremos para que reserves cada conversación en los horarios que elijas, en el orden de arriba. Si quieres, puedes reservarlas una tras otra.", // needs-native-review: new words, 12 Nov 2026
+    booking: "Reservas cada conversación en los horarios que elijas, en el orden de arriba.", // needs-native-review: new words, 12 Nov 2026
+    bookFirst: (role, url) => `Reserva tu primera conversación, con ${role}, aquí: ${url}`, // needs-native-review: new words, 12 Nov 2026
+    writeFirst: (role) => `Te escribiremos con horarios para tu primera conversación, con ${role}.`, // needs-native-review: new words, 12 Nov 2026
+    laterOpen: "Cada conversación siguiente se abre cuando la anterior esté escrita, y la reservas de la misma manera.", // needs-native-review: new words, 12 Nov 2026
     after: "Después de la última conversación, el círculo decide por consentimiento, y te escribimos con su respuesta.",
   },
 
@@ -547,7 +565,9 @@ const es: ApplicantMessages = {
       order: (roles) =>
         roles.length <= 1
           ? `Después de la invitación, reservas la conversación${roles[0] ? ` con ${roles[0]}` : ""} en el horario que elijas.`
-          : `Después de la invitación, reservas cada conversación en los horarios que elijas, en este orden: primero ${roles[0]}, luego ${roles.slice(1).join(", luego ")}. Si quieres, puedes reservarlas una tras otra.`,
+          : `Después de la invitación, reservas cada conversación en los horarios que elijas, en este orden: primero ${roles[0]}, luego ${roles.slice(1).join(", luego ")}. Cada una se abre cuando la anterior esté escrita.`,
+      bookNow: (role) => `Reserva tu conversación con ${role}`,
+      writeNow: (role) => `Te escribiremos con horarios para tu conversación con ${role}.`,
     },
     references: {
       none: "No diste referencias, así que haremos una verificación de antecedentes. Aceptaste cuando enviaste tu propuesta. Nosotros cubrimos su costo y no contactamos a nadie antes de nuestra primera conversación contigo.",
@@ -640,6 +660,8 @@ export interface StatusServedForView {
   path: Array<{ label: string; state: "done" | "now" | "later" }>;
   booking: string | null;
   mode: "block" | "split";
+  /** The conversation open now and its role's booking link, null when none is open (server/lib/applicationReview.ts statusOf). */
+  bookNow?: { role: string; url: string | null } | null;
   outcome?: "adopted" | "declined" | "withdrawn" | null;
   referencesGiven?: number | null;
   /** Our review comes before the conversations on this application. */
@@ -655,7 +677,7 @@ export interface StatusView {
   stepWords: string;
   move: string;
   path: Array<{ label: string; state: "done" | "now" | "later" }>;
-  booking: { text: string } | null;
+  booking: { text: string; book: { label: string; url: string } | { text: string } | null } | null;
   references: string | null;
 }
 
@@ -724,7 +746,11 @@ export function statusView(lang: ApplicantLanguage | null | undefined, s: Status
   const talks = s.path.map((p) => CONVERSATION_LABEL.exec(p.label)).filter((m): m is RegExpExecArray => !!m);
   const booking =
     s.booking && !decided && talks.length > 0
-      ? { text: w.booking.order(talks.map((m) => m[1])) }
+      ? {
+          text: w.booking.order(talks.map((m) => m[1])),
+          // Only the conversation open now offers its way to book: the later ones open in order.
+          book: s.bookNow ? (s.bookNow.url ? { label: w.booking.bookNow(s.bookNow.role), url: s.bookNow.url } : { text: w.booking.writeNow(s.bookNow.role) }) : null,
+        }
       : null;
 
   const references = closed || typeof s.referencesGiven !== "number" ? null : s.referencesGiven === 0 ? w.references.none : w.references.some(s.referencesGiven);

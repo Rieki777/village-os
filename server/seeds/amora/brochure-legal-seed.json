@@ -32,9 +32,9 @@
   "landShareTransferNote": "tax-free",
   "membership": {
     "entityLabel": "Amora 508(c)(1)(a)",
-    "contributionParagraph": "Your monthly membership contribution supports our shared mission and is tax-deductible as a contribution to our 508(c)(1)(a) nonprofit.",
-    "contributionShortNote": "Tax-deductible contribution to Amora 508(c)(1)(a).",
-    "footerNote": "Your membership is in Amora 508(c)(1)(a), a nonprofit mutual benefit organization. Monthly contributions are tax-deductible to the extent permitted by law.",
-    "backgroundCheckNote": "and it's tax deductible"
+    "contributionParagraph": "Your monthly membership contribution supports our shared mission.",
+    "contributionShortNote": "A contribution to Amora 508(c)(1)(a).",
+    "footerNote": "Your membership is in Amora 508(c)(1)(a), a nonprofit mutual benefit organization.",
+    "backgroundCheckNote": ""
   }
 }

@@ -411,6 +411,17 @@ describe("your first day", () => {
     expect(step.querySelector("[data-first-conversations]")?.textContent).toContain("Technical Operations: your accounts and tools");
     expect((within(step).getByLabelText("Your time zone") as HTMLInputElement).value).toBe(Intl.DateTimeFormat().resolvedOptions().timeZone);
     expect(within(step).getByLabelText(/earliest you could start/)).toBeTruthy();
+    expect(step.querySelector("[data-first-booking]"), "control: a role with no conversations names no first one").toBeNull();
+  });
+
+  it("names the first interviewer from the role's own list, and says its booking link comes with the invitation", async () => {
+    const conversations = [{ role: "Operations Role", minutes: 60 }, { role: "Hiring Role", minutes: 20 }];
+    await applyFor("r-gate", { ...FORM, roles: [{ ...(FORM as any).roles[0], conversations }] });
+    const step = document.querySelector('[data-stone="first"]') as HTMLElement;
+    const said = step.querySelector("[data-first-booking]")?.textContent ?? "";
+    expect(said).toContain("With Operations Role.");
+    expect(said).toContain("through the booking link in your invitation, or we'll write to you with times");
+    expect(said).not.toContain("Hiring Role");
   });
 });
 

@@ -167,7 +167,7 @@ export default function LoveLetter() {
   const contributionShortNote = membership?.contributionShortNote?.trim();
   const footerNote =
     membership?.footerNote?.trim() ||
-    "Ask your community how membership contributions are structured, and whether any part is tax-deductible where you live.";
+    "Ask your community how membership contributions are structured.";
   // This page's words, `{entity}` included. Null until the saved words have
   // arrived, so the defaults never flash first. A path choice the village left
   // as the platform's words carries its path name (Admin, Paths & Stages); the
