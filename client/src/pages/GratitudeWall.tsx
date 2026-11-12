@@ -33,13 +33,14 @@
 import Layout from "@/components/Layout";
 import VoiceArea from "@/components/voice/VoiceArea";
 import { useLingui } from "@lingui/react/macro";
+import QuietEmpty from "@/components/quiet/QuietEmpty";
 import { useAuth } from "@/contexts/AuthContext";
 import { gameFetch, fetchGameMe, GameMe } from "@/lib/gameApi";
 import { useTokenName } from "@/hooks/useTokenNames";
 import { useLadderTitle } from "@/hooks/useVillagePaths";
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
-import { Send, Sparkles } from "lucide-react";
+import { Send } from "lucide-react";
 import CycleClock from "@/components/CycleClock";
 import { forgetExamplesCache } from "@/components/ExamplesBanner";
 import InfoTip from "@/components/InfoTip";
@@ -387,10 +388,17 @@ export default function GratitudeWall() {
           )}
 
           {wall.length === 0 ? (
-            <div className="py-14 text-center text-muted-foreground">
-              <Sparkles className="mx-auto mb-3 h-10 w-10 opacity-30" aria-hidden="true" />
-              <p>The wall is waiting for its first appreciation.</p>
-            </div>
+            // An empty ring of places, nobody named yet, and one door: to the
+            // composer above for a member, none for a visitor, whose sign-in
+            // door already sits above the wall (components/quiet).
+            <QuietEmpty
+              drawing="ring"
+              title={t`No thanks on the wall yet`}
+              door={user ? { label: t({ message: "Carry a thanks", context: "empty thanks wall: door to the thank-you form" }), href: "#send" } : undefined}
+              className="justify-center"
+            >
+              {t`The wall is waiting for its first appreciation.`}
+            </QuietEmpty>
           ) : (
             <div className="space-y-3">
               {wall.map((w) => (

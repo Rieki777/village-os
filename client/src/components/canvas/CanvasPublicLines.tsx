@@ -23,7 +23,7 @@
  * count of lines written, nothing combined across blocks, canvas order only.
  */
 import { useCallback, useEffect, useState } from "react";
-import { ExternalLink, Loader2 } from "lucide-react";
+import { ExternalLink } from "lucide-react";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { authToken } from "@/lib/gameApi";
 import { useAuth } from "@/contexts/AuthContext";
@@ -37,6 +37,7 @@ import {
   type CanvasMemberAnswer,
   type CanvasPublicBlock,
 } from "@shared/canvasPublicLines";
+import BreathingLoader from "@/components/natural/BreathingLoader";
 
 type LinesById = Partial<Record<CanvasBlockId, CanvasPublicBlock>>;
 type AnswersById = Partial<Record<CanvasBlockId, CanvasMemberAnswer[]>>;
@@ -344,7 +345,7 @@ export default function CanvasPublicLines() {
         </div>
       ) : !lines ? (
         <p className="mt-6 text-sm text-stone-600 py-4 text-center">
-          <Loader2 className="w-4 h-4 animate-spin inline mr-2" />
+          <BreathingLoader decorative size={16} className="mr-2 align-middle" />
           <Trans context="the canvas is loading">Reading the canvas</Trans>
         </p>
       ) : (

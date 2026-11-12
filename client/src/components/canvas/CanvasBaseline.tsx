@@ -35,7 +35,7 @@
  */
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Link } from "wouter";
-import { ExternalLink, Loader2, Printer } from "lucide-react";
+import { ExternalLink, Printer } from "lucide-react";
 import { Trans } from "@lingui/react/macro";
 import { authToken } from "@/lib/gameApi";
 import {
@@ -50,6 +50,7 @@ import { CANVAS_SCALE_TEXT } from "@shared/governanceCanvasText";
 import { newestLevels, radarDescription, type CanvasBlockView, type CanvasPayload } from "@/lib/canvasCopy";
 import { CanvasRadar } from "./CanvasRadar";
 import { CanvasBlockCard } from "./CanvasBlockCard";
+import BreathingLoader from "@/components/natural/BreathingLoader";
 
 const headers = (): Record<string, string> => {
   const t = authToken();
@@ -159,7 +160,7 @@ export function CanvasBaseline({
           </div>
         ) : !data ? (
           <p className="text-sm text-stone-600 py-8 text-center">
-            <Loader2 className="w-4 h-4 animate-spin inline mr-2" />
+            <BreathingLoader decorative size={16} className="mr-2 align-middle" />
             <Trans context="the canvas is loading">Reading the canvas</Trans>
           </p>
         ) : (

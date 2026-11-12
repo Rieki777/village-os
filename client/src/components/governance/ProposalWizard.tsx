@@ -24,7 +24,7 @@ import { settleDraftAnswers } from "./seraDraftAnswers";
 import { goalsAsText } from "@shared/proposalGoals";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
-import { ArrowLeft, ArrowRight, Check, Loader2, Save, Send } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Save, Send } from "lucide-react";
 import { BreathingLoader } from "@/components/natural";
 import {
   deleteDraft as apiDeleteDraft,
@@ -715,7 +715,7 @@ export default function ProposalWizard({ start = null, leaveTo = "/decisions" }:
               onClick={publish}
               className="inline-flex min-h-[44px] items-center gap-2 rounded-lg bg-notice px-5 text-sm font-semibold text-background hover:bg-notice/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50"
             >
-              {busy ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> : <Send className="w-4 h-4" aria-hidden="true" />}
+              {busy ? <BreathingLoader decorative size={16} /> : <Send className="w-4 h-4" aria-hidden="true" />}
               {cfg?.publishLabel ?? "Put it in front of the village"}
             </button>
           ) : (

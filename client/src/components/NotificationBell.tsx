@@ -33,6 +33,15 @@
  *    A ballot that was withdrawn still reads, and can still be cleared. This is
  *    GitHub's phantom notification, answered before it happens.
  *
+ *  - FIREFLIES, NOT A NUMBER (Phase B, B2). The amber count badge is gone from
+ *    the screen. While an unread notice waits on you (a kind marked `waits`
+ *    in shared/notificationKinds.ts), a few fireflies rest on the bell; when
+ *    only news arrived since you last opened it, a still dot; otherwise the
+ *    bell alone. A waiting notice that arrives while the page is open flies
+ *    its light in once. The counts did not go: the bell's spoken name says
+ *    every one of them (lib/bellLight.ts), and the panel lists each notice,
+ *    with the waiting ones marked in words.
+ *
  * ACCESSIBILITY CONTRACT. The trigger is a button carrying `aria-expanded`,
  * `aria-controls`, and a label that speaks the whole string ("3 unread
  * notifications", never "3", per WCAG SC 4.1.3's own worked example). The
@@ -41,14 +50,17 @@
  * Unread carries a dot AND the word "New" AND a heavier weight, so colour is
  * never the only signal (SC 1.4.1). Every row and control clears 44px.
  */
-import { useCallback, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { Suspense, lazy, useCallback, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Bell, ChevronDown, Settings2 } from "lucide-react";
 import { Link } from "wouter";
+import { Trans } from "@lingui/react/macro";
 import { buildFeed, unreadIdsOf, type FeedRow } from "@/lib/notificationFeed";
 import BellTaskActions, { BELL_TASK_TYPES } from "@/components/tasks/BellTaskActions";
 import { forgetAllBellAnswers } from "@/components/tasks/bellAnswers";
 import { useModuleOn } from "@/modules/ModuleProvider";
 import { taskIdFromLink } from "@shared/sessionTasks";
+import { waitsOnYou } from "@shared/notificationKinds";
+import { bellLabel, bellLook, newlyWaiting, waitingIds } from "@/lib/bellLight";
 import {
   getNotifyState,
   markNotificationsRead,
@@ -56,6 +68,9 @@ import {
   refreshNotifications,
   subscribeNotifications,
 } from "@/lib/notificationStore";
+
+// The nature kit stays out of the first page: the lights load the first time a notice waits on you.
+const BellFireflies = lazy(() => import("./bell/BellFireflies"));
 
 function timeAgo(iso: string): string {
   const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
@@ -79,6 +94,15 @@ export function bellTaskOf(row: FeedRow): number | null {
 export function bellItemTaskOf(item: { type: string; link?: string | null }): number | null {
   if (!BELL_TASK_TYPES.includes(item.type)) return null;
   return taskIdFromLink(item.link ?? null);
+}
+
+/** Said beside an unread row that asks something of its reader: why the bell is lit, in words. */
+function WaitsMark() {
+  return (
+    <span className="block text-[10px] font-semibold text-teal-deep mt-0.5">
+      <Trans context="notification bell">Waits on you</Trans>
+    </span>
+  );
 }
 
 /** The unread mark: a dot, a word, and a weight. Never the colour alone. */
@@ -123,6 +147,17 @@ export default function NotificationBell({ memberId = null }: NotificationBellPr
   // that only clears by pretending to have read things is a number that
   // teaches people to stop opening the bell.
   const unseen = state.unseen;
+  const look = bellLook(state);
+
+  // One flight per waiting notice that arrives while the page is open. The
+  // first list this bell sees is seeded in silence (`newlyWaiting`).
+  const [arrival, setArrival] = useState(0);
+  const waitingBefore = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    if (!state.loaded) return;
+    if (newlyWaiting(waitingBefore.current, state.items).length > 0) setArrival((n) => n + 1);
+    waitingBefore.current = new Set(waitingIds(state.items));
+  }, [state.loaded, state.items]);
 
   useEffect(() => {
     const onDoc = (e: MouseEvent) => {
@@ -178,13 +213,9 @@ export default function NotificationBell({ memberId = null }: NotificationBellPr
   }, []);
 
   // The whole string, never the bare number: WCAG SC 4.1.3's own worked
-  // example is a cart announcing "3 items" and not "3".
-  const label =
-    unseen > 0
-      ? `Notifications, ${unseen} new`
-      : unread > 0
-        ? `Notifications, nothing new, ${unread} still unread`
-        : "Notifications, nothing new";
+  // example is a cart announcing "3 items" and not "3". The screen shows no
+  // number at all now, so this name carries every count there is.
+  const label = bellLabel(state);
 
   return (
     <div className="relative" ref={wrapRef}>
@@ -197,14 +228,18 @@ export default function NotificationBell({ memberId = null }: NotificationBellPr
         aria-controls={`${uid}-panel`}
         className="relative p-2 rounded-lg hover:bg-white/10 transition-colors inline-flex items-center justify-center pointer-coarse:min-h-11 pointer-coarse:min-w-11 pointer-coarse:-m-1 max-md:min-h-11 max-md:min-w-11 max-md:-m-1"
       >
-        <Bell className="w-5 h-5" />
-        {unseen > 0 && (
+        <Bell aria-hidden="true" className="w-5 h-5" />
+        {look === "lit" && (
+          <Suspense fallback={null}>
+            <BellFireflies arrival={arrival} />
+          </Suspense>
+        )}
+        {look === "dot" && (
           <span
             aria-hidden="true"
-            className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-amber text-[11px] font-bold text-black flex items-center justify-center"
-          >
-            {unseen > 9 ? "9+" : unseen}
-          </span>
+            data-testid="bell-news-dot"
+            className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-current opacity-70"
+          />
         )}
       </button>
 
@@ -268,6 +303,7 @@ export default function NotificationBell({ memberId = null }: NotificationBellPr
                               {row.title}
                             </span>
                             <span className="block text-xs text-muted-foreground mt-0.5">{row.detail}</span>
+                            {row.unread > 0 && waitsOnYou(row.type) && <WaitsMark />}
                             <span className="block text-[10px] text-muted-foreground mt-1">Newest {timeAgo(row.at)}</span>
                           </span>
                           {row.unread > 0 && <NewMark />}
@@ -296,6 +332,7 @@ export default function NotificationBell({ memberId = null }: NotificationBellPr
                                       </span>
                                       {/* Four titles from one session read the same; the task's own words tell them apart. */}
                                       {it.body && <span className="block text-xs text-muted-foreground mt-0.5 line-clamp-2">{String(it.body)}</span>}
+                                      {!it.isRead && waitsOnYou(it.type) && <WaitsMark />}
                                       <span className="block text-[10px] text-muted-foreground mt-0.5">{timeAgo(it.at)}</span>
                                     </span>
                                     {!it.isRead && <NewMark />}
@@ -340,6 +377,7 @@ export default function NotificationBell({ memberId = null }: NotificationBellPr
                                 {row.detail}
                               </span>
                             )}
+                            {row.unread > 0 && waitsOnYou(row.type) && <WaitsMark />}
                             <span className="block text-[10px] text-muted-foreground mt-1">{timeAgo(row.at)}</span>
                           </span>
                           {row.unread > 0 && <NewMark />}

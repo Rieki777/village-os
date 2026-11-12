@@ -10,6 +10,7 @@ import {
   petalPath,
   tipRadius,
 } from "./badgeFlower";
+import { petalFullness } from "./badgeFlower";
 
 const badges = (n: number) => Array.from({ length: n }, (_, i) => ({ id: `b${i}`, kind: i % 2 ? "earned" : "granted" }));
 const byIndex = <T extends { index: number }>(ps: T[]) => ps.slice().sort((a, b) => a.index - b.index);
@@ -129,5 +130,15 @@ describe("capPetals", () => {
     expect(capPetals([1, 2, 3, 4, 5], 3)).toEqual({ shown: [1, 2, 3], more: 2 });
     expect(capPetals([1, 2], 13)).toEqual({ shown: [1, 2], more: 0 });
     expect(capPetals([1, 2], -1)).toEqual({ shown: [], more: 2 });
+  });
+});
+
+describe("petalFullness (a tier is a fuller petal, never a number)", () => {
+  it("draws a single badge at its own width and each further tier a step fuller, capped", () => {
+    expect(petalFullness(undefined)).toBe(1);
+    expect(petalFullness(1)).toBe(1);
+    expect(petalFullness(2)).toBeCloseTo(1.18);
+    expect(petalFullness(3)).toBeCloseTo(1.36);
+    expect(petalFullness(50)).toBeCloseTo(1.72);
   });
 });

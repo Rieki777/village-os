@@ -22,6 +22,7 @@ import { moonsOnLandPhrase } from "@shared/villageMoon";
 import { MyGeneKeysSeal } from "@/components/geneKeys/ProfileGeneKeys";
 import BadgeFlower, { type FlowerBadge } from "@/components/badges/BadgeFlower";
 import BadgeRoster from "@/components/badges/BadgeRoster";
+import MoonString from "@/components/profile/MoonString";
 
 const headers = (): Record<string, string> => {
   const t = authToken();
@@ -42,25 +43,15 @@ interface Archetype {
 }
 
 /**
- * THE ARC IS THE LADDER, DRAWN ROUND THE FACE.
- *
- * `stageIndex` and `stageCount` are passed in rather than fetched, because
- * Profile.tsx already holds both: `stageIndex` off /api/game/me and `stages`
- * off /api/game/config. A second read here would be a second opinion about
- * the same fact, and the two would disagree for one render every time the
- * page refreshed after a rung turned.
- *
- * Both are optional and the arc simply does not draw without them. A hero that
- * renders a zero-length arc while it waits says "you have got nowhere", which
- * is a lie told confidently; drawing nothing says nothing.
+ * NO RUNG ON THE FACE (the prune, waves 1 and 2, display only). The pill under
+ * the portrait used to read "Stage 10 · Role Holder", a rank worn on the face.
+ * It is gone, and nothing replaces it: the badge flower, the title a member
+ * chose and the moons they have spent on the land already say who they are.
  */
 
 export default function ProfileHero({
   name,
   handle,
-  stageIndex,
-  stageCount,
-  stageLabel,
   season,
   rolesLine,
   actions,
@@ -71,10 +62,6 @@ export default function ProfileHero({
 }: {
   name: string;
   handle?: string | null;
-  stageIndex?: number | null;
-  stageCount?: number | null;
-  /** "Stage 5 · Member", off the ladder the page already holds. Absent, the pill counts the rung instead. */
-  stageLabel?: string | null;
   /** "Season of Roots · day 41 of 92", added after the village's name when the season is known. */
   season?: string | null;
   /** The roles held, each as "Role (FirstName)". */
@@ -96,21 +83,6 @@ export default function ProfileHero({
   const [moons, setMoons] = useState<number | null>(null);
   const [joined, setJoined] = useState<string | null>(null);
   const village = useGameConfig()?.project;
-
-  /*
-   * THE FRACTION, AND WHY IT IS NOT stageIndex / stageCount.
-   *
-   * A member standing on the first rung has index 0, and 0/12 draws an empty
-   * ring around somebody who has in fact arrived and been counted. The rungs
-   * are the GAPS between positions, so a twelve-rung ladder has eleven of
-   * them, and standing on the first means one position reached out of twelve.
-   * `(index + 1) / count` is what makes the ring read as "where I am" instead
-   * of "how much I have not done".
-   */
-  const known = typeof stageIndex === "number" && typeof stageCount === "number" && stageCount > 0;
-  // R47: progress is a number, and the ladder's name is the Path of Growth,
-  // so the chip names the stage and never "Maturity".
-  const rung = stageLabel || (known ? `Stage ${stageIndex + 1}/${stageCount}` : "");
 
   /*
    * THE VILLAGE'S NAME, AND NOT ITS TAGLINE.
@@ -270,13 +242,8 @@ export default function ProfileHero({
           <div className="pointer-events-none absolute inset-[6px] overflow-hidden rounded-full border-4 border-background bg-muted">
             {portrait("hero", primary)}
           </div>
-          {/* Their Gene Keys seal, top right, opposite the stage chip. Nothing while the module is off or nothing is saved. */}
+          {/* Their Gene Keys seal, top right. Nothing while the module is off or nothing is saved. */}
           <MyGeneKeysSeal />
-          {rung && (
-            <span className="absolute bottom-0 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full border-[3px] border-background bg-dash-gold px-3 py-0.5 text-xs font-bold text-dash-gold-ink sm:bottom-1.5 sm:px-3.5 sm:py-1 sm:text-sm">
-              {rung}
-            </span>
-          )}
         </div>
 
         <div className="flex w-full min-w-0 flex-1 flex-col gap-2.5">
@@ -329,6 +296,7 @@ export default function ProfileHero({
                 missing join date never leaves a stray middle dot. */}
             {[handle ? `@${handle}` : "", joinedLine, moonsOnLandPhrase(moons), rolesLine ?? ""].filter(Boolean).join(" · ")}
           </p>
+          <MoonString moons={moons} className="hidden sm:flex" />
           {about}
 
           {/* The party, under the identity. Multi-class is the point, so every
