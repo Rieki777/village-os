@@ -36,13 +36,14 @@ export interface RootStripProps {
   className?: string;
 }
 
-const HEIGHT = 56;
+// The root grows in its own band UNDER the words (D-02): it once ran through the sentence it carries.
+const BAND = 16;
 
 function Root({ width, branches, className }: { width: number; branches: number; className: string }) {
-  const { main, hyphae } = rootStrip(width, HEIGHT, branches, 11, 0.84);
+  const { main, hyphae } = rootStrip(width, BAND, branches, 11, 0.5);
   // slice, never stretch: the root keeps its own proportions and is cut to the strip's width.
   return (
-    <svg viewBox={`0 0 ${width} ${HEIGHT}`} preserveAspectRatio="xMinYMid slice" aria-hidden="true" className={`nk-root-svg ${className}`}>
+    <svg viewBox={`0 0 ${width} ${BAND}`} preserveAspectRatio="xMinYMid slice" aria-hidden="true" className={`nk-root-svg ${className}`} style={{ top: "auto", height: BAND }} data-root-band="">
       <g fill="none" stroke="currentColor" strokeLinecap="round" className="text-open">
         <path d={main} pathLength={1} className="nk-draw" strokeWidth={1.2} strokeOpacity={0.55} />
         {hyphae.map((h, i) => (
@@ -69,8 +70,9 @@ export default function RootStrip({ seed, children, detail, aside, onOpen, openL
       <Root width={1400} branches={16} className="hidden sm:block" />
       {seed ? <span className="relative shrink-0">{seed}</span> : null}
       <span className="relative min-w-0 flex-1">
-        <span className="block truncate text-sm text-foreground sm:text-base">{children}</span>
-        {detail ? <span className="hidden truncate text-sm text-muted-foreground lg:block">{detail}</span> : null}
+        {/* A phone cuts the one line to fit; a desktop has the room for the whole sentence (D-02). */}
+        <span className="block truncate text-sm text-foreground sm:overflow-visible sm:whitespace-normal sm:text-base">{children}</span>
+        {detail ? <span className="hidden truncate text-sm text-muted-foreground lg:block lg:overflow-visible lg:whitespace-normal">{detail}</span> : null}
       </span>
       {aside ? <span className="relative hidden shrink-0 items-center gap-4 lg:flex">{aside}</span> : null}
       {onOpen ? (
@@ -78,7 +80,7 @@ export default function RootStrip({ seed, children, detail, aside, onOpen, openL
       ) : null}
     </>
   );
-  const shell = `nk group relative flex min-h-14 w-full items-center gap-3 overflow-hidden border-b border-border bg-card px-4 py-2 text-left sm:px-6 ${className}`.trim();
+  const shell = `nk group relative flex min-h-14 w-full items-center gap-3 overflow-hidden border-b border-border bg-card px-4 pb-5 pt-2 text-left sm:px-6 ${className}`.trim();
   if (onOpen) {
     return (
       <button

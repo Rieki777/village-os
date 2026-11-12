@@ -228,4 +228,22 @@ describe("RootStrip", () => {
     expect(onOpen).toHaveBeenCalledOnce();
     expect(btn.getAttribute("data-motion")).toBe("still");
   });
+  it("grows the root in a band under the words, never through them, and gives a desktop the whole line (D-02)", () => {
+    motion(false);
+    render(<RootStrip detail="Then the circle answers within a week">Read a few roles slowly, then tell us which one calls you</RootStrip>);
+    const strip = screen.getByTestId("root-strip");
+    const bands = strip.querySelectorAll("svg[data-root-band]");
+    expect(bands.length).toBe(2);
+    for (const svg of Array.from(bands)) {
+      // Anchored to the bottom edge, at the band's own height: the words sit above it.
+      expect((svg as SVGElement).style.top).toBe("auto");
+      expect((svg as SVGElement).style.height).toBe("16px");
+      expect(svg.getAttribute("viewBox")).toMatch(/ 16$/);
+    }
+    expect(strip.className).toContain("pb-5");
+    const line = screen.getByText("Read a few roles slowly, then tell us which one calls you");
+    expect(line.className).toContain("truncate");
+    expect(line.className).toContain("sm:whitespace-normal");
+    expect(screen.getByText("Then the circle answers within a week").className).toContain("lg:whitespace-normal");
+  });
 });
