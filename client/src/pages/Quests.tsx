@@ -96,10 +96,6 @@ export default function Quests() {
   // season goal's open work. The commons links each goal here.
   const search = useSearch();
   const [activeGoal, setActiveGoal] = useState<string>(() => new URLSearchParams(search).get("goal") || "All");
-  useEffect(() => {
-    const g = new URLSearchParams(search).get("goal");
-    if (g) setActiveGoal(g);
-  }, [search]);
   const [activePlace, setActivePlace] = useState<string>("All");
   const goals = useQuestGoals();
   const placeWords = usePlaceWords();
