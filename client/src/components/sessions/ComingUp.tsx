@@ -30,6 +30,12 @@
  * meeting on Thursday"); a meeting on the calendar is skipped there. A circle
  * with a calendar and no rhythm is offered "Set a meeting rhythm".
  *
+ * "I'LL BE THERE" (Phase C, the Gathering). A row whose next meeting is on the
+ * village calendar carries the gatherings' own answer (GatheringSeed.tsx): a
+ * Seed of Life that fills one circle for each of us who said we will come, and
+ * the button. Fireflies gather on one of them only: the viewer's own circle
+ * that meets soonest and has not heard from them (`leadRow`).
+ *
  * "Follow the calendar" sits at the foot of the section (FollowCalendar.tsx):
  * any member puts the circles they choose on their own calendar. It shows
  * whenever the village has a circle, a rhythm or not, so "every circle, new
@@ -52,10 +58,18 @@ import {
 } from "@shared/sessionRhythm";
 import { gameFetch } from "@/lib/gameApi";
 import FollowCalendar from "./FollowCalendar";
+import GatheringSeed from "./GatheringSeed";
 import OwnCalendarPanel from "./OwnCalendarPanel";
 import RhythmForm from "./RhythmForm";
 import { useHash } from "./useHash";
 import { BTN_PRIMARY, BTN_QUIET, BTN_SECONDARY, EYEBROW, HINT, LABEL_CAPS, PANEL } from "./roomUi";
+
+/** The one row whose "I'll be there" carries the page's fireflies: the viewer's own circle that meets soonest and has not heard from them. */
+export function leadRow(rows: readonly ComingUpRow[]): string | null {
+  const open = rows.filter((r) => r.mine && r.gathering && !r.gathering.mine && !r.openRoom);
+  open.sort((a, b) => Date.parse(a.next.at) - Date.parse(b.next.at));
+  return open[0]?.circleId ?? null;
+}
 
 type Sent = { ok: true; row: ComingUpRow | null } | { ok: false; error: string };
 
@@ -83,6 +97,7 @@ function Row({
   zone,
   defaultMinutes,
   lit,
+  lead,
   onGetReady,
   onChanged,
   onSaid,
@@ -92,6 +107,7 @@ function Row({
   zone: string;
   defaultMinutes: number | null;
   lit: boolean;
+  lead: boolean;
   onGetReady: (row: ComingUpRow) => void;
   onChanged: () => Promise<void> | void;
   onSaid: (text: string) => void;
@@ -192,6 +208,7 @@ function Row({
               )}
             </div>
           </div>
+          {row.gathering && <GatheringSeed row={{ ...row, gathering: row.gathering }} lead={lead} onChanged={onChanged} onSaid={onSaid} />}
           {row.canKeep && (
             <div className="mt-2 flex flex-wrap items-center gap-1">
               <button ref={changeButton} type="button" className={BTN_QUIET} disabled={busy} aria-describedby={describedBy} onClick={() => setEditing(true)}>
@@ -269,6 +286,7 @@ export default function ComingUp({
   }, [setting]);
 
   // A circle that has a rhythm changes it from its own row, so this form only sets new ones.
+  const lead = leadRow(comingUp.rows);
   const keepable = circles.filter((c) => comingUp.keepCircleIds.includes(c.id) && !comingUp.rows.some((r) => r.circleId === c.id));
   if (!comingUp.rows.length && !keepable.length && !circles.length) return null;
 
@@ -313,6 +331,7 @@ export default function ComingUp({
               zone={comingUp.zone}
               defaultMinutes={defaultMinutes}
               lit={lit === row.circleId}
+              lead={lead === row.circleId}
               onGetReady={onGetReady}
               onChanged={onChanged}
               onSaid={setSaid}

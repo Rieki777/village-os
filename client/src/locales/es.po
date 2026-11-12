@@ -13340,3 +13340,83 @@ msgstr "(nombre de ejemplo)"
 msgctxt "calendar page: today's place in the moon"
 msgid "Today is day {lunarDay} of {moonLength}"
 msgstr "Hoy es el día {lunarDay} de {moonLength}"
+
+#: client/src/components/sessions/GatheringSeed.tsx
+msgctxt "coming up, the answer to a meeting"
+msgid "I'll be there"
+msgstr "Ahí estaré"
+
+#: client/src/components/sessions/GatheringSeed.tsx
+msgctxt "coming up, taking back i'll be there"
+msgid "I can't come after all"
+msgstr "Al final no puedo ir"
+
+#: client/src/components/sessions/GatheringSeed.tsx
+msgctxt "coming up, i'll be there"
+msgid "You said you will be there."
+msgstr "Dijiste que estarás ahí."
+
+#: client/src/components/sessions/GatheringSeed.tsx
+msgctxt "coming up, i'll be there"
+msgid "Nobody has said yet. The seed fills as we say we will come."
+msgstr "Nadie ha dicho todavía. La semilla se llena cuando decimos que vendremos."
+
+#: client/src/components/sessions/GatheringSeed.tsx
+msgctxt "coming up, i'll be there"
+msgid "That did not go through. Try again in a moment."
+msgstr "No se pudo. Inténtalo de nuevo en un momento."
+
+#: client/src/components/sessions/GatheringSeed.tsx
+msgctxt "coming up, i'll be there, the names of who said so"
+msgid "{named, plural, one {{names} said they will be there.} other {{names} said they will be there.}}"
+msgstr "{named, plural, one {{names} dijo que estará ahí.} other {{names} dijeron que estarán ahí.}}"
+
+#: client/src/components/sessions/GatheringSeed.tsx
+msgctxt "coming up, i'll be there, how many said so"
+msgid "{0, plural, one {# of us said we will be there.} other {# of us said we will be there.}}"
+msgstr "{0, plural, one {# de nosotros dijo que estará ahí.} other {# de nosotros dijimos que estaremos ahí.}}"
+
+#: client/src/components/sessions/GatheringSeed.tsx
+msgctxt "coming up, i'll be there, said once it lands"
+msgid "Thank you. The {circle} will see you there."
+msgstr "Gracias. El {circle} te verá ahí."
+
+#: client/src/components/sessions/GatheringSeed.tsx
+msgctxt "coming up, i'll be there, said once it is taken back"
+msgid "Thank you for saying. Your circle in the seed is open again."
+msgstr "Gracias por avisar. Tu círculo en la semilla vuelve a estar abierto."
+
+#: client/src/components/sessions/GatheringSeed.tsx
+msgctxt "coming up, the seed drawing"
+msgid "{filled, plural, one {Seed of Life, # of seven circles filled} other {Seed of Life, # of seven circles filled}}"
+msgstr "{filled, plural, one {Semilla de la Vida, # de siete círculos llenos} other {Semilla de la Vida, # de siete círculos llenos}}"
+
+#: client/src/components/sessions/SharedBreath.tsx
+msgctxt "live room, the gathering flower"
+msgid "{here, plural, one {# of us is here.} other {# of us are here.}}"
+msgstr "{here, plural, one {# de nosotros está aquí.} other {# de nosotros estamos aquí.}}"
+
+#: client/src/components/sessions/HarvestPlant.tsx
+msgctxt "friday harvest, a priority that was done"
+msgid "Flowered"
+msgstr "Floreció"
+
+#: client/src/components/sessions/HarvestPlant.tsx
+msgctxt "friday harvest, a priority partly done, carried to monday"
+msgid "In bud"
+msgstr "En botón"
+
+#: client/src/components/sessions/HarvestPlant.tsx
+msgctxt "friday harvest, a priority not started, carried to monday"
+msgid "Seed kept"
+msgstr "Semilla guardada"
+
+#: client/src/components/sessions/HarvestPlant.tsx
+msgctxt "friday harvest, a priority with no answer yet"
+msgid "A seed, not read back yet"
+msgstr "Una semilla, aún sin revisar"
+
+#: client/src/components/sessions/HarvestPlant.tsx
+msgctxt "friday harvest, the line under the read back"
+msgid "Nothing is marked as failed. What did not grow goes back to Monday's soil."
+msgstr "Nada se marca como fallido. Lo que no creció vuelve a la tierra del lunes."
