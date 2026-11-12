@@ -508,24 +508,24 @@ export async function holder(w, ctx) {
     await sw.click();
   });
   await w.look("quests-by-roots");
-  // The quest meadow (Phase C, decision 5): one bed per circle, each quest a
-  // seed, a bud or a flower. A tap on a plant opens it in the panel beside
-  // (desktop) or under (phone) the field. The rehearsal's starter quests are
-  // all examples, and an example never leads, so this walks the choosing and
-  // leaves the lead to the meadow's own tests.
-  await w.step("walk the quest meadow and choose a plant", async () => {
-    const field = page.getByRole("group", { name: /The meadow: every quest/ });
-    await field.waitFor();
-    const plants = field.locator("button[data-quest]");
-    if ((await plants.count()) < 2) throw new Error("the meadow drew fewer than two plants");
-    if (!(await field.locator("figure[data-bed]").count())) throw new Error("the meadow drew no bed");
-    const second = plants.nth(1);
-    const id = await second.getAttribute("data-quest");
-    await second.click();
-    await page.locator(`[data-meadow-panel="${id}"]`).waitFor();
-    if ((await second.getAttribute("aria-pressed")) !== "true") throw new Error("the chosen plant is not marked as chosen");
+  // The open work board (Phase C, decision 5): a plain list grouped by
+  // circle, each card naming the season goal it grows with a small status
+  // mark, and a goal filter that reads back the village's count of open
+  // quests for that goal (the commons links here as /quests?goal=<id>). The
+  // starter quests are examples, which never lead and never count, so the
+  // "Fits you" card and the count are the board's own tests' to prove.
+  await w.step("filter the open work by a season goal", async () => {
+    await page.getByRole("heading", { name: "Open work" }).waitFor();
+    if (!(await page.locator("[data-circle-group]").count())) throw new Error("the open work is not grouped by circle");
+    if (!(await page.locator("article [data-status]").count())) throw new Error("the cards carry no status mark");
+    const goal = page.locator("[data-goal-filter]:not([data-goal-filter=All])").first();
+    await goal.click();
+    await page.locator("[data-goal-thread]").waitFor();
+    const cards = await page.locator("[data-circle-group] article").count();
+    const growing = await page.locator("[data-circle-group] article [data-goal]").count();
+    if (!cards || cards !== growing) throw new Error(`the goal filter shows ${cards} cards, ${growing} of them growing that goal`);
   });
-  await w.look("quest-meadow", { next: page.getByRole("link", { name: /Open this quest/ }) });
+  await w.look("open-work-goal");
 }
 
 export const PERSONAS = [
