@@ -239,14 +239,14 @@ describe("the door a /roles card opens", () => {
   it("offers a raised hand while the map module is on, and posts it to the map's own route", async () => {
     renderRoles();
     fireEvent.click(await header("Seed Keeper"));
-    const raise = await screen.findByRole("button", { name: "Raise your hand for Seed Keeper" });
+    const raise = await screen.findByRole("button", { name: "Apply for this role: Seed Keeper" });
     fireEvent.click(raise);
-    fireEvent.click(await screen.findByRole("button", { name: "Raise my hand" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Send my application" }));
     await waitFor(() =>
       expect(asked.find((a) => a.method === "POST")?.url).toBe("/api/map/roles/seed-keeper/raise-hand"),
     );
     // Said twice on purpose: on the line under the door, and once in the card's polite live region.
-    expect(await screen.findAllByText("Hand raised. The founding team will be in touch.")).toHaveLength(2);
+    expect(await screen.findAllByText("Application sent. The founding team will be in touch.")).toHaveLength(2);
   });
 
   it("never offers the contact relay, even on a full seat whose holder the map would offer it for", async () => {
@@ -272,7 +272,7 @@ describe("the door a /roles card opens", () => {
     const card = document.querySelector("article[data-power-card]") as HTMLElement;
     expect(within(card).getByText("Ines")).toBeTruthy();
     expect(within(card).queryByRole("button", { name: /^Contact/ })).toBeNull();
-    expect(within(card).queryByRole("button", { name: /Raise your hand/ })).toBeNull();
+    expect(within(card).queryByRole("button", { name: /Apply for this role/ })).toBeNull();
     // Nor the map's note about a holder the map cannot reach yet.
     expect(within(card).queryByText("Held, and not reachable through the map yet.")).toBeNull();
   });
@@ -284,8 +284,8 @@ describe("the door a /roles card opens", () => {
     const card = document.querySelector("article[data-power-card]") as HTMLElement;
     // The card itself rendered (known positive), and it has no door.
     expect(within(card).getByText("Holding it now")).toBeTruthy();
-    expect(within(card).queryByRole("button", { name: /Raise your hand/ })).toBeNull();
-    expect(within(card).queryByRole("link", { name: /Sign in to raise your hand/ })).toBeNull();
+    expect(within(card).queryByRole("button", { name: /Apply for this role/ })).toBeNull();
+    expect(within(card).queryByRole("link", { name: /Sign in to apply for this role/ })).toBeNull();
   });
 
   it("asks a signed-out reader to sign in first, back to this page", async () => {
@@ -306,8 +306,8 @@ describe("the door a /roles card opens", () => {
     );
     renderRoles();
     fireEvent.click(await header("Seed Keeper"));
-    const link = await screen.findByRole("link", { name: /Sign in to raise your hand/ });
+    const link = await screen.findByRole("link", { name: /Sign in to apply for this role/ });
     expect(link.getAttribute("href")).toMatch(/^\/login\?next=/);
-    expect(screen.queryByRole("button", { name: /Raise your hand/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Apply for this role/ })).toBeNull();
   });
 });

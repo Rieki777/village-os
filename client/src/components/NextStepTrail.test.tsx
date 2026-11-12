@@ -110,16 +110,35 @@ describe("the root strip", () => {
 
   it("gives a visitor the front door and the companion's line, with no read of anybody's account", async () => {
     useAuthMock.mockReturnValue({ user: null, loading: false });
-    at("/steward");
+    at("/visit");
     const step = await screen.findByRole("link", { name: "Find where you belong" });
     expect(step).toHaveAttribute("href", "/roles");
     expect(screen.getByText(/Read a few roles slowly/)).toBeInTheDocument();
     expect(fetchGameMeMock).not.toHaveBeenCalled();
   });
 
+  it("QA2-03: a visitor reads how to take the step first, then what follows it", async () => {
+    useAuthMock.mockReturnValue({ user: null, loading: false });
+    at("/visit");
+    const line = await screen.findByText(/Read a few roles slowly/);
+    expect(line.textContent).toBe("Read a few roles slowly: the one that stays with you is a good place to start. Then tell us about you and the role, a few short questions.");
+  });
+
+  it("QA2-03: stays quiet on the steward and resident pages, which draw their own journey", async () => {
+    useAuthMock.mockReturnValue({ user: null, loading: false });
+    for (const p of ["/steward", "/resident", "/steward?utm_source=newsletter"]) {
+      clearPathCache();
+      const { container, unmount } = at(p);
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(container.querySelector("[data-root-line]"), p).toBeNull();
+      unmount();
+    }
+  });
+
   it("the companion stays quiet for a visitor after three screens of one visit", async () => {
     useAuthMock.mockReturnValue({ user: null, loading: false });
-    for (const p of ["/", "/steward", "/resident"]) {
+    for (const p of ["/", "/quests", "/gratitude"]) {
       const { unmount } = at(p);
       await screen.findByText(/Read a few roles slowly/);
       unmount();

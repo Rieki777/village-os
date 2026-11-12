@@ -5,7 +5,7 @@
  *   - the role's words, under the editor's own headings (CARD_WORDS), each
  *     drawn only once it is written, so no heading sits over blank space;
  *   - the founding sections (shared/roleCardSections.ts): "This is a paid
- *     role", Ideal background, Qualities we're looking for, AI support with its
+ *     role", Ideal background, Qualities we're looking for, Digital Companion with its
  *     animal companion, and How pay works as SHARES of the whole, never an
  *     amount or a range;
  *   - the listing details (track, goals, where, languages, how it is filled,
@@ -164,7 +164,10 @@ export default function FullRoleCard({ seat, circleName = null, register = "game
   ].filter((h) => h.text);
   const aim = asText(seat.aim);
   const existsWhile = asText(seat.existsWhile);
-  const commitment = asText(seat.timeCommitment);
+  // One commitment line (QA2-16): the role's terms say it as a percent in the details below, so the
+  // free text is drawn only on a card whose terms name none.
+  const commitmentPct: number | null = Number.isInteger(seat?.card?.commitmentPct) ? (seat.card.commitmentPct as number) : null;
+  const commitment = commitmentPct !== null ? null : asText(seat.timeCommitment);
   const roots = Array.isArray(seat.archetypes) ? seat.archetypes.map(String) : [];
   const apply = mayApply(seat);
   const last = answer?.lastEdited ?? null;
@@ -179,7 +182,54 @@ export default function FullRoleCard({ seat, circleName = null, register = "game
     </Fireflies>
   ) : null;
 
-  const side = (
+  // THE OFFER RAIL (design pass D-03, 12 Nov 2026): on the founding card the pay, the commitment and the
+  // one act sit together in the sticky column, so a desktop reader meets Apply beside the words, never
+  // 1,500px down. Only what the card holds is drawn: no ceiling written, no ceiling line.
+  const offer = founding ? (
+    <section className="rounded-2xl border border-notice/50 bg-card p-5 shadow-sm" data-testid="offer-rail">
+      {pay && (
+        <div data-testid="pay-shape">
+          <h4 className={EYEBROW}>{SECTION_WORDS.payShape}</h4>
+          {pay.ceiling && <p className="mt-2 font-display text-2xl leading-snug text-card-foreground" data-testid="pay-ceiling">{pay.ceiling}</p>}
+          {pay.shape.length > 0 && (
+            <ul className="mt-4 grid grid-cols-3 gap-2" aria-hidden="true" data-testid="pay-tiles">
+              {pay.shape.map((sh) => (
+                <li key={sh.label} className="min-w-0 rounded-xl border border-border bg-muted px-3 py-2">
+                  <span className="block truncate text-xs capitalize text-muted-foreground">{sh.label}</span>
+                  <span className="block font-display text-2xl text-card-foreground">{sh.pct}%</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          {pay.split && <p className={`mt-3 ${HINT}`} data-testid="pay-split">{pay.split}</p>}
+          {pay.atRisk && <p className="mt-3 text-sm leading-relaxed text-card-foreground" data-testid="pay-at-risk">{pay.atRisk}</p>}
+          {pay.note && <p className="mt-3 text-xs leading-relaxed text-muted-foreground" data-testid="pay-note">{pay.note}</p>}
+        </div>
+      )}
+      {(commitmentPct !== null || commitment) && (
+        <dl className={`${pay ? "mt-4 " : ""}border-t border-border pt-3 text-sm`}>
+          <div className="flex items-baseline justify-between gap-3">
+            <dt className="text-muted-foreground">{W.timeCommitment}</dt>
+            <dd className="text-right text-card-foreground">{commitmentPct !== null ? `${commitmentPct}%` : commitment}</dd>
+          </div>
+        </dl>
+      )}
+      {wide && act && (
+        <div className="mt-5">
+          {act}
+          <p className={`mt-2 text-center ${HINT}`}>{t({ message: "Six steps. No account needed.", context: "full role card, under the one act" })}</p>
+        </div>
+      )}
+    </section>
+  ) : null;
+
+  const side = founding ? (
+    <div className="flex flex-col gap-5">
+      {offer}
+      {/* The rail says the commitment, so the details below leave it out (each concept once, QA2-16). */}
+      <RoleCardParams seat={params?.card ? { ...params, card: { ...params.card, commitmentPct: undefined } } : params} />
+    </div>
+  ) : (
     <div className="flex flex-col gap-5">
       {pay && (
         <section className={`rounded-xl border ${founding ? "border-notice/50" : "border-border"} bg-card p-4`} data-testid="pay-shape">
@@ -210,11 +260,8 @@ export default function FullRoleCard({ seat, circleName = null, register = "game
       data-register={register}
     >
       <header className="flex flex-col gap-2">
-        {(circleName || sections?.paid) && (
-          <p className={EYEBROW}>
-            {[circleName, sections?.paid ? t({ message: "Paid role", context: "full role card chip" }) : null].filter(Boolean).join(" · ")}
-          </p>
-        )}
+        {/* "Paid" is said once, by "This is a paid role" under the title (QA2-16). */}
+        {circleName && <p className={EYEBROW}>{circleName}</p>}
         {showTitle && <h3 className={founding ? "font-display text-3xl leading-tight text-card-foreground sm:text-4xl" : "font-display text-2xl text-card-foreground"}>{String(seat?.name ?? "")}</h3>}
         {/* The roots it grows from, drawn by RootTags (RootsSlot.tsx). */}
         <RootsSlot roots={roots} />

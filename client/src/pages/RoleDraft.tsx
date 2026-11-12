@@ -51,6 +51,7 @@ import { BreathingLoader } from "@/components/natural";
 import Leaf from "@/components/journey/Leaf";
 import { useVillageName } from "@/hooks/useVillageName";
 import { gameFetch, useSeason } from "@/lib/gameApi";
+import { readFoundingTeam } from "@/components/roleCard/roleCardApi";
 import { useModuleOn } from "@/modules/ModuleProvider";
 import { readStoredJson, writeStoredJson } from "@/lib/safeStorage";
 import { fromOrgSeat, seasonForSheet } from "@shared/roleSheetInputs";
@@ -72,6 +73,7 @@ import {
   archetypeFromSearch,
   openRolesFrom,
   rankForCharacters,
+  withoutFounding,
   type DraftRole,
 } from "@shared/roleDraft";
 
@@ -93,7 +95,7 @@ interface PlaceInvite {
   name: string;
 }
 
-type Load = { kind: "loading" } | { kind: "failed" } | { kind: "ready"; roles: DraftRole[]; org: any };
+type Load = { kind: "loading" } | { kind: "failed" } | { kind: "ready"; roles: DraftRole[]; org: any; founding: boolean };
 
 /**
  * Whether the open proposal takes applications now, and which roles it offers
@@ -225,12 +227,15 @@ export default function RoleDraft() {
   const [, navigate] = useLocation();
 
   useEffect(() => {
+    // The founding team is read beside the chart: its roles are applied for from their own card on /roles (QA2-01).
+    const founding = readFoundingTeam().then((a) => (a.on ? a.roleIds : []));
     gameFetch("/api/org")
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-      .then((org) => {
+      .then(async (org) => {
         if (!org || !Array.isArray(org.roles)) throw new Error("bad shape");
-        const roles = openRolesFrom(org);
-        setLoad({ kind: "ready", roles, org });
+        const foundingIds = await founding;
+        const roles = withoutFounding(openRolesFrom(org), foundingIds);
+        setLoad({ kind: "ready", roles, org, founding: foundingIds.length > 0 });
         // A drafted role that has since been filled or closed leaves the draft.
         setPicks((p) => p.filter((id) => roles.some((r) => r.id === id)));
       })
@@ -341,10 +346,18 @@ export default function RoleDraft() {
       <div className={`${WORLD} py-10 sm:py-14`}>
         <div className="container max-w-6xl">
           <p className={EYEBROW}>{t({ message: "Open roles · select yours", context: "role draft eyebrow" })}</p>
-          <h1 className={`mt-2 text-balance ${H1}`}>{t`Select your roles at ${villageName}`}</h1>
+          <h1 className={`mt-2 text-balance ${H1}`}>{t`Find your roles at ${villageName}`}</h1>
           <p className={`mt-3 ${LEDE}`}>
             {t`Pick the characters you play, scout every open role by what it asks, open any card in full, and select up to three. Your selection stays in this browser until you apply, and nothing is sent before then.`}
           </p>
+          {load.kind === "ready" && load.founding && (
+            <p className="mt-3 text-sm text-muted-foreground" data-founding-elsewhere="">
+              {t({ message: "Looking for a founding role?", context: "role draft, founding roles live on /roles" })}{" "}
+              <Link href="/roles" className={LINK}>
+                {t({ message: "See the founding team.", context: "role draft, founding roles live on /roles" })}
+              </Link>
+            </p>
+          )}
 
           <div className="sm:sticky sm:top-24 z-20 -mx-4 bg-background/95 px-4 pb-3 pt-1 backdrop-blur">
             <SelectStepper

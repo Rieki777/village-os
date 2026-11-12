@@ -8,7 +8,7 @@ import {
   rankForCharacters,
   type DraftRole,
 } from "./roleDraft";
-import { boardRoles, characterArt, fitCountFor, roleArtFor, unlistedValue } from "./roleDraft";
+import { boardRoles, characterArt, fitCountFor, roleArtFor, unlistedValue, withoutFounding } from "./roleDraft";
 import { OPEN_PROPOSAL_MAX_ROLES } from "./openProposals";
 
 const ORG = {
@@ -183,5 +183,20 @@ describe("an archetype carried from /roles", () => {
     expect(draftWithArchetype(d, "building")).toEqual({ chars: ["catalyzing", "building"], picks: ["garden"] });
     expect(draftWithArchetype(d, "catalyzing")).toBe(d);
     expect(draftWithArchetype(d, null)).toBe(d);
+  });
+});
+
+describe("QA2-01: the board while the founding team is featured", () => {
+  it("leaves the founding team's roles off the board, and keeps every other open role", () => {
+    const all = openRolesFrom(ORG);
+    expect(all.some((r) => r.id === "lfs")).toBe(true);
+    const board = withoutFounding(all, ["lfs"]);
+    expect(board.map((r) => r.id)).not.toContain("lfs");
+    expect(board.map((r) => r.id)).toEqual(all.map((r) => r.id).filter((id) => id !== "lfs"));
+  });
+
+  it("keeps the whole board while the founding team is off", () => {
+    const all = openRolesFrom(ORG);
+    expect(withoutFounding(all, [])).toEqual(all);
   });
 });

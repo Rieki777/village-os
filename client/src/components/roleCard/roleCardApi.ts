@@ -6,6 +6,7 @@
  */
 import { gameFetch } from "@/lib/gameApi";
 import { NO_VILLAGE_PAY, readSections, villagePayFrom, type RoleCardSections, type VillagePay } from "@shared/roleCardSections";
+import { DEFAULT_OTHER_WAYS, otherWaysOf, type OtherWays } from "@shared/otherWays";
 
 export interface FoundingTeamAnswer {
   on: boolean;
@@ -15,6 +16,8 @@ export interface FoundingTeamAnswer {
   sections: Record<string, RoleCardSections>;
   showPayRanges: boolean;
   villagePay: VillagePay;
+  /** The "Other ways to join" tiles (shared/otherWays.ts), the defaults when the read fails. */
+  otherWays: OtherWays;
 }
 
 export interface RoleCardAnswer {
@@ -26,7 +29,7 @@ export interface RoleCardAnswer {
   mayEdit: boolean;
 }
 
-const OFF: FoundingTeamAnswer = { on: false, roleIds: [], names: {}, sections: {}, showPayRanges: false, villagePay: NO_VILLAGE_PAY };
+const OFF: FoundingTeamAnswer = { on: false, roleIds: [], names: {}, sections: {}, showPayRanges: false, villagePay: NO_VILLAGE_PAY, otherWays: DEFAULT_OTHER_WAYS };
 
 /** The village's pay block as the server sent it, read again here so a bad answer draws nothing. */
 function payOf(v: any): VillagePay {
@@ -50,7 +53,7 @@ export async function readFoundingTeam(): Promise<FoundingTeamAnswer> {
       const read = readSections(d?.sections?.[id]);
       if (read.ok) sections[id] = read.value;
     }
-    return { on: d?.on === true && roleIds.length > 0, roleIds, names, sections, showPayRanges: d?.showPayRanges === true, villagePay: payOf(d?.villagePay) };
+    return { on: d?.on === true && roleIds.length > 0, roleIds, names, sections, showPayRanges: d?.showPayRanges === true, villagePay: payOf(d?.villagePay), otherWays: otherWaysOf(d?.otherWays) };
   } catch {
     return OFF;
   }

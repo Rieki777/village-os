@@ -41,9 +41,14 @@ export interface FoundingRole {
   sections: RoleCardSections | null;
 }
 
-export default function FoundingTeam({ roles, initialOpen = null, villagePay = null }: { roles: FoundingRole[]; initialOpen?: string | null; villagePay?: VillagePay | null }) {
+/**
+ * `lead`: the section opens the page (design pass M1 and D-04, 12 Nov 2026). Its heading is then the
+ * page's h1, and on a phone the spacing is tighter so the role rows sit in the first screen.
+ */
+export default function FoundingTeam({ roles, initialOpen = null, villagePay = null, lead = false }: { roles: FoundingRole[]; initialOpen?: string | null; villagePay?: VillagePay | null; lead?: boolean }) {
   const { t } = useLingui();
   const headingId = `${useId().replace(/[^a-zA-Z0-9]/g, "")}-founding`;
+  const Heading = lead ? "h1" : "h2";
   const wide = useWide();
   // A phone opens on the list, one thing at a time; a desktop opens on the first role beside it.
   const [open, setOpen] = useState<string | null>(initialOpen);
@@ -53,19 +58,19 @@ export default function FoundingTeam({ roles, initialOpen = null, villagePay = n
   const current = roles.find((r) => String(r.seat.id) === shown) ?? null;
 
   return (
-    <section aria-labelledby={headingId} className="relative mx-auto mb-16 max-w-6xl" data-founding-team="">
-      <div className="relative overflow-hidden border-y border-notice/40 py-10 sm:py-14">
+    <section aria-labelledby={headingId} className={`relative mx-auto max-w-6xl ${lead ? "mb-10 sm:mb-16" : "mb-16"}`} data-founding-team="">
+      <div className={`relative overflow-hidden ${lead ? "border-b py-4 sm:border-t sm:py-14" : "border-y py-10 sm:py-14"} border-notice/40`}>
         <SeedLines className="absolute -right-10 -top-10 size-64 opacity-20 sm:size-80" />
         <p className="text-xs font-semibold uppercase tracking-[0.3em] text-notice">{t({ message: "Founding team", context: "founding team section eyebrow" })}</p>
-        <h2 id={headingId} className="mt-3 font-display text-4xl leading-tight text-foreground sm:text-6xl">
+        <Heading id={headingId} className="mt-3 font-display text-4xl leading-tight text-foreground sm:text-6xl">
           {t({ message: "Join the founding team", context: "founding team section heading" })}
-        </h2>
-        <p className="mt-5 max-w-2xl text-lg leading-relaxed text-muted-foreground sm:text-xl">
+        </Heading>
+        <p className={`${lead ? "mt-3" : "mt-5"} max-w-2xl text-lg leading-relaxed text-muted-foreground sm:mt-5 sm:text-xl`}>
           {t({ message: "We are building our team of people who will lead each domain of the village from the foundation through to completion.", context: "founding team section lede" })}
         </p>
       </div>
 
-      <div className="mt-10 grid gap-6 lg:grid-cols-[18rem_minmax(0,1fr)] lg:gap-10">
+      <div className={`${lead ? "mt-5" : "mt-10"} grid gap-6 sm:mt-10 lg:grid-cols-[16rem_minmax(0,1fr)] lg:gap-10`}>
         <ul className="grid gap-3 self-start lg:sticky lg:top-28" aria-label={t({ message: "The founding roles", context: "founding team list" })}>
           {roles.map((r) => {
             const id = String(r.seat.id);

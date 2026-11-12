@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildCircleCard, holderCardHref, type CircleCardIn, type CircleSection } from "./circleCard";
+import { buildCircleCard, holderCardHref, writtenOnly, type CircleCardIn, type CircleSection } from "./circleCard";
 import { charterFromRow, EMPTY_CHARTER, readStoredValues } from "./circleCharter";
 import { CCOS_TERMS, CIRCLE_HEADINGS, CIRCLE_SECTION_KEYS } from "./circleCardWords";
 import { ROLE_ANCHOR } from "./playerCard";
@@ -252,3 +252,28 @@ describe("the live parts, which the platform reads and nobody types", () => {
     });
   });
 });
+
+describe("QA2-06: the card a reader who cannot propose words sees", () => {
+  it("shows only the headings that have words, and keeps the facts that are true", () => {
+    const full = buildCircleCard(base({ circle: { id: "c-new", name: "New circle", purpose: null, status: "forming", parent: null }, charter: null }));
+    const card = writtenOnly(full);
+    expect(card.sections.find((s) => s.kind === "text")).toBeUndefined();
+    for (const s of card.sections) if (s.kind === "list" || s.kind === "values") expect(s.slot, s.key).toEqual({ kind: "unread" });
+    expect(card.header.existsWhile).toEqual({ kind: "unread" });
+    expect(JSON.stringify(card)).not.toMatch(/not written yet|No purpose written yet/i);
+    // The roles and the adoption record still say what is true.
+    expect(find(card.sections, "roles").slot).toEqual({ kind: "empty", words: "No roles in this circle yet" });
+    expect(find(card.sections, "adoption").slot.kind).toBe("empty");
+    // The model itself is untouched: those who may propose words still see where they go.
+    expect(find(full.sections, "domains").slot).toEqual({ kind: "empty", words: "Not written yet" });
+  });
+
+  it("keeps every written word, and the purpose block while its exists-while line is written", () => {
+    const card = writtenOnly(buildCircleCard(base({ circle: { id: "c-g", name: "Garden circle", purpose: null, status: "active", parent: null } })));
+    expect(find(card.sections, "accountabilities").slot).toEqual({ kind: "shown", value: ["One", "Two", "Three"] });
+    expect(card.header.existsWhile).toEqual({ kind: "shown", value: "the village eats from its own land" });
+    expect(find(card.sections, "purpose").slot).toEqual({ kind: "unread" });
+    expect(find(card.sections, "domains").slot).toEqual({ kind: "unread" });
+  });
+});
+

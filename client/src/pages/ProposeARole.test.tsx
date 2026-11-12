@@ -571,9 +571,21 @@ describe("what the form kept from the Firefly Path", () => {
     expect(document.body.textContent).toContain("Your name and email come from your account");
   });
 
-  it("a village whose applications are for one cycle names its days", async () => {
+  it("QA2-05: names no internal cycle under the title, even when the village's applications run by the moon", async () => {
     await applyFor("r-gate", { ...FORM, season: { id: "s-now", name: "Season of Seeds", startsOn: "2000-01-01" }, term: { kind: "moon", startsOn: "2026-11-09", endsOn: "2026-12-08" } });
-    expect(document.querySelector("[data-term-days]")?.textContent).toBe("This application is for the cycle from 9 November 2026 to 8 December 2026.");
+    expect(document.querySelector("[data-term-days]")).toBeNull();
+    expect(document.querySelector("header")?.textContent).not.toMatch(/9 November 2026|8 December 2026|This application is for the cycle/);
+  });
+
+  it("QA2-14: the village's note shows under the title while it is set, and nothing shows while it is empty", async () => {
+    await applyFor("r-gate", { ...FORM, founding: { ...SETUP, updatedNote: "We updated this application on 14 November. Your saved answers are still here." } });
+    const note = document.querySelector("[data-updated-note]");
+    expect(note?.textContent).toBe("We updated this application on 14 November. Your saved answers are still here.");
+    // Under the title: the note sits in the page header with the heading.
+    expect(note?.closest("header")?.querySelector("h1")).toBeTruthy();
+    cleanup();
+    await applyFor("r-gate");
+    expect(document.querySelector("[data-updated-note]")).toBeNull();
   });
 
   it("closed: says so, and shows no form", async () => {

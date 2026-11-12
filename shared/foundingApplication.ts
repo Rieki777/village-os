@@ -25,6 +25,13 @@ export const FOUNDING_KEYS = {
 } as const;
 
 /**
+ * The note under the application's title when the application changes (QA2-14): a village
+ * setting, empty by default, set for a few days while the live flow moves. Kept apart from
+ * FOUNDING_KEYS because a village's seed never sets it: it is a passing note, never content.
+ */
+export const UPDATED_NOTE_KEY = "org.founding_updated_note";
+
+/**
  * THE PAY SHAPE IS LANE A3's (Phase A coordination, 11 Nov 2026): one village
  * setting shown on every role card and here alike, so the two never disagree.
  * `org.pay_shape` ("Cash 40, Equity 55, Credits 5"), `org.pay_shape_at_risk`
@@ -38,7 +45,7 @@ export const PAY_SHAPE_KEYS = {
   note: "org.pay_shape_note",
 } as const;
 
-export type FoundingKey = (typeof FOUNDING_KEYS)[keyof typeof FOUNDING_KEYS] | (typeof PAY_SHAPE_KEYS)[keyof typeof PAY_SHAPE_KEYS];
+export type FoundingKey = (typeof FOUNDING_KEYS)[keyof typeof FOUNDING_KEYS] | (typeof PAY_SHAPE_KEYS)[keyof typeof PAY_SHAPE_KEYS] | typeof UPDATED_NOTE_KEY;
 
 /** One share of the whole: its name and percent. Never an amount. */
 export interface PayShare {
@@ -64,6 +71,8 @@ export interface FoundingSetup {
   firstCycle: string;
   /** The first conversations after the hire, one per line. */
   firstConversations: string[];
+  /** The village's note under the application's title when the application changes (QA2-14); empty, no note. */
+  updatedNote: string;
 }
 
 /** Lines of a long setting: one per line, trimmed, blank lines dropped. */
@@ -127,6 +136,7 @@ export function foundingSetupFrom(get: (key: FoundingKey) => string): FoundingSe
     footer: words(get(PAY_SHAPE_KEYS.note), 300),
     firstCycle: words(get(FOUNDING_KEYS.firstCycle)),
     firstConversations: linesOf(get(FOUNDING_KEYS.firstConversations)),
+    updatedNote: words(get(UPDATED_NOTE_KEY), 300),
   };
 }
 
@@ -143,6 +153,7 @@ export function foundingSetupOf(raw: unknown): FoundingSetup {
     footer: words(o.footer, 300),
     firstCycle: words(o.firstCycle),
     firstConversations: lines(o.firstConversations),
+    updatedNote: words(o.updatedNote, 300),
   };
 }
 

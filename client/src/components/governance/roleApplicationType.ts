@@ -168,7 +168,7 @@ export const ROLE_APPLICATION_TYPE: WizardTypeConfig = {
   id: "role_application",
   group: "Recurring",
   icon: UserPlus,
-  title: "Propose for a role",
+  title: "Apply for a role",
   description:
     "Propose to hold one role or up to three, with what you will have done by the end of the season and the terms you hold them on.",
   consequence:
@@ -226,7 +226,6 @@ export const ROLE_APPLICATION_TYPE: WizardTypeConfig = {
           rows: 4,
           maxLength: 1500,
           label: "Why you",
-          placeholder: "I have been planting food forests for 20 years. I've been living on and near the project for 5, and I'm deeply familiar with the land.",
           required: true,
           // The member reads the label "Why you", so the problem names it the same way (red team U11).
           problem: atLeast(30, '"Why you"'),

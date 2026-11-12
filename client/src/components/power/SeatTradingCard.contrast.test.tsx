@@ -213,7 +213,7 @@ describe("the seat card on the night ground", () => {
 
   it("clears every floor in the opened raise form and the opened composer", () => {
     render(<SeatTradingCard input={fromMapSeat(EMPTY, DATA(true), { signedIn: true })} ctx={CTX} action={<SeatAction circleId="land" />} />);
-    fireEvent.click(screen.getByRole("button", { name: "Raise your hand for Water Keeper" }));
+    fireEvent.click(screen.getByRole("button", { name: "Apply for this role: Water Keeper" }));
     expect(describeFailures(measure("bg-black").results)).toEqual([]);
   });
 });

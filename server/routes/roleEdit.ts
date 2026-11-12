@@ -59,6 +59,7 @@ import crypto from "node:crypto";
 import { boolVar, stringVar } from "../lib/variables";
 import { isListed } from "../../shared/roleListing";
 import { foundingRoles } from "../../shared/foundingTeam";
+import { otherWaysFrom } from "../../shared/otherWays";
 import { hasSections, villagePayFrom, type RoleCardSections } from "../../shared/roleCardSections";
 import { lastEditedOf, sectionsFor, sectionsForMany } from "../lib/roleCardSections";
 
@@ -145,6 +146,8 @@ export function registerRoleEditRoutes(app: Express, g: Gate): void {
       sections: Object.fromEntries(featured.map((r) => [r.id, sections.get(r.id) as RoleCardSections])),
       showPayRanges: boolVar("org.show_pay_ranges"),
       villagePay: villagePay(),
+      // The "Other ways to join" tiles beside the section (QA2-07): village words, sent whether the section is on or off.
+      otherWays: otherWaysFrom((k) => stringVar(k)),
     });
   });
 

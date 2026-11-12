@@ -3,7 +3,7 @@
  * and the application's own fields on the body (shared/openProposals.ts).
  */
 import { describe, expect, it } from "vitest";
-import { FOUNDING_KEYS, PAY_SHAPE_KEYS, foundingSetupFrom, foundingSetupOf, linesOf, payShapeOf, shareWords } from "./foundingApplication";
+import { FOUNDING_KEYS, PAY_SHAPE_KEYS, UPDATED_NOTE_KEY, foundingSetupFrom, foundingSetupOf, linesOf, payShapeOf, shareWords } from "./foundingApplication";
 import { readFileSync } from "node:fs";
 import { VARIABLES_BY_KEY, validateVariable } from "./gameVariables";
 import { OPEN_APPLY_ROLES, openBodyOf, parseOpenProposal } from "./openProposals";
@@ -58,6 +58,14 @@ describe("the village's words", () => {
     expect(s.shares.map((x) => x.pct)).toEqual([40, 55, 5]);
     expect(s.atRisk).toMatch(/at risk/);
     expect(s.firstConversations.join(" ")).toMatch(/Technical Operations/);
+  });
+
+  it("QA2-14: the note under the title is its own setting, empty by default, and read back safely", () => {
+    expect(VARIABLES_BY_KEY[UPDATED_NOTE_KEY]?.default).toBe("");
+    expect(foundingSetupFrom(() => "").updatedNote).toBe("");
+    expect(foundingSetupFrom((k) => (k === UPDATED_NOTE_KEY ? "  We updated this application on 14 November.  " : "")).updatedNote).toBe("We updated this application on 14 November.");
+    expect(foundingSetupOf({ updatedNote: 7 }).updatedNote).toBe("");
+    expect(foundingSetupOf({ updatedNote: "Changed today." }).updatedNote).toBe("Changed today.");
   });
 
   it("the form's answer is read back safely, whatever arrives", () => {

@@ -37,6 +37,7 @@ import { coordinatingCircle } from "@shared/coordinatingCircle";
 import FoundingTeam, { type FoundingRole } from "@/components/roleCard/FoundingTeam";
 import FullRoleCard from "@/components/roleCard/FullRoleCard";
 import { readFoundingTeam, type FoundingTeamAnswer } from "@/components/roleCard/roleCardApi";
+import { DEFAULT_OTHER_WAYS, OTHER_WAYS_DEFAULTS } from "@shared/otherWays";
 import RootsFilterToggle from "@/components/roots/RootsFilterToggle";
 import { useRootsFilter } from "@/components/roots/useRootsFilter";
 
@@ -536,6 +537,12 @@ export default function Roles() {
         .filter((r): r is RoleEntry => !!r && r.raw?.listed !== false)
         .map((r) => ({ seat: r.raw, circleName: r.group, sections: founding.sections[r.id] ?? null }))
     : [];
+  const otherWays = founding?.otherWays ?? DEFAULT_OTHER_WAYS;
+  const leads = featured.length > 0;
+  // One h1 per page: the founding team's heading while it leads, the page's own otherwise.
+  const HeroHeading = leads ? "h2" : "h1";
+  // The header waits for both reads, so it never draws on top and then jumps below the founding team.
+  const heroShown = founding !== null && (!founding.on || roles !== null || failed);
   const featuredShown = new Set(featured.map((f) => String(f.seat.id)));
   const unlistedCount = (roles ?? []).filter((r) => r.raw?.listed === false).length;
   // Each role appears once: a featured role lives in the founding section. A linked seat is a
@@ -559,12 +566,74 @@ export default function Roles() {
     (a, b) => (circleOrder.get(a.title) ?? 999) - (circleOrder.get(b.title) ?? 999),
   );
 
+
+  const otherWaysSection = (
+    <>
+          {/* OTHER WAYS TO JOIN: clearly secondary to the founding team, and open from the start. */}
+          <section aria-labelledby="other-ways" className="mx-auto mb-14 max-w-4xl" data-other-ways="">
+            <h2 id="other-ways" className={`${H2} mb-2`}>{t({ message: "Other ways to join", context: "roles page, other ways to join" })}</h2>
+            <p className="mb-4 text-sm text-muted-foreground">{t({ message: "Not every way in is a founding role. Each of these is open now.", context: "roles page, other ways to join" })}</p>
+            <ul className="grid gap-3 sm:grid-cols-2">
+              <li className={TILE}>
+                <Link href="/role-proposals/new" className={`inline-flex min-h-11 items-center gap-2 ${LINK}`} data-propose-new-role="">
+                  {t({ message: "Propose a new role", context: "roles page, other ways to join" })}
+                  <ArrowRight className="size-4" aria-hidden="true" />
+                </Link>
+                <p className="mt-1 text-xs text-muted-foreground">{t({ message: "Propose is for a role we do not list. Tell us the role you see, and the village decides.", context: "roles page, other ways to join" })}</p>
+              </li>
+              <li className={TILE}>
+                <Link href="/quests" className={`inline-flex min-h-11 items-center gap-2 ${LINK}`}>
+                  {t({ message: "Take a quest, alone or with others", context: "roles page, other ways to join" })}
+                  <ArrowRight className="size-4" aria-hidden="true" />
+                </Link>
+              </li>
+              {/* QA2-07: the resident path and the gifts tile, the village's own words (shared/otherWays.ts). */}
+              <li className={TILE} data-other-way="seeder">
+                <Link href={otherWays.seeder.href} className={`inline-flex min-h-11 items-center gap-2 ${LINK}`}>
+                  {otherWays.seeder.title === OTHER_WAYS_DEFAULTS.seederTitle ? t({ message: "Become a Founding Seeder", context: "roles page, other ways to join" }) : otherWays.seeder.title}
+                  <ArrowRight className="size-4" aria-hidden="true" />
+                </Link>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {otherWays.seeder.line === OTHER_WAYS_DEFAULTS.seederLine ? t({ message: "Live here one day? Start on the resident path.", context: "roles page, other ways to join" }) : otherWays.seeder.line}
+                </p>
+              </li>
+              <li className={TILE} data-other-way="gifts">
+                <Link href={otherWays.gifts.href} className={`inline-flex min-h-11 items-center gap-2 ${LINK}`}>
+                  {otherWays.gifts.title === OTHER_WAYS_DEFAULTS.giftsTitle ? t({ message: "Offer your gifts", context: "roles page, other ways to join" }) : otherWays.gifts.title}
+                  <ArrowRight className="size-4" aria-hidden="true" />
+                </Link>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {otherWays.gifts.line === OTHER_WAYS_DEFAULTS.giftsLine ? t({ message: "Volunteer or work-trade: tell us what you would like to give.", context: "roles page, other ways to join" }) : otherWays.gifts.line}
+                </p>
+              </li>
+            </ul>
+            {/* QA2-02: while the founding team is featured, the game's way in sits here, quiet and
+                secondary, with no "Step one": the founding application keeps the only steps on the page. */}
+            {featured.length > 0 && (
+              <div className="mt-8" data-game-way="">
+                <h3 className="font-display text-2xl leading-tight text-foreground">{t({ message: "Find your place in the game", context: "roles page, other ways to join" })}</h3>
+                <ArchetypeStep nested allShown={showAll} onSeeAll={() => setShowAll(true)} />
+              </div>
+            )}
+          </section>
+    </>
+  );
+
   return (
     <Layout>
       {/* The sheet's world (docs/DESIGN_RULE.md): the same night ground and display face as the profile. */}
-      <section className={`${WORLD} py-16 sm:py-24`}>
+      <section className={`${WORLD} ${leads ? "pb-16 pt-4 sm:py-16" : "py-16"} sm:py-24`}>
         <div className="container">
-          {/* Header */}
+          {leads && (
+            <>
+              <FoundingTeam lead roles={featured} villagePay={founding?.villagePay ?? null} />
+              {otherWaysSection}
+            </>
+          )}
+
+          {/* Header: below "Other ways to join" while the founding team leads (design pass M1 and D-04). */}
+          {heroShown && (
+          <>
           <m.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -573,9 +642,9 @@ export default function Roles() {
             <div className={`${RING} mx-auto mb-6 size-16`}>
               <Briefcase className="w-7 h-7" aria-hidden="true" />
             </div>
-            <h1 className={`${H1} mb-4`}>
+            <HeroHeading className={`${H1} mb-4`}>
               {linkedName ?? t({ message: `Roles and Circles`, context: "roles page" })}
-            </h1>
+            </HeroHeading>
             {/* R46 enchant-first: the forest image carries the surface; the
                 sociocracy mechanics live in the three tooltips. */}
             <p className="text-lg leading-relaxed text-muted-foreground max-w-2xl mx-auto sm:text-xl">
@@ -608,32 +677,12 @@ export default function Roles() {
               </Link>
             )}
           </m.div>
-
-          {featured.length > 0 && <FoundingTeam roles={featured} villagePay={founding?.villagePay ?? null} />}
-
-          {/* OTHER WAYS TO JOIN: clearly secondary to the founding team, and open from the start. */}
-          <section aria-labelledby="other-ways" className="mx-auto mb-14 max-w-4xl" data-other-ways="">
-            <h2 id="other-ways" className={`${H2} mb-2`}>{t({ message: "Other ways to join", context: "roles page, other ways to join" })}</h2>
-            <p className="mb-4 text-sm text-muted-foreground">{t({ message: "Not every way in is a founding role. Each of these is open now.", context: "roles page, other ways to join" })}</p>
-            <ul className="grid gap-3 sm:grid-cols-2">
-              <li className={TILE}>
-                <Link href="/role-proposals/new" className={`inline-flex min-h-11 items-center gap-2 ${LINK}`} data-propose-new-role="">
-                  {t({ message: "Propose a new role", context: "roles page, other ways to join" })}
-                  <ArrowRight className="size-4" aria-hidden="true" />
-                </Link>
-                <p className="mt-1 text-xs text-muted-foreground">{t({ message: "Propose is for a role we do not list. Tell us the role you see, and the village decides.", context: "roles page, other ways to join" })}</p>
-              </li>
-              <li className={TILE}>
-                <Link href="/quests" className={`inline-flex min-h-11 items-center gap-2 ${LINK}`}>
-                  {t({ message: "Take a quest, alone or with others", context: "roles page, other ways to join" })}
-                  <ArrowRight className="size-4" aria-hidden="true" />
-                </Link>
-              </li>
-            </ul>
-          </section>
+          </>
+          )}
+          {!leads && otherWaysSection}
 
           <SeasonGoals />
-          <ArchetypeStep allShown={showAll} onSeeAll={() => setShowAll(true)} />
+          {featured.length === 0 && <ArchetypeStep allShown={showAll} onSeeAll={() => setShowAll(true)} />}
 
           <div className="max-w-4xl mx-auto">
             {/* Offered here because this is the page that names you: the

@@ -84,7 +84,7 @@ type StepTable = Record<CompanionStep, StepWords>;
 const EN: StepTable = {
   "find-role": {
     short: "Start with the roles that call to you.",
-    line: "Read a few roles slowly. The one that stays with you is a good place to start.",
+    line: "Read a few roles slowly: the one that stays with you is a good place to start.",
     why: "Each role card says what the work is and who it serves, so you can choose with your eyes open.",
   },
   propose: {
@@ -157,7 +157,7 @@ const EN: StepTable = {
 const ES: StepTable = {
   "find-role": {
     short: "Empieza por los roles que te llaman.",
-    line: "Lee algunos roles con calma. El que se quede contigo es un buen comienzo.",
+    line: "Lee algunos roles con calma: el que se quede contigo es un buen comienzo.", // needs-native-review: new words, 12 Nov 2026
     why: "Cada tarjeta de rol dice cuál es el trabajo y a quién sirve, para que elijas con claridad.",
   },
   propose: {
