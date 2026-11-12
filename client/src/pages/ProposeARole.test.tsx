@@ -719,3 +719,15 @@ describe("on a phone with the keyboard up (M2, batch 158)", () => {
     await waitFor(() => expect(bar.getAttribute("data-keyboard")).toBeNull());
   });
 });
+
+describe("the review step's words (batch 158)", () => {
+  it("no longer says the line the lead deleted: \"Aligning is the village's way of signing\"", async () => {
+    await applyFor();
+    await completeAll();
+    walk();
+    expect(stoneNow()).toBe("review");
+    await screen.findByLabelText(LETTER.intent);
+    expect(document.body.textContent).toContain("It takes effect once you confirm your address");
+    expect(document.body.textContent).not.toMatch(/way of signing/);
+  });
+});
