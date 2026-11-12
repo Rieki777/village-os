@@ -21,6 +21,8 @@
  *                    profile in their first hour, where our first 14 days
  *                    show as a strip of days, then opens the steward
  *                    training from /training and marks a lesson done.
+ *                    Finds her light on the map off, turns it on, and reads
+ *                    the circles map's today card.
  *   6. reviewer      The founder on the review page: an agent's batch of three
  *                    proposed changes, one edited in place, accepted together.
  *
@@ -620,6 +622,41 @@ export async function holder(w, ctx) {
     await page.getByText(/^1 of \d+ lessons done$/).waitFor({ timeout: 10_000 });
   });
   await w.look("training-resident");
+  // The living map (Phase D, D2): her light on the map is off until she
+  // chooses it, on her own settings; then the circles map glows as hearths
+  // joined by threads, with today's card naming circles and never people.
+  await w.step("find her light on the map off, and turn it on", async () => {
+    await w.goto("/profile#map-light");
+    const box = page.getByRole("checkbox", { name: "Show my light on the map" });
+    await box.waitFor();
+    if (await box.isChecked()) throw new Error("a new member's light on the map should be off until they choose it");
+    await box.scrollIntoViewIfNeeded();
+    // A click, then wait: the switch follows the server's answer, so it turns
+    // on only once the save lands (check() wants the state to change at once).
+    await box.click();
+    await page.waitForFunction(
+      () => (document.querySelector("[data-map-light-setting] input[type=checkbox]"))?.checked === true,
+      null,
+      { timeout: 10_000 },
+    );
+    // Asked of the server as the holder, so a switch that only looked on cannot pass.
+    const token = await page.evaluate(() => localStorage.getItem("village-auth-token"));
+    for (let i = 0; i < 10; i++) {
+      const res = await fetch(`${ctx.base}/api/map/my-light`, { headers: { authorization: `Bearer ${token}` } });
+      if ((await res.json()).on === true) return;
+      await page.waitForTimeout(300);
+    }
+    throw new Error("the server does not say her light is on");
+  });
+  await w.look("map-light", { journey: false, full: false });
+  await w.step("open the circles map and read today", async () => {
+    await w.goto("/map/circles");
+    await page.locator("[data-hearths]").first().waitFor({ state: "attached" });
+    const card = page.locator("[data-today-on-map]:visible").first();
+    await card.waitFor();
+    if ((await card.locator("[data-my-light]").getAttribute("data-my-light")) !== "on") throw new Error("today's card does not say her light is on");
+  });
+  await w.look("living-map", { journey: false });
 }
 
 // ── 6. The reviewer ───────────────────────────────────────────────────────

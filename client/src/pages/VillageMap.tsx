@@ -55,6 +55,10 @@ import ArrangeLens from "@/components/power/ArrangeLens";
 import { useArrange } from "@/components/power/useArrange";
 import { withMoves } from "@/components/power/arrange";
 import { useVision, VisionGhosts, VisionPanel } from "@/components/power/VisionLayer";
+// D2, the living map: hearths, mycelial threads and today's opt-in lights.
+import HearthLens from "@/components/map/HearthLens";
+import TodayOnTheMap from "@/components/map/TodayOnTheMap";
+import { useHearths } from "@/components/map/useHearths";
 import {
   NO_FILTERS,
   type Filters,
@@ -113,6 +117,9 @@ export default function VillageMap() {
   const vision = useVision(mode === "vision");
   const resourcesModule = useModule("resources");
   const resources = useResources(resourcesOn && !!resourcesModule);
+  /* Today's hearths: which circles meet and how many opted-in lights gather.
+     A signed-in member only; a visitor's map glows and threads with no lights. */
+  const today = useHearths(!!mapModule, viewerUserId);
 
   /*
    * ARRANGE MODE draws the village as the pending moves leave it, and the
@@ -297,9 +304,15 @@ export default function VillageMap() {
 
   // Both canvases draw the same lens nodes through PowerMap's `lenses`
   // seam, exactly the seam L3's resources ring uses without editing here.
-  const lensNodes =
+  // The hearths draw first, under every other lens, and only on the village
+  // as it stands now: Vision and Arrange are pictures of another village.
+  // The phone passes its depth so no hearth glows under a circle it hides.
+  const lensNodesFor = (maxDepth?: number) =>
     data && layout ? (
       <>
+        {mode === "now" && !arranging && (
+          <HearthLens layout={layout} circles={data.circles} relations={data.relations} hearths={today?.hearths ?? null} maxDepth={maxDepth} />
+        )}
         {lensOn && <DecideLens layout={layout} circles={data.circles} power={data.power} domain={lensDomain} />}
         {resourcesOn && resources && <ResourcesLens layout={layout} circles={data.circles} resources={resources} />}
         {mode === "vision" && <VisionGhosts layout={layout} drafts={vision.drafts} />}
@@ -371,7 +384,9 @@ export default function VillageMap() {
           second saying of the same thing and waits for the room to say it.
           The two invitations moved BELOW the map, beside the search that
           also acts on it. */}
-      <section className="py-6 sm:py-10 bg-gradient-to-b from-teal-deep/5 to-background">
+      {/* In the night world with the map under it (Phase D): one ground from
+          the title down, so the hearths are not met after a light band. */}
+      <section className="circle-lens py-6 sm:py-10 bg-background text-foreground">
         <div className="container text-center">
           <h1 className="font-display text-3xl sm:text-4xl font-bold text-foreground mb-2 sm:mb-3">How Power Is Held</h1>
           <p className="hidden sm:block text-muted-foreground max-w-xl mx-auto">
@@ -444,7 +459,7 @@ export default function VillageMap() {
                       viewerUserId={viewerUserId}
                       linesOn={linesOn}
                       pulseSeatId={pulseSeatId}
-                      lenses={lensNodes}
+                      lenses={lensNodesFor(phoneMaxDepth)}
                       // The phone draws one level at a time; the breadcrumb
                       // is the way down, and the accordion below carries the
                       // rest. Seventeen circles and their children in a
@@ -460,6 +475,11 @@ export default function VillageMap() {
                     />
                   </div>
                   <MapKey className="px-4 mt-3" />
+                  {today && (
+                    <div className="px-4 mt-3">
+                      <TodayOnTheMap today={today} circleName={(id) => data.circles.find((c) => c.id === id)?.name ?? id} />
+                    </div>
+                  )}
                   {/* THE KEY. Every number on the map, named, in the order it
                       is counted round the ring. A row steps into its circle;
                       the one a tap has named on the map is marked here too. */}
@@ -680,7 +700,7 @@ export default function VillageMap() {
                       viewerUserId={viewerUserId}
                       linesOn={linesOn}
                       pulseSeatId={pulseSeatId}
-                      lenses={lensNodes}
+                      lenses={lensNodesFor()}
                       svgRef={svgRef}
                       arrangeHint={arranging && !publishing ? "press M to pick it up and move it" : undefined}
                     />
@@ -704,6 +724,9 @@ export default function VillageMap() {
                         onApply={arrange.apply}
                         door={data.viewer.arrangeDoor === "power" ? "power" : "admin"}
                       />
+                    )}
+                    {today && !selectedSeat && !arranging && (
+                      <TodayOnTheMap className="mb-5" today={today} circleName={(id) => data.circles.find((c) => c.id === id)?.name ?? id} />
                     )}
                     {selectedSeat ? (
                       <div>
