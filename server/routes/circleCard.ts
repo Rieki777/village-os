@@ -37,6 +37,7 @@
  * decided. Ten in ten minutes is the most anybody may open.
  */
 import type { Express } from "express";
+import type { Pool } from "mysql2/promise";
 import { hasCapability } from "../../shared/capabilities";
 import { CIRCLE_WORD_REFUSALS as R } from "../../shared/circleCardWords";
 import { writtenOnly } from "../../shared/circleCard";
@@ -50,6 +51,10 @@ import type { LapseContext } from "../lib/orgChart";
 import { addChange, createDraft } from "../lib/orgDrafts";
 import { mapShowsStructureTo, orgSeatTier, type SeatTier } from "../lib/seatProjection";
 import { holdsRoleInCircle } from "../repos/circleCard";
+import { GAME_CONFIG } from "../../shared/gameConfig";
+import { isAdmitted } from "../lib/admission";
+import { leftTheVillage } from "../lib/formerMember";
+import { isUnclaimable } from "../lib/oauthAccounts";
 
 type Deps = Pick<AppDeps, "authedUser" | "isAdmin" | "capabilityCtx" | "getPool" | "overLimit"> & {
   /** Every circle in the store (`circlesRepo.all()`). */
@@ -87,6 +92,19 @@ async function orgTierFor(deps: Deps, req: any): Promise<SeatTier> {
       admin,
     }),
   });
+}
+
+/**
+ * Whether this reader reads the holders' first names (lead, 12 Nov 2026): a
+ * signed-in member whose account is live. Not a visitor, not an erased or
+ * example account, not somebody who left and was not admitted again, and not
+ * an account the village has not let in. An admin reads them too.
+ */
+export async function readsHolderNames(pool: Pool, viewer: any, admin: boolean): Promise<boolean> {
+  if (!viewer || !viewer.id) return false;
+  if (isUnclaimable({ id: String(viewer.id), email: String(viewer.email ?? ""), isExample: viewer.isExample === true })) return false;
+  if (!admin && !isAdmitted(viewer, GAME_CONFIG.stages)) return false;
+  return !(await leftTheVillage(pool, viewer));
 }
 
 const PROPOSALS_PER_WINDOW = 10;
@@ -127,6 +145,7 @@ export function register(app: Express, deps: Deps): void {
       viewer: viewer ? { userId: String(viewer.id), admin } : null,
       sessionsDeps: { circles: () => deps.circles().map((c) => ({ id: c.id, name: c.name })), lapseContext: deps.lapse },
       dormantBadges: deps.dormantBadgeIds ? await deps.dormantBadgeIds().catch(() => []) : [],
+      namesFor: await readsHolderNames(deps.getPool(), viewer, admin),
     });
     const proposes = await mayPropose(deps, req, viewer, circle);
     res.json({

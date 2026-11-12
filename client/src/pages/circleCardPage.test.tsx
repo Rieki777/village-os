@@ -52,6 +52,7 @@ const roleRow = (id: string, name: string, filled: boolean) => ({
   stateWords: filled ? "Filled" : "Open",
   filled,
   holderCards: filled ? [{ href: `/profile/cai#role-${id}`, label: "See their card", ariaLabel: `See the card of who holds ${name}` }] : [],
+  holderLine: filled ? "Held by Cai" : null,
   applyHref: filled ? null : `/propose?seat=${id}`,
   applyLabel: "Apply for this role",
 });
@@ -156,6 +157,10 @@ describe("the circle hearth", () => {
     // A stone names the role, never its holder.
     expect(hearth.textContent).toContain("W");
     expect(hearth.textContent).not.toContain("cai");
+    // Who holds what names the holder by the first name the server sent, and only on a held row.
+    const lines = Array.from(document.querySelectorAll("[data-circle-role-holders]")).map((n) => n.textContent);
+    expect(lines).toContain("Held by Cai");
+    expect(document.querySelector('[data-circle-role="r-seed"] [data-circle-role-holders]')).toBeNull();
   });
 
   it("threads reach the circle we sit in and the circles in ours", async () => {

@@ -240,6 +240,11 @@ export function WhoHolds({ roles, heading, note }: { roles: RoleRowOut[]; headin
                   {r.name}
                 </Link>
                 <span className={`text-xs ${r.filled ? "text-muted-foreground" : "text-notice"}`}>{r.stateWords}</span>
+                {r.holderLine ? (
+                  <span className="text-sm text-card-foreground" data-circle-role-holders="">
+                    {r.holderLine}
+                  </span>
+                ) : null}
               </div>
             </div>
             {r.pay ? (

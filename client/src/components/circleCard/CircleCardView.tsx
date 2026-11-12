@@ -144,6 +144,11 @@ function RoleRow({ role }: { role: RoleRowOut }) {
           {role.stateWords}
         </span>
       </div>
+      {role.holderLine ? (
+        <p className="text-sm text-card-foreground" data-circle-role-holders="">
+          {role.holderLine}
+        </p>
+      ) : null}
       {/* What it pays, before the Apply link (Rye, 2026-10-30). */}
       {role.pay ? (
         <div className="text-xs">
