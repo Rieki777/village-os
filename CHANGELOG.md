@@ -366,6 +366,26 @@ an address that bounces or complains stops being written to.
   dates and with no amounts, which stay in the ledger. Two badges, Homeowner
   and Neighbour, come with it.
 
+**Value and work**
+
+- **Invoice rails (#975, #991).** An invoice is followed from sending to
+  approval to payment, and the Treasury card syncs read-only. The email that
+  carried an invoice is recorded without its body or attachment.
+- **The valuation engine.** It gives a suggested figure for a piece of work, and
+  the figure a person sets is saved beside that suggestion. Each saved version
+  of the village's model is kept.
+- **The pricing desk.** A page at `/pricing` for whoever holds the pay-setting
+  power. The server refuses everyone else.
+- **Budgets.** The Treasurer uploads a cash budget in Admin. It is kept line by
+  line, with each import, a note per period, the sources it comes from and an
+  envelope per circle.
+- **The price kept at claim (#1000).** A claim keeps the terms the quest had
+  when it was taken.
+- **Earned Equity's three rules switched on, amount blank (#892, #896, #992).**
+  A running village has each of its three rules queued to go on from the next
+  cycle with no amount written. A rule the village already switched on, or
+  already has a change queued for, is left alone.
+
 **Finding your way**
 
 - The words on every page were rewritten so the village guides a member
@@ -659,6 +679,7 @@ change what you have:
 | An established village's words | A village that already holds page words of its own keeps the path and stage, How We Govern and Circles words it shows today, written into its stored content. A village that used the first Command Centre plan keeps that plan as its own | Harmless either way: these are the words and the plan it already shows |
 | The address book and paths | Fills the new Comms tables from members' accounts, form submissions and housing requests, and records who is already on a path. Sends nothing and grants nothing | No; 1.2.0 ignores them |
 | Season goal ids | Gives each link 0298 made by words the id those words derive, on tables this release made | No; 1.2.0 ignores them |
+| Earned Equity's rules | Each of the three Earned Equity rules that is off and has no change queued is queued to go on from the next cycle, with its amount blank. A rule the village already switched on is left alone | **No.** The queued change stays |
 
 **What the village keeps from now on:** every email it sends is recorded, with
 its words, for 18 months by default (`comms.retention_months`). A password
