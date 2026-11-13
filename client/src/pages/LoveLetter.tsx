@@ -1,4 +1,5 @@
 import Layout from "@/components/Layout";
+import { BTN_PRIMARY, WORLD } from "@/components/journey/look";
 import { m, AnimatePresence } from "framer-motion";
 import { Heart, CheckCircle2, ArrowRight, Users, Home, TrendingUp, Sparkles, Send } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -20,6 +21,8 @@ import { resolvePage } from "@shared/pageContent/resolve";
 import { withPathNames } from "@shared/pageContent/pathNames";
 import { servedPathsFrom } from "@/hooks/useVillagePaths";
 import { useStoryPageOffAlone } from "@/lib/brochure";
+import { Celebration, scrollBehavior, useReducedMotion } from "@/components/natural";
+import Leaf from "@/components/journey/Leaf";
 
 /**
  * S2 brochure lane, 2026-08-30: this page used to state, nine times, that
@@ -128,7 +131,7 @@ interface LegalContent {
 function NextStep({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex gap-3">
-      <CheckCircle2 className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
+      <CheckCircle2 className="w-5 h-5 text-notice mt-0.5 flex-shrink-0" />
       <p>{children}</p>
     </div>
   );
@@ -136,10 +139,11 @@ function NextStep({ children }: { children: React.ReactNode }) {
 
 /** What each path choice needs that is not words. Its label is the village's (Admin, Pages, Membership letter). */
 const PATH_LOOK: Record<(typeof LETTER_PATH_IDS)[number], { icon: typeof Users; color: string }> = {
-  investor: { icon: TrendingUp, color: "border-amber text-amber" },
-  steward: { icon: Users, color: "border-sage text-sage" },
-  resident: { icon: Home, color: "border-teal text-teal" },
-  prosperity: { icon: Sparkles, color: "border-teal-light text-teal-light" },
+  // The sheet's inks (docs/DESIGN_RULE.md): gold, living green and moonlight, which read on its night ground.
+  investor: { icon: TrendingUp, color: "border-notice text-notice" },
+  steward: { icon: Users, color: "border-open text-open" },
+  resident: { icon: Home, color: "border-foreground/70 text-foreground" },
+  prosperity: { icon: Sparkles, color: "border-muted-foreground text-muted-foreground" },
 };
 
 export default function LoveLetter() {
@@ -163,7 +167,7 @@ export default function LoveLetter() {
   const contributionShortNote = membership?.contributionShortNote?.trim();
   const footerNote =
     membership?.footerNote?.trim() ||
-    "Ask your community how membership contributions are structured, and whether any part is tax-deductible where you live.";
+    "Ask your community how membership contributions are structured.";
   // This page's words, `{entity}` included. Null until the saved words have
   // arrived, so the defaults never flash first. A path choice the village left
   // as the platform's words carries its path name (Admin, Paths & Stages); the
@@ -245,6 +249,12 @@ export default function LoveLetter() {
   // A link to a story page switched off on its own in Admin, Pages is left out.
   const pageOff = useStoryPageOffAlone();
   const emailFallback = contactEmail ? ` or email ${contactEmail}` : "";
+
+  // The thank-you replaces a long form, so it opens at its own top; on a phone it used to open at the footer.
+  useEffect(() => {
+    if (submitted && typeof window !== "undefined") window.scrollTo?.({ top: 0, behavior: scrollBehavior() });
+  }, [submitted]);
+  const still = useReducedMotion();
 
   const togglePath = (pathId: string) => {
     setForm(prev => ({
@@ -341,32 +351,33 @@ export default function LoveLetter() {
     const handle = user?.handle?.trim() ?? "";
     return (
       <Layout>
-        <section className="py-24 bg-background">
+        <section className={`${WORLD} py-16 sm:py-24`}>
           <div className="container max-w-2xl mx-auto">
             <m.div
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               className="text-center"
             >
-              <m.div
-                className="w-24 h-24 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-8"
-                animate={{ scale: [1, 1.1, 1] }}
-                transition={{ duration: 2, repeat: Infinity }}
-              >
-                <Heart className="w-12 h-12 text-primary" fill="currentColor" />
-              </m.div>
+              {/* Aligned: seeds carried out from the heart and settling, once. The heart itself holds still,
+                  because the words below it are being read. Reduce motion: the seeds already landed. */}
+              <div className="relative mx-auto mb-6 flex h-40 w-40 justify-center" data-aligned-moment={still ? "still" : "live"}>
+                <Celebration kind="seeds" intensity="moment" size={150} className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2" />
+                <span className="relative grid h-24 w-24 place-items-center rounded-full bg-notice/10 ring-4 ring-notice/30">
+                  <Heart className="w-12 h-12 text-notice" fill="currentColor" />
+                </span>
+              </div>
               <h1 className="font-display text-4xl md:text-5xl font-bold text-foreground mb-6">
                 Thank you{firstName ? `, ${firstName}` : ""}.
               </h1>
               {user && (
                 <p className="text-base text-foreground mb-8">
                   {LETTER_WORDS.done}{" "}
-                  <Link href="/profile" className="font-semibold text-primary underline underline-offset-2">
+                  <Link href="/profile" className="font-semibold text-notice underline underline-offset-2">
                     {LETTER_WORDS.kept}
                   </Link>
                 </p>
               )}
-              <div className="bg-card border border-primary/20 rounded-2xl p-8 mb-8 text-left">
+              <div className="bg-card border border-border rounded-2xl p-8 mb-8 text-left">
                 <h2 className="font-display text-2xl font-bold text-foreground mb-4">What happens next</h2>
                 <div data-next-steps="" className="space-y-4 text-muted-foreground">
                   <NextStep>Your letter is with the people who look after joining {villageName}.</NextStep>
@@ -381,7 +392,7 @@ export default function LoveLetter() {
                   {user && handle && vouchesLeft && (
                     <NextStep>
                       Members who know you can also vouch for you on{" "}
-                      <Link href={`/profile/${encodeURIComponent(handle)}`} className="font-semibold text-primary underline underline-offset-2">
+                      <Link href={`/profile/${encodeURIComponent(handle)}`} className="font-semibold text-notice underline underline-offset-2">
                         your page
                       </Link>
                       . {vouchesLeft}
@@ -390,13 +401,13 @@ export default function LoveLetter() {
                 </div>
               </div>
               {page?.thanks.fields.quote && (
-              <p className="text-lg font-accent text-primary italic mb-8 break-words">
+              <p className="text-lg font-accent text-notice italic mb-8 break-words">
                 "{page.thanks.fields.quote}"
               </p>
               )}
               <a
                 href="/"
-                className="inline-flex items-center gap-2 px-8 py-4 bg-primary text-primary-foreground rounded-full font-semibold hover:bg-teal-deep-dark transition"
+                className={`${BTN_PRIMARY} px-8 py-4`}
               >
                 Return Home
                 <ArrowRight className="w-5 h-5" />
@@ -410,7 +421,7 @@ export default function LoveLetter() {
 
   return (
     <Layout>
-      <section className="py-16 bg-background">
+      <section className={`${WORLD} py-12 sm:py-16`}>
         <div className="container max-w-3xl mx-auto">
 
           {/* Header */}
@@ -419,8 +430,8 @@ export default function LoveLetter() {
             animate={{ opacity: 1, y: 0 }}
             className="text-center mb-12"
           >
-            <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-6">
-              <Heart className="w-8 h-8 text-primary" />
+            <div className="w-16 h-16 rounded-full bg-notice/10 flex items-center justify-center mx-auto mb-6">
+              <Heart className="w-8 h-8 text-notice" />
             </div>
             <h1 className={`font-display text-4xl md:text-5xl font-bold text-foreground mb-4 break-words${hero ? "" : " invisible"}`}>
               {hero?.headline || "\u00a0"}
@@ -436,13 +447,13 @@ export default function LoveLetter() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
-            className="bg-card p-6 sm:p-8 md:p-12 rounded-2xl shadow-lg font-accent text-lg leading-relaxed mb-10 border border-border"
+            className="bg-card p-6 sm:p-8 md:p-12 rounded-2xl shadow-sm font-accent text-lg leading-relaxed mb-10 border border-border"
           >
             <p className="mb-6 text-foreground">{parts.greeting}</p>
 
-            <p className="mb-6 text-muted-foreground">{parts.opening}</p>
+            <p className="mb-6 text-foreground">{parts.opening}</p>
 
-            <p className="mb-6 text-muted-foreground">{parts.joining}</p>
+            <p className="mb-6 text-foreground">{parts.joining}</p>
 
             {/* With no commitments the line leading into them goes too, as it does in the stored words. */}
             {parts.commitments.length > 0 && (
@@ -452,20 +463,20 @@ export default function LoveLetter() {
                 <ul className="space-y-3 mb-8">
                   {parts.commitments.map((commitment, i) => (
                     <li key={i} className="flex items-start gap-3">
-                      <Heart className="w-5 h-5 text-primary mt-1 flex-shrink-0" />
-                      <span className="text-muted-foreground min-w-0 break-words">{commitment}</span>
+                      <Heart className="w-5 h-5 text-notice mt-1 flex-shrink-0" />
+                      <span className="text-foreground min-w-0 break-words">{commitment}</span>
                     </li>
                   ))}
                 </ul>
               </>
             )}
 
-            <p className="mb-6 text-muted-foreground">{parts.inReturn}</p>
+            <p className="mb-6 text-foreground">{parts.inReturn}</p>
 
-            <p className="mb-6 text-muted-foreground">{parts.governance}</p>
+            <p className="mb-6 text-foreground">{parts.governance}</p>
 
             {parts.contribution && (
-              <p className="mb-6 text-muted-foreground">{parts.contribution}</p>
+              <p className="mb-6 text-foreground">{parts.contribution}</p>
             )}
 
             <p className="text-foreground font-semibold italic">
@@ -480,7 +491,7 @@ export default function LoveLetter() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2 }}
-            className="bg-primary/5 border border-primary/20 rounded-2xl p-6 sm:p-8 md:p-12"
+            className="bg-muted border border-border rounded-2xl p-6 sm:p-8 md:p-12"
           >
             <h2 className="font-display text-2xl md:text-3xl font-bold text-foreground mb-2 break-words">
               {user ? LETTER_WORDS.heading(letterTitle) : words.fields.visitorHeading}
@@ -514,7 +525,7 @@ export default function LoveLetter() {
                     value={form.name}
                     onChange={e => setForm(p => ({ ...p, name: e.target.value }))}
                     placeholder="Your full name"
-                    className="w-full px-4 py-3 rounded-xl border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    className="w-full px-4 py-3 rounded-xl border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                   />
                 </div>
                 <div>
@@ -529,7 +540,7 @@ export default function LoveLetter() {
                     value={form.email}
                     onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
                     placeholder="your@email.com"
-                    className="w-full px-4 py-3 rounded-xl border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    className="w-full px-4 py-3 rounded-xl border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                   />
                 </div>
               </div>
@@ -547,7 +558,7 @@ export default function LoveLetter() {
                   value={form.phone}
                   onChange={e => setForm(p => ({ ...p, phone: e.target.value }))}
                   placeholder="+1 555 000 0000"
-                  className="w-full px-4 py-3 rounded-xl border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+                  className="w-full px-4 py-3 rounded-xl border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                 />
               </div>
 
@@ -566,17 +577,19 @@ export default function LoveLetter() {
                     <button
                       key={id}
                       type="button"
+                      aria-pressed={form.paths.includes(id)}
+                      data-on={form.paths.includes(id)}
                       onClick={() => togglePath(id)}
-                      className={`flex items-center gap-3 p-4 rounded-xl border-2 text-left transition-all ${
+                      className={`jw-btn jw-pick flex min-h-14 items-center gap-3 p-4 rounded-xl border-2 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ${
                         form.paths.includes(id)
-                          ? `${look.color} bg-primary/5`
-                          : "border-border text-muted-foreground hover:border-primary/30"
+                          ? `${look.color} bg-muted`
+                          : "border-border bg-background text-muted-foreground hover:border-notice/60"
                       }`}
                     >
                       <look.icon className="w-5 h-5 flex-shrink-0" />
                       <span className="text-sm font-medium min-w-0 break-words">{path.label}</span>
                       {form.paths.includes(id) && (
-                        <CheckCircle2 className="w-4 h-4 ml-auto flex-shrink-0" />
+                        <CheckCircle2 className="jw-unfurl w-5 h-5 ml-auto flex-shrink-0" />
                       )}
                     </button>
                     );
@@ -598,7 +611,7 @@ export default function LoveLetter() {
                   id="letter-contribution"
                   value={form.contribution}
                   onChange={e => setForm(p => ({ ...p, contribution: e.target.value }))}
-                  className="w-full px-4 py-3 rounded-xl border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+                  className="w-full px-4 py-3 rounded-xl border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                 >
                   <option value="">Select contribution level</option>
                   {tiers.map((tier, i) => (
@@ -615,7 +628,7 @@ export default function LoveLetter() {
                     placeholder={contribution.fields.customPlaceholder}
                     value={form.customAmount}
                     onChange={e => setForm(p => ({ ...p, customAmount: e.target.value }))}
-                    className="mt-3 w-full px-4 py-3 rounded-xl border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    className="mt-3 w-full px-4 py-3 rounded-xl border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                   />
                 )}
               </div>
@@ -632,18 +645,18 @@ export default function LoveLetter() {
                   onChange={e => setForm(p => ({ ...p, why: e.target.value }))}
                   rows={4}
                   placeholder="Share what resonates for you, what you're hoping to co-create, and what gifts you'd bring to the village..."
-                  className="w-full px-4 py-3 rounded-xl border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 resize-none"
+                  className="w-full px-4 py-3 rounded-xl border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring resize-none"
                 />
               </div>
 
               {/* Acknowledgements */}
               <div className="space-y-4 pt-2">
-                <label className="flex items-start gap-3 cursor-pointer">
+                <label className="-mx-2 flex min-h-11 items-start gap-3 rounded-xl p-2 cursor-pointer hover:bg-muted">
                   <input
                     type="checkbox"
                     checked={form.goodNeighbor}
                     onChange={e => setForm(p => ({ ...p, goodNeighbor: e.target.checked }))}
-                    className="mt-1 h-4 w-4 flex-shrink-0 accent-teal-deep"
+                    className="mt-0.5 h-5 w-5 flex-shrink-0 accent-notice"
                   />
                   <span className="text-sm text-muted-foreground">
                     I have read and agree to the{" "}
@@ -652,7 +665,7 @@ export default function LoveLetter() {
                     {pageOff("/good-neighbor") ? (
                       <span className="text-foreground">{words.fields.standardsLabel}</span>
                     ) : (
-                      <a href="/good-neighbor" className="text-primary underline" target="_blank">
+                      <a href="/good-neighbor" className="text-notice underline" target="_blank">
                         {words.fields.standardsLabel}
                       </a>
                     )}{" "}
@@ -660,12 +673,12 @@ export default function LoveLetter() {
                   </span>
                 </label>
 
-                <label className="flex items-start gap-3 cursor-pointer">
+                <label className="-mx-2 flex min-h-11 items-start gap-3 rounded-xl p-2 cursor-pointer hover:bg-muted">
                   <input
                     type="checkbox"
                     checked={form.commitmentAck}
                     onChange={e => setForm(p => ({ ...p, commitmentAck: e.target.checked }))}
-                    className="mt-1 h-4 w-4 flex-shrink-0 accent-teal-deep"
+                    className="mt-0.5 h-5 w-5 flex-shrink-0 accent-notice"
                   />
                   <span className="text-sm text-muted-foreground min-w-0 break-words">
                     {words.fields.ackLabel} <span className="text-destructive">*</span>
@@ -692,15 +705,14 @@ export default function LoveLetter() {
               <button
                 type="submit"
                 disabled={submitting}
-                className="w-full px-4 py-4 bg-primary text-primary-foreground rounded-xl font-semibold text-lg hover:bg-teal-deep-dark transition disabled:opacity-60 flex items-center justify-center gap-3"
+                className={`${BTN_PRIMARY} w-full py-4 text-lg`}
               >
                 {submitting ? (
                   <>
-                    <m.div
-                      animate={{ rotate: 360 }}
-                      transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                      className="w-5 h-5 flex-shrink-0 border-2 border-white/30 border-t-white rounded-full"
-                    />
+                    {/* A leaf breathing while the letter is carried, where a ring used to spin. */}
+                    <span className={still ? "flex-shrink-0" : "nat-breathe flex-shrink-0"} aria-hidden="true">
+                      <Leaf size={20} unfurl={false} />
+                    </span>
                     {user ? LETTER_WORDS.busy : "Signing your membership..."}
                   </>
                 ) : (

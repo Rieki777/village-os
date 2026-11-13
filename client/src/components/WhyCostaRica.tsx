@@ -8,6 +8,7 @@ import {
   FileQuestion,
 } from "lucide-react";
 import { useVillageContent } from "@/hooks/useVillageContent";
+import { CARD, EYEBROW, HINT, LEDE, RING } from "@/components/journey/look";
 
 /**
  * The village's own legal, tax and residency environment (S2 brochure lane,
@@ -33,6 +34,16 @@ import { useVillageContent } from "@/hooks/useVillageContent";
  * placeholder never says what the law is, only that the village has not
  * said yet.
  */
+
+/*
+ * DRAWN IN THE SEMANTIC TOKENS ONLY (night-contrast lane, 2026-11-11). It sits on
+ * /resident, which stands in the sheet's night world, and on the investor page,
+ * which does not. The brand inks it used (`text-teal-deep`, `bg-sage/15`) are
+ * dark by design, so on the night ground the heading, the eyebrow and every
+ * card title measured 1.22:1 to 1.59:1. The tokens re-theme with the ground they
+ * land on, so one set of classes reads on both pages.
+ */
+const SECTION = "bg-muted/40 py-16 sm:py-20";
 
 const ICONS = [ShieldCheck, Plane, Scale, Landmark, MapPin, TrendingUp];
 
@@ -72,20 +83,19 @@ export default function WhyCostaRica() {
 
   if (isPlaceholder || !wroteSomething) {
     return (
-      <section className="bg-sage/15 py-20">
+      <section className={SECTION}>
         <div className="container max-w-3xl mx-auto px-4">
-          <div className="bg-card rounded-2xl border border-border shadow-sm p-8 flex gap-4 items-start">
-            <div className="shrink-0 w-12 h-12 rounded-xl bg-teal-deep/10 text-teal-deep flex items-center justify-center">
-              <FileQuestion className="w-6 h-6" />
+          <div className={`${CARD} flex gap-4 items-start`}>
+            <div className={RING}>
+              <FileQuestion className="size-5" aria-hidden="true" />
             </div>
             <div>
-              <h2 className="font-display text-xl font-semibold text-teal-deep mb-1.5">
+              <h2 className="font-display text-xl font-semibold text-card-foreground mb-1.5">
                 Legal, Tax and Residency Context
               </h2>
-              <p className="text-sm text-muted-foreground leading-relaxed">
+              <p className={`${HINT} leading-relaxed`}>
                 This village has not yet published the legal, tax and residency details
-                for where it sits. Ask a steward, or check back once the community has
-                written its own.
+                for where it sits. Ask a steward, or check back in a few moons.
               </p>
             </div>
           </div>
@@ -95,17 +105,17 @@ export default function WhyCostaRica() {
   }
 
   return (
-    <section className="bg-sage/15 py-20">
+    <section className={SECTION}>
       <div className="container max-w-5xl mx-auto px-4">
-        <div className="text-center mb-12">
-          <span className="inline-block text-xs tracking-widest uppercase text-teal-deep font-semibold mb-3">
+        <div className="text-center mb-10 sm:mb-12">
+          <p className={`${EYEBROW} mb-3`}>
             Location & Context
-          </span>
-          <h2 className="font-display text-3xl md:text-4xl font-bold text-teal-deep mb-3">
+          </p>
+          <h2 className="font-display text-3xl md:text-4xl font-bold text-foreground mb-3">
             {overview?.heading || "Legal, Tax and Residency Context"}
           </h2>
           {overview?.intro && (
-            <p className="text-muted-foreground max-w-2xl mx-auto">{overview.intro}</p>
+            <p className={`${LEDE} mx-auto`}>{overview.intro}</p>
           )}
         </div>
         {points.length > 0 && (
@@ -115,16 +125,16 @@ export default function WhyCostaRica() {
             return (
               <div
                 key={p.title}
-                className="bg-card rounded-2xl border border-border shadow-sm p-6 flex gap-4"
+                className="rounded-2xl border border-border bg-card p-5 shadow-sm sm:p-6 flex gap-4"
               >
-                <div className="shrink-0 w-12 h-12 rounded-xl bg-teal-deep/10 text-teal-deep flex items-center justify-center">
-                  <Icon className="w-6 h-6" />
+                <div className={RING}>
+                  <Icon className="size-5" aria-hidden="true" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h3 className="font-display text-lg font-semibold text-teal-deep mb-1.5">
+                  <h3 className="font-display text-lg font-semibold text-card-foreground mb-1.5">
                     {p.title}
                   </h3>
-                  <p className="text-sm text-muted-foreground leading-relaxed">{p.body}</p>
+                  <p className={`${HINT} leading-relaxed`}>{p.body}</p>
                 </div>
               </div>
             );

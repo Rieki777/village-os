@@ -1,4 +1,7 @@
 import Layout from "@/components/Layout";
+import { BTN_PRIMARY, WORLD } from "@/components/journey/look";
+import CircleName from "@/components/circles/CircleName";
+import { anchorCircleId } from "@shared/circlePicker";
 import { Link } from "wouter";
 import { m, AnimatePresence } from "framer-motion";
 import { Users, ArrowRight, ChevronDown } from "lucide-react";
@@ -76,6 +79,7 @@ interface CardWords {
 
 interface CircleEntry {
   id: string;
+  anchor?: boolean;
   name: string;
   subtitle?: string;
   stage: "today" | "future";
@@ -154,7 +158,7 @@ function CircleCard({ circle, expanded, onToggle, index, onOpenSeat, coordinator
             </div>
             <div>
               <h3 className="font-display text-xl font-bold text-foreground">
-                {circle.name}
+                <CircleName name={circle.name} anchor={circle.anchor} />
               </h3>
               {circle.subtitle && (
                 <p className="text-sm text-muted-foreground mt-1">
@@ -289,6 +293,7 @@ export default function Circles() {
           seatsByCircle.set(r.circleId, list);
         }
         setPeople(data.people ?? null);
+        const anchorOf = anchorCircleId(data.circles);
         setRaw({ circles: data.circles ?? [], seats: data.roles ?? [], village: data.village });
         setSeatCounts({
           seats: (data.roles ?? []).reduce((n: number, r: any) => n + Number(r.seats ?? 0), 0),
@@ -333,6 +338,7 @@ export default function Circles() {
             return {
               id: String(c.id ?? c.name ?? `circle-${i}`),
               name: String(c.name ?? "Untitled circle"),
+              anchor: String(c.id) === anchorOf,
               subtitle: c.purpose ?? "",
               description: c.purpose ?? "",
               // A forming or dormant circle is one the village has named and
@@ -410,15 +416,17 @@ export default function Circles() {
 
   return (
     <Layout>
-      <section className="py-24 bg-background">
+      {/* D-10/M14: the night world, like every member page around it. */}
+      <div className={WORLD} data-world="night">
+      <section className="py-24">
         <div className="container">
           <m.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             className="text-center mb-16"
           >
-            <div className="w-16 h-16 rounded-full bg-sage/10 flex items-center justify-center mx-auto mb-6">
-              <Users className="w-8 h-8 text-sage" />
+            <div className="w-16 h-16 rounded-full bg-notice/10 flex items-center justify-center mx-auto mb-6">
+              <Users className="w-8 h-8 text-notice" />
             </div>
             <h1 className="font-display text-4xl md:text-5xl font-bold text-foreground mb-4 break-words">
               {hero.fields.headline}
@@ -434,7 +442,7 @@ export default function Circles() {
                 ]}
               />
             </p>
-            <Link href="/roles" className="inline-flex items-center gap-2 px-6 py-3 bg-sage text-white rounded-lg hover:bg-sage/90 transition-colors font-medium">
+            <Link href="/roles" className={BTN_PRIMARY}>
               {hero.fields.rolesLabel}
               <ArrowRight className="w-4 h-4" />
             </Link>
@@ -568,7 +576,7 @@ export default function Circles() {
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="mt-16 bg-sage/5 p-8 rounded-2xl border border-sage/20"
+            className="mt-16 bg-card p-8 rounded-2xl border border-border"
           >
             <h2 className="font-display text-2xl font-bold text-foreground mb-4 break-words">
               {together.fields.heading}
@@ -591,7 +599,7 @@ export default function Circles() {
             className="mt-12 text-center"
           >
             <Link href="/roles">
-              <a className="inline-flex items-center gap-2 px-6 py-3 bg-sage text-white rounded-lg hover:bg-sage/90 transition-colors font-medium">
+              <a className={BTN_PRIMARY}>
                 {closing.fields.label}
                 <ArrowRight className="w-4 h-4" />
               </a>
@@ -600,6 +608,7 @@ export default function Circles() {
           )}
         </div>
       </section>
+      </div>
     </Layout>
   );
 }

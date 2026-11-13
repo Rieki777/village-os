@@ -28,14 +28,17 @@
  *   - the village wrote them: prints them, and says they are a draft while the
  *     policy still carries its draft flag.
  *
- * It renders the body only. Each page keeps its own heading and frame.
+ * It renders the body only. Each page keeps its own heading and frame. Its inks are the
+ * semantic tokens, so the steps read on the night world of /roles as on any other page
+ * (phase A: the stone and amber inks were near-invisible on the night card).
  */
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { ArrowRight } from "lucide-react";
-import { Trans } from "@lingui/react/macro";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { useIsAdmin } from "@/contexts/AuthContext";
 import { authToken } from "@/lib/gameApi";
+import { CONFLICT_INTRO_DEFAULT, conflictIntroOf } from "@shared/conflictIntro";
 
 interface ExitPolicyAnswer {
   policy?: {
@@ -43,13 +46,14 @@ interface ExitPolicyAnswer {
     restorative?: { steps?: unknown };
   };
   platformWording?: unknown;
+  conflictIntro?: unknown;
 }
 
 type Reading =
   | { state: "loading" }
   | { state: "failed" }
-  | { state: "unwritten" }
-  | { state: "written"; steps: string[]; draft: boolean };
+  | { state: "unwritten"; intro: string }
+  | { state: "written"; steps: string[]; draft: boolean; intro: string };
 
 /** Where an admin writes the steps: the Departures tab holds the exit policy editor. */
 export const WRITE_STEPS_HREF = "/admin?tab=exits-admin";
@@ -67,8 +71,28 @@ export function readConflictSteps(answer: ExitPolicyAnswer | null | undefined): 
     : [];
   const wording = answer?.platformWording;
   const stillPlatforms = !Array.isArray(wording) || wording.includes("restorativeSteps");
-  if (stillPlatforms || steps.length === 0) return { state: "unwritten" };
-  return { state: "written", steps, draft: answer?.policy?.placeholder === true };
+  const intro = conflictIntroOf(answer?.conflictIntro);
+  if (stillPlatforms || steps.length === 0) return { state: "unwritten", intro };
+  return { state: "written", steps, draft: answer?.policy?.placeholder === true, intro };
+}
+
+/**
+ * How the village sees conflict, above its steps (lead, 12 Nov 2026). The platform's own words go
+ * through the catalogue so they read in the reader's language; a village's own words print as written.
+ * Empty draws nothing.
+ */
+function ConflictIntro({ intro }: { intro: string }) {
+  const { t } = useLingui();
+  if (!intro) return null;
+  const said =
+    intro === CONFLICT_INTRO_DEFAULT
+      ? t({
+          message:
+            "Conflict helps us evolve. As a culture, we meet it as an opportunity for growth, so everyone in it can take something good from it. Together we seek to understand what each conflict teaches us, so that every one helps us grow stronger.",
+          context: "conflict steps: how the village sees conflict, the platform's default",
+        })
+      : intro;
+  return <p data-conflict-intro="">{said}</p>;
 }
 
 export default function VillageConflictSteps() {
@@ -96,7 +120,7 @@ export default function VillageConflictSteps() {
   const policyLink = (
     <Link
       href="/exit-policy"
-      className="inline-flex items-center gap-2 text-teal-deep font-semibold hover:text-teal transition-colors"
+      className="inline-flex min-h-11 items-center gap-2 font-semibold text-notice underline underline-offset-2 hover:text-foreground transition-colors"
     >
       <Trans>Read the village's exit policy</Trans> <ArrowRight className="w-4 h-4" />
     </Link>
@@ -104,7 +128,7 @@ export default function VillageConflictSteps() {
 
   if (reading.state === "loading") {
     return (
-      <p role="status" className="text-stone-600 leading-relaxed">
+      <p role="status" className="text-muted-foreground leading-relaxed">
         <Trans>Loading this village's conflict steps…</Trans>
       </p>
     );
@@ -112,7 +136,7 @@ export default function VillageConflictSteps() {
 
   if (reading.state === "failed") {
     return (
-      <div className="space-y-3 text-stone-700 leading-relaxed">
+      <div className="space-y-3 text-foreground leading-relaxed">
         <p role="status"><Trans>This village's conflict steps could not be loaded just now.</Trans></p>
         {policyLink}
       </div>
@@ -121,12 +145,13 @@ export default function VillageConflictSteps() {
 
   if (reading.state === "unwritten") {
     return (
-      <div className="space-y-3 text-stone-700 leading-relaxed">
+      <div className="space-y-3 text-foreground leading-relaxed">
+        <ConflictIntro intro={reading.intro} />
         <p><Trans>This village has not written its conflict steps yet.</Trans></p>
         {isAdmin && (
           <p>
             <Trans>
-              <Link href={WRITE_STEPS_HREF} className="text-teal-deep font-semibold underline">
+              <Link href={WRITE_STEPS_HREF} className="font-semibold text-notice underline underline-offset-2">
                 Write them in Admin, under Departures
               </Link>
               . They are the restorative steps of the exit policy, and this page prints them once they are in the village's own words.
@@ -138,15 +163,16 @@ export default function VillageConflictSteps() {
   }
 
   return (
-    <div className="space-y-4 text-stone-700 leading-relaxed">
-      <p><Trans>When tension between people needs repair, these are the steps this village wrote for it:</Trans></p>
+    <div className="space-y-4 text-foreground leading-relaxed">
+      <ConflictIntro intro={reading.intro} />
+      <p><Trans>When tension between people needs repair, these are the steps we follow:</Trans></p>
       <ol className="space-y-2 list-decimal pl-6">
         {reading.steps.map((step, i) => (
           <li key={i}>{step}</li>
         ))}
       </ol>
       {reading.draft && (
-        <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-4 py-2.5">
+        <p className="text-sm text-foreground bg-notice/10 border border-notice/50 rounded-lg px-4 py-2.5">
           <Trans>These steps are still a draft. The community has not yet adopted its exit policy.</Trans>
         </p>
       )}

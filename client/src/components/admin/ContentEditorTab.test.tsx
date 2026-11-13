@@ -139,10 +139,11 @@ describe("the content editor never offers a failed read as content", () => {
     // transient failure), saving it would publish it.
     await user.clear(box());
     await user.type(box(), '{{"error":"Section not found"}');
-    await user.click(screen.getByRole("button", { name: /Save Changes/i }));
+    await user.click(screen.getByRole("button", { name: /^Save$/ }));
 
     expect(writes, "an error envelope was PUT to the village").toHaveLength(0);
-    expect(screen.getByRole("alert").textContent).toContain("not content");
+    // Said beside the box and again on the save bar.
+    expect(screen.getAllByRole("alert")[0].textContent).toContain("not content");
   });
 
   it("blocks saving entirely when the read failed for a reason that is not 404", async () => {
@@ -159,7 +160,9 @@ describe("the content editor never offers a failed read as content", () => {
     await waitFor(() => expect(screen.getAllByRole("alert").length).toBeGreaterThan(0));
     expect(screen.getAllByRole("alert")[0].textContent).toContain("could not be read");
 
-    await user.click(screen.getByRole("button", { name: /Save Changes/i }));
+    // Anything typed over unknown ground still cannot be saved from the bar.
+    await user.type(box(), '{{"opening":"new"}');
+    await user.click(screen.getByRole("button", { name: /^Save$/ }));
     expect(writes, "a save was sent on top of an unknown current state").toHaveLength(0);
   });
 

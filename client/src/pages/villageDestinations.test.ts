@@ -36,6 +36,21 @@ const ROOT = path.resolve(import.meta.dirname, "..");
  */
 const PLATFORM_HOSTS = ["app.hypha.earth"];
 
+/**
+ * The webmail doors in `components/fireflyPath/stones.ts`: "Check your email"
+ * opens the applicant's own provider. They belong to the person's address,
+ * never to a village, so every village ships the same list.
+ */
+const WEBMAIL_HOSTS = [
+  "mail.google.com",
+  "outlook.live.com",
+  "mail.yahoo.com",
+  "www.icloud.com",
+  "mail.proton.me",
+  "www.gmx.com",
+  "mail.aol.com",
+];
+
 /** mailto: followed by a real address, rather than `mailto:${expression}`. */
 const LITERAL_MAILTO = /mailto:[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/;
 
@@ -79,7 +94,7 @@ describe("no page carries one village's destination", () => {
       fs.readFileSync(file, "utf8").split("\n").forEach((line, i) => {
         for (const hit of line.matchAll(LITERAL_DESTINATION)) {
           const host = new URL(hit[1]).host;
-          if (!PLATFORM_HOSTS.includes(host)) found.push(`${rel(file)}:${i + 1} ${hit[1]}`);
+          if (!PLATFORM_HOSTS.includes(host) && !WEBMAIL_HOSTS.includes(host)) found.push(`${rel(file)}:${i + 1} ${hit[1]}`);
         }
       });
     }

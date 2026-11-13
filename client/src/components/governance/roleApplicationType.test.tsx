@@ -29,7 +29,7 @@ const searchOf = (...args: Parameters<typeof applySeatsHref>) => {
   const href = applySeatsHref(...args);
   return href.slice(href.indexOf("?"));
 };
-const cardFor = () => screen.getByRole("button", { name: /Propose for a role/ });
+const cardFor = () => screen.getByRole("button", { name: /Apply for a role/ });
 
 describe("role_application publishes", () => {
   it("is conductable on the server", () => {

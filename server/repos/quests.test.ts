@@ -295,7 +295,17 @@ describe.skipIf(!configured)("life signs aggregates (MySQL)", () => {
     const counts = await claims.fieldCounts();
     // claimed + submitted are both live work; the two consented are finished;
     // the declined one is neither.
-    expect(counts.get("q-real")).toEqual({ active: 2, done: 2 });
+    expect(counts.get("q-real")).toEqual({ active: 2, done: 2, moon: 0 });
+  });
+
+  it("counts this moon's flowers from `since`, examples still excluded", async () => {
+    // c-3 was consented on 1 Feb and c-4 on 1 Mar: a moon that began on
+    // 15 Feb holds one of them. u-demo's 1 May consent never counts.
+    const counts = await claims.fieldCounts(new Date("2026-02-15T00:00:00.000Z"));
+    expect(counts.get("q-real")).toEqual({ active: 2, done: 2, moon: 1 });
+    // A moon after every consent holds none, and the all-time count stands.
+    const later = await claims.fieldCounts(new Date("2026-06-01T00:00:00.000Z"));
+    expect(later.get("q-real")).toEqual({ active: 2, done: 2, moon: 0 });
   });
 
   it("never counts an example quest or an example member", async () => {

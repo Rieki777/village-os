@@ -21,6 +21,7 @@
  * A static row looks static, so nothing promises a tap it does not answer.
  */
 import { useId, type ReactNode } from "react";
+import FramelessImg from "@/components/FramelessImg";
 import { Bot, ChevronRight, Hourglass, Plus, UserRound } from "lucide-react";
 import { SHEET_WORDS, type Spot } from "@shared/roleSheet";
 import { initialsFrom } from "./holderFace";
@@ -44,7 +45,7 @@ function Disc({ spot }: { spot: Spot }) {
       return (
         <span aria-hidden="true" className={`${DISC} bg-muted font-display text-[17px] text-foreground ${edge}`}>
           {spot.avatar ? (
-            <img src={spot.avatar} alt="" className="size-full rounded-full object-cover object-top" />
+            <FramelessImg src={spot.avatar} alt="" className="size-full rounded-full object-cover object-top" />
           ) : (
             initialsFrom(spot.title)
           )}

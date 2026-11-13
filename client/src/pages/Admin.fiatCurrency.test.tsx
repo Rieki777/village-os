@@ -128,9 +128,10 @@ describe("the founder can set the village's own currency", () => {
     await waitFor(() => expect(field()).toBeTruthy());
   };
   const save = async (user: ReturnType<typeof userEvent.setup>) => {
-    // Anchored, because "Save identity pack" is a different button in a
-    // different section of the same wizard.
-    await user.click(screen.getByRole("button", { name: /^Save identity$/i }));
+    // Identity saves from the floating bar once a box changed. Anchored,
+    // because "Save identity pack" is a different button in a different
+    // section of the same wizard.
+    await user.click(await screen.findByRole("button", { name: /^Save$/i }));
     await waitFor(() => expect(ctx.puts.length).toBeGreaterThan(0));
   };
 
@@ -151,8 +152,8 @@ describe("the founder can set the village's own currency", () => {
     await open("USD");
     expect(field().value).toBe("USD");
     await user.selectOptions(field(), "CRC");
-    // The pick lands only on Save identity, so the screen says so until then.
-    expect(screen.getByText(/Not saved yet\. Press Save identity below to keep Costa Rican Col[oó]n \(CRC\)/)).toBeTruthy();
+    // The pick lands only on Save, so the screen says so until then.
+    expect(screen.getByText(/Not saved yet\. Press Save to keep Costa Rican Col[oó]n \(CRC\)/)).toBeTruthy();
     await save(user);
     await waitFor(() => expect(screen.queryByText(/Not saved yet/)).toBeNull());
 

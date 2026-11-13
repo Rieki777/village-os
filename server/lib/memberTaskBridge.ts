@@ -31,6 +31,7 @@ import {
   libraryCode, reviewOf, stripContact, type FeedbackAction, type FeedbackInput,
 } from "../../shared/memberTaskFeedback";
 import { itemsOf, planImport } from "../../shared/memberTaskImport";
+import { approvalRecordDocument, readApprovalRecordPayload } from "../../shared/agentApprovalRecord";
 import { heldFromLibrary, runImport } from "../repos/memberTaskImport";
 import type { MemberTaskRow } from "../repos/memberTasks";
 import {
@@ -158,6 +159,14 @@ export function planSend(tools: Map<string, ToolInfo>, row: Pick<OutboxRow, "kin
     if (!tool) return { tool: null, drop: true, error: "no suppress tool offered; the feedback carries the removal and our tombstone holds" };
     args = { task_id: p.task_id, owner_id: p.owner_id };
     minimal = { task_id: p.task_id };
+  } else if (row.kind === "decision_record") {
+    // A lead-approved connector write (server/lib/agentLeadApproval.ts), kept whole as one Governance record.
+    const record = readApprovalRecordPayload(p);
+    if (!record) return { tool: null, drop: true, error: "not an approval record" };
+    const doc = approvalRecordDocument(record);
+    tool = "save_document";
+    args = doc.args;
+    minimal = doc.minimal;
   } else if (row.kind === "forget_person") {
     tool = tools.has("delete_feedback_for_person") ? "delete_feedback_for_person" : "delete_owner_feedback";
     args = p;

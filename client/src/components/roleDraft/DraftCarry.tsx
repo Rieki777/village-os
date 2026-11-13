@@ -18,6 +18,8 @@ import { readStoredJson, removeStored } from "@/lib/safeStorage";
 import { IKIGAI_KEY, hasIkigai, ikigaiFromStored } from "@shared/roleDiscover";
 import { ROLE_DRAFT_KEY, applyHrefFor, draftFromStored } from "@shared/roleDraft";
 import { readsTerms } from "@/components/characters/RolesThatFit";
+import { BTN_PRIMARY } from "@/components/journey/look";
+
 
 export default function DraftCarry({
   cast,
@@ -135,8 +137,8 @@ export default function DraftCarry({
       {hasAnswers && (
         <p className="mt-3 text-sm">
           {ikigai.carry
-            ? t`Your R-Ikigai answers are saved in this browser, and the open form copies them into Why you.`
-            : t`Your R-Ikigai answers are saved in this browser. Nothing has been sent.`}
+            ? t`Your Ikigai answers are saved in this browser, and the open form copies them into Why you.`
+            : t`Your Ikigai answers are saved in this browser. Nothing has been sent.`}
         </p>
       )}
       {adoptedNames && <p className="mt-3 text-sm font-semibold">{t`Adopted, and yours from the start of next season: ${adoptedNames}.`}</p>}
@@ -146,7 +148,7 @@ export default function DraftCarry({
           <p className="text-sm">
             {named.length ? t`The roles you selected: ${roleList}.` : t`You selected roles before you joined.`}
           </p>
-          <Link href={propose} className="mt-2 inline-flex min-h-11 items-center rounded-full bg-primary px-4 text-sm font-bold text-primary-foreground hover:bg-teal-deep-dark focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+          <Link href={propose} className={`mt-2 ${BTN_PRIMARY}`}>
             {member ? t`Apply for the roles you selected` : t`Apply with your selection`}
           </Link>
         </div>

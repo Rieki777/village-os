@@ -15,6 +15,7 @@
  * `returnFocusTo`, since the card may leave the screen. A refusal is said
  * inline in the server's words; what landed is read out in the room's toast.
  */
+import CirclePicker from "@/components/circles/CirclePicker";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { toast } from "sonner";
 import { TENSION_SEND_COPY } from "@shared/sessionLibrary";
@@ -93,14 +94,7 @@ export default function SendTension({ view, actions, entry, sessionId, returnFoc
         <label htmlFor={`${idBase}-circle`} className={LABEL}>
           {TENSION_SEND_COPY.circleLabel}
         </label>
-        <select id={`${idBase}-circle`} autoFocus className={`mt-1 ${INPUT}`} value={circleId} onChange={(e) => setCircleId(e.target.value)}>
-          {options.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-          <option value="">{TENSION_SEND_COPY.noCircle}</option>
-        </select>
+        <CirclePicker id={`${idBase}-circle`} className={`mt-1 ${INPUT}`} circles={options} value={circleId} onChange={setCircleId} extra={<option value="">{TENSION_SEND_COPY.noCircle}</option>} />
       </div>
       <p className={HINT}>{circleId ? TENSION_SEND_COPY.warning : TENSION_SEND_COPY.warningNoCircle}</p>
       {error && (

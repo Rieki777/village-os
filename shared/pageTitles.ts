@@ -38,8 +38,10 @@ export const PAGE_TITLES: Readonly<Record<string, string>> = {
   "/propose-quest": "Propose a quest",
   "/pricing": "Pricing desk",
   "/roles": "Roles",
-  "/roles/select": "Select your roles",
-  "/roles/draft": "Select your roles",
+  "/roles/select": "Find your roles",
+  "/roles/draft": "Find your roles",
+  "/join": "Roles",
+  "/apply": "Roles",
   "/forum": "Forum",
   "/messages": "Messages",
   "/introductions": "Introductions",
@@ -69,6 +71,7 @@ export const PAGE_TITLES: Readonly<Record<string, string>> = {
   "/tokens": "The Exchange",
   "/wallet": "The Exchange",
   "/profile": "My profile",
+  "/path": "Your path",
   "/login": "Sign in",
   "/set-password": "Choose a password",
   "/verify-email": "Confirm your address",
@@ -119,12 +122,14 @@ export const PAGE_TITLES: Readonly<Record<string, string>> = {
   "/email": "Your email",
   "/village-email": "How the village emails",
   "/training": "Training",
+  "/training/steward": "Steward training",
+  "/training/resident": "Resident training",
   "/governance": "Governance",
   "/decisions": "Decisions",
   "/propose": "Start a proposal",
   "/role-applications": "Role proposal",
   "/open-proposals": "A proposed role", // somebody with no account proposed it (0305)
-  "/role-measures": "How roles are going", // members only, counts and medians from stamped times
+  "/role-measures": "How roles are going", // admins only, counts and medians from stamped times
   "/application-status": "Where your proposal is", // the applicant's own page, by the emailed link (role journey L5)
   "/seat-applications": "Role proposal",
   "/season-plans": "The village's season",

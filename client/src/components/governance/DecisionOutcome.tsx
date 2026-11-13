@@ -48,44 +48,44 @@ const OUTCOME: Record<
   open: {
     word: "Still open",
     icon: MinusCircle,
-    frame: "border-stone-300 bg-stone-50",
-    chip: "bg-stone-600 text-white",
+    frame: "border-border bg-muted",
+    chip: "bg-muted-foreground text-background",
     law: false,
   },
   passed: {
     word: "Carried",
     icon: CheckCircle2,
-    frame: "border-sage bg-sage-light",
-    chip: "bg-sage text-white",
+    frame: "border-open bg-open/10",
+    chip: "bg-open text-background",
     law: true,
   },
   failed: {
     word: "Did not carry",
     icon: CircleSlash,
-    frame: "border-stone-300 bg-stone-50",
-    chip: "bg-stone-600 text-white",
+    frame: "border-border bg-muted",
+    chip: "bg-muted-foreground text-background",
     law: false,
   },
   no_quorum: {
     word: "Too few spoke",
     icon: MinusCircle,
-    frame: "border-stone-300 bg-stone-50",
-    chip: "bg-stone-600 text-white",
+    frame: "border-border bg-muted",
+    chip: "bg-muted-foreground text-background",
     law: false,
   },
   // 0334: never an outcome. The question is open again on a linked re-run.
   no_quorum_rerun: {
     word: "Open again, half the quorum",
     icon: MinusCircle,
-    frame: "border-stone-300 bg-stone-50",
-    chip: "bg-stone-600 text-white",
+    frame: "border-border bg-muted",
+    chip: "bg-muted-foreground text-background",
     law: false,
   },
   withdrawn: {
     word: "Withdrawn",
     icon: CircleSlash,
-    frame: "border-stone-300 bg-stone-50",
-    chip: "bg-stone-600 text-white",
+    frame: "border-border bg-muted",
+    chip: "bg-muted-foreground text-background",
     law: false,
   },
 };
@@ -104,8 +104,8 @@ const OUTCOME: Record<
 const UNKNOWN_OUTCOME = {
   word: "Closed",
   icon: MinusCircle,
-  frame: "border-stone-300 bg-stone-50",
-  chip: "bg-stone-600 text-white",
+  frame: "border-border bg-muted",
+  chip: "bg-muted-foreground text-background",
   law: false,
 };
 
@@ -184,31 +184,31 @@ export default function DecisionOutcome({
         {counting && landing?.landsAt && <LandingClock landsAt={landing.landsAt} sentence={landing.countdownSentence} />}
 
         {ballot.status === "passed" && landing?.notYetInEffect && (
-          <p className="mt-3 text-sm font-semibold text-stone-800">{landing.notYetInEffect}</p>
+          <p className="mt-3 text-sm font-semibold text-foreground">{landing.notYetInEffect}</p>
         )}
 
         {/* The human sentence, at the size the sentence deserves. */}
         {ballot.outcomeNote ? (
-          <p className="mt-3 font-display text-xl font-bold leading-snug text-stone-900 sm:text-2xl">
+          <p className="mt-3 font-display text-xl font-bold leading-snug text-foreground sm:text-2xl">
             {ballot.outcomeNote}
           </p>
         ) : (
-          <p className="mt-3 text-lg text-stone-700">This closed without a sentence on it.</p>
+          <p className="mt-3 text-lg text-muted-foreground">This closed without a sentence on it.</p>
         )}
 
         {/* 0334: the two ballots of a quorum re-run point at each other. */}
         {ballot.status === "no_quorum_rerun" && ballot.rerunId && (
-          <p className="mt-3 text-sm font-semibold text-stone-800">
-            <Link href={`/decisions/${ballot.rerunId}`} className="text-teal-deep hover:underline">
+          <p className="mt-3 text-sm font-semibold text-foreground">
+            <Link href={`/decisions/${ballot.rerunId}`} className="text-notice hover:underline">
               <Trans>Vote on it again here</Trans>
             </Link>
           </p>
         )}
         {ballot.rerunOf && (
-          <p className="mt-3 text-sm text-stone-700">
+          <p className="mt-3 text-sm text-muted-foreground">
             <Trans>
               This asks again after{" "}
-              <Link href={`/decisions/${ballot.rerunOf}`} className="text-teal-deep hover:underline">
+              <Link href={`/decisions/${ballot.rerunOf}`} className="text-notice hover:underline">
                 a vote too few of us answered
               </Link>
               .
@@ -216,56 +216,56 @@ export default function DecisionOutcome({
           </p>
         )}
 
-        <p className="mt-2 text-sm text-stone-700">
+        <p className="mt-2 text-sm text-muted-foreground">
           {ballot.closedBy ? <>Closed by {ballot.closedBy}</> : <>Closed</>}
           {closedOn ? ` on ${closedOn}` : ""}
           {o.law ? ", and it stands until the village decides otherwise." : "."}
         </p>
 
         {/* The numbers, once they have done their job. */}
-        <dl className="mt-4 flex flex-wrap gap-x-6 gap-y-2 border-t border-stone-900/10 pt-3 text-sm">
+        <dl className="mt-4 flex flex-wrap gap-x-6 gap-y-2 border-t border-border pt-3 text-sm">
           <div>
-            <dt className="text-xs text-stone-600">Yes</dt>
-            <dd className="font-semibold tabular-nums text-stone-900">{weightText(ballot.tallies.yesW)}</dd>
+            <dt className="text-xs text-muted-foreground">Yes</dt>
+            <dd className="font-semibold tabular-nums text-foreground">{weightText(ballot.tallies.yesW)}</dd>
           </div>
           <div>
-            <dt className="text-xs text-stone-600">No</dt>
-            <dd className="font-semibold tabular-nums text-stone-900">{weightText(ballot.tallies.noW)}</dd>
+            <dt className="text-xs text-muted-foreground">No</dt>
+            <dd className="font-semibold tabular-nums text-foreground">{weightText(ballot.tallies.noW)}</dd>
           </div>
           <div>
-            <dt className="text-xs text-stone-600">Abstain</dt>
-            <dd className="font-semibold tabular-nums text-stone-900">{weightText(ballot.tallies.abstainW)}</dd>
+            <dt className="text-xs text-muted-foreground">Abstain</dt>
+            <dd className="font-semibold tabular-nums text-foreground">{weightText(ballot.tallies.abstainW)}</dd>
           </div>
           <div>
-            <dt className="text-xs text-stone-600">Agreement</dt>
-            <dd className="font-semibold tabular-nums text-stone-900">
-              {pctText(ballot.unity)} <span className="font-normal text-stone-600">of {pctText(ballot.unityPct)}</span>
+            <dt className="text-xs text-muted-foreground">Agreement</dt>
+            <dd className="font-semibold tabular-nums text-foreground">
+              {pctText(ballot.unity)} <span className="font-normal text-muted-foreground">of {pctText(ballot.unityPct)}</span>
             </dd>
           </div>
           <div>
-            <dt className="text-xs text-stone-600">Participation</dt>
-            <dd className="font-semibold tabular-nums text-stone-900">
-              {pctText(ballot.quorum)} <span className="font-normal text-stone-600">of {pctText(ballot.quorumPct)}</span>
+            <dt className="text-xs text-muted-foreground">Participation</dt>
+            <dd className="font-semibold tabular-nums text-foreground">
+              {pctText(ballot.quorum)} <span className="font-normal text-muted-foreground">of {pctText(ballot.quorumPct)}</span>
             </dd>
           </div>
         </dl>
 
         {/* What changed in the world. */}
         {(applied?.length || held) && (
-          <div className="mt-4 border-t border-stone-900/10 pt-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-stone-600">What changed</p>
+          <div className="mt-4 border-t border-border pt-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">What changed</p>
             {applied && applied.length > 0 && (
               <ul className="mt-1.5 space-y-1">
                 {applied.map((key) => (
-                  <li key={key} className="text-sm text-stone-800">
-                    <code className="rounded bg-stone-900/5 px-1.5 py-0.5 text-xs">{key}</code> now holds the value the
+                  <li key={key} className="text-sm text-foreground">
+                    <code className="rounded bg-muted px-1.5 py-0.5 text-xs">{key}</code> now holds the value the
                     village voted for.
                   </li>
                 ))}
               </ul>
             )}
             {held && (
-              <p className="mt-1.5 text-sm text-stone-800">
+              <p className="mt-1.5 text-sm text-foreground">
                 Nothing has moved yet: {held}. The change is recorded and waiting.
               </p>
             )}

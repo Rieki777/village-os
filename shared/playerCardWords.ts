@@ -47,7 +47,7 @@ export const CARD_WORDS = {
   portraitAlt: (name: string) => `${name}'s character portrait`,
 
   // Doors
-  applyDoor: "Propose for a role",
+  applyDoor: "Apply for a role",
   planDoor: "Plan my season",
 
   // Tiles
@@ -113,7 +113,7 @@ export const CARD_WORDS = {
   signsStretched: "Signs I'm stretched",
   flowsBack: "What flows back",
   stepBack: "How I can step back",
-  timeCommitment: "Time",
+  timeCommitment: "Commitment",
   // The circle card's own sentence, so the two cards say it once.
   termsKey: CIRCLE_CARD_WORDS.termsKey,
   working: "How we'll know it's working",

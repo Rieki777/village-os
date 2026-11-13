@@ -8,7 +8,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { buildPlayerCard, type ApplicationIn, type PlayerCardInput, type PlayerRoleIn } from "./playerCard";
-import { countWord, moonNameOf, personTime, spanWords } from "./playerCardHero";
+import { countWord, moonNameOf, personTime, roleCommitmentPct, spanWords } from "./playerCardHero";
 
 const TZ = "America/Costa_Rica";
 
@@ -56,7 +56,7 @@ function input(over: Partial<PlayerCardInput> = {}): PlayerCardInput {
     owner: { userId: "u-owner", displayName: "Lena Ortiz", avatar: "/api/uploads/portrait-1.webp" },
     viewerUserId: "u-owner",
     villageName: "Riverbend",
-    season: { id: "s2", name: "Season of Foundations", startsOn: "2026-10-01", endsOn: "2027-01-01" }, // endsOn is the next season's first day
+    season: { id: "s2", name: "Season of Foundations", startsOn: "2026-10-01", endsOn: "2026-12-31" }, // endsOn is a civil day, shown as written
     nextSeasonId: null,
     archetypeNames: {},
     roles: [1, 2, 3].map((n) => role(n, { timeCommitment: "Part of a full-time season" })),
@@ -105,7 +105,7 @@ describe("the hero", () => {
     const next = { id: "s3", name: "Second Season", startsOn: "2027-01-01", endsOn: "2027-03-21" };
     const card = buildPlayerCard(input({ mode: "proposal", proposalSeason: next }));
     expect(card.header.eyebrow).toBe("Riverbend · Second Season");
-    expect(card.header.span).toBe("1 January to 20 March 2027");
+    expect(card.header.span).toBe("1 January to 21 March 2027");
     expect(card.header.moon).toMatchObject({ words: "Second Season", day: null, of: null, over: null });
     // My moon cycle runs over that season.
     expect(card.timeline.moons[0].startsAt.slice(0, 10)).toBe("2027-01-01");
@@ -153,6 +153,38 @@ describe("the hero", () => {
     expect(personTime([r("Mornings"), r("Mornings")])).toBe("Mornings");
     expect(personTime([r("Mornings"), r(null)])).toBeNull();
     expect(personTime([r(null)])).toBeNull();
+    // Audit M2: a commitment is shown as it was chosen and never turned into hours.
+    expect(personTime([r("Commitment: 60%")])).toBe("Commitment: 60%");
+    expect(personTime([r("Commitment: 100%")])).toBe("Commitment: 100%");
+    expect(personTime([r("Commitment: 60%"), r("Commitment: 40%")])).toBeNull();
+    const stated = { ...r("Roughly 40 hours a week"), cardSeat: { commitmentPct: 60 } };
+    expect(personTime([stated])).toBe("Commitment: 60%");
+  });
+
+  it("reads the agreed commitment first, and the card's own card.commitmentPct, before any legacy time line (verify B3)", () => {
+    // The new holder chose 100% on her application; the role still carries "Roughly 40 hours a week".
+    const legacy = role(1, { timeCommitment: "Roughly 40 hours a week" });
+    expect(personTime([{ ...legacy, settings: { clocks: { commitmentPct: 100 } } }])).toBe("Commitment: 100%");
+    // /api/org sends the card's commitment inside `card`, which is how the server hands it over.
+    expect(personTime([{ ...legacy, cardSeat: { timeCommitment: "Roughly 40 hours a week", card: { commitmentPct: 60 } } }])).toBe("Commitment: 60%");
+    // Agreed terms beat the card's offer.
+    expect(personTime([{ ...legacy, cardSeat: { card: { commitmentPct: 60 } }, settings: { clocks: { commitmentPct: 100 } } }])).toBe("Commitment: 100%");
+    expect(roleCommitmentPct({ settings: { clocks: {} }, cardSeat: null })).toBeNull();
+    expect(personTime([legacy])).toBe("Full-time");
+  });
+
+  it("draws the agreed commitment in the parameters block and on the tagline of a proposal card (verify B3)", () => {
+    const roles = [
+      role(1, {
+        timeCommitment: "Roughly 40 hours a week",
+        cardSeat: { timeCommitment: "Roughly 40 hours a week", card: {} },
+        settings: { v: 1, clocks: { commitmentPct: 100 } },
+      }),
+    ];
+    const card = buildPlayerCard(input({ roles, mode: "proposal" }));
+    expect(card.header.tagline).toContain("Commitment: 100%");
+    expect(card.header.tagline).not.toMatch(/Full-time|hours/);
+    expect((card.roles[0].cardSeat?.card as Record<string, unknown>).commitmentPct).toBe(100);
   });
 
   it("writes the span's year once when both ends share it", () => {
@@ -216,9 +248,21 @@ describe("the role tiles", () => {
 });
 
 describe("the season's end", () => {
-  it("is the day before `endsOn`, because a season runs while today is before it", () => {
+  it("counts its `endsOn` day too, as the role chart header does", () => {
     const h = buildPlayerCard(input({ season: { id: "s2", name: "Autumn", startsOn: "2026-09-22", endsOn: "2026-12-21" } })).header;
-    expect(h.span).toBe("22 September to 20 December 2026");
-    expect(h.moon.words).toBe("October Moon · Day 31 of 90");
+    expect(h.span).toBe("22 September to 21 December 2026");
+    expect(h.moon.words).toBe("October Moon · Day 31 of 91");
   });
+});
+
+describe("a civil end date has no zone shift (audit M12)", () => {
+  // Zones west of UTC are where a civil day slips: midnight there is the evening before in UTC.
+  for (const zone of ["America/Los_Angeles", "America/Costa_Rica", "Pacific/Honolulu", "Asia/Tokyo", "UTC"]) {
+    it(`shows the season's end as written in ${zone}`, () => {
+      const h = buildPlayerCard(input({ timeZone: zone, season: { id: "s2", name: "Foundations", startsOn: "2026-06-21", endsOn: "2026-12-31" } })).header;
+      expect(h.span).toBe("21 June to 31 December 2026");
+      const q1 = buildPlayerCard(input({ timeZone: zone, mode: "proposal", proposalSeason: { id: "s3", name: "Next", startsOn: "2027-01-01", endsOn: "2027-03-31" } })).header;
+      expect(q1.span).toBe("1 January to 31 March 2027");
+    });
+  }
 });

@@ -98,6 +98,9 @@ vi.mock("@/contexts/AuthContext", async () => {
 
 import Governance from "./Governance";
 import { readConflictSteps, WRITE_STEPS_HREF } from "@/components/governance/VillageConflictSteps";
+import { CONFLICT_INTRO_DEFAULT, CONFLICT_INTRO_KEY, conflictIntroOf } from "@shared/conflictIntro";
+import { VARIABLES_BY_KEY } from "@shared/gameVariables";
+import { variableNever } from "@shared/proposedChanges";
 import { CANVAS_BLOCK_IDS } from "@shared/governanceCanvas";
 import { CANVAS_BLOCK_TEXT, CANVAS_CREDIT } from "@shared/governanceCanvasText";
 import { CANVAS_PUBLIC_MATRIX_PATH, CANVAS_PUBLIC_PATH } from "@shared/canvasPublicLines";
@@ -421,11 +424,12 @@ function answerWith(body: unknown, ok = true, agreement: unknown = { stored: fal
 const fetched = (key: string) =>
   fetchMock.mock.calls.some(([url, init]) => `${(init as RequestInit | undefined)?.method ?? "GET"} ${url}` === key);
 
-function policy(steps: string[], opts: { placeholder?: boolean; platformWording?: unknown } = {}) {
+function policy(steps: string[], opts: { placeholder?: boolean; platformWording?: unknown; conflictIntro?: unknown } = {}) {
   return {
     policy: { placeholder: opts.placeholder ?? false, restorative: { intakeContactRole: "", steps } },
     configured: true,
     platformWording: opts.platformWording ?? [],
+    ...("conflictIntro" in opts ? { conflictIntro: opts.conflictIntro } : {}),
   };
 }
 
@@ -462,7 +466,7 @@ describe("the Governance page's conflict section", () => {
     const list = first.closest("ol");
     expect(list).not.toBeNull();
     expect(Array.from(list!.querySelectorAll("li")).map((li) => li.textContent)).toEqual(VILLAGE_STEPS);
-    expect(screen.getByText(/these are the steps this village wrote for it/)).toBeTruthy();
+    expect(screen.getByText("When tension between people needs repair, these are the steps we follow:")).toBeTruthy();
     expect(screen.getByRole("link", { name: /Read the village's exit policy/ }).getAttribute("href")).toBe("/exit-policy");
     expect(fetchMock).toHaveBeenCalledWith("/api/exit-policy");
     // Adopted terms carry no draft note.
@@ -512,18 +516,63 @@ describe("the Governance page's conflict section", () => {
   });
 });
 
+describe("how the village sees conflict, said before its steps (lead, 12 Nov)", () => {
+  const intro = () => document.querySelector("[data-conflict-intro]");
+
+  it("is a village setting an admin edits and a member may propose, holding the lead's words by default", () => {
+    const def = VARIABLES_BY_KEY[CONFLICT_INTRO_KEY];
+    expect(def?.default).toBe(CONFLICT_INTRO_DEFAULT);
+    expect(def?.label).toBeTruthy();
+    expect(def?.description).toMatch(/Empty/);
+    expect(variableNever(def)).toBeNull();
+  });
+
+  it("says the default first, then the line that leads into the steps", async () => {
+    answerWith(policy(VILLAGE_STEPS, { conflictIntro: CONFLICT_INTRO_DEFAULT }));
+    renderPage();
+    const lead = await screen.findByText("When tension between people needs repair, these are the steps we follow:");
+    expect(intro()?.textContent).toBe(CONFLICT_INTRO_DEFAULT);
+    expect(intro()!.compareDocumentPosition(lead) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("prints the village's own words as written, also above the line saying it has not written its steps", async () => {
+    answerWith(policy(PLATFORM_STEPS, { platformWording: ["restorativeSteps"], conflictIntro: "We meet conflict at the fire." }));
+    renderPage();
+    expect(await screen.findByText("This village has not written its conflict steps yet.")).toBeTruthy();
+    expect(intro()?.textContent).toBe("We meet conflict at the fire.");
+  });
+
+  it("draws no intro when the village emptied the setting (CONTROL: the same answer with words draws one)", async () => {
+    answerWith(policy(VILLAGE_STEPS, { conflictIntro: "" }));
+    const { unmount } = renderPage();
+    await screen.findByText(VILLAGE_STEPS[0]);
+    expect(intro()).toBeNull();
+    unmount();
+    answerWith(policy(VILLAGE_STEPS, { conflictIntro: "Words." }));
+    renderPage();
+    await waitFor(() => expect(intro()?.textContent).toBe("Words."));
+  });
+
+  it("reads the answer safely", () => {
+    expect(conflictIntroOf(undefined)).toBe("");
+    expect(conflictIntroOf(7)).toBe("");
+    expect(conflictIntroOf("  a \n b ")).toBe("a b");
+    expect(readConflictSteps(policy(VILLAGE_STEPS, { conflictIntro: "Hi." }))).toMatchObject({ state: "written", intro: "Hi." });
+  });
+});
+
 describe("readConflictSteps, the rule under the section", () => {
   it("treats an answer with no platformWording list as unwritten, so unvouched words are never the village's", () => {
-    expect(readConflictSteps({ policy: { restorative: { steps: VILLAGE_STEPS } } })).toEqual({ state: "unwritten" });
+    expect(readConflictSteps({ policy: { restorative: { steps: VILLAGE_STEPS } } })).toEqual({ state: "unwritten", intro: "" });
   });
 
   it("treats an empty or blank step list as unwritten", () => {
-    expect(readConflictSteps(policy([]))).toEqual({ state: "unwritten" });
-    expect(readConflictSteps(policy(["  ", ""]))).toEqual({ state: "unwritten" });
+    expect(readConflictSteps(policy([]))).toEqual({ state: "unwritten", intro: "" });
+    expect(readConflictSteps(policy(["  ", ""]))).toEqual({ state: "unwritten", intro: "" });
   });
 
   it("keeps the village's words and drops blank lines", () => {
-    expect(readConflictSteps(policy(["One", " ", "Two"]))).toEqual({ state: "written", steps: ["One", "Two"], draft: false });
+    expect(readConflictSteps(policy(["One", " ", "Two"]))).toEqual({ state: "written", steps: ["One", "Two"], draft: false, intro: "" });
   });
 });
 

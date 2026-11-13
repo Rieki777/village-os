@@ -81,12 +81,12 @@ export default function RegisterEntry({ row, headingLevel = 3 }: { row: Register
         <summary className="inline-flex min-h-11 cursor-pointer items-center rounded-lg px-1 text-sm font-semibold text-foreground underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-ring">
           {ALIGNED_WORDS.readWords}
         </summary>
-        <pre
+        <div
           data-alignment-words=""
-          className="mt-2 max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-xl border border-border/60 bg-background p-4 font-sans text-sm leading-relaxed text-foreground"
+          className="mt-2 max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-xl border border-border/60 bg-background p-4 text-sm leading-relaxed text-foreground"
         >
           {row.body}
-        </pre>
+        </div>
       </details>
       {row.href && (
         <Link href={row.href} className={linkClass}>

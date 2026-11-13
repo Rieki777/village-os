@@ -8,7 +8,7 @@ import {
   rankForCharacters,
   type DraftRole,
 } from "./roleDraft";
-import { boardRoles, characterArt, fitCountFor, roleArtFor, unlistedValue } from "./roleDraft";
+import { boardRoles, characterArt, fitCountFor, roleArtFor, unlistedValue, withoutFounding } from "./roleDraft";
 import { OPEN_PROPOSAL_MAX_ROLES } from "./openProposals";
 
 const ORG = {
@@ -159,10 +159,44 @@ describe("the counts come from the listed roles the board offers (Rye, 9 Nov: 46
 
 describe("art", () => {
   it("a character's art is the stock file, a role's falls back to its first character, an upload stays on this host", () => {
-    expect(characterArt("building")).toBe("/images/avatars/building-f-olive.webp");
+    expect(characterArt("building")).toBe("/images/avatars/building-f-deep.webp");
     const [lfs] = openRolesFrom(ORG);
     expect(roleArtFor(lfs)).toBe("/images/avatars/researching-f-olive.webp");
+    // A village's own sixth root has no cast look and wears the default.
+    expect(characterArt("gardening")).toBe("/images/avatars/gardening-f-olive.webp");
     expect(roleArtFor({ archetypes: [], raw: { imageUrl: "/uploads/x.webp" } })).toBe("/uploads/x.webp");
     expect(roleArtFor({ archetypes: [], raw: { imageUrl: "https://elsewhere.example/x.png" } })).toBeNull();
+  });
+});
+
+describe("an archetype carried from /roles", () => {
+  it("reads only a plain key from the address", async () => {
+    const { archetypeFromSearch } = await import("./roleDraft");
+    expect(archetypeFromSearch("?archetype=building")).toBe("building");
+    expect(archetypeFromSearch("?archetype=<script>")).toBeNull();
+    expect(archetypeFromSearch("")).toBeNull();
+  });
+
+  it("adds it to the draft once, keeps the picks, and never doubles it", async () => {
+    const { draftWithArchetype } = await import("./roleDraft");
+    const d = { chars: ["catalyzing"], picks: ["garden"] };
+    expect(draftWithArchetype(d, "building")).toEqual({ chars: ["catalyzing", "building"], picks: ["garden"] });
+    expect(draftWithArchetype(d, "catalyzing")).toBe(d);
+    expect(draftWithArchetype(d, null)).toBe(d);
+  });
+});
+
+describe("QA2-01: the board while the founding team is featured", () => {
+  it("leaves the founding team's roles off the board, and keeps every other open role", () => {
+    const all = openRolesFrom(ORG);
+    expect(all.some((r) => r.id === "lfs")).toBe(true);
+    const board = withoutFounding(all, ["lfs"]);
+    expect(board.map((r) => r.id)).not.toContain("lfs");
+    expect(board.map((r) => r.id)).toEqual(all.map((r) => r.id).filter((id) => id !== "lfs"));
+  });
+
+  it("keeps the whole board while the founding team is off", () => {
+    const all = openRolesFrom(ORG);
+    expect(withoutFounding(all, [])).toEqual(all);
   });
 });

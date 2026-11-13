@@ -67,6 +67,9 @@ import {
   ipBucket,
   limiterAddressKey,
   safeGreeting,
+  APPLY_EMAIL_WORDS,
+  stepsAfterSubmit,
+  stepsAsLines,
 } from "../../shared/openProposals";
 import type { AppDeps } from "../lib/appDeps";
 import { post } from "../lib/comms/postOffice";
@@ -74,25 +77,34 @@ import { effectiveLifecycle } from "../lib/modules";
 import { listOrgRoles } from "../lib/orgChart";
 import { singlePublicAddress } from "../lib/publicAddress";
 import { registerJob } from "../lib/scheduler";
+import { clearAboutYouDecidedBefore } from "../repos/seatApplications";
 import { accountFor, arrivalFor, confirmAndAsk, describeFor, tellTheCircle } from "../lib/openProposalDecide";
 import { whenInviteDescribed, whenInvitedArrives } from "../lib/inviteDoor";
 import { alignAtApplication, carryToAccount, type SigningDoor } from "../lib/applicationMembership";
 import { currentLetter } from "../lib/membershipLetter";
 import { LETTER_WORDS, type LetterSource } from "../../shared/membershipLetter";
 import { inApplicationTransaction } from "../repos/seatApplications";
-import { OPEN_INVITE_PREFIX, openInviteId } from "../../shared/openProposalDecide";
+import { OPEN_INVITE_PREFIX, openInviteId, replyPromise } from "../../shared/openProposalDecide";
 import { inviteById } from "../repos/memberInvites";
 import { dbDocument } from "../repos/store-db";
 import { registerOpenProposalDecide, type DecideRouteDeps } from "./openProposalDecide";
+import { registerAgentProposals } from "./agentRoleProposals";
 import { registerApplicationReview } from "./applicationReview";
 import { clearReviewOf, refsDueForClearing } from "../repos/applicationReview";
-import { boolVar } from "../lib/variables";
+import { boolVar, numberVar, rawValue } from "../lib/variables";
+import { foundingSetupFrom, type FoundingSetup } from "../../shared/foundingApplication";
+import { VARIABLES_BY_KEY } from "../../shared/gameVariables";
+import { languageForNewProposal, languageOf } from "../lib/applicantLanguage";
+import { wordsIn } from "../../shared/applicantWords";
+import { makeApplicantTeller } from "../lib/applicantUpdates";
 import * as store from "../repos/openProposals";
 import { villageCircles } from "../repos/roleProposals";
 import { activeClock } from "../lib/gratitude-cycles";
-import { isTermMode, moonTermFor, moonTermWords, type OpenProposalTerm, type OpenProposalTermMode } from "../../shared/openProposalTerm";
+import { isTermMode, moonTermFor, type OpenProposalTerm, type OpenProposalTermMode } from "../../shared/openProposalTerm";
 import { isListed } from "../../shared/roleListing";
 import { gateOf } from "../lib/roleCardProjection";
+import { publicTermsOf } from "../../shared/seatTermsOffer";
+import { writtenKeys } from "../../shared/termsWords";
 import { ATTACHMENT_WORDS, PROPOSAL_FILES_MAX, PROPOSAL_FILE_MAX_BYTES } from "../../shared/proposalAttachments";
 import { checkProposalFiles, removeProposalFiles, sweepProposalFiles, writeProposalFiles, type UploadedFile } from "../lib/proposalFiles";
 
@@ -118,6 +130,8 @@ type Deps = Pick<
   boolVar?: (key: string) => boolean;
   /** A text setting: the village's default track (`org.default_track`) for the card gate. */
   stringVar?: (key: string) => string;
+  /** The application's village words. Absent: read from the village settings (shared/foundingApplication.ts). */
+  founding?: () => FoundingSetup;
 };
 
 /** The admin's switch for the public link (sheet 19i: on unless switched off). */
@@ -139,6 +153,11 @@ const newToken = (): string => crypto.randomBytes(24).toString("base64url");
 /** The greeting's name: a stranger typed it, so only a plain name is repeated (shared/openProposals.ts, safeGreeting). */
 const firstNameOf = (name: string): string | null => safeGreeting(name);
 
+/** Every try from one connection, refused or accepted, per hour. A flood stopper, far above what an honest session needs. */
+const OPEN_TRIES_HOURLY = 60;
+/** Posts that carry files, per connection per hour, refused or accepted. */
+const OPEN_UPLOAD_TRIES_HOURLY = 30;
+
 export function register(app: Express, deps: Deps): void {
   const { getPool, overLimit, clientIp, guardCapability, authedUser, deploymentOrigin, projectName, escapeHtml } = deps;
   const postEmail = deps.postEmail ?? ((email: OutgoingEmail) => post(deps.commsPostOffice, email));
@@ -157,9 +176,12 @@ export function register(app: Express, deps: Deps): void {
     calendar: deps.seatCalendar,
     lapse: deps.lapse,
     now,
+    projectName,
     /** The village setting `org.consent_after_interviews` (role journey L5), off unless the village turned it on. */
     consentAfterInterviews: () => boolVar("org.consent_after_interviews"),
   };
+
+  const tellApplicant = makeApplicantTeller({ getPool, members: deps.members, notify: deps.notify, postEmail, projectName, siteUrl: site });
 
   /** The switch, read fresh: one small row, and an admin who just flipped it sees it at once. */
   async function settings(): Promise<OpenProposalSettings> {
@@ -196,6 +218,14 @@ export function register(app: Express, deps: Deps): void {
     };
   }
 
+  /**
+   * The application's village words (shared/foundingApplication.ts): the ways
+   * to get to know us, the pay shape the role cards show, the first cycle.
+   * Read fresh on every request, so a change in Admin shows at once. A setting
+   * the registry does not know yet (the pay shape is lane A3's) reads as empty.
+   */
+  const founding = (): FoundingSetup => (deps.founding ? deps.founding() : foundingSetupFrom((key) => (VARIABLES_BY_KEY[key] ? rawValue(key) : "")));
+
   /** Next season by the village's calendar: the first that starts after today, or null. */
   function nextSeason() {
     const state = deps.seasonState();
@@ -227,6 +257,10 @@ export function register(app: Express, deps: Deps): void {
         accountabilities: Array.isArray(r.accountabilities) ? r.accountabilities.map((a: unknown) => String(a ?? "").trim()).filter(Boolean) : [],
         whyItMatters: r.whyItMatters ?? null,
         timeCommitment: (r as any).timeCommitment ?? null,
+        // The role's suggested wording for the eight settings and the commitment it asks (joining lane PR 3). Words only: no other term leaves here.
+        terms: publicTermsOf(r.termsOffer),
+        // A role always background-checked (0370): the form says a check happens whatever the references say.
+        alwaysChecked: r.alwaysChecked === true,
         // The conversations in the role's order, as its public card shows them (role journey L5), so the
         // form and the board can say what happens next (role audit, 10 Nov 2026). The booking link is
         // not here: it is offered once the address is confirmed (L6).
@@ -264,6 +298,7 @@ export function register(app: Express, deps: Deps): void {
       goals: t?.goals ?? [],
       ...(t ? {} : { message: mode === "moon" ? OPEN_WORDS.noCurrentSeason : OPEN_WORDS.noSeason }),
       roles: t ? await offered() : [],
+      founding: founding(),
     });
   });
 
@@ -282,7 +317,8 @@ export function register(app: Express, deps: Deps): void {
   app.post("/api/open-proposals", async (req, res) => {
     if (!req.is("multipart/form-data")) return intake(req, res, req.body ?? {}, []);
     // Before any file is read: the per-connection cap on posts that carry files.
-    if (await overLimit(`open-proposal:upload:ip:${ipBucket(clientIp(req))}`, 5, 60 * 60_000)) return res.status(429).json({ error: OPEN_WORDS.tooMany });
+    // Generous on purpose: this counts every post that carries files, refused or not. The strict five an hour is counted in `intake`, on accepted proposals only.
+    if (await overLimit(`open-proposal:upload:ip:${ipBucket(clientIp(req))}`, OPEN_UPLOAD_TRIES_HOURLY, 60 * 60_000)) return res.status(429).json({ error: OPEN_WORDS.tooManyTries });
     upload(req, res, (err: any) => {
       if (err) {
         const code = String(err?.code ?? "");
@@ -306,7 +342,10 @@ export function register(app: Express, deps: Deps): void {
   async function intake(req: Request, res: Response, body: Record<string, any>, files: UploadedFile[]) {
     // Honeypot: a hidden field only a bot fills. Pretend it went, keep nothing.
     if (body.hp) return res.json({ sent: true });
-    if (await overLimit(`open-proposal:ip:${ipBucket(clientIp(req))}`, 5, 60 * 60_000)) return res.status(429).json({ error: OPEN_WORDS.tooMany });
+    // Two buckets per connection. This one counts every try, refused or not, and is generous: it only stops a flood.
+    // The strict five an hour is counted below, once the proposal has been judged and would be accepted, so a person
+    // who meets three honest mistakes is never locked out for them (audit B1).
+    if (await overLimit(`open-proposal:tries:ip:${ipBucket(clientIp(req))}`, OPEN_TRIES_HOURLY, 60 * 60_000)) return res.status(429).json({ error: OPEN_WORDS.tooManyTries });
     const d = await door(body.link);
     if (!d.open) return res.status(403).json({ error: OPEN_WORDS.closed });
     const mode = (await settings()).term;
@@ -315,11 +354,20 @@ export function register(app: Express, deps: Deps): void {
     const season = t.season;
     const roles = await offered();
     const outcomes = new Map(roles.map((r) => [r.id, r.accountabilities]));
+    const alwaysChecked = new Set(roles.filter((r) => r.alwaysChecked).map((r) => r.id));
+    const termsOf = new Map(roles.map((r) => [r.id, r.terms]));
     const parsed = parseOpenProposal(body, {
+      writtenTerms: (ids) => writtenKeys(ids.map((id) => termsOf.get(id))),
       roleIds: new Set(roles.map((r) => r.id)),
       address: singlePublicAddress,
       accountabilitiesOf: (id) => outcomes.get(id) ?? [],
       goalIds: new Set(t.goals.map((g) => g.id)),
+      // A goal's date must fall in this moon (shared/proposalGoals.ts).
+      today: new Date().toISOString().slice(0, 10),
+      alwaysChecked: (id) => alwaysChecked.has(id),
+      now: now(),
+      // A tick is kept only for a way the village lists now, in its words as they read today.
+      knowUs: founding().knowUs,
     });
     if (!parsed.ok) return res.status(400).json({ error: parsed.error, field: parsed.field });
     // The files, every one checked before any is kept (Rye, 10 Nov 2026).
@@ -345,11 +393,15 @@ export function register(app: Express, deps: Deps): void {
       if (!asked || asked.letterVersion !== letter.version) return res.status(409).json({ error: LETTER_WORDS.changed, field: "membership", letter });
       membership = asked;
     }
-    const proposal = { ...parsed.value.body, ...(card ? { card } : {}), ...(t.term ? { term: t.term } : {}), ...(membership ? { membership } : {}) };
+    // The language their emails come in: chosen once, here, by the rule in shared/applicantLanguage.ts.
+    const locale = await languageForNewProposal({ getPool, members: deps.members }, { clientLocale: body.locale, email, acceptLanguage: req.headers["accept-language"] });
+    const proposal = { ...parsed.value.body, ...(card ? { card } : {}), ...(t.term ? { term: t.term } : {}), ...(membership ? { membership } : {}), locale };
     const emailKey = emailKeyOf(email);
-    if (await overLimit(`open-proposal:email:${limiterAddressKey(emailKey)}`, 3, 24 * 60 * 60_000)) return res.status(429).json({ error: OPEN_WORDS.tooMany });
+    // Every refusal above has been given. Only now, with the proposal acceptable, does this connection spend one of its five an hour.
+    if (await overLimit(`open-proposal:ip:${ipBucket(clientIp(req))}`, 5, 60 * 60_000)) return res.status(429).json({ error: OPEN_WORDS.tooMany });
+    if (await overLimit(`open-proposal:email:${limiterAddressKey(emailKey)}`, 3, 24 * 60 * 60_000)) return res.status(429).json({ error: OPEN_WORDS.tooManyForAddress });
     // The last gate before an email goes: the village's overall hourly cap on confirmations.
-    if (await overLimit("open-proposal:global", OPEN_GLOBAL_HOURLY, 60 * 60_000)) return res.status(429).json({ error: OPEN_WORDS.tooMany });
+    if (await overLimit("open-proposal:global", OPEN_GLOBAL_HOURLY, 60 * 60_000)) return res.status(429).json({ error: OPEN_WORDS.tooBusy });
 
     const pool = getPool();
     const id = `op-${crypto.randomBytes(10).toString("hex")}`;
@@ -370,7 +422,10 @@ export function register(app: Express, deps: Deps): void {
       village: projectName(),
       roleNames: proposal.roles.map((r) => byId.get(r.roleId) ?? "").filter(Boolean),
       link: `${site()}/propose-a-role/confirm?token=${encodeURIComponent(token)}`,
-      ...(t.term ? { when: moonTermWords(t.term) } : {}),
+      lang: locale,
+      // The form is for a listed role: an application (Phase A vocabulary).
+      kind: "application",
+      ...(t.term ? { when: wordsIn(locale).confirm.thisMoon(wordsIn(locale).day(t.term.startsOn), wordsIn(locale).day(t.term.endsOn)) } : {}),
     });
     const sent = await postEmail({
       idempotencyKey: `open-proposal:${id}:confirm`,
@@ -390,7 +445,8 @@ export function register(app: Express, deps: Deps): void {
       if (fileDir) await removeProposalFiles(fileDir, id);
       return res.status(503).json({ error: OPEN_WORDS.notSent });
     }
-    res.json({ sent: true, email, message: OPEN_WORDS.sent(email) });
+    // The days the village gives itself to first reply: the "sent" page dates its next steps with it (the firefly path).
+    res.json({ sent: true, email, message: OPEN_WORDS.sent(email), replyDays: numberVar("org.applicant_reply_days") });
   }
 
   /**
@@ -418,7 +474,7 @@ export function register(app: Express, deps: Deps): void {
   }
 
   app.post("/api/open-proposals/confirm", async (req, res) => {
-    if (await overLimit(`open-proposal:confirm:${clientIp(req)}`, 30, 60 * 60_000)) return res.status(429).json({ error: OPEN_WORDS.tooMany });
+    if (await overLimit(`open-proposal:confirm:${clientIp(req)}`, 30, 60 * 60_000)) return res.status(429).json({ error: OPEN_WORDS.tooManyOpens });
     const token = typeof req.body?.token === "string" ? req.body.token.trim() : "";
     const at = now();
     // Confirmed, and the circle asked, in one transaction (part B). A used, old or unknown token asks nobody.
@@ -436,18 +492,18 @@ export function register(app: Express, deps: Deps): void {
     if (confirmed.review?.statusToken) {
       statusPath = `/application-status/${encodeURIComponent(confirmed.proposal.id)}?token=${encodeURIComponent(confirmed.review.statusToken)}`;
       if (confirmed.proposal.email) {
-        const text = `Your proposal is with the village. Follow where it is, who acts next and by when:
-
-${site()}${statusPath}
-
-Keep this link to yourself: it is how we know it is you.`;
+        const lang = languageOf(confirmed.proposal);
+        const apply = APPLY_EMAIL_WORDS[lang];
+        // The steps after submit (lane A2's one list, through the slot in shared/openProposals.ts), when there are any.
+        const steps = stepsAsLines(stepsAfterSubmit(lang, numberVar("org.applicant_reply_days")));
+        const text = `${apply.statusText(`${site()}${statusPath}`, wordsIn(lang).replyPromise(numberVar("org.applicant_reply_days")))}${steps ? `\n\n${steps}` : ""}`;
         try {
           await postEmail({
             idempotencyKey: `open-proposal:${confirmed.proposal.id}:status`,
             kind: "essential",
             origin: "open_proposal.status",
             to: { email: confirmed.proposal.email },
-            subject: "Where your proposal is",
+            subject: apply.statusSubject,
             html: `<!doctype html><html><body style="font-family:system-ui,sans-serif;color:#1f2937">${text
               .split("\n\n")
               .map((para) => `<p>${escapeHtml(para).replace(/\n/g, "<br>")}</p>`)
@@ -459,7 +515,12 @@ Keep this link to yourself: it is how we know it is you.`;
         }
       }
     }
-    res.json({ confirmed: true, message: OPEN_WORDS.confirmed, statusPath });
+    // Somebody who already has an account reads it on their profile too; the email above is theirs either way.
+    await tellApplicant(confirmed.proposal.id, "confirmed");
+    // The language the applicant proposed in, so the confirmed page can speak it, and the first-reply window to date the next step.
+    const replyDays = numberVar("org.applicant_reply_days");
+    const steps = stepsAfterSubmit(languageOf(confirmed.proposal), replyDays);
+    res.json({ confirmed: true, message: OPEN_WORDS.confirmed, statusPath, locale: languageOf(confirmed.proposal), replyDays, ...(steps.length ? { steps } : {}) });
   });
 
   // ── The desk ──────────────────────────────────────────────────────────────
@@ -535,6 +596,8 @@ Keep this link to yourself: it is how we know it is you.`;
   // ── The decision (part B) ─────────────────────────────────────────────────
 
   registerOpenProposalDecide(app, { ...deps, postEmail, now });
+  // An agent proposed by its keeper (0374): the member door's agent side, the same proposal and the same decision.
+  registerAgentProposals(app, deps, { target: async () => target((await settings()).term), offered, decide, now });
   /*
    * FIRST, THE MEMBERSHIP MADE AT APPLICATION (Rye's answer 8). An account made
    * through the invitation carries it, and queues the signing a steward accepts.
@@ -575,10 +638,12 @@ export async function tidyOpenProposals(pool: Pool, at: Date, fileDir?: string):
     if (!invite || invite.usedByUserId) continue;
     if (await store.anonymiseOpenProposal(pool, p.id, at)) anonymised += 1;
   }
+  // The member door's applications lose the same three sections at the same age (withdrawn or not adopted).
+  const doorCleared = await clearAboutYouDecidedBefore(pool, cutoff);
   // Scores and conversation notes follow the application's retention (role journey L5): cleared with the name and address.
   const cleared = await clearReviewOf(pool, await refsDueForClearing(pool, cutoff), at);
   if (cleared > 0) console.log(`[open-proposals] ${cleared} reviews cleared with their anonymised applications`);
   // Files follow the row (Rye, 10 Nov 2026): a deleted or anonymised proposal keeps none.
   const files = fileDir ? await sweepProposalFiles(fileDir, (ids) => store.proposalsKeepingFiles(pool, ids)) : 0;
-  return `${deleted} unconfirmed deleted, ${expired} undecided closed, ${anonymised} anonymised${files ? `, ${files} file folders removed` : ""}`;
+  return `${deleted} unconfirmed deleted, ${expired} undecided closed, ${anonymised} anonymised${doorCleared ? `, ${doorCleared} member-door applications cleared of references` : ""}${files ? `, ${files} file folders removed` : ""}`;
 }

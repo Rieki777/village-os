@@ -11,7 +11,7 @@
 import { useEffect, useState } from "react";
 import { authToken } from "@/lib/gameApi";
 import { ExternalLink, Link2, ShieldCheck } from "lucide-react";
-import { useModules } from "@/modules/ModuleProvider";
+import { moduleIsOn, useModules } from "@/modules/ModuleProvider";
 
 const headers = (): Record<string, string> => {
   const t = authToken();
@@ -59,8 +59,9 @@ function VillageFigure({ label, figure }: { label: string; figure: any }) {
 }
 
 export default function OnchainCard() {
-  const { modules, loaded } = useModules();
-  const hyphaOn = modules.some((m) => m.id === "hypha");
+  // Asked only once the catalog has loaded and says the module is on: before it
+  // loads, and for a module listed as off, the read would answer 404 (verify item 7).
+  const hyphaOn = moduleIsOn(useModules(), "hypha");
   const [data, setData] = useState<any>(null);
   const [village, setVillage] = useState<any>(null);
   const [busy, setBusy] = useState(false);
@@ -91,13 +92,16 @@ export default function OnchainCard() {
      * for the nav. Asking it first turns a guaranteed failed request into no
      * request.
      */
-    if (loaded && !hyphaOn) return;
+  };
+  const loadVillage = () => {
+    if (!hyphaOn) return;
     fetch("/api/hypha", { headers: headers() })
       .then((r) => (r.ok ? r.json() : null))
       .then(setVillage)
       .catch(() => {});
   };
   useEffect(load, []);
+  useEffect(loadVillage, [hyphaOn]);
 
   /** The chain's own name for a slot, when a contract has been confirmed. */
   const chainToken = (slug: string) =>
@@ -135,6 +139,7 @@ export default function OnchainCard() {
       }).then(async (r) => ({ ok: r.ok, body: await r.json() }));
       if (!v.ok) throw new Error(v.body.message ?? v.body.error ?? "Verification failed");
       load();
+      loadVillage();
     } catch (e: any) {
       setError(e?.message || "Verification failed");
     } finally {

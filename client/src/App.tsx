@@ -3,6 +3,8 @@ import { Toaster } from "@/components/ui/sonner";
 import BreakGlass from "@/components/BreakGlass";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
+import QuietLoading from "@/components/natural/QuietLoading";
+import { useLingui } from "@lingui/react/macro";
 import { Redirect, Route, Switch, useLocation } from "wouter";
 import { LazyMotion, MotionConfig } from "framer-motion";
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
@@ -178,6 +180,7 @@ const Profile = lazyPage(() => import("./pages/Profile"));
 const Characters = lazyPage(() => import("./pages/Characters"));
 const GeneKeys = lazyPage(() => import("./pages/GeneKeys"));
 const Mint = lazyPage(() => import("./pages/Mint"));
+const ProposedChanges = lazyPage(() => import("./pages/ProposedChanges"));
 const PublicProfile = lazyPage(() => import("./pages/PublicProfile"));
 const Register = lazyPage(() => import("./pages/Register"));
 const SetPassword = lazyPage(() => import("./pages/SetPassword"));
@@ -232,6 +235,7 @@ const ConfirmProposal = lazyPage(() => import("./pages/ProposeARole").then((m) =
 const OpenProposal = lazyPage(() => import("./pages/OpenProposal"));
 const RoleMeasures = lazyPage(() => import("./pages/RoleMeasures"));
 const ApplicationStatus = lazyPage(() => import("./pages/ApplicationStatus"));
+const YourPath = lazyPage(() => import("./pages/YourPath")); // the whole path, unrolled (the Root)
 const Feed = lazyPage(() => import("./pages/Feed"));
 const Stay = lazyPage(() => import("./pages/Stay"));
 const Wallet = lazyPage(() => import("./pages/Wallet"));
@@ -257,21 +261,23 @@ const SessionRoom = lazyPage(() => import("./pages/SessionRoom"));
 const SessionSeason = lazyPage(() => import("./pages/SessionSeason"));
 
 /**
- * Shown while a page chunk arrives. Deliberately quiet: on a slow link this
- * appears for a second or two, and a spinner that shouts is worse than one
- * that waits. `min-h` holds the viewport so the footer does not jump up and
- * back down as the chunk lands.
+ * Shown while a page chunk arrives: the breathing leaf and a few words
+ * (components/natural/QuietLoading), never a spinning ring. Deliberately
+ * quiet: on a slow link this appears for a second or two. `min-h` holds the
+ * viewport so the footer does not jump up and back down as the chunk lands.
+ *
+ * It stands on the night ground (`world`), where nearly every member page
+ * now arrives, so a page does not flash light and then go dark as it lands.
+ *
+ * Two forms, because the first one shows BEFORE the language is known
+ * (LocaleRoot's own fallback, where no catalog is loaded and useLingui has no
+ * provider): that one says "Loading page" in the source language, as the old
+ * ring's hidden label did. Every later wait is inside the provider and speaks
+ * the visitor's language.
  */
 function PageLoading() {
-  return (
-    <div className="flex min-h-[60vh] items-center justify-center" role="status" aria-live="polite">
-      <span className="sr-only">Loading page</span>
-      <div
-        aria-hidden="true"
-        className="h-8 w-8 animate-spin rounded-full border-2 border-muted border-t-foreground/60"
-      />
-    </div>
-  );
+  const { t } = useLingui();
+  return <QuietLoading world label={t({ message: "Gathering your page", context: "loading: a page is on its way" })} />;
 }
 
 function Router() {
@@ -360,6 +366,9 @@ function Router() {
       {/* The old address, kept so every shared link and bookmark still lands (the board was called a draft until 9 Nov 2026). */}
       <Route path="/roles/draft">{() => <Redirect to="/roles/select" replace />}</Route>
       <Route path="/roles" component={Roles} />
+      {/* /join and /apply were 404s that people guessed at. There is one front door now. */}
+      <Route path="/join">{() => <Redirect to="/roles" replace />}</Route>
+      <Route path="/apply">{() => <Redirect to="/roles" replace />}</Route>
       <Route path="/how-we-create" component={HowWeCreate} />
       <Route path="/co-creators-guide" component={CoCreatorsGuide} />
       <Route path="/housing" component={Housing} />
@@ -371,6 +380,8 @@ function Router() {
       {/* The Mint has its own route rather than a tab inside Admin: that file
           is 5,000 lines and shared, and this surface reads in one screen. */}
       <Route path="/admin/mint" component={Mint} />
+      {/* Every change an agent proposed, reviewed, edited and accepted on one page. */}
+      <Route path="/admin/proposals" component={ProposedChanges} />
       <Route path="/profile" component={Profile} />
       {/* The class select. Under /profile because a party is part of who you
           are here, not a separate account setting. */}
@@ -402,6 +413,9 @@ function Router() {
       <Route path="/good-neighbor" component={GoodNeighbor} />
       <Route path="/steward-rights" component={StewardRights} />
       <Route path="/resident-rights" component={ResidentRights} />
+      {/* One training page per track, each with its own words in Admin, Pages; /training chooses between them. */}
+      <Route path="/training/steward">{() => <Training track="steward" />}</Route>
+      <Route path="/training/resident">{() => <Training track="resident" />}</Route>
       <Route path="/training" component={Training} />
       <Route path="/governance" component={Governance} />
       {/* The live surfaces sit BESIDE the explainer, never inside it: /governance
@@ -417,6 +431,7 @@ function Router() {
       <Route path="/open-proposals/:id" component={OpenProposal} />
       <Route path="/role-measures" component={RoleMeasures} />
       <Route path="/application-status/:ref" component={ApplicationStatus} />
+      <Route path="/path" component={YourPath} />
       <Route path="/seat-applications/:id" component={SeatApplicationsAlias} />
       {/* Propose my roles for next season. /new and /shared/:token before /:id, which would take them. */}
       <Route path="/role-proposals/new" component={NewRoleProposal} />
@@ -474,7 +489,7 @@ function App() {
       <LazyMotion features={loadMotionFeatures}>
         <AuthProvider>
         {/* The visitor's language, before any page renders (internal spec i18n, US1). */}
-        <LocaleRoot fallback={<PageLoading />}>
+        <LocaleRoot fallback={<QuietLoading world />}>
         <ModuleProvider>
           <TooltipProvider>
             <Toaster />

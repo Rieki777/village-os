@@ -6,9 +6,11 @@
  * none of them gets a refusal and this draws nothing: nothing here decides
  * who may approve.
  *
- * Each recap shows its READING FIRST (A4: the band and its sentence), then
- * the numbers: roles with their item counts, items outside their roles, and
- * who can approve. Opening one lists its items with Approve or Return with a
+ * Each recap shows who sent it, then its roles with their item counts, items
+ * outside their roles, and who can approve. It never shows the member's task
+ * score, its band ("Rethink the plan") or their role coverage: those are the
+ * member's own reading, and the people approving their pay do not see them
+ * (Phase C, decision 2). The server no longer sends them on a queue row. Opening one lists its items with Approve or Return with a
  * note each, then Approve the work. The queue row carries no items or hash in
  * the contract yet (see moonApi.ts); until it does, the recap is returned
  * whole with a note and the page says where its items are read.
@@ -21,23 +23,10 @@ import {
   RECAP_STATUS_WORDS,
   SELF_APPROVED_WORDS,
   dayWords,
-  type Reading,
 } from "@shared/moonRecap";
 import * as api from "./moonApi";
 import type { QueueData, QueueRowView } from "./moonApi";
 import { ERROR, H2, INPUT, KICKER, LABEL, MUTED, PANEL, SMALL_BTN, SMALL_BTN_ON } from "./moonUi";
-
-/** A recap's reading, first: the band, its sentence, then its context lines. */
-export function ReadingFirst({ reading }: { reading: Reading | null | undefined }) {
-  if (!reading) return null;
-  return (
-    <div className="flex flex-col gap-1" data-testid="queue-reading">
-      <p className="m-0 text-sm font-semibold text-foreground">{reading.label}</p>
-      <p className="m-0 text-sm text-foreground">{reading.says}</p>
-      {reading.lines.map((l) => <p key={l} className="m-0 text-xs text-muted-foreground">{l}</p>)}
-    </div>
-  );
-}
 
 /** Who sent it, where it waits, and the self-approved mark. */
 export function RowHead({ row }: { row: QueueRowView }) {
@@ -92,8 +81,6 @@ function WorkRow({ row, onDone, noEligible }: { row: QueueRowView; onDone: () =>
   return (
     <li className="flex flex-col gap-3 rounded-[14px] border border-dash-edge bg-card p-3" data-testid="queue-row">
       <RowHead row={row} />
-      <ReadingFirst reading={row.taskReading} />
-      <ReadingFirst reading={row.seatReading} />
       <ul className="m-0 list-disc pl-5 text-sm text-foreground">
         {row.roles.map((r) => <li key={r.roleId}>{r.name}: {r.itemCount}</li>)}
       </ul>

@@ -48,7 +48,11 @@ import { boolVar, stringVar } from "../lib/variables";
 import * as repo from "../repos/applicationReview";
 import * as store from "../repos/openProposals";
 import type { DecideRouteDeps } from "./openProposalDecide";
+import { makeApplicantTeller } from "../lib/applicantUpdates";
+import { applicantOffer, replyOffer } from "../lib/counterOffer";
 
+/** A status token: the first email's random one is 32 characters, a signed link's is about 130. */
+const TOKEN_MAX = 300;
 const MINUTE = 60_000;
 const CLOCK_EVERY_MS = 60 * MINUTE;
 export const REVIEW_CLOCK_JOB = "application-review-clock";
@@ -68,6 +72,7 @@ export function registerApplicationReview(app: Express, deps: DecideRouteDeps & 
     members: deps.members,
     consentAfterInterviews: () => boolVar("org.consent_after_interviews"),
     onboardingRole: () => stringVar("org.onboarding_role"),
+    tellApplicant: makeApplicantTeller({ getPool, members: deps.members, notify: deps.notify, postEmail: deps.postEmail, projectName: deps.projectName, siteUrl: () => deps.deploymentOrigin() }),
   };
 
   /** The signed-in member holding `terms.read`, or null after answering 401. */
@@ -90,7 +95,7 @@ export function registerApplicationReview(app: Express, deps: DecideRouteDeps & 
 
   app.get("/api/application-status/:ref", async (req, res) => {
     const ref = refOf(req);
-    const token = typeof req.query.token === "string" ? req.query.token.slice(0, 100) : "";
+    const token = typeof req.query.token === "string" ? req.query.token.slice(0, TOKEN_MAX) : "";
     if (await overLimit(`application-status:${deps.clientIp ? deps.clientIp(req) : "x"}`, 60, 10 * MINUTE)) return res.status(429).json({ error: "too_many" });
     const s = ref && token ? await statusByToken(work, ref, token) : null;
     // One answer for an unknown ref and a wrong token, so a ref cannot be probed.
@@ -109,11 +114,35 @@ export function registerApplicationReview(app: Express, deps: DecideRouteDeps & 
     res.set("Cache-Control", "no-store").json({ status: s });
   });
 
+  // ── The applicant answers the terms we changed (joining lane PR 4) ────────
+  /* Accept or talk again, for the changed settings only; saved into the proposal. Same proof of who as the status page. */
+
+  app.post("/api/application-status/:ref/terms", async (req, res) => {
+    const ref = refOf(req);
+    const token = typeof req.query.token === "string" ? req.query.token.slice(0, TOKEN_MAX) : "";
+    if (await overLimit(`application-terms:${deps.clientIp ? deps.clientIp(req) : "x"}`, 20, 10 * MINUTE)) return res.status(429).json({ error: "too_many" });
+    if (!ref || !token || !(await statusByToken(work, ref, token))) return res.status(404).json(NOT_HERE);
+    const out = await replyOffer(getPool(), ref, req.body?.replies, now());
+    if (!out.ok) return res.status(out.status).json({ error: "terms_not_saved", message: out.error, ...(out.key ? { field: out.key } : {}) });
+    res.json({ success: true, offer: await applicantOffer(getPool(), ref) });
+  });
+
+  app.post("/api/governance/applications/:ref/terms", async (req, res) => {
+    const viewer = await authedUser(req);
+    if (!viewer) return res.status(401).json({ error: "auth_required" });
+    if (await overLimit(`application-terms:${String(viewer.id)}`, 20, 10 * MINUTE)) return res.status(429).json({ error: "too_many" });
+    const ref = refOf(req);
+    if (!ref || !(await isApplicant(work, ref, String(viewer.id)))) return res.status(404).json(NOT_HERE);
+    const out = await replyOffer(getPool(), ref, req.body?.replies, now());
+    if (!out.ok) return res.status(out.status).json({ error: "terms_not_saved", message: out.error, ...(out.key ? { field: out.key } : {}) });
+    res.json({ success: true, offer: await applicantOffer(getPool(), ref) });
+  });
+
   // ── Splitting the conversations over days (D30) ───────────────────────────
 
   app.post("/api/application-status/:ref/split", async (req, res) => {
     const ref = refOf(req);
-    const token = typeof req.query.token === "string" ? req.query.token.slice(0, 100) : "";
+    const token = typeof req.query.token === "string" ? req.query.token.slice(0, TOKEN_MAX) : "";
     if (await overLimit(`application-split:${deps.clientIp ? deps.clientIp(req) : "x"}`, 10, 10 * MINUTE)) return res.status(429).json({ error: "too_many" });
     // The link proves who asks, the way it does for the status page.
     if (!ref || !token || !(await statusByToken(work, ref, token))) return res.status(404).json(NOT_HERE);
@@ -191,7 +220,10 @@ export function registerApplicationReview(app: Express, deps: DecideRouteDeps & 
     const mayReply = (roleId && (await repo.liveHoldersOfRole(getPool(), roleId)).includes(userId)) || (await deps.liveHoldersOf("org.seat")).includes(userId);
     if (!mayReply) return res.status(403).json({ error: "not_a_holder", message: "The first reply is for the role that welcomes people." });
     if (await isApplicant(work, ref, userId)) return res.status(403).json({ error: "own", message: REVIEW_WORDS.own });
-    res.json({ success: true, stamped: await stampFirstReply(work, ref, userId) });
+    const stamped = await stampFirstReply(work, ref, userId);
+    // Told once, on the stamp that made it: a retry stamps nothing and tells nobody again.
+    if (stamped && kindOfRef(ref) === "open") await work.tellApplicant?.(ref, "first_reply");
+    res.json({ success: true, stamped });
   });
 
   // ── The ballot fallback (G12) ─────────────────────────────────────────────

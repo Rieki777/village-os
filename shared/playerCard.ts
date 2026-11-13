@@ -40,7 +40,7 @@
  */
 import { LUNAR_CLOCK } from "./cycleClock";
 import { walkthroughDay, type RhythmDoc } from "./moonRhythm";
-import { civilDaysBetween, fullMoonsBetween, zonedTimeToUtc } from "./lunar";
+import { civilDaysBetween, daysOfSpan, fullMoonsBetween, zonedTimeToUtc } from "./lunar";
 import { CARD_WORDS as W, ALLOWANCE_WORDS, APPLICATION_STATUS_WORDS, PAY_WORDS, PER_WORDS } from "./playerCardWords";
 import { formatDay, joinList, type Read } from "./roleSheet";
 import { cycleWindows, readSign, type SignReading, type SignRows } from "./roleSigns";
@@ -49,11 +49,35 @@ import { roleCcos, roleTerm, type HoldingWellOut, type ListSectionOut, type Text
 import type { RoleEditKey } from "./playerCardEdit";
 import { APPLICATION_STATUSES, OPEN_STATUSES, applicationHref, type ApplicationStatus } from "./seatApplications";
 import { applicationGroup, PAST_SEATING_WORDS, type PastSeating } from "./applicationGroups";
-import { AFTER_ADOPT_LINE, MEMBER_LATER_LINE, loadHoursLine, openRowLine } from "./roleProposalHonesty";
+import { AFTER_ADOPT_LINE, MEMBER_LATER_LINE, OPEN_ROW_AGAIN, loadHoursLine, openRowLine } from "./roleProposalHonesty";
+
+
+/**
+ * A proposal card names who fills its open rows once, in the first one, and the
+ * rest say "too" (audit P6: the same sentence stood in eight rows). Walks the
+ * built card in its own order, so the first row drawn keeps the name.
+ */
+function nameOpenRowsOnce<T>(card: T, line: string): T {
+  let seen = false;
+  const walk = (v: unknown): unknown => {
+    if (typeof v === "string") {
+      if (v !== line) return v;
+      if (!seen) {
+        seen = true;
+        return v;
+      }
+      return OPEN_ROW_AGAIN;
+    }
+    if (Array.isArray(v)) return v.map(walk);
+    if (v && typeof v === "object") return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, walk(x)]));
+    return v;
+  };
+  return walk(card) as T;
+}
 import { MONEY_LINE, type SeatSettings } from "./seatSettings";
 import type { AccomplishmentMoon } from "./taskAccomplishments";
 import { roleProposalsOut, type RoleProposalIn, type RoleProposalOut } from "./playerCardProposals";
-import { heroOf, moonLineOf, moonNameOf, trackOf, type HeroOut, type TrackOut } from "./playerCardHero";
+import { heroOf, moonLineOf, moonNameOf, seatWithCommitment, trackOf, type HeroOut, type TrackOut } from "./playerCardHero";
 import { roleIcon, type RoleIcon } from "./roleIcons";
 
 export * from "./playerCardWords";
@@ -146,7 +170,7 @@ export interface PlayerRoleIn {
   accountabilities: string[];
   /** `org_roles.criticality`. */
   criticality: Read<"normal" | "high">;
-  circle: Read<{ id: string; name: string } | null>;
+  circle: Read<{ id: string; name: string; anchor?: boolean } | null>;
   /** This holding's `term_ends_at`. */
   termEndsAt: Read<string | null>;
   /** `org_roles.archetypes`. */
@@ -346,7 +370,23 @@ export interface PlayerCardInput {
   frameworkTerms?: boolean;
 }
 
-export type CardMode = "live" | "proposal";
+/**
+ * "adopted" is an application the village has adopted (verify item 7): drawn
+ * on its own terms, roles and season like a proposal, with the proposal's aim
+ * and goals, while the live sections (tasks, signs, tensions, load) read as a
+ * holder's, because the roles are now hers.
+ */
+export type CardMode = "live" | "proposal" | "adopted";
+
+/** Drawn from an application (proposed or adopted): its terms, its season, its open rows. */
+function fromApplication(input: PlayerCardInput): boolean {
+  return input.mode === "proposal" || input.mode === "adopted";
+}
+
+/** Not adopted yet: the live sections read "Starts once adopted". */
+function notYetAdopted(input: PlayerCardInput): boolean {
+  return input.mode === "proposal";
+}
 
 /** The five steps of the owner's own load read. */
 export const LOAD_STEPS = [1, 2, 3, 4, 5] as const;
@@ -432,7 +472,7 @@ export interface RoleOut {
   /** "Key role", the circle, "Held until ...", and "Review week of ..." or "No review date set". */
   chips: string[];
   /** The role's circle, linked to that circle's card (`/circles/:id`); null when it sits in none. */
-  circle: { name: string; href: string } | null;
+  circle: { name: string; href: string; anchor?: boolean } | null;
   /** The time chip (0274), drawn after the chips when it is written. */
   time: TextSectionOut;
   plays: { label: string; chips: { key: string; name: string }[] } | null;
@@ -597,7 +637,7 @@ function portraitOf(owner: PlayerCardInput["owner"]): PortraitOut {
 
 /** The season the card is drawn in: a proposal's own when the host names one (E9), else the running one. */
 function seasonDrawn(input: PlayerCardInput): PlayerCardInput["season"] {
-  return input.mode === "proposal" && input.proposalSeason !== undefined ? input.proposalSeason : input.season;
+  return fromApplication(input) && input.proposalSeason !== undefined ? input.proposalSeason : input.season;
 }
 
 function header(input: PlayerCardInput, roles: PlayerRoleIn[] | undefined): HeaderOut {
@@ -606,7 +646,7 @@ function header(input: PlayerCardInput, roles: PlayerRoleIn[] | undefined): Head
       ? ""
       : roles.length === 0
         ? W.holdsNoRoles
-        : input.mode === "proposal"
+        : notYetAdopted(input)
           ? W.appliesFor(joinList(roles.map((r) => r.name)))
           : W.rolesLine(roles.length, joinList(roles.map((r) => r.name)));
   let day: HeaderOut["day"] = UNREAD;
@@ -616,8 +656,7 @@ function header(input: PlayerCardInput, roles: PlayerRoleIn[] | undefined): Head
     const end = instantOf(input.season.endsOn, input.timeZone);
     if (!start || !end) day = empty(W.seasonNotRead);
     else {
-      const of = civilDaysBetween(start, end, input.timeZone) + 1;
-      const d = Math.min(of, Math.max(1, civilDaysBetween(start, input.now, input.timeZone) + 1));
+      const { day: d, of } = daysOfSpan(start, end, input.now, input.timeZone);
       day = shown({
         words: W.dayOfSeason(d, of),
         day: { n: d, source: "season.startsOn" },
@@ -633,7 +672,7 @@ function header(input: PlayerCardInput, roles: PlayerRoleIn[] | undefined): Head
     season: seasonDrawn(input),
     roles,
     applications: input.applications,
-    proposal: input.mode === "proposal",
+    proposal: notYetAdopted(input),
   });
   return { portrait: portraitOf(input.owner), name: input.owner.displayName, rolesLine, day, ...hero };
 }
@@ -651,7 +690,7 @@ function playsAs(role: PlayerRoleIn, names: Read<Record<string, string> | null>)
 
 function signsFor(role: PlayerRoleIn, input: PlayerCardInput): Slot<SignOut[]> {
   if (role.settings === undefined) return UNREAD;
-  if (input.mode === "proposal") return empty(AFTER_ADOPT_LINE);
+  if (notYetAdopted(input)) return empty(AFTER_ADOPT_LINE);
   const measures = role.settings?.scoreboard?.measures ?? [];
   if (!measures.length) return empty(W.noSigns);
   const windows = cycleWindows(input.now, LUNAR_CLOCK, input.timeZone);
@@ -696,12 +735,12 @@ export function signSheetKey(key: string, circleId: string | null): string {
 function viewerHoldsRole(role: PlayerRoleIn, input: PlayerCardInput): boolean {
   const viewer = input.viewerUserId ?? null;
   if (viewer === null) return false;
-  return role.viewerHolds === true || (input.mode !== "proposal" && viewer === input.owner.userId);
+  return role.viewerHolds === true || (!notYetAdopted(input) && viewer === input.owner.userId);
 }
 
 function tensionsFor(role: PlayerRoleIn, input: PlayerCardInput): RoleOut["tensions"] {
   if (role.tensions === undefined) return UNREAD;
-  if (input.mode === "proposal") return empty(AFTER_ADOPT_LINE);
+  if (notYetAdopted(input)) return empty(AFTER_ADOPT_LINE);
   const viewer = input.viewerUserId ?? null;
   const holds = viewerHoldsRole(role, input);
   const openAll = role.tensions.filter((t) => t.status === "open");
@@ -738,7 +777,7 @@ function tensionsFor(role: PlayerRoleIn, input: PlayerCardInput): RoleOut["tensi
 
 /** Raise for a member who does not hold the role; Waiting on you on the holder's own card. */
 function tensionDoorFor(role: PlayerRoleIn, input: PlayerCardInput): TensionDoor {
-  if (input.mode === "proposal" || role.tensions === undefined) return null;
+  if (notYetAdopted(input) || role.tensions === undefined) return null;
   const viewer = input.viewerUserId ?? null;
   if (viewer === null || input.viewerMember !== true) return null;
   if (viewerHoldsRole(role, input)) return viewer === input.owner.userId ? "waiting" : null;
@@ -749,13 +788,13 @@ function roleOut(role: PlayerRoleIn, input: PlayerCardInput): RoleOut {
   const chips: string[] = [];
   if (role.criticality === "high") chips.push(W.keyRole);
   // The circle is drawn as a link to its card, beside these chips.
-  const circle = role.circle ? { name: role.circle.name, href: `/circles/${encodeURIComponent(role.circle.id)}` } : null;
+  const circle = role.circle ? { name: role.circle.name, href: `/circles/${encodeURIComponent(role.circle.id)}`, ...(role.circle.anchor === true ? { anchor: true } : {}) } : null;
   const held = formatDay(role.termEndsAt ?? null, true, input.timeZone);
   if (held) chips.push(W.heldUntil(held));
   // 0274: the CCOS sections, and the review chip from the role's own terms.
   const terms = input.frameworkTerms === true;
   const ccos = roleCcos(role, terms);
-  if (ccos.review) chips.push(input.mode === "proposal" && ccos.review === W.noReviewDate ? openRowLine(input.fillWith) : ccos.review);
+  if (ccos.review) chips.push(fromApplication(input) && ccos.review === W.noReviewDate ? openRowLine(input.fillWith) : ccos.review);
 
   const powers =
     role.powers === undefined
@@ -767,7 +806,7 @@ function roleOut(role: PlayerRoleIn, input: PlayerCardInput): RoleOut {
             ),
           )
         : empty(W.noPowers);
-  const opsOpen = input.mode === "proposal" ? openRowLine(input.fillWith) : W.notWritten;
+  const opsOpen = fromApplication(input) ? openRowLine(input.fillWith) : W.notWritten;
   const anyShared = !!role.powers?.some((p) => p.sharedWith?.length);
   // A10: nothing handed over, so say what the role suits, once per power and
   // never a power it already holds. An unread or empty list leaves the card
@@ -780,7 +819,8 @@ function roleOut(role: PlayerRoleIn, input: PlayerCardInput): RoleOut {
 
   return {
     id: role.id,
-    cardSeat: role.cardSeat ?? null,
+    // The agreed commitment over the card's, so the block reads what was agreed (verify report B3).
+    cardSeat: seatWithCommitment(role),
     anchor: ROLE_ANCHOR(role.id),
     title: role.name,
     purpose: {
@@ -812,7 +852,7 @@ function roleOut(role: PlayerRoleIn, input: PlayerCardInput): RoleOut {
     },
     holdingWell: ccos.holdingWell,
     notMine: { heading: W.notMine, term: roleTerm("notMine", terms), items: wordsSlot(role.notMine, opsOpen) },
-    runbook: { heading: W.runbook, text: textSlot(role.runbook, input.mode === "proposal" ? MEMBER_LATER_LINE : W.notWritten) },
+    runbook: { heading: W.runbook, text: textSlot(role.runbook, fromApplication(input) ? MEMBER_LATER_LINE : W.notWritten) },
     powers: showSuited
       ? { heading: W.suitedTo, items: shown(suited.map((p) => p.label)), note: W.suitedNote }
       : { heading: anyShared ? W.powersShared : W.powers, items: powers, note: null },
@@ -836,7 +876,7 @@ function across(input: PlayerCardInput, roles: PlayerRoleIn[] | undefined, roleO
       : [];
 
   const plan = input.plan;
-  const proposal = input.mode === "proposal";
+  const proposal = notYetAdopted(input);
   const aim: Slot<string> = plan === undefined ? UNREAD : plan === null ? empty(W.noPlan) : textSlot(plan.aim, W.noAim);
   const sg = input.seasonalGoals;
   const sgList = (sg ?? [])
@@ -856,7 +896,7 @@ function across(input: PlayerCardInput, roles: PlayerRoleIn[] | undefined, roleO
     plan === undefined
       ? UNREAD
       : !plan || !plan.goals.length
-        ? empty(proposal ? openRowLine(input.fillWith) : W.noGoals)
+        ? empty(fromApplication(input) ? openRowLine(input.fillWith) : W.noGoals)
         : shown(
             plan.goals
               .filter((g) => clean(g.goal))
@@ -1068,11 +1108,11 @@ function agreementRows(s: SeatSettings, input: PlayerCardInput): AgreementRow[] 
     if (s.term.endsOn) term.push(W.endsOn(day(s.term.endsOn) ?? s.term.endsOn));
     else if (s.term.lengthMoons) term.push(W.lengthMoons(s.term.lengthMoons));
     else if (s.term.endsOn === null) term.push(W.endsWithSeason);
-    const openReview = input.mode === "proposal" ? openRowLine(input.fillWith) : W.noReviewDate;
+    const openReview = fromApplication(input) ? openRowLine(input.fillWith) : W.noReviewDate;
     term.push(s.term.reviewOn ? W.reviewDate(day(s.term.reviewOn) ?? s.term.reviewOn) : openReview);
     if (s.term.renewalOn) term.push(W.renewalDate(day(s.term.renewalOn) ?? s.term.renewalOn));
     if (s.term.noticeDays !== undefined) term.push(W.notice(s.term.noticeDays));
-  } else term.push(input.mode === "proposal" ? openRowLine(input.fillWith) : W.noReviewDate);
+  } else term.push(fromApplication(input) ? openRowLine(input.fillWith) : W.noReviewDate);
   rows.push({ label: W.term, lines: term, small: false });
 
   const clocks: string[] = [];
@@ -1158,11 +1198,16 @@ function accomplished(input: PlayerCardInput, roles: PlayerRoleIn[]): Accomplish
 // ── The card ───────────────────────────────────────────────────────────────
 
 export function buildPlayerCard(input: PlayerCardInput): PlayerCard {
+  const built = buildCard(input);
+  return fromApplication(input) ? nameOpenRowsOnce(built, openRowLine(input.fillWith)) : built;
+}
+
+function buildCard(input: PlayerCardInput): PlayerCard {
   const roles = input.roles;
   const list = roles ?? [];
   const roleOuts = list.map((r) => roleOut(r, input));
   const tiles: PlayerCard["tiles"] = {
-    heading: input.mode === "proposal" ? W.proposedRoles : W.myRoles,
+    heading: notYetAdopted(input) ? W.proposedRoles : W.myRoles,
     items:
       roles === undefined
         ? UNREAD
@@ -1174,7 +1219,7 @@ export function buildPlayerCard(input: PlayerCardInput): PlayerCard {
                 icon: roleIcon(r.name, r.domain),
                 anchor: ROLE_ANCHOR(r.id),
                 // A proposal holds nothing yet, so it has no health to read.
-                health: input.mode === "proposal" ? null : roleHealth(r, roleOuts[i].working.items, input.now, input.timeZone),
+                health: fromApplication(input) ? null : roleHealth(r, roleOuts[i].working.items, input.now, input.timeZone),
               })),
             )
           : empty(W.holdsNoRoles),
@@ -1194,7 +1239,7 @@ export function buildPlayerCard(input: PlayerCardInput): PlayerCard {
           ? UNREAD
           : input.howIHold && input.howIHold.some((h) => clean(h.text))
             ? shown(input.howIHold.filter((h) => clean(h.text)).map((h) => ({ label: h.label, text: clean(h.text)! })))
-            : empty(input.mode === "proposal" ? MEMBER_LATER_LINE : W.notWritten),
+            : empty(fromApplication(input) ? MEMBER_LATER_LINE : W.notWritten),
     },
     applications: applications(input),
     agreements: agreements(input, list),

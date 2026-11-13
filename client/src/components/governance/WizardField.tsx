@@ -39,8 +39,11 @@ import { isSearchSource, loadPickOptions, searchMembers, type PickOption } from 
 import { SeatTermForRole, type SeatTermLook } from "@/components/power/SeatTermField";
 import SeatSettingsEditor from "./SeatSettingsEditor";
 import SeatPicksField from "./SeatPicksField";
+import AboutYouField from "./AboutYouField";
+import GoalsField from "./GoalsField";
 import SeasonGoalField from "./SeasonGoalField";
 import TermsOnOfferField from "./TermsOnOfferField";
+import { AimAssist } from "./SeraDraftFields";
 import { useVillagePresets } from "@/lib/seatPresetsRead";
 
 export interface MechanicsVariableLite {
@@ -59,15 +62,15 @@ export interface MechanicsVariableLite {
 }
 
 const inputClass =
-  "w-full min-h-[44px] rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep aria-[invalid=true]:border-coral";
+  "w-full min-h-[44px] rounded-lg border border-border px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring aria-[invalid=true]:border-destructive";
 
 /** The wizard's look for a seat's end date: the same inputs as every other field. */
 const TERM_LOOK: SeatTermLook = {
-  label: "block text-sm font-semibold text-stone-900",
+  label: "block text-sm font-semibold text-foreground",
   input: `mt-1 ${inputClass}`,
-  line: "text-xs text-stone-600 leading-relaxed",
-  caution: "text-sm font-medium text-amber-800 leading-relaxed",
-  refusal: "text-sm font-medium text-coral",
+  line: "text-xs text-muted-foreground leading-relaxed",
+  caution: "text-sm font-medium text-notice leading-relaxed",
+  refusal: "text-sm font-medium text-destructive",
 };
 
 export default function WizardField({
@@ -79,6 +82,8 @@ export default function WizardField({
   dials,
   /** Every answer so far, for a field whose meaning depends on another one. */
   answers,
+  /** Sets another answer: the drafts from Sera keep their marks under their own key (seraDraftAnswers.ts). */
+  setAnswer,
 }: {
   field: FieldSpec;
   value: unknown;
@@ -86,6 +91,7 @@ export default function WizardField({
   onChange: (next: unknown) => void;
   dials?: MechanicsVariableLite[];
   answers?: Record<string, unknown>;
+  setAnswer?: (key: string, value: unknown) => void;
 }) {
   const id = useId();
   // The village's own presets, offered after the platform's (PR3). Asked only
@@ -96,9 +102,9 @@ export default function WizardField({
   const describedBy = [problem ? errorId : null, field.help ? helpId : null].filter(Boolean).join(" ") || undefined;
 
   const label = (
-    <label htmlFor={id} className="block text-sm font-semibold text-stone-900">
+    <label htmlFor={id} className="block text-sm font-semibold text-foreground">
       {field.label}
-      {field.required && <span className="ml-1 text-coral" aria-hidden="true">*</span>}
+      {field.required && <span className="ml-1 text-destructive" aria-hidden="true">*</span>}
       {field.required && <span className="sr-only"> (required)</span>}
       {field.tip && <InfoTip tip={field.tip} label={`What ${field.label.toLowerCase()} means`} />}
     </label>
@@ -107,12 +113,12 @@ export default function WizardField({
   const footer = (
     <>
       {field.help && (
-        <p id={helpId} className="mt-1 text-xs text-stone-600 leading-relaxed">
+        <p id={helpId} className="mt-1 text-xs text-muted-foreground leading-relaxed">
           {field.help}
         </p>
       )}
       {problem && (
-        <p id={errorId} role="alert" className="mt-1 text-sm font-medium text-coral">
+        <p id={errorId} role="alert" className="mt-1 text-sm font-medium text-destructive">
           {problem}
         </p>
       )}
@@ -141,7 +147,7 @@ export default function WizardField({
             onChange={(e) => onChange(e.target.value)}
           />
           {field.maxLength && (
-            <p className="mt-1 text-right text-xs tabular-nums text-stone-500">
+            <p className="mt-1 text-right text-xs tabular-nums text-muted-foreground">
               {text.length} of {field.maxLength}
             </p>
           )}
@@ -166,7 +172,7 @@ export default function WizardField({
               aria-labelledby={undefined}
               aria-label={`${field.label}, percent`}
               onChange={(e) => onChange(Number(e.target.value))}
-              className="h-11 flex-1 accent-teal-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
+              className="h-11 flex-1 accent-notice focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             />
             <span className="flex items-center gap-1">
               <input
@@ -178,7 +184,7 @@ export default function WizardField({
                 onChange={(e) => onChange(Number(e.target.value))}
                 className={`${inputClass} w-20 text-right tabular-nums`}
               />
-              <span className="text-sm text-stone-600">%</span>
+              <span className="text-sm text-muted-foreground">%</span>
             </span>
           </div>
           {footer}
@@ -233,9 +239,9 @@ export default function WizardField({
       // No single control to label: the editor is many, each labelled itself.
       return (
         <div>
-          <p className="block text-sm font-semibold text-stone-900">{field.label}</p>
+          <p className="block text-sm font-semibold text-foreground">{field.label}</p>
           {field.help && (
-            <p id={helpId} className="mt-1 text-xs text-stone-600 leading-relaxed">
+            <p id={helpId} className="mt-1 text-xs text-muted-foreground leading-relaxed">
               {field.help}
             </p>
           )}
@@ -248,7 +254,7 @@ export default function WizardField({
             />
           </div>
           {problem && (
-            <p id={errorId} role="alert" className="mt-2 text-sm font-medium text-coral">
+            <p id={errorId} role="alert" className="mt-2 text-sm font-medium text-destructive">
               {problem}
             </p>
           )}
@@ -292,6 +298,12 @@ export default function WizardField({
     case "seasonGoal":
       return <SeasonGoalField field={field} value={value} onChange={onChange} problem={problem} />;
 
+    case "aboutYou":
+      return <AboutYouField field={field} value={value} onChange={onChange} answers={answers ?? {}} problem={problem} setAnswer={setAnswer} />;
+
+    case "goalsList":
+      return <GoalsField field={field} value={value} onChange={onChange} answers={answers ?? {}} problem={problem} />;
+
     case "termsOnOffer":
       return <TermsOnOfferField field={field} value={value} onChange={onChange} answers={answers ?? {}} problem={problem} />;
 
@@ -322,6 +334,7 @@ export default function WizardField({
             value={text}
             onChange={(e) => onChange(e.target.value)}
           />
+          {field.key === "aim" && <AimAssist value={text} answers={answers ?? {}} onChange={onChange} setAnswer={setAnswer} />}
           {footer}
         </div>
       );
@@ -403,14 +416,14 @@ function PickField({
                   type="button"
                   onClick={() => onChange(o.value)}
                   aria-pressed={String(value ?? "") === o.value}
-                  className={`flex min-h-[44px] w-full items-center justify-between rounded-lg border px-3 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep ${
+                  className={`flex min-h-[44px] w-full items-center justify-between rounded-lg border px-3 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                     String(value ?? "") === o.value
-                      ? "border-teal-deep bg-teal-deep/5 font-semibold text-stone-900"
-                      : "border-stone-200 text-stone-700 hover:bg-stone-50"
+                      ? "border-notice bg-notice/10 font-semibold text-foreground"
+                      : "border-border text-foreground hover:bg-muted"
                   }`}
                 >
                   <span>{o.label}</span>
-                  {o.hint && <span className="text-xs text-stone-500">{o.hint}</span>}
+                  {o.hint && <span className="text-xs text-muted-foreground">{o.hint}</span>}
                 </button>
               </li>
             ))}
@@ -442,7 +455,7 @@ function PickField({
         ))}
       </select>
       {empty && (
-        <p className="mt-1 text-xs text-stone-600">
+        <p className="mt-1 text-xs text-muted-foreground">
           This village has nothing here yet, so this kind of proposal has nothing to point at.
         </p>
       )}
@@ -490,29 +503,29 @@ function ChangeSetField({
           {value.map((change) => {
             const dial = byKey.get(change.key);
             return (
-              <li key={change.key} className="rounded-lg border border-stone-200 p-3">
+              <li key={change.key} className="rounded-lg border border-border p-3">
                 <div className="flex items-start justify-between gap-2">
                   <span className="min-w-0">
-                    <span className="block text-sm font-semibold text-stone-900">{dial?.label ?? change.key}</span>
+                    <span className="block text-sm font-semibold text-foreground">{dial?.label ?? change.key}</span>
                     {dial?.description && (
-                      <span className="block text-xs text-stone-600 leading-relaxed">{dial.description}</span>
+                      <span className="block text-xs text-muted-foreground leading-relaxed">{dial.description}</span>
                     )}
                   </span>
                   <button
                     type="button"
                     onClick={() => onChange(value.filter((c) => c.key !== change.key))}
                     aria-label={`Take ${dial?.label ?? change.key} out of this proposal`}
-                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-stone-500 hover:bg-stone-100 hover:text-stone-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
+                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     <X className="w-4 h-4" aria-hidden="true" />
                   </button>
                 </div>
                 <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <span className="text-xs text-stone-600">
-                    now <strong className="tabular-nums text-stone-800">{dial?.withheld ? "kept private" : dial?.value ?? "?"}</strong>
+                  <span className="text-xs text-muted-foreground">
+                    now <strong className="tabular-nums text-foreground">{dial?.withheld ? "kept private" : dial?.value ?? "?"}</strong>
                     {dial?.unit ? ` ${dial.unit}` : ""}
                   </span>
-                  <span className="text-xs text-stone-400" aria-hidden="true">
+                  <span className="text-xs text-muted-foreground" aria-hidden="true">
                     to
                   </span>
                   {dial?.choices ? (
@@ -545,7 +558,7 @@ function ChangeSetField({
                     />
                   )}
                   {dial && (dial.min !== null || dial.max !== null) && (
-                    <span className="text-xs text-stone-500">
+                    <span className="text-xs text-muted-foreground">
                       allowed {dial.min ?? "any"} to {dial.max ?? "any"}
                     </span>
                   )}
@@ -574,13 +587,13 @@ function ChangeSetField({
               </option>
             ))}
           </select>
-          <span className="inline-flex items-center gap-1 text-xs text-stone-500">
+          <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
             <Plus className="w-3 h-3" aria-hidden="true" />
             {available.length} more the village governs
           </span>
         </div>
       ) : (
-        <p className="text-xs text-stone-600">
+        <p className="text-xs text-muted-foreground">
           {open.length === 0
             ? "The list of dials has not loaded, or this village governs none of them yet."
             : "Every rule the village governs is already in this proposal."}

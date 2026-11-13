@@ -243,3 +243,31 @@ export interface ApplicationCountIn {
 }
 
 export const fetchApplicationsForCounts = () => call<{ applications: ApplicationCountIn[] }>("/api/governance/role-applications");
+
+// ── An agent proposed by its keeper (0374, server/routes/agentRoleProposals.ts) ──
+
+export interface AgentFormOut {
+  season: { id: string; name: string | null; startsOn: string } | null;
+  term: { startsOn: string; endsOn: string } | null;
+  roles: Array<{ id: string; name: string; circle: string; aim: string | null }>;
+  agents: Array<{ id: string; name: string; reach: Array<{ scope: string; words: string }> }>;
+  keeper: { id: string; name: string };
+  switchOffPlatform: string;
+  message?: string;
+  noAgents?: string;
+}
+
+export interface AgentProposalIn {
+  agentUserId: string;
+  keeper: boolean;
+  what: string;
+  switchOff: string;
+  why: string;
+  aim: string;
+  roles: Array<{ roleId: string; note: string }>;
+}
+
+/** `GET /api/governance/agent-proposals/form`: the roles an agent may hold and the agents to pick. */
+export const fetchAgentForm = () => call<AgentFormOut>("/api/governance/agent-proposals/form");
+/** `POST /api/governance/agent-proposals`: the keeper sends it; the circle is asked. */
+export const sendAgentProposal = (body: AgentProposalIn) => call<{ sent: true; id: string; href: string; message: string }>("/api/governance/agent-proposals", "POST", body);

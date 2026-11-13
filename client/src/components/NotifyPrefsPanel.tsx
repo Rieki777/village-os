@@ -16,6 +16,7 @@ import { CashOwedNotice, VotesCastNotice, useUnpaidCash } from "@/components/Lea
 import { CASH_GIVE_UP_FIELD } from "@shared/cashOwed";
 import LeavingNotices, { useLeavingNotices } from "@/components/LeavingNotices";
 import EmailFromVillage from "@/components/EmailFromVillage";
+import MapLightSetting from "@/components/map/MapLightSetting";
 import { useModuleOn } from "@/modules/ModuleProvider";
 import { TASK_COPY, TASK_EMAIL_PREFS, isTaskEmailPref } from "@shared/sessionTasks";
 
@@ -266,8 +267,9 @@ export default function NotifyPrefsPanel({ onDeleted }: { onDeleted?: () => void
         <div className="space-y-2.5 mb-6">
           {Object.keys(LABELS).map((key) => (
             <div key={key} className="flex items-center justify-between gap-3">
-              <span className="text-sm text-muted-foreground">{LABELS[key]}</span>
+              <label htmlFor={`notify-${key}`} className="text-sm text-muted-foreground">{LABELS[key]}</label>
               <select
+                id={`notify-${key}`}
                 value={prefs[key]}
                 disabled={saving}
                 onChange={(e) => save({ [key]: e.target.value })}
@@ -370,6 +372,9 @@ export default function NotifyPrefsPanel({ onDeleted }: { onDeleted?: () => void
           {contactNote && <p role="alert" className="text-xs text-destructive mt-1">{contactNote}</p>}
         </div>
       )}
+
+      {/* D2: the member's own light on the circles map, off until they choose it. */}
+      <MapLightSetting />
 
       <GuideDataSection />
 

@@ -22,21 +22,21 @@ There is no timestamp and no author line, on purpose. Both would change on every
 
 ## Who may change what
 
-Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 215 open and 50 founder:
+Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 236 open and 50 founder:
 
 - **open**, the whole village. Community-governable. These are the dials the village decides together, through the proposal loop. A founder can close one of these to their community; the platform ceiling says it may be open.
 - **founder**, the founder or an admin. Founder-held. Legal posture, infrastructure, privacy windows and abuse guards. They stay visible to everybody and they are never proposable. Nothing can open one of these to the village.
 
 The BOUNDS are constitutional in every case. Governance moves a value between the min and the max printed below; nothing here moves the min or the max. That is what keeps a vote from turning a dial into a different mechanism.
 
-Each dial also says WHEN a change lands. 238 of them as soon as it is saved, and 27 of them at the next cycle close.
+Each dial also says WHEN a change lands. 259 of them as soon as it is saved, and 27 of them at the next cycle close.
 
 - **instant**, as soon as it is saved. The new value is live immediately.
 - **cycle-close**, at the next cycle close. Changing one of these mid-cycle would move the basis a settlement is already being measured against, so the new value waits for the cycle to close. That gap is deliberate: it gives the village the window between a decision passing and the decision biting.
 
 ## At a glance
 
-265 dials in 37 categories. 148 carry a minimum and a maximum. By type: 111 integer, 19 decimal, 19 percentage, 37 boolean, 34 choice, 44 text, 1 longtext.
+286 dials in 39 categories. 149 carry a minimum and a maximum. By type: 112 integer, 19 decimal, 19 percentage, 41 boolean, 34 choice, 55 text, 6 longtext.
 
 | Category | Dials | the whole village | the founder or an admin |
 | --- | --- | --- | --- |
@@ -57,7 +57,8 @@ Each dial also says WHEN a change lands. 238 of them as soon as it is saved, and
 | Data lifecycle | 3 | 0 | 3 |
 | Automation | 1 | 0 | 1 |
 | Village map | 12 | 9 | 3 |
-| The village's people | 9 | 8 | 1 |
+| The village's people | 17 | 16 | 1 |
+| The founding team | 12 | 12 | 0 |
 | Events | 3 | 3 | 0 |
 | Forum | 1 | 1 | 0 |
 | Companions | 2 | 2 | 0 |
@@ -75,6 +76,7 @@ Each dial also says WHEN a change lands. 238 of them as soon as it is saved, and
 | Exit | 10 | 10 | 0 |
 | Needs | 5 | 5 | 0 |
 | Journal | 2 | 2 | 0 |
+| Connector | 1 | 1 | 0 |
 | Live Sessions | 2 | 2 | 0 |
 | Language | 1 | 1 | 0 |
 
@@ -270,12 +272,32 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | Show who holds each role to visitors | `org.public_people` | The village's people | boolean | `true` | the founder or an admin |
 | Ask the circle to consent after the conversations | `org.consent_after_interviews` | The village's people | boolean | `false` | the whole village |
 | The role that sends first replies to applicants | `org.onboarding_role` | The village's people | text | blank | the whole village |
+| Days we promise to reply to a role proposal | `org.applicant_reply_days` | The village's people | integer | `7` | the whole village |
+| Review each application before the conversations | `org.review_before_conversations` | The village's people | boolean | `false` | the whole village |
+| The way to stay close, named in the not-invited letter | `org.stay_close_name` | The village's people | text | blank | the whole village |
+| Where the way to stay close is | `org.stay_close_link` | The village's people | text | blank | the whole village |
 | Roles accepted from a sync start unlisted | `org.sync_starts_unlisted` | The village's people | boolean | `false` | the whole village |
 | The track a role without one reads as | `org.default_track` | The village's people | text | blank | the whole village |
 | A role needs a complete card before anyone can apply | `org.apply_needs_complete_card` | The village's people | boolean | `false` | the whole village |
 | The role that holds first conversations | `org.first_conversation_role` | The village's people | text | blank | the whole village |
 | The circle that consents paid roles | `org.paid_consent_circle` | The village's people | text | blank | the whole village |
 | Show the CCOS term on circle and role card headings | `org.ccos_terms` | The village's people | boolean | `true` | the whole village |
+| How we see conflict, before the conflict steps | `org.conflict_intro` | The village's people | longtext | `Conflict helps us evolve. As a culture, we meet it as an opportunity for growth, so everyone in it can take something good from it. Together we seek to understand what each conflict teaches us, so that every one helps us grow stronger.` | the whole village |
+| Feature the founding team on the Roles page | `org.founding_team` | The village's people | boolean | `false` | the whole village |
+| The founding team's roles | `org.founding_team_roles` | The village's people | text | blank | the whole village |
+| Show pay ranges on role cards | `org.show_pay_ranges` | The village's people | boolean | `false` | the whole village |
+| How rewards work, on every role card | `org.pay_shape` | The founding team | text | blank | the whole village |
+| The at-risk line under the pay shape | `org.pay_shape_at_risk` | The founding team | text | blank | the whole village |
+| The note under the pay shape | `org.pay_shape_note` | The founding team | text | blank | the whole village |
+| Ways to get to know us before applying | `org.founding_know_us` | The founding team | longtext | `Join a community call Visit the land Share a meal with us` | the whole village |
+| The note while a way to get to know us is not ticked | `org.founding_know_us_note` | The founding team | longtext | `We encourage you to do these, but if you haven't, you can still apply, especially if you've been invited to, or if you live far away and the next call is more than a week away, or if you feel you're an incredibly strong candidate.` | the whole village |
+| What the first cycle looks like | `org.founding_first_cycle` | The founding team | longtext | `Your first cycle is one month. At its end, either side may choose to stop there, with thanks.` | the whole village |
+| The first conversations after joining | `org.founding_first_conversations` | The founding team | longtext | blank | the whole village |
+| A note when the application changes | `org.founding_updated_note` | The founding team | text | blank | the whole village |
+| Other ways to join: the resident path tile | `org.other_ways_seeder_title` | The founding team | text | `Become a Founding Seeder` | the whole village |
+| Other ways to join: the line under the resident path tile | `org.other_ways_seeder_line` | The founding team | text | `Live here one day? Start on the resident path.` | the whole village |
+| Other ways to join: the gifts tile | `org.other_ways_gifts_title` | The founding team | text | `Offer your gifts` | the whole village |
+| Other ways to join: the line under the gifts tile | `org.other_ways_gifts_line` | The founding team | text | `Volunteer or work-trade: tell us what you would like to give.` | the whole village |
 | Let members RSVP | `events.rsvp_enabled` | Events | boolean | `true` | the whole village |
 | Show gatherings this far ahead | `events.upcoming_days` | Events | integer | `90` | the whole village |
 | Keep finished gatherings listed for | `events.past_visible_days` | Events | integer | `30` | the whole village |
@@ -346,6 +368,7 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | Whether naming the village's needs target is asked before launch | `needs.launch_requirement` | Needs | choice | `recommended` | the whole village |
 | Members who must answer before a pulse average shows | `journal.pulse_floor` | Journal | integer | `1` | the whole village |
 | Every member has a task board unless a steward turns one off | `memberTasks.listDefault` | Journal | boolean | `true` | the whole village |
+| Our agent may make the changes we approve in the chat | `agents.lead_approved_writes` | Connector | boolean | `true` | the whole village |
 | The place line read at drop in | `sessions.place_line` | Live Sessions | text | blank | the whole village |
 | How long a live session runs unless its opener says otherwise | `sessions.default_minutes` | Live Sessions | integer | `60` | the whole village |
 | Default language | `village.default_locale` | Language | choice | `en` | the whole village |
@@ -3399,7 +3422,7 @@ A photograph taken down loses its file immediately. What stays is the record of 
 
 ## The village's people
 
-9 dials. 8 for the whole village, 1 for the founder or an admin.
+17 dials. 16 for the whole village, 1 for the founder or an admin.
 
 ### Show who holds each role to visitors
 
@@ -3443,6 +3466,63 @@ The role whose holders are reminded to send each applicant a first reply within 
 | A change takes effect | as soon as it is saved |
 | What it costs to change | a routine vote |
 
+### Days we promise to reply to a role proposal
+
+The number of days the applicant's status page says we reply within. It is a promise to the person, so set the number the people who reply can keep. The reminder to the role that sends first replies runs on its own clock (3 business days) and is not changed by this.
+
+| Fact | Value |
+| --- | --- |
+| Key | `org.applicant_reply_days` |
+| Type | integer, a whole number |
+| Default | `7` |
+| Range | 1 to 60 |
+| Counted in | days |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### Review each application before the conversations
+
+On, an application waits for our review once its address confirms: a holder of the power to place people in roles invites the applicant to the conversations, in the order the role names them, or sends the not-invited letter, which thanks them and points to open ways to stay close. The first conversation opens only with the invitation, and the circle is asked to consent once the conversations are written up. Off, the first conversation opens as the address confirms. An application keeps the setting it confirmed under.
+
+| Fact | Value |
+| --- | --- |
+| Key | `org.review_before_conversations` |
+| Type | boolean, on or off |
+| Default | `false` |
+| Range | on or off |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### The way to stay close, named in the not-invited letter
+
+The name of the village's open way in for someone not invited to a role, such as its supporters' circle. The not-invited letter and the status page point to it first, then to quests and events. Leave it empty and they point to quests and events only.
+
+| Fact | Value |
+| --- | --- |
+| Key | `org.stay_close_name` |
+| Type | text, free text, one line |
+| Default | blank |
+| Range | no bounds are set |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### Where the way to stay close is
+
+A page of this site, such as /resident, or an https address. Used only when the way to stay close has a name.
+
+| Fact | Value |
+| --- | --- |
+| Key | `org.stay_close_link` |
+| Type | text, free text, one line |
+| Default | blank |
+| Range | no bounds are set |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
 ### Roles accepted from a sync start unlisted
 
 On, a role that arrives from a sync and is accepted starts unlisted: holders, stewards and admins see it, and no visitor or member browsing the village does. A steward lists it once its card is ready. Off, an accepted role is listed at once.
@@ -3473,7 +3553,7 @@ What a role whose card names no track reads as: contractor, volunteer, employee 
 
 ### A role needs a complete card before anyone can apply
 
-On, a role whose card is not complete shows "Being written" in place of Apply, and the open form leaves it out. A card is complete when its aim, what it decides on, what it answers for, rough hours, track, reward type, term, a village goal, selection criteria and interviewing roles are written, and, for a paid role, a pay range is on offer. Off, Apply shows on every open role as before.
+On, a role whose card is not complete shows "Being written" in place of Apply, and the open form leaves it out. A card is complete when its aim, what it decides on, what it answers for, commitment, track, reward type, term, a village goal, selection criteria and interviewing roles are written, and, for a paid role, a pay range is on offer. Off, Apply shows on every open role as before.
 
 | Fact | Value |
 | --- | --- |
@@ -3523,6 +3603,234 @@ Each heading on a circle card, and on each role in full on a player's card, is p
 | Type | boolean, on or off |
 | Default | `true` |
 | Range | on or off |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### How we see conflict, before the conflict steps
+
+The paragraph above the conflict steps on /roles and /governance, under How we evolve through conflict: how this village sees conflict, in its own words. Empty, the steps show with no paragraph above them.
+
+| Fact | Value |
+| --- | --- |
+| Key | `org.conflict_intro` |
+| Type | longtext, free text, several lines, shown to members as plain words |
+| Default | `Conflict helps us evolve. As a culture, we meet it as an opportunity for growth, so everyone in it can take something good from it. Together we seek to understand what each conflict teaches us, so that every one helps us grow stronger.` |
+| Range | no bounds are set |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### Feature the founding team on the Roles page
+
+On, the top of the Roles and Circles page is a quiet "Join the founding team" section: the paid founding roles the village is hiring for, each with its full card and one Apply act. The roles are the ones written in "The founding team's roles". Off, the page opens on the roles and circles as before.
+
+| Fact | Value |
+| --- | --- |
+| Key | `org.founding_team` |
+| Type | boolean, on or off |
+| Default | `false` |
+| Range | on or off |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### The founding team's roles
+
+The roles the founding team section features, in the order they show: paste each role id from the org chart, separated by commas or new lines. A role that is unlisted, ended or held as an example is left out of the section. Empty, the section shows nothing.
+
+| Fact | Value |
+| --- | --- |
+| Key | `org.founding_team_roles` |
+| Type | text, free text, one line |
+| Default | blank |
+| Range | no bounds are set |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### Show pay ranges on role cards
+
+Off, no role card shows a pay range or an amount to visitors or members, whatever a role's terms hold: a card shows how pay works (its shares) instead. On, an open listed role whose terms name a pay range shows that range on its card to everyone. People who hold the power to read terms still read the full terms either way.
+
+| Fact | Value |
+| --- | --- |
+| Key | `org.show_pay_ranges` |
+| Type | boolean, on or off |
+| Default | `false` |
+| Range | on or off |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+## The founding team
+
+12 dials. 12 for the whole village.
+
+### How rewards work, on every role card
+
+The shape of the pay every role card shows under "How rewards work", as shares of the whole, never an amount: write each share's name and percent, separated by commas, like Cash 60, Equity 40, Credits 0. The shares add up to 100 or less, and a share at 0 still shows, as 0%. A role whose card writes its own shares shows those instead. Empty, cards show no pay shape.
+
+| Fact | Value |
+| --- | --- |
+| Key | `org.pay_shape` |
+| Type | text, free text, one line |
+| Default | blank |
+| Range | no bounds are set |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### The at-risk line under the pay shape
+
+One line under the shares on every role card, in the village's words, saying which part of the pay depends on what the village raises or earns. No amounts. Empty, no line.
+
+| Fact | Value |
+| --- | --- |
+| Key | `org.pay_shape_at_risk` |
+| Type | text, free text, one line |
+| Default | blank |
+| Range | no bounds are set |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### The note under the pay shape
+
+The last line under the pay shape on every role card, like Indicative only. Terms are still being defined and are subject to legal review. No amounts. A role's card may write its own. A note that starts with * puts a matching * after the card's total compensation line, so it reads as that line's fine print. Empty, no note.
+
+| Fact | Value |
+| --- | --- |
+| Key | `org.pay_shape_note` |
+| Type | text, free text, one line |
+| Default | blank |
+| Range | no bounds are set |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### Ways to get to know us before applying
+
+The first step of the application lists these, one per line, and the applicant ticks the ones they have done. The step never stops anyone applying. Up to eight lines.
+
+| Fact | Value |
+| --- | --- |
+| Key | `org.founding_know_us` |
+| Type | longtext, free text, several lines, shown to members as plain words |
+| Default | `Join a community call Visit the land Share a meal with us` |
+| Range | no bounds are set |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### The note while a way to get to know us is not ticked
+
+Shown on the first step of the application whenever a way is not ticked yet. It encourages, and the applicant can always continue.
+
+| Fact | Value |
+| --- | --- |
+| Key | `org.founding_know_us_note` |
+| Type | longtext, free text, several lines, shown to members as plain words |
+| Default | `We encourage you to do these, but if you haven't, you can still apply, especially if you've been invited to, or if you live far away and the next call is more than a week away, or if you feel you're an incredibly strong candidate.` |
+| Range | no bounds are set |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### What the first cycle looks like
+
+Shown on the Your first day step of the application: how long the first cycle is, when it runs, and that either side may end it there after the first full moon cycle.
+
+| Fact | Value |
+| --- | --- |
+| Key | `org.founding_first_cycle` |
+| Type | longtext, free text, several lines, shown to members as plain words |
+| Default | `Your first cycle is one month. At its end, either side may choose to stop there, with thanks.` |
+| Range | no bounds are set |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### The first conversations after joining
+
+Shown on the Your first day step: the first conversations a new team member has once they are chosen, one per line. Leave it empty and none are listed.
+
+| Fact | Value |
+| --- | --- |
+| Key | `org.founding_first_conversations` |
+| Type | longtext, free text, several lines, shown to members as plain words |
+| Default | blank |
+| Range | no bounds are set |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### A note when the application changes
+
+Shown under the application's title while it is set, for example: We updated this application on 14 November. Your saved answers are still here. Empty, no note.
+
+| Fact | Value |
+| --- | --- |
+| Key | `org.founding_updated_note` |
+| Type | text, free text, one line |
+| Default | blank |
+| Range | no bounds are set |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### Other ways to join: the resident path tile
+
+The first tile under Other ways to join on the Roles page. It goes to the way to stay close, or to the resident page while that is empty.
+
+| Fact | Value |
+| --- | --- |
+| Key | `org.other_ways_seeder_title` |
+| Type | text, free text, one line |
+| Default | `Become a Founding Seeder` |
+| Range | no bounds are set |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### Other ways to join: the line under the resident path tile
+
+One short line under the resident path tile.
+
+| Fact | Value |
+| --- | --- |
+| Key | `org.other_ways_seeder_line` |
+| Type | text, free text, one line |
+| Default | `Live here one day? Start on the resident path.` |
+| Range | no bounds are set |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### Other ways to join: the gifts tile
+
+The tile under Other ways to join that goes to the work-with-us page, for volunteering and work-trade.
+
+| Fact | Value |
+| --- | --- |
+| Key | `org.other_ways_gifts_title` |
+| Type | text, free text, one line |
+| Default | `Offer your gifts` |
+| Range | no bounds are set |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### Other ways to join: the line under the gifts tile
+
+One short line under the gifts tile.
+
+| Fact | Value |
+| --- | --- |
+| Key | `org.other_ways_gifts_line` |
+| Type | text, free text, one line |
+| Default | `Volunteer or work-trade: tell us what you would like to give.` |
+| Range | no bounds are set |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
 | What it costs to change | a routine vote |
@@ -4665,6 +4973,24 @@ When on, every member has a task board on their profile unless a steward turns t
 | A change takes effect | as soon as it is saved |
 | What it costs to change | a routine vote |
 
+## Connector
+
+1 dial. 1 for the whole village.
+
+### Our agent may make the changes we approve in the chat
+
+When on, the village connector, acting for the person who connected it, may write a role's words, draft the wording of its terms, seat and unseat a person, and change the village's own wording, each time a person has approved it in the chat. Every seating names who approved it and quotes the approval, and every admin and founder is told. Pay, money, erasure, secrets, agent accounts and powers stay a person's act. It is on by default because it opens nothing by itself: the list of paths the agent may use is still edited only by a person, and every write still needs the approval note from the person in the chat. Off, the connector does only what it did before.
+
+| Fact | Value |
+| --- | --- |
+| Key | `agents.lead_approved_writes` |
+| Type | boolean, on or off |
+| Default | `true` |
+| Range | on or off |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
 ## Live Sessions
 
 2 dials. 2 for the whole village.
@@ -4733,6 +5059,7 @@ The generator reads these and fails loudly if any of them moves:
 - `shared/changeSetCap.ts`
 - `shared/closingPolicies.ts`
 - `shared/conflictAgreement.ts`
+- `shared/conflictIntro.ts`
 - `shared/gameConfig.ts`
 - `shared/gameVariables.ts`
 - `shared/governanceEngine.ts`

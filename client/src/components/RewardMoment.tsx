@@ -11,14 +11,15 @@
  * back as one payload and is shown as one card, a line per piece of work.
  *
  * THE SAME GLOW AS A STAGE REACHED. The approved profile design draws the
- * stage ceremony on a dark forest ground with a gold halo and gold sparks;
+ * stage ceremony on a dark forest ground with a gold halo; since wave 2 the
+ * sparks are fireflies and the burst a bloom;
  * this card is that ceremony at the size of a dialog. Every colour is a
  * `var(--reward-*, fallback)`, so a village can retone it and the theme guard
  * reads it as the token pattern it is.
  *
- * STILL FORM AND A LIVE REGION, as every celebration has. `Celebration` draws
- * its settled composition under reduce-motion, and it announces every line
- * through its own status region. The words on the card carry the same news,
+ * STILL FORM AND A LIVE REGION, as every celebration has. The nature kit
+ * draws its still bloom under reduce-motion, and a status region here
+ * announces every line. The words on the card carry the same news,
  * so the moment lands whether or not anyone sees the drawing.
  *
  * `moment` INTENSITY, which is rationed. This is the end of a piece of work
@@ -28,9 +29,8 @@
  * A MEMBER WHO TURNED CELEBRATIONS OFF on their profile sees nothing: the
  * arrivals are marked seen in silence, and the bell still holds the news.
  */
-import { useEffect, useId, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useId, useRef, useState } from "react";
 import { X } from "lucide-react";
-import Celebration from "@/components/natural/Celebration";
 import { authToken } from "@/lib/gameApi";
 import { holdFloor } from "@/lib/onceDialogs";
 import { formatMoney } from "@shared/money";
@@ -46,14 +46,12 @@ const PANEL_EDGE = "var(--reward-panel-edge, #8a7334)";
 const GROUND =
   "radial-gradient(circle at 50% 30%, var(--reward-ground-1, #2a3a22) 0%, var(--reward-ground-2, #0e1814) 55%, var(--reward-ground-3, #070d0a) 100%)";
 
-/* The approved design's sparks, scattered by the same arithmetic so the card
-   reads as the same night sky. Decorative and still. */
-const SPARKS = Array.from({ length: 22 }, (_, i) => ({
-  left: `${(i * 41) % 96}%`,
-  top: `${(i * 29) % 92}%`,
-  size: i % 5 === 0 ? 5 : 3,
-  opacity: 0.2 + (i % 5) * 0.14,
-}));
+/* The night around the card: a few fireflies, and in the halo a Seed of Life
+   that opens once (game feel wave 2: a bloom, never a burst; the sparks and
+   the seed burst that were here are gone). Lazy, because this card rides in
+   the app shell and the nature kit must stay out of the first page. */
+const RewardBloom = lazy(() => import("@/components/rewardMoment/RewardBloom"));
+const RewardSky = lazy(() => import("@/components/rewardMoment/RewardBloom").then((m) => ({ default: m.RewardSky })));
 
 async function send(path: string, init?: RequestInit): Promise<any> {
   const token = authToken();
@@ -138,15 +136,9 @@ export default function RewardMoment() {
         className="relative w-full max-w-md overflow-hidden rounded-3xl px-6 pb-6 pt-8 text-center"
         style={{ background: GROUND, color: CREAM, boxShadow: "0 0 60px var(--reward-glow-soft, rgba(243, 216, 145, 0.18))" }}
       >
-        <div aria-hidden="true" className="pointer-events-none absolute inset-0">
-          {SPARKS.map((s, i) => (
-            <span
-              key={i}
-              className="absolute rounded-full"
-              style={{ left: s.left, top: s.top, width: s.size, height: s.size, opacity: s.opacity, background: GOLD, boxShadow: `0 0 8px ${GOLD}` }}
-            />
-          ))}
-        </div>
+        <Suspense fallback={null}>
+          <RewardSky />
+        </Suspense>
 
         <button
           ref={closeRef}
@@ -171,7 +163,15 @@ export default function RewardMoment() {
             className="flex h-full w-full items-center justify-center rounded-full"
             style={{ background: "radial-gradient(circle at 50% 35%, var(--reward-core-1, #1f3326), var(--reward-core-2, #0e1814))" }}
           >
-            <Celebration kind="seeds" intensity="moment" size={92} seed={view.keys.length} message={rewardAnnouncement(view)} />
+            <span className="block size-[92px]">
+              <Suspense fallback={null}>
+                <RewardBloom />
+              </Suspense>
+            </span>
+          </span>
+          {/* The live region the celebration used to carry: the same news as the card, for a screen reader. */}
+          <span className="sr-only" role="status">
+            {rewardAnnouncement(view)}
           </span>
         </div>
 

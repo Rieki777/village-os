@@ -55,6 +55,7 @@ import { roleHeldBy } from "../repos/playerCard";
 import { effectiveLifecycle } from "../lib/modules";
 import { rhythmDoc } from "../lib/moonRecap";
 import { EMPTY_RHYTHM } from "../../shared/moonRhythm";
+import { stringVar } from "../lib/variables";
 
 export type CardDeps = Pick<AppDeps, "authedUser" | "isAdmin" | "capabilityCtx" | "getPool" | "firstName"> & {
   /** `seasonState()`: every season, the current and upcoming ones, and the village's zone. */
@@ -119,6 +120,8 @@ export async function cardContext(deps: CardDeps, viewerId: string | null, viewe
     moonId: (deps.clock ?? villageClock)().idFor(now),
     ...cardSeasons(state, now),
     villageName: deps.villageName(),
+    // The partner on a proposal card's open rows: the role the village names to welcome people (verify B4).
+    onboardingRoleId: stringVar("org.onboarding_role").trim(),
     lapse: deps.lapse(),
     archetypeNames: Object.fromEntries(archetypes.map((a) => [a.key, a.name])),
     firstName: deps.firstName,

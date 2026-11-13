@@ -86,7 +86,12 @@ export interface ServedPath {
   /** The buddy's first name, never the full name. */
   buddyName: string;
   mine: boolean;
-  items: Array<PathItemState & { mayTick: boolean }>;
+  /**
+   * `ownerName`: who the step waits on, as the holder reads it: the role the
+   * village names for that owner key (the welcome waits on its onboarding
+   * role), the buddy's first name, or empty for the holder's own step.
+   */
+  items: Array<PathItemState & { mayTick: boolean; ownerName: string }>;
   openCount: number;
   checkinsDue: number[];
   /** Present only when the viewer is the holder, the buddy or the onboarding role. */
@@ -103,12 +108,22 @@ export async function servePath(env: OnboardingEnv, viewerId: string, p: repo.Pa
   if (!readsCheckins) return null;
   const role = await repo.roleFacts(env.db, p.orgRoleId);
   const rows = visibleItems(await repo.itemsOfPath(env.db, p.id), env.consented(p.orgRoleId));
+  // A step's link lives in the village's document and is looked up by key here,
+  // so a path that opened before a link was added still shows it, and a mended
+  // address reaches paths already open. Everything else on a step stays as the
+  // path opened with it.
+  const links = new Map(
+    mergePath({ village: doc, circleId: role?.circleId ?? null, first90: role?.first90 ?? null }).flatMap((i) => (i.link ? [[i.key, i.link] as const] : [])),
+  );
   const items: ServedPath["items"] = [];
+  const roleNames = ownerRoleNames(doc);
+  const buddyFirst = p.buddyUserId ? holderFirstName(await repo.nameOf(env.db, p.buddyUserId)) : "";
   for (const r of rows) {
     const holdsRole = r.owner === "holder" || r.owner === "buddy" ? false : await holdsOwner(env.db, viewerId, doc, r.owner);
     items.push({
-      key: r.key, kind: r.kind, title: r.title, owner: r.owner, dueDay: r.dueDay, doneWhen: r.doneWhen, source: r.source, phase: r.phase, phaseFrom: r.phaseFrom, phaseTo: r.phaseTo, doneAt: r.doneAt,
+      key: r.key, kind: r.kind, title: r.title, owner: r.owner, dueDay: r.dueDay, doneWhen: r.doneWhen, ...(links.has(r.key) ? { link: links.get(r.key) } : {}), source: r.source, phase: r.phase, phaseFrom: r.phaseFrom, phaseTo: r.phaseTo, doneAt: r.doneAt,
       mayTick: mayTick(viewerId, people, r.owner, holdsRole),
+      ownerName: r.owner === "holder" ? "" : r.owner === "buddy" ? buddyFirst : (roleNames[r.owner] ?? ""),
     });
   }
   const checkins = (await repo.checkinsOfPath(env.db, p.id)).map((c) => {
@@ -119,7 +134,7 @@ export async function servePath(env: OnboardingEnv, viewerId: string, p: repo.Pa
   const dayNo = Math.max(1, Math.floor((Date.parse(`${env.today}T00:00:00Z`) - Date.parse(`${p.openedOn}T00:00:00Z`)) / 86_400_000) + 1);
   return {
     id: p.id, roleName: role?.name ?? "", title: p.title || "Your first days", openedOn: p.openedOn, dueOn: p.dueOn, day: dayNo, buddyUserId: p.buddyUserId,
-    buddyName: p.buddyUserId ? holderFirstName(await repo.nameOf(env.db, p.buddyUserId)) : "", mine,
+    buddyName: buddyFirst, mine,
     items, openCount: openItems(items), checkinsDue: checkinsDue(p.openedOn, env.today, p.checkinDays).filter((d) => !checkins.some((c) => c.day === d)),
     checkins, mayFile: mayFileCheckin(viewerId, people),
   };

@@ -49,13 +49,13 @@ export interface MonthViewProps {
 export function StackedHeaders({ top, bottom, pill }: { top: string; bottom: string; pill?: string | null }) {
   return (
     <div className="grid grid-rows-2 rounded-xl border border-border overflow-hidden mb-3" role="group" aria-label="Month and moon">
-      <div className="min-h-[44px] flex items-center justify-center px-3 bg-teal-deep text-white font-display text-lg font-semibold text-center">
+      <div className="min-h-[44px] flex items-center justify-center px-3 bg-card border-b border-border text-foreground font-display text-lg text-center">
         {top}
       </div>
       <div className="min-h-[44px] flex items-center justify-center gap-2 px-3 bg-card text-foreground font-display text-lg font-semibold text-center">
         <span>{bottom}</span>
         {pill && (
-          <span className="text-[10px] font-medium uppercase tracking-wide text-amber-800 bg-amber-50 border border-amber-100 rounded px-1.5 py-0.5">
+          <span className="text-xs font-medium uppercase tracking-widest text-notice border border-notice/50 rounded-lg px-1.5 py-0.5">
             {pill}
           </span>
         )}
@@ -113,7 +113,7 @@ export default function MonthView(p: MonthViewProps) {
         aria-pressed={selected}
         aria-label={`${day.key}, ${info ? moonDayLine(info, p.moonOneCycle) : ""}${list.length ? `, ${list.length} item${list.length === 1 ? "" : "s"}` : ""}`}
         className={`flex flex-col justify-start text-left min-h-[56px] sm:min-h-[76px] p-1 sm:p-1.5 border-t border-l border-border transition-colors ${
-          selected ? "bg-teal-deep/10 ring-2 ring-inset ring-teal-deep" : "hover:bg-muted/60"
+          selected ? "bg-muted ring-2 ring-inset ring-notice" : "hover:bg-muted/60"
         }`}
       >
         {/* A day from the next or last month is quieter by INK, not by
@@ -122,7 +122,7 @@ export default function MonthView(p: MonthViewProps) {
             buttons a visitor can still press. shared/brandTokens.ts derives the
             muted ink to clear 4.5:1 on --muted, and this ground is lighter. */}
         <div className="flex items-start justify-between gap-1">
-          <span className={`text-sm font-semibold leading-none ${isToday ? "rounded-full bg-teal-deep text-white px-1.5 py-0.5" : dim ? "text-muted-foreground" : "text-foreground"}`}>
+          <span className={`text-sm font-semibold leading-none ${isToday ? "rounded-full bg-notice text-background px-1.5 py-0.5" : dim ? "text-muted-foreground" : "text-foreground"}`}>
             {primary}
           </span>
           {info && <MoonGlyph phase={info.phase} size={12} hemisphere={p.hemisphere} />}
@@ -153,7 +153,6 @@ export default function MonthView(p: MonthViewProps) {
         <StackedHeaders
           top={moonHeading(label)}
           bottom={span}
-          pill={label.isExample ? "example name" : null}
         />
         <div className="flex items-start justify-between gap-2">
           <LayerChips present={present} off={off} toggle={toggle} />
@@ -179,7 +178,6 @@ export default function MonthView(p: MonthViewProps) {
         bottom={cursorLunar && label
           ? `${moonHeading(label)}, day ${cursorLunar.day} of ${cursorLunar.length}`
           : "Outside the lunar table"}
-        pill={label?.isExample ? "example name" : null}
       />
       <div className="flex items-start justify-between gap-2">
         <LayerChips present={present} off={off} toggle={toggle} />

@@ -1,4 +1,9 @@
 import Layout from "@/components/Layout";
+import { BTN_PRIMARY, BTN_SECONDARY, EYEBROW, RING, WORLD } from "@/components/journey/look";
+import { SeedOfLife } from "@/components/journey/nature";
+import FirstSteps from "@/components/tracks/FirstSteps";
+import TwoTracks from "@/components/tracks/TwoTracks";
+import { usePageContent } from "@/hooks/usePageContent";
 import { altOr, useBrandImages, useGameConfig, useVillageLinks } from "@/lib/gameApi";
 import { figureWithCurrency } from "@shared/money";
 import WhyCostaRica from "@/components/WhyCostaRica";
@@ -9,9 +14,10 @@ import { Emphasized, Highlighted } from "@/components/PageText";
 import { JourneyLink, leavesSite } from "@/components/journey/JourneyLink";
 import { useJourneyContent, useJourneyProgress } from "@/hooks/useJourneyContent";
 import { buttonAction, stepPoints, type TargetContext } from "@/lib/journeyPage";
-import { JOURNEY_LEGACY_STEP_IDS, RESIDENT_JOURNEY } from "@shared/pageContent/journeys";
+import { JOURNEY_LEGACY_STEP_IDS, RESIDENT_JOURNEY, STEWARD_JOURNEY } from "@shared/pageContent/journeys";
 import type { ResolvedSection } from "@shared/pageContent/types";
 import { useState, useEffect } from "react";
+import { useLingui } from "@lingui/react/macro";
 import { m, AnimatePresence } from "framer-motion";
 import {
   Home,
@@ -26,11 +32,8 @@ import {
   Award,
   Key,
   Building,
-  Shield,
-  Crown,
   ChevronDown,
   ExternalLink,
-  Sparkles,
   BookOpen,
   Sprout,
   Wallet,
@@ -41,6 +44,13 @@ import {
  * EVERY WORD ON THIS PAGE IS THE VILLAGE'S OWN, from Admin, Pages, Resident
  * journey (shared/pageContent/journeys.ts). What stays here is the look: the
  * icons, handed out by position.
+ *
+ * ONE FLOW, TWO PATHS (build list section 8, 11 Nov 2026). The first steps
+ * and the fork into two paths are the steward page's sections, written once
+ * there and shown here as well; this page's own steps are the resident path,
+ * which always carries the village's early supporters step from its own list.
+ * It stands in the same night world as the steward page, in the game's
+ * playful register (docs/DESIGN_RULE.md).
  *
  * THE DEPOSIT FIGURES ARE NOT WRITTEN ANYWHERE IN CODE (founder ruling,
  * 2026-09-03). The deposit step said "from $5k to $20k+ depending on the home
@@ -76,7 +86,18 @@ const STEP_ICONS = [Calendar, Users, Sprout, BookOpen, Heart, Home, Wallet, File
  * the default words may say or imply that years alone grow anybody's voice,
  * and the heading that did say so ("Growing Your Voice") is gone.
  */
-const TITLE_ICONS = [Home, Shield, Users, Crown];
+/** One ring per title, from the heart outward: the drawing for long presence on the land. */
+function TreeRings({ rings }: { rings: number }) {
+  const n = Math.max(1, Math.min(6, rings));
+  return (
+    <svg viewBox="0 0 40 40" aria-hidden="true" data-rings={n} className="h-10 w-10 text-notice">
+      <circle cx="20" cy="20" r="2" fill="currentColor" />
+      {Array.from({ length: n }, (_, i) => (
+        <circle key={i} cx="20" cy="20" r={5 + i * 3} fill="none" stroke="currentColor" strokeOpacity={0.85 - i * 0.1} strokeWidth="1.1" />
+      ))}
+    </svg>
+  );
+}
 
 interface VillageDues {
   amount?: string;
@@ -111,9 +132,15 @@ export default function ResidentJourney() {
     "background-note": backgroundCheckNote ? `, ${backgroundCheckNote}` : "",
     "transfer-note": transferNote ? ` ${transferNote}` : "",
   }));
+  // The first steps and the two paths, from the steward page where they are written once.
+  const shared = usePageContent(STEWARD_JOURNEY);
   const hero = page?.hero.fields;
   const steps = page?.steps.lists.items ?? null;
   const progress = useJourneyProgress("amora-resident-progress", steps, JOURNEY_LEGACY_STEP_IDS.resident);
+  const { t } = useLingui();
+  const walkedCount = progress.doneCount;
+  const stepCount = progress.total;
+  const seedLabel = t({ message: `${walkedCount} of ${stepCount} steps completed`, context: "resident path ticked off" });
   // This village's own destinations. Blank hides the control that uses one.
   const { eventsUrl, mailTo } = useVillageLinks();
   const targets: TargetContext = { eventsUrl, mailTo, subject: "" };
@@ -136,6 +163,8 @@ export default function ResidentJourney() {
 
   return (
     <Layout>
+      {/* The sheet's world (docs/DESIGN_RULE.md), as the steward's door is. */}
+      <div className={WORLD}>
       {/* Hero Section */}
       <section className="relative py-24 overflow-hidden">
         <div className="absolute inset-0 z-0">
@@ -167,14 +196,11 @@ export default function ResidentJourney() {
               animate={{ opacity: 1, x: 0 }}
               className="flex items-center gap-3 mb-6"
             >
-              <m.div
-                className="w-12 h-12 shrink-0 rounded-xl bg-teal-deep flex items-center justify-center"
-                animate={{ rotate: [0, 5, -5, 0] }}
-                transition={{ duration: 2, repeat: Infinity }}
-              >
-                <Home className="w-6 h-6 text-white" />
-              </m.div>
-              <span className={`text-teal-deep font-medium tracking-wide uppercase text-sm min-w-0 break-words${waiting}`}>{hero?.eyebrow || " "}</span>
+              {/* A gold ring, the way the sheet carries its icons. It used to rock forever beside the text. */}
+              <span className={`${RING} size-12`} aria-hidden="true">
+                <Home className="w-6 h-6" />
+              </span>
+              <span className={`${EYEBROW} text-sm min-w-0 break-words${waiting}`}>{hero?.eyebrow || " "}</span>
             </m.div>
 
             <m.h1
@@ -186,7 +212,7 @@ export default function ResidentJourney() {
               <Highlighted
                 text={hero?.headline || " "}
                 phrase={hero?.highlight ?? ""}
-                render={(phrase) => <span className="text-teal-deep italic">{phrase}</span>}
+                render={(phrase) => <span className="text-notice italic">{phrase}</span>}
               />
             </m.h1>
 
@@ -206,16 +232,13 @@ export default function ResidentJourney() {
               className="flex flex-wrap gap-4"
             >
               {heroPrimary && (
-                <JourneyLink action={heroPrimary.action} className="btn-village flex items-center gap-2">
+                <JourneyLink action={heroPrimary.action} className={BTN_PRIMARY}>
                   <Calendar className="w-5 h-5" />
                   {heroPrimary.label}
                 </JourneyLink>
               )}
               {heroSecondary && (
-                <JourneyLink
-                  action={heroSecondary.action}
-                  className="px-6 py-3 bg-white/90 text-foreground rounded-full font-medium uppercase tracking-wider text-sm hover:bg-white transition-all"
-                >
+                <JourneyLink action={heroSecondary.action} className={`${BTN_SECONDARY} bg-card`}>
                   {heroSecondary.label}
                 </JourneyLink>
               )}
@@ -224,9 +247,26 @@ export default function ResidentJourney() {
         </div>
       </section>
 
+      {/* The first steps everyone takes, shared with the steward page. */}
+      {page && shared && !page.entry.hidden && !shared.getToKnow.hidden && (
+        <div className="border-y border-border/60 bg-card/40">
+          <FirstSteps
+            section={shared.getToKnow}
+            heading={page.entry.fields.heading}
+            body={page.entry.fields.body}
+            targets={targets}
+            showExceptions={false}
+            register="game"
+          />
+        </div>
+      )}
+
+      {/* Where the path divides: this page is the home path. */}
+      {shared && <TwoTracks section={shared.tracks} here="resident" />}
+
       {/* Land Share Info */}
       {page && !page.tenure.hidden && (
-      <section className="py-16 bg-teal-deep/10">
+      <section className="py-16 bg-muted">
         <div className="container">
           <m.div
             className="max-w-3xl mx-auto text-center"
@@ -234,12 +274,7 @@ export default function ResidentJourney() {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
           >
-            <m.div
-              animate={{ y: [0, -5, 0] }}
-              transition={{ duration: 2, repeat: Infinity }}
-            >
-              <Key className="w-12 h-12 text-teal-deep mx-auto mb-4" />
-            </m.div>
+            <Key className="w-12 h-12 text-notice mx-auto mb-4" aria-hidden="true" />
             <h2 className="font-display text-2xl md:text-3xl font-semibold text-foreground mb-4 break-words">
               {page.tenure.fields.heading}
             </h2>
@@ -253,7 +288,7 @@ export default function ResidentJourney() {
 
       {/* Interactive Journey Steps */}
       {page && steps && (
-      <section className="py-20 bg-background">
+      <section id="home-path" className="scroll-mt-20 py-20 bg-background">
         <div className="container">
           <m.div
             className="text-center mb-8"
@@ -268,16 +303,14 @@ export default function ResidentJourney() {
               <Emphasized text={page.steps.fields.intro} />
             </p>
 
-            {/* Progress Bar */}
-            <div className="max-w-md mx-auto">
-              <div className="relative h-3 bg-muted rounded-full overflow-hidden mb-2">
-                <m.div
-                  className="absolute inset-y-0 left-0 bg-gradient-to-r from-coral to-gold rounded-full"
-                  initial={{ width: 0 }}
-                  animate={{ width: `${progress.progress}%` }}
-                  transition={{ duration: 0.5, ease: "easeOut" }}
-                />
-              </div>
+            {/* Progress grows as a Seed of Life, one circle per step ticked; never a filling bar. */}
+            <div className="flex flex-col items-center gap-2">
+              <SeedOfLife
+                total={Math.min(Math.max(progress.total, 1), 19)}
+                walked={Math.min(progress.doneCount, 19)}
+                label={seedLabel}
+                size="md"
+              />
               <p className="text-sm text-muted-foreground">
                 {progress.doneCount} of {progress.total} steps completed
               </p>
@@ -303,7 +336,7 @@ export default function ResidentJourney() {
                     viewport={{ once: true }}
                     transition={{ delay: index * 0.03 }}
                     className={`bg-card rounded-xl shadow-sm overflow-hidden transition-all ${
-                      isCompleted ? "border-l-4 border-coral" : "border-l-4 border-transparent hover:border-coral/50"
+                      isCompleted ? "border-l-4 border-notice" : "border-l-4 border-transparent hover:border-notice/50"
                     }`}
                   >
                     <div
@@ -321,28 +354,31 @@ export default function ResidentJourney() {
                             e.stopPropagation();
                             progress.toggle(step);
                           }}
-                          className="flex-shrink-0 mt-0.5 rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
+                          // A 44px target around a 20px tick. The negative margins give
+                          // the 24px back to the row, so the layout is the one it had,
+                          // and the tick still sits 2px below the row's top as before.
+                          className="flex-shrink-0 -mx-3 -mt-2.5 -mb-3 inline-flex size-11 items-center justify-center rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                         >
                           <m.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}>
                             {isCompleted ? (
-                              <CheckCircle2 className="w-5 h-5 text-teal-deep" />
+                              <CheckCircle2 className="w-5 h-5 text-notice" />
                             ) : (
-                              <Circle className="w-5 h-5 text-muted-foreground hover:text-teal-deep transition-colors" />
+                              <Circle className="w-5 h-5 text-muted-foreground hover:text-notice transition-colors" />
                             )}
                           </m.div>
                         </button>
 
                         <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                          isCompleted ? "bg-teal-deep/10" : "bg-muted"
+                          isCompleted ? "bg-muted" : "bg-muted"
                         }`}>
-                          <StepIcon className={`w-4 h-4 ${isCompleted ? "text-teal-deep" : "text-muted-foreground"}`} />
+                          <StepIcon className={`w-4 h-4 ${isCompleted ? "text-notice" : "text-muted-foreground"}`} />
                         </div>
 
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between gap-2">
                             <div className="flex items-center gap-2 flex-wrap min-w-0">
                               <span className={`px-2 py-0.5 text-xs font-medium rounded ${
-                                isCompleted ? "bg-teal-deep/10 text-teal-deep" : "bg-muted text-muted-foreground"
+                                isCompleted ? "bg-muted text-notice" : "bg-muted text-muted-foreground"
                               }`}>
                                 {step.stage}
                               </span>
@@ -384,7 +420,7 @@ export default function ResidentJourney() {
                                     transition={{ delay: i * 0.05 }}
                                     className="flex items-center gap-2 text-xs text-muted-foreground min-w-0 break-words"
                                   >
-                                    <div className="w-1 h-1 shrink-0 rounded-full bg-teal-deep" />
+                                    <div className="w-1 h-1 shrink-0 rounded-full bg-open" />
                                     <span className="min-w-0 break-words">{detail}</span>
                                   </m.li>
                                 ))}
@@ -393,7 +429,7 @@ export default function ResidentJourney() {
                             {action && (
                               <JourneyLink
                                 action={action.action}
-                                className="inline-flex items-center gap-2 px-3 py-1.5 bg-teal-deep text-white rounded-full text-xs font-medium hover:bg-teal-deep-dark transition"
+                                className={`${BTN_PRIMARY} text-sm`}
                               >
                                 {action.label}
                                 {leavesSite(action.action) ? <ExternalLink className="w-3 h-3" /> : <ArrowRight className="w-3 h-3" />}
@@ -416,7 +452,7 @@ export default function ResidentJourney() {
 
       {/* Resident Progression */}
       {page && !page.titles.hidden && (
-      <section className="py-20 bg-teal-deep text-white">
+      <section className="py-20 bg-card text-foreground">
         <div className="container">
           <m.div
             className="text-center mb-12"
@@ -427,14 +463,13 @@ export default function ResidentJourney() {
             <h2 className="font-display text-3xl md:text-4xl font-semibold mb-4 break-words">
               {page.titles.fields.heading}
             </h2>
-            <p className="text-white/70 max-w-2xl mx-auto">
+            <p className="text-muted-foreground max-w-2xl mx-auto">
               <Emphasized text={page.titles.fields.body} />
             </p>
           </m.div>
 
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6 max-w-4xl mx-auto">
             {page.titles.lists.items.map((level, index) => {
-              const LevelIcon = TITLE_ICONS[index % TITLE_ICONS.length];
               return (
               <m.div
                 key={`${index}-${level.level}`}
@@ -442,16 +477,13 @@ export default function ResidentJourney() {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ delay: index * 0.1 }}
-                whileHover={{ y: -8, scale: 1.02 }}
-                className="bg-white/10 p-6 rounded-xl text-center backdrop-blur-sm min-w-0"
+                className="bg-muted border border-border p-6 rounded-xl text-center min-w-0"
               >
-                <m.div
-                  className="w-14 h-14 rounded-full bg-white/20 flex items-center justify-center mx-auto mb-4"
-                  whileHover={{ rotate: 360 }}
-                  transition={{ duration: 0.5 }}
-                >
-                  <LevelIcon className="w-7 h-7" />
-                </m.div>
+                {/* TREE RINGS (the prune, wave 2, C4): a title for time here grows a ring, never a badge
+                    or a crown. Quiet, never compared, and nothing reads a member's years. */}
+                <div className="w-14 h-14 rounded-full bg-card border border-border flex items-center justify-center mx-auto mb-4">
+                  <TreeRings rings={index + 1} />
+                </div>
                 <h3 className="font-display text-xl font-semibold mb-2 break-words">
                   {level.level}
                 </h3>
@@ -460,11 +492,11 @@ export default function ResidentJourney() {
                     keeps this label quieter than the heading above it, which
                     is what the fade was for. */}
                 {level.years && (
-                  <p className="text-white/80 text-xs mb-3 uppercase tracking-wide break-words">
+                  <p className="text-muted-foreground text-xs mb-3 uppercase tracking-wide break-words">
                     {level.years}+
                   </p>
                 )}
-                <p className="text-white/90 text-sm break-words">
+                <p className="text-foreground text-sm break-words">
                   {level.description}
                 </p>
               </m.div>
@@ -477,7 +509,7 @@ export default function ResidentJourney() {
 
       {/* Village Dues */}
       {page && !page.dues.hidden && (
-      <section className="py-20 bg-cream">
+      <section className="py-20 bg-card">
         <div className="container">
           <m.div
             className="max-w-3xl mx-auto text-center"
@@ -490,7 +522,7 @@ export default function ResidentJourney() {
             </h2>
             {dues?.amount && (
               <div className="mb-6">
-                <span className="font-display text-5xl md:text-6xl font-bold text-teal-deep">
+                <span className="font-display text-5xl md:text-6xl font-bold text-notice">
                   {figureWithCurrency(dues.amount, dues.currency, fiatCurrency)}
                 </span>
                 <span className="text-xl text-muted-foreground"> / {dues.period || "month"}</span>
@@ -502,7 +534,7 @@ export default function ResidentJourney() {
             {duesLink && (
               <JourneyLink
                 action={duesLink.action}
-                className="inline-flex items-center gap-2 text-teal-deep font-medium hover:gap-3 transition-all"
+                className="inline-flex items-center gap-2 text-notice font-medium hover:gap-3 transition-all"
               >
                 {duesLink.label}
                 <ArrowRight className="w-4 h-4" />
@@ -537,7 +569,7 @@ export default function ResidentJourney() {
 
       {/* Your Next Step CTA */}
       {page && !page.nextStep.hidden && (
-      <section className="py-20 bg-teal-deep/5">
+      <section className="py-20 bg-muted">
         <div className="container">
           <m.div
             className="max-w-2xl mx-auto text-center"
@@ -569,12 +601,7 @@ export default function ResidentJourney() {
             whileInView={{ opacity: 1, scale: 1 }}
             viewport={{ once: true }}
           >
-            <m.div
-              animate={{ y: [0, -10, 0] }}
-              transition={{ duration: 2, repeat: Infinity }}
-            >
-              <Sparkles className="w-12 h-12 text-teal-deep mx-auto mb-6" />
-            </m.div>
+            <Sprout className="w-12 h-12 text-open mx-auto mb-6" aria-hidden="true" />
             <h2 className="font-display text-3xl md:text-4xl font-semibold text-foreground mb-4 break-words">
               {page.closing.fields.heading}
             </h2>
@@ -583,7 +610,7 @@ export default function ResidentJourney() {
             </p>
             <div className="flex flex-wrap justify-center gap-4">
               {closingPrimary && (
-                <JourneyLink action={closingPrimary.action} className="btn-village flex items-center gap-2">
+                <JourneyLink action={closingPrimary.action} className={BTN_PRIMARY}>
                   <Calendar className="w-5 h-5" />
                   {closingPrimary.label}
                 </JourneyLink>
@@ -591,7 +618,7 @@ export default function ResidentJourney() {
               {closingSecondary && (
                 <JourneyLink
                   action={closingSecondary.action}
-                  className="px-6 py-3 bg-white text-foreground rounded-full font-medium uppercase tracking-wider text-sm hover:bg-white/90 transition-all border border-border"
+                  className="px-6 py-3 bg-card text-foreground rounded-full font-medium uppercase tracking-wider text-sm hover:bg-muted transition-all border border-border"
                 >
                   {closingSecondary.label}
                 </JourneyLink>
@@ -601,6 +628,7 @@ export default function ResidentJourney() {
         </div>
       </section>
       )}
+      </div>
     </Layout>
   );
 }
@@ -610,7 +638,7 @@ function BandButton({ section, targets, icon = false }: { section: ResolvedSecti
   const cta = buttonAction(section.fields.ctaLabel, section.fields.ctaTarget, targets);
   if (!cta) return null;
   return (
-    <JourneyLink action={cta.action} className="btn-village inline-flex items-center gap-2">
+    <JourneyLink action={cta.action} className={BTN_PRIMARY}>
       {icon ? <Calendar className="w-5 h-5" /> : null}
       {cta.label}
       {icon ? null : <ArrowRight className="w-4 h-4" />}

@@ -115,7 +115,11 @@ export const CIRCLE_CARD_WORDS = {
   seeCardOf: (role: string, i: number, of: number) =>
     of > 1 ? `See the card of holder ${i} of ${role}` : `See the card of the holder of ${role}`,
   roleDetails: "About this role",
-  apply: "Propose for this role",
+  apply: "Apply for this role",
+  heldByNames: (names: readonly string[]): string | null =>
+    names.length === 0
+      ? null
+      : `Held by ${names.length === 1 ? names[0] : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`}`,
   holdersPrivate: "Sign in to open the holders' cards.",
 
   // Values

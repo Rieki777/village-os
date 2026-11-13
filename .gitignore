@@ -136,3 +136,6 @@ docs/prototypes/.qa-out/
 # git ref, plus the qa/ shell it has to be framed by. qa/README.md now tells you
 # to make it, so it needs a line here for the same reason .qa-out does.
 docs/prototypes/.qa-ctrl/
+
+# The nightly rehearsal writes its runs here (scripts/rehearsal, docs/REHEARSAL.md).
+.rehearsal/

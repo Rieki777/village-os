@@ -25,7 +25,9 @@ import {
   Briefcase,
   Globe
 } from "lucide-react";
-import { useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
+import { useLingui } from "@lingui/react/macro";
+import { BTN_PRIMARY, BTN_SECONDARY, EYEBROW, LINK, NOTE, RING, WORLD } from "@/components/journey/look";
 import { Image } from "@/components/Image";
 import { usePageContent } from "@/hooks/usePageContent";
 import { Emphasized, Highlighted } from "@/components/PageText";
@@ -83,6 +85,14 @@ function JourneyArt({ src, alt }: { src: string | undefined; alt: string }) {
   );
 }
 
+/**
+ * The lights on the one act, through React.lazy (docs/DESIGN_RULE.md): a
+ * static import here regrouped the shared chunks and pulled lazy-only modules
+ * onto the first page (the guard-boot-set build check). Until the kit arrives
+ * the act draws without its lights.
+ */
+const Fireflies = lazy(() => import("@/components/journey/nature/Fireflies"));
+
 /** What each path card needs that is not words: where it goes, its icon, its picture. */
 const PATH_CARD_LOOK = {
   investor: { icon: TrendingUp, href: "/investor", color: "bg-amber", imageKey: "investorHero", altKey: "investorHeroAlt" },
@@ -118,6 +128,7 @@ const PERSONA_LOOKS = [
 ];
 
 export default function Home() {
+  const { t } = useLingui();
   // Blank hides both buttons rather than pointing at another village.
   const { eventsUrl } = useVillageLinks();
   const brand = useBrandImages();
@@ -136,45 +147,54 @@ export default function Home() {
     const look = PATH_CARD_LOOK[card.id as keyof typeof PATH_CARD_LOOK];
     return !!look && !pageOff(look.href);
   });
-  const pathsShown = !!paths && !paths.hidden && pathCards.length > 0;
   const personas = page?.personas;
   const cta = page?.cta;
   // R47: the hero holds one door forward, plus the map when this village has
   // one. An off module would only answer the door with its closed card.
   const mapOn = !!useModule("map");
+  // THE FOUNDING TEAM IS THE FIRST SCREEN'S ONE ACT while the village has the
+  // section on (D-01). A senior professional landing here read no word about
+  // paid roles, and the only gold on the screen was a link off the site. Off,
+  // the hero keeps its own door to the paths. The read never blocks the page.
+  const founding = useFoundingOn();
+  const pathsShown = !!paths && !paths.hidden && pathCards.length > 0;
+  const waysShown = pathsShown || founding;
+  const foundingLink = (
+      <Link href="/roles" className={`${BTN_PRIMARY} min-h-12 px-6 text-base`} data-hero-act="founding">
+        {t({ message: "Join the founding team", context: "landing hero main act" })}
+        <ArrowRight aria-hidden="true" className="h-5 w-5" />
+      </Link>
+  );
+  const heroAct = founding ? (
+    <Suspense fallback={foundingLink}>
+    <Fireflies count={6}>
+      {foundingLink}
+    </Fireflies>
+    </Suspense>
+  ) : (
+    <a href="#choose-path" className={`${BTN_PRIMARY} min-h-12 px-6 text-base`} data-hero-act="paths">
+      Pick your path
+      <ArrowRight aria-hidden="true" className="h-5 w-5" />
+    </a>
+  );
   return (
     <Layout>
-      {/* Hero Section.
-          The hero's own surface is the brand BAND, and everything else in this
-          section is drawn against it. shared/brandTokens.ts derives
-          --tone-brand-band together with --tone-sun-on-band, moves the two
-          toward each other until the pair clears 4.5:1, and refuses to ship a
-          village theme where it does not. That derivation is the only reason
-          any promise below holds for all thirteen deployments rather than for
-          the platform's own neutral palette alone. */}
-      <section className="relative min-h-[90vh] flex items-center overflow-hidden bg-teal-band">
-        {/* Background picture, when the village has one. */}
+      {/* THE LANDING STANDS IN THE NIGHT WORLD (D-01, docs/DESIGN_RULE.md): the
+          same ground, tokens and display face as the founding pages a visitor
+          goes on to, so the first screen and the second are one place. */}
+      <div className={WORLD}>
+      {/* Hero Section. Words first, then the picture (M11): the photograph
+          mounts once the words are there, so a slow phone paints the sentence
+          and never an empty frame. */}
+      <section className="relative overflow-hidden" data-landing-hero="">
         <div className="absolute inset-0 z-0">
           {/* THE HERO RENDERS ONLY WHEN THERE IS ONE, the same rule the four
-              journey pages already follow (InvestorJourney, StewardJourney,
-              ResidentJourney, ProsperityJourney all guard their hero this
-              way). This page did not, so a village with no uploaded art got
-              Image's placeholder mark: a 32px picture frame in the middle of
-              a 1272px hero, which reads to a visitor as a broken photograph
-              rather than as a village that has not added one yet. All
-              thirteen deployments are in that state and the live one is too.
-
-              A hero that IS configured and then fails to load keeps the
-              placeholder, deliberately. Those are different facts: nothing
-              uploaded means nothing is missing, and a 404 on a file the
-              village did upload means something IS. Image draws the mark and
-              keeps the village's own alt text on it for the second case, so a
-              screen reader still hears what the picture was meant to be.
-
-              priority: when there IS a hero it is the Largest Contentful
-              Paint element, and without fetchPriority=high it queues behind
-              every other image on the page. */}
-          {brand.hero ? (
+              journey pages follow. A village with no uploaded art gets the
+              night ground and nothing that reads as a broken photograph. A
+              hero that IS configured and then fails to load keeps Image's
+              mark and the village's own alt text, because that is breakage.
+              priority: it is the largest paint once it arrives. */}
+          {brand.hero && hero ? (
             <>
               <Image
                 src={brand.hero}
@@ -182,142 +202,164 @@ export default function Home() {
                 priority
                 className="w-full h-full"
               />
-              {/* The scrim belongs to the photograph and goes with it. It used
-                  to be drawn from literal black and painted whether or not
-                  there was anything to darken, so a village with no art got a
-                  wash fading to nothing on the right: a picture-shaped hole
-                  where a picture had never been. Nothing here now hints at a
-                  photograph that does not exist. */}
-              <div className="absolute inset-0 bg-gradient-to-r from-teal-band via-teal-band/85 to-teal-band/25" />
+              {/* The scrim belongs to the photograph and goes with it: dark
+                  where the words sit, open where the land is, and dark again
+                  at the foot where the ways in overlap the hero. */}
+              <div className="absolute inset-0 bg-gradient-to-r from-background via-background/85 to-background/20" />
+              <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-background to-transparent" />
             </>
           ) : null}
         </div>
 
-        {/* Content */}
-        {/* Top padding clears the fixed header. With the old py-20 a tall
-            headline pushed the badge and its first line under the header,
-            measured with every field at its limit (1280x900, 2026-10-22). */}
-        <div className="container relative z-10 pt-28 pb-10 md:pt-32 md:pb-20">
+        <div className={`container relative z-10 pt-12 sm:pt-20 lg:pt-28 ${waysShown ? "pb-32 sm:pb-36 lg:pb-44" : "pb-16 lg:pb-24"}`}>
           <div className="relative max-w-2xl">
-            {/* THE COPY SITS ON AN OPAQUE BAND, AND THAT IS THE WHOLE FIX.
-
-                A translucent scrim cannot promise a contrast ratio, because
-                the ratio then depends on the photograph underneath, and a
-                photograph is whatever the village uploads. With no photograph
-                the scrim thinned toward the right until the accent word ran
-                at 1.65:1 on its left edge and 2.52:1 on its right, against a
-                3:1 floor for large text (measured at 1272x900, this branch,
-                before this change). Nudging the accent hex would not have
-                fixed it: --primary is derived to clear 4.5:1 on WHITE, so on
-                a dark scrim the arithmetic has no answer at either end.
-
-                This band is opaque, so the ratio is a property of two named
-                colours and holds whatever is behind it. It bleeds past the
-                copy on every side, and a village with no photograph never
-                sees it: the section behind it is the same band colour, so it
-                only becomes a visible panel at the moment there is a picture
-                for it to sit on, which is the moment it is needed. */}
+            {/* THE COPY SITS ON AN OPAQUE BAND, so its contrast is a property
+                of two named colours and holds whatever photograph is behind
+                it. With no photograph the band is the ground itself and never
+                shows; with one, it is the dark panel the words need. */}
             <div
               aria-hidden="true"
-              className="absolute -inset-x-5 -inset-y-6 sm:-inset-x-8 sm:-inset-y-10 rounded-3xl bg-teal-band"
+              className="absolute -inset-x-5 -inset-y-6 sm:-inset-x-8 sm:-inset-y-10 rounded-2xl bg-background"
             />
             {hero?.badge ? (
-              <span className="relative inline-block px-4 py-1.5 bg-white/20 backdrop-blur-sm rounded-full text-white text-sm font-medium mb-6">
-                {hero.badge}
-              </span>
+              <p className={`relative mb-5 ${EYEBROW}`}>{hero.badge}</p>
             ) : null}
             <h1
-              style={{ animationDelay: "0.1s" }}
-              className={`hero-rise relative font-display ${headlineSize(hero?.headline ?? "")} font-bold text-white leading-tight mb-6 break-words${hero ? "" : " invisible"}`}
+              style={{ animationDelay: "0.05s" }}
+              className={`hero-rise relative font-display ${headlineSize(hero?.headline ?? "")} leading-[1.08] text-foreground text-balance mb-6 break-words${hero ? "" : " invisible"}`}
             >
-              {/* text-amber-on-band, not text-primary. --primary is the seed
-                  colour derived to clear 4.5:1 against WHITE, and the phrase
-                  has a dark band behind it, so it was measured at 1.65:1 and
-                  2.52:1 on the live palette. --tone-sun-on-band is the other
-                  half of the pair --tone-brand-band belongs to:
-                  shared/brandTokens.ts moves the two toward each other until
-                  they clear 4.5:1 and refuses to ship a village theme where
-                  they do not. */}
               <Highlighted
                 text={hero?.headline || "\u00a0"}
                 phrase={hero?.highlight ?? ""}
-                render={(phrase) => <span className="text-amber-on-band">{phrase}</span>}
+                render={(phrase) => <span className="text-notice">{phrase}</span>}
               />
             </h1>
 
             <p
-              style={{ animationDelay: "0.2s" }}
-              className={`hero-rise relative text-xl text-white/80 leading-relaxed mb-8${hero ? "" : " invisible"}`}
+              style={{ animationDelay: "0.1s" }}
+              className={`hero-rise relative max-w-[34em] text-lg sm:text-xl text-foreground/90 leading-relaxed mb-8${hero ? "" : " invisible"}`}
             >
-              <Emphasized text={hero?.subline ?? ""} strongClassName="font-semibold text-white" />
+              <Emphasized text={hero?.subline ?? ""} strongClassName="font-semibold text-foreground" />
+              {founding ? (
+                <>
+                  {" "}
+                  {t({
+                    message: "We're forming the founding team now: paid roles that take the village from idea to home, season by season and intended for the long run.",
+                    context: "landing hero, the founding team line",
+                  })}
+                </>
+              ) : null}
             </p>
 
             <div
-              style={{ animationDelay: "0.3s" }}
-              className="hero-rise relative flex flex-wrap gap-4"
+              style={{ animationDelay: "0.15s" }}
+              className="hero-rise relative flex flex-wrap items-center gap-3"
             >
-              {/* THE TWO CONTROLS ARE DRAWN AGAINST THE BAND, NOT AGAINST A
-                  SCRIM. WCAG 1.4.11 asks 3:1 for the boundary that tells a
-                  visitor a control is there, and bg-primary can never give
-                  that here: --tone-brand-band IS --tone-brand darkened, so the
-                  fill and the surface behind it are the same hue a few steps
-                  apart, for every village rather than only for the platform
-                  default. Measured on the band: 1.46:1 for the filled button
-                  and 1.92:1 for the outline one. White is the pairing this
-                  codebase already uses for a control on the band
-                  (Decisions.tsx), at 15.13:1, and the second control keeps its
-                  translucent fill with a border that clears 3:1 on its own.
-
-                  Measured after: 15.13:1 for the filled control, and 5.18:1
-                  for the outline one's border.
-
-                  That second number is the pixel a visitor's eye actually
-                  lands on, and it took three readings to get right. This
-                  comment first said 3.55:1 and the lane's own report said
-                  3.67:1, neither reproducible. The border is border-white/40
-                  over bg-white/20, and background-clip defaults to border-box,
-                  so the button's own translucent fill composites UNDER its
-                  border. Model the border against the bare band and you get
-                  3.68:1; measure what is painted and it is 5.18:1. Both clear
-                  the 3:1 requirement, so the conclusion never moved, but a
-                  comment carrying a measurement nobody can reproduce is the
-                  thing this whole exercise exists to stop. */}
-              <a
-                href="#choose-path"
-                className="px-8 py-4 bg-white text-teal-band rounded-lg font-semibold text-lg hover:bg-cream transition-all duration-200 flex items-center gap-2"
-              >
-                Pick your path
-                <ArrowRight className="w-5 h-5" />
-              </a>
-              {mapOn && (
-                <Link
-                  href="/map"
-                  className="px-8 py-4 bg-white/20 backdrop-blur-sm border border-white/40 text-white rounded-lg font-semibold text-lg hover:bg-white/30 transition-all duration-200"
-                >
-                  Walk the map
+              {heroAct}
+              {mapOn ? (
+                <Link href="/map" className={`${BTN_SECONDARY} min-h-12 bg-background/60 px-5 text-base`}>
+                  {t({ message: "Explore the map", context: "landing hero second act" })}
                 </Link>
-              )}
+              ) : founding ? (
+                <a href="#choose-path" className={`${BTN_SECONDARY} min-h-12 bg-background/60 px-5 text-base`}>
+                  Pick your path
+                </a>
+              ) : null}
             </div>
-          </div>
-        </div>
-
-        {/* Scroll indicator. CSS like the hero above it (index.css). */}
-        <div className="hero-cue absolute bottom-8 left-1/2 -translate-x-1/2 z-10">
-          <div className="w-6 h-10 border-2 border-white/50 rounded-full flex justify-center">
-            <div className="hero-cue-dot w-1.5 h-1.5 bg-white rounded-full mt-2" />
           </div>
         </div>
       </section>
 
+      {/* THE WAYS IN, overlapping the hero's foot (D-01, D-16). One row on a
+          desktop, every card the same height with its door at the bottom; a
+          column on a phone. The founding team leads with the gold edge while
+          the village has the section on. The section keeps its id when it is
+          empty so the hero's "Pick your path" never points at nothing. */}
+      <section id="choose-path" aria-labelledby={waysShown ? "choose-path-h" : undefined} className={waysShown ? "relative z-20 scroll-mt-24 pb-16 sm:pb-20" : undefined}>
+        {waysShown && (
+        <div className="container -mt-24 sm:-mt-28 lg:-mt-32">
+          {paths && pathsShown ? (
+            <div className="relative mb-5 max-w-2xl">
+              <p className={EYEBROW}>{paths.fields.eyebrow}</p>
+              <h2 id="choose-path-h" className="mt-2 font-display text-2xl leading-tight text-foreground sm:text-3xl">
+                {paths.fields.heading}
+              </h2>
+            </div>
+          ) : (
+            <h2 id="choose-path-h" className="sr-only">
+              {t({ message: "Ways in", context: "landing, the ways in heading when the paths are hidden" })}
+            </h2>
+          )}
+          <ul className="grid auto-rows-fr gap-4 sm:grid-cols-2 lg:auto-cols-fr lg:grid-flow-col lg:grid-cols-none">
+            {founding && (
+              <li className="min-w-0">
+                <Link href="/roles" className={`${WAY_CARD} border-2 border-notice/60`} data-way="founding">
+                  <span className={EYEBROW}>{t({ message: "Paid roles", context: "landing, founding team card eyebrow" })}</span>
+                  <span className="mt-2 block font-display text-2xl leading-tight text-foreground">
+                    {t({ message: "Founding team", context: "landing, founding team card title" })}
+                  </span>
+                  <span className={`mt-2 block ${WAY_BODY}`}>
+                    {t({ message: "Lead a whole domain of the village, from the foundation through to completion.", context: "landing, founding team card body" })}
+                  </span>
+                  <span className="mt-auto inline-flex items-center gap-2 pt-4 text-sm font-semibold text-notice">
+                    {t({ message: "See the open roles", context: "landing, founding team card door" })}
+                    <ArrowRight aria-hidden="true" className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+                  </span>
+                </Link>
+              </li>
+            )}
+            {pathsShown && pathCards.map((card) => {
+              const look = PATH_CARD_LOOK[card.id as keyof typeof PATH_CARD_LOOK];
+              if (!look) return null;
+              const art = brand[look.imageKey];
+              return (
+                <li key={card.id} className="min-w-0">
+                  <Link href={look.href} className={`${WAY_CARD} border border-border`}>
+                    {/* The village's own art for this way in, when it has added
+                        some; a card without art is a quiet card, never a frame. */}
+                    {art ? (
+                      <span className="relative -mx-5 -mt-5 mb-4 block h-28 overflow-hidden rounded-t-2xl">
+                        <JourneyArt src={art} alt={altOr(brand[look.altKey], card.title)} />
+                      </span>
+                    ) : null}
+                    <span className="flex flex-wrap items-baseline gap-x-2">
+                      <h3 className="font-display text-2xl leading-tight text-foreground">{card.title}</h3>
+                      <span className="text-sm text-muted-foreground">{card.subtitle}</span>
+                    </span>
+                    <span className={`mt-2 block ${WAY_BODY}`}>{card.description}</span>
+                    <span className="mt-auto inline-flex items-center gap-2 pt-4 text-sm font-semibold text-foreground group-hover:text-notice">
+                      <span>Choose {card.title}</span>
+                      <ArrowRight aria-hidden="true" className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+                    </span>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+          {paths && pathsShown && paths.fields.intro ? (
+            <p className={`mt-6 max-w-2xl ${NOTE}`}>
+              <Emphasized text={paths.fields.intro} />
+            </p>
+          ) : null}
+        </div>
+        )}
+      </section>
+
+      <SeasonBanner />
+
+      {/* The commons: this season's goals, the village's own count and no
+          names (batch 157, D3; D-19). Placed right after the ways in. */}
+      <VillagePulse />
+
       {/* Journey Stages */}
       {journey && !journey.hidden && (
-      <section className="py-16 bg-aqua-light">
+      <section className="border-y border-border/60 bg-card/40 py-16">
         <div className="container">
           <div className="text-center mb-12">
-            <h2 className="font-display text-3xl md:text-4xl font-bold text-foreground mb-4">
+            <h2 className="font-display text-3xl md:text-4xl text-foreground mb-4">
               {journey.fields.heading}
             </h2>
-            <p className="text-muted-foreground max-w-2xl mx-auto">
+            <p className={`mx-auto ${NOTE} max-w-2xl`}>
               <Emphasized text={journey.fields.intro} />
             </p>
           </div>
@@ -334,10 +376,10 @@ export default function Home() {
                   transition={{ delay: index * 0.1 }}
                   className="flex flex-col items-center px-6 py-4"
                 >
-                  <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center mb-3">
-                    <Icon className="w-6 h-6 text-primary" />
-                  </div>
-                  <span className="font-display text-lg font-semibold text-foreground">
+                  <span className={`${RING} mb-3 size-14`} aria-hidden="true">
+                    <Icon className="w-6 h-6" />
+                  </span>
+                  <span className="font-display text-lg text-foreground">
                     {item.name}
                   </span>
                   <span className="text-sm text-muted-foreground">
@@ -345,7 +387,7 @@ export default function Home() {
                   </span>
                 </m.div>
                 {index < all.length - 1 && (
-                  <ArrowRight className="w-5 h-5 text-muted-foreground hidden md:block" />
+                  <ArrowRight aria-hidden="true" className="w-5 h-5 text-muted-foreground hidden md:block" />
                 )}
               </div>
               );
@@ -355,115 +397,21 @@ export default function Home() {
       </section>
       )}
 
-      <SeasonBanner />
-
       <BuildProgress />
 
-      <VillagePulse />
-
-      {/* Above "choose your path" on purpose: seeing the place comes before
-          being asked which way into it you want. */}
+      {/* Seeing the place, after the ways in. */}
       <MapPeek />
-
-      {/* Choose Your Path. The section keeps its id when hidden so the
-          hero's "Pick your path" anchor never points at nothing. */}
-      <section id="choose-path" className={pathsShown ? "py-24 bg-background" : undefined}>
-        {paths && pathsShown && (
-        <div className="container">
-          <div className="text-center mb-16">
-            <m.span
-              initial={{ opacity: 0 }}
-              whileInView={{ opacity: 1 }}
-              viewport={{ once: true }}
-              className="inline-block px-4 py-1.5 bg-primary/10 rounded-full text-primary text-sm font-medium mb-4"
-            >
-              {paths.fields.eyebrow}
-            </m.span>
-            <m.h2
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              className="font-display text-4xl md:text-5xl font-bold text-foreground mb-4"
-            >
-              {paths.fields.heading}
-            </m.h2>
-            <m.p
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ delay: 0.1 }}
-              className="text-xl text-muted-foreground max-w-2xl mx-auto"
-            >
-              <Emphasized text={paths.fields.intro} />
-            </m.p>
-          </div>
-
-          <div className="grid md:grid-cols-2 gap-8">
-            {pathCards.map((card, index) => {
-              const look = PATH_CARD_LOOK[card.id as keyof typeof PATH_CARD_LOOK];
-              if (!look) return null;
-              return (
-              <m.div
-                key={card.id}
-                initial={{ opacity: 0, y: 30 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: index * 0.1 }}
-              >
-                <Link href={look.href}>
-                  <div className="group relative overflow-hidden rounded-2xl bg-card shadow-lg hover:shadow-xl transition-all duration-300 cursor-pointer">
-                    {/* Image. The alt is the one the founder wrote for this
-                        picture; it used to be the card's title, which left
-                        the four alt boxes in Pictures doing nothing here. */}
-                    <div className="relative h-56 overflow-hidden">
-                      <JourneyArt src={brand[look.imageKey]} alt={altOr(brand[look.altKey], card.title)} />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-                      <div className={`absolute top-4 left-4 w-12 h-12 ${look.color} rounded-xl flex items-center justify-center`}>
-                        <look.icon className="w-6 h-6 text-white" />
-                      </div>
-                    </div>
-
-                    {/* Content */}
-                    <div className="p-6">
-                      <div className="flex flex-wrap items-center gap-x-2 mb-2">
-                        <h3 className="font-display text-2xl font-bold text-foreground">
-                          {card.title}
-                        </h3>
-                        <span className="text-sm text-muted-foreground">
-                          {card.subtitle}
-                        </span>
-                      </div>
-                      <p className="text-muted-foreground mb-4 leading-relaxed">
-                        {card.description}
-                      </p>
-                      <div className="flex items-center text-primary font-medium group-hover:gap-3 gap-2 transition-all duration-200">
-                        <span>Choose {card.title}</span>
-                        <ArrowRight className="w-4 h-4" />
-                      </div>
-                    </div>
-                  </div>
-                </Link>
-              </m.div>
-              );
-            })}
-          </div>
-        </div>
-        )}
-      </section>
-
 
       {/* Who comes to this village */}
       {personas && !personas.hidden && (
-      <section className="py-24 bg-background">
+      <section className="py-24">
         <div className="container">
           <div className="text-center mb-16">
             <m.span
               initial={{ opacity: 0 }}
               whileInView={{ opacity: 1 }}
               viewport={{ once: true }}
-              // sage on sage/20 measured 3.99:1; sage-light is the tint
-              // index.css documents for sage ink (4.82:1).
-              className="inline-block px-4 py-1.5 bg-sage-light rounded-full text-sage text-sm font-medium mb-4"
+              className={`mb-4 inline-block ${EYEBROW}`}
             >
               {personas.fields.eyebrow}
             </m.span>
@@ -471,7 +419,7 @@ export default function Home() {
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
-              className="font-display text-4xl md:text-5xl font-bold text-foreground mb-4"
+              className="font-display text-4xl md:text-5xl text-foreground mb-4"
             >
               {personas.fields.heading}
             </m.h2>
@@ -498,16 +446,14 @@ export default function Home() {
                 transition={{ delay: index * 0.07 }}
                 className="bg-card rounded-xl p-6 shadow-sm border border-border"
               >
-                <div
-                  className={`w-12 h-12 rounded-xl ${look.color} flex items-center justify-center mb-4`}
-                >
-                  <look.icon className={`w-6 h-6 ${look.iconColor}`} />
-                </div>
-                <h3 className="font-display text-lg font-bold text-foreground mb-1">
+                <span className={`${RING} mb-4`} aria-hidden="true">
+                  <look.icon className="w-5 h-5" />
+                </span>
+                <h3 className="font-display text-lg text-foreground mb-1">
                   {persona.label}
                 </h3>
                 {persona.tagline && (
-                <p className="text-primary text-sm font-medium italic mb-3">
+                <p className="text-notice text-sm font-medium italic mb-3">
                   "{persona.tagline}"
                 </p>
                 )}
@@ -525,7 +471,7 @@ export default function Home() {
             </p>
             <a
               href="#choose-path"
-              className="inline-flex items-center gap-2 text-primary font-semibold hover:opacity-80 transition-opacity"
+              className={`inline-flex min-h-11 items-center gap-2 ${LINK}`}
               onClick={(e) => {
                 e.preventDefault();
                 document
@@ -542,14 +488,14 @@ export default function Home() {
 
       {/* CTA Section */}
       {cta && !cta.hidden && (
-      <section className="py-24 bg-primary/5">
+      <section className="border-t border-border/60 bg-card/40 py-24">
         <div className="container">
           <div className="max-w-3xl mx-auto text-center">
             <m.h2
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
-              className="font-display text-4xl md:text-5xl font-bold text-foreground mb-6"
+              className="font-display text-4xl md:text-5xl text-foreground mb-6"
             >
               {cta.fields.heading}
             </m.h2>
@@ -574,7 +520,7 @@ export default function Home() {
                   href={eventsUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="px-8 py-4 bg-primary text-primary-foreground rounded-lg font-semibold text-lg hover:bg-teal-deep-dark transition-all duration-200 flex items-center gap-2"
+                  className={BTN_SECONDARY}
                 >
                   <Calendar className="w-5 h-5" />
                   {cta.fields.primaryLabel}
@@ -585,7 +531,7 @@ export default function Home() {
                   href={eventsUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="px-8 py-4 bg-secondary text-secondary-foreground rounded-lg font-semibold text-lg hover:opacity-90 transition-all duration-200"
+                  className={BTN_SECONDARY}
                 >
                   {cta.fields.secondaryLabel}
                 </a>
@@ -595,6 +541,30 @@ export default function Home() {
         </div>
       </section>
       )}
+      </div>
     </Layout>
   );
+}
+
+/** A way-in card: the whole card is the door, every one the same height, the door's words at the foot. */
+const WAY_CARD =
+  "group flex h-full flex-col rounded-2xl bg-card p-5 shadow-sm transition-colors hover:border-notice/70 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring";
+const WAY_BODY = "text-sm leading-relaxed text-muted-foreground sm:text-base";
+
+/** Whether the village has its founding team section on. Off until the read answers, and off when it fails. */
+function useFoundingOn(): boolean {
+  const [on, setOn] = useState(false);
+  useEffect(() => {
+    let live = true;
+    // The same public read the roles page makes (GET /api/org/founding-team),
+    // asked for its one yes or no; any failure is the section off.
+    fetch("/api/org/founding-team")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => live && setOn(d?.on === true && Array.isArray(d?.roleIds) && d.roleIds.length > 0))
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, []);
+  return on;
 }

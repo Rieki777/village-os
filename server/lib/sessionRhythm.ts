@@ -47,6 +47,7 @@ import { attachOwnCalendar, detachOwnCalendar, importedNext, ownCalendars, ownCa
 import { civilParts } from "../../shared/lunar";
 import { OWN_CALENDAR_COPY, OWN_CALENDAR_REFUSALS, type OwnCalendarView } from "../../shared/sessionCalendar";
 import { villageTimezone } from "./villageReaders";
+import { attachGatherings, type GatheringDeps } from "./sessionGathering";
 import { effectiveLifecycle } from "./modules";
 import { LIFECYCLE_RANK, type ModuleLifecycle } from "../../shared/modules";
 import { numberVar } from "./variables";
@@ -88,7 +89,7 @@ const toIso = (v: unknown): string | null => {
 };
 
 /** What the rules need from the routes: the live circles, whose seat terms still run, and the bell. */
-export interface RhythmDeps {
+export interface RhythmDeps extends GatheringDeps {
   circles: () => { id: string; name: string }[];
   lapseContext?: () => LapseContext;
   /** For a test: what reading a circle's own calendar returns. Absent: the guarded fetch. */
@@ -255,6 +256,8 @@ export async function comingUpFor(pool: Pool, who: RhythmAsker, deps: RhythmDeps
     .map((id) => rowFor(rhythms.get(id) ?? null, imported.get(id) ?? null, circles.get(id)!, now, zone, ctx))
     .filter((r): r is ComingUpRow => r != null)
     .sort((a, b) => Number(b.mine) - Number(a.mine) || Date.parse(a.next.at) - Date.parse(b.next.at));
+  // "I'll be there": the gatherings' own `going` for each next meeting (server/lib/sessionGathering.ts).
+  await attachGatherings(pool, rows, who, deps);
   return { rows, zone, keepCircleIds, ownCalendars: ownCalendarViews, ownCalendarsAvailable: available };
 }
 
@@ -267,7 +270,9 @@ async function oneRow(pool: Pool, circleId: string, who: RhythmAsker, deps: Rhyt
   if (!circle || (!row && !imported.has(circleId))) return null;
   const v = await viewerOf(pool, who, deps);
   const ctx = { waiting: await waitingByCircle(pool, v), rooms: await openRooms(pool), lib: v.lib, own: v.own };
-  return rowFor(row ? mapRhythm(row) : null, imported.get(circleId) ?? null, circle, now, zone, ctx);
+  const one = rowFor(row ? mapRhythm(row) : null, imported.get(circleId) ?? null, circle, now, zone, ctx);
+  if (one) await attachGatherings(pool, [one], who, deps);
+  return one;
 }
 
 // ── A circle's own calendar ─────────────────────────────────────────────────

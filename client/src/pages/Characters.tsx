@@ -33,6 +33,7 @@
  *     to announce itself.
  */
 import DraftCarry from "@/components/roleDraft/DraftCarry";
+import FramelessImg from "@/components/FramelessImg";
 import { Link } from "wouter";
 import Layout from "@/components/Layout";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -48,6 +49,9 @@ import RolesThatFit from "@/components/characters/RolesThatFit";
 
 import GeneKeysPrompt from "@/components/geneKeys/GeneKeysPrompt";
 import RoleStartSteps from "@/components/profile/RoleStartSteps";
+import RootTags, { RootGlyph } from "@/components/roots/RootTags";
+import { castArt, castLookFor } from "@shared/archetypeRoots";
+import { useLingui } from "@lingui/react/macro";
 
 const headers = (): Record<string, string> => {
   const t = authToken();
@@ -101,6 +105,7 @@ const art = (key: string, p: string, t: string) => `/images/avatars/${key}-${p}-
 // which says why `role="radio"` is a promise. Shared with the live room.
 
 export default function Characters() {
+  const { t } = useLingui();
   const { user } = useAuth();
   const [archetypes, setArchetypes] = useState<Archetype[]>([]);
   const [party, setParty] = useState<Character[]>([]);
@@ -220,6 +225,13 @@ export default function Characters() {
     if (mine) {
       setPresentation(mine.presentation);
       setTone(mine.tone);
+    } else {
+      // A root nobody picked yet shows the face it wears in the cast
+      // (shared/archetypeRoots.ts, CAST_LOOK): together the five are three
+      // women and two men, one Black, two brown and two white.
+      const look = castLookFor(activeKey);
+      setPresentation(look.presentation);
+      setTone(look.tone);
     }
     loadPaths(activeKey);
   }, [activeKey, party.length]);
@@ -242,7 +254,7 @@ export default function Characters() {
     const own = studio?.portraits?.find((p) => p.archetypeKey === key)?.url;
     if (own) return own;
     const mine = party.find((c) => c.archetypeKey === key);
-    return mine?.avatar ?? art(key, "f", "olive");
+    return mine?.avatar ?? castArt(key);
   };
 
   const walk = async () => {
@@ -265,7 +277,7 @@ export default function Characters() {
       }
       loadParty();
       if (!playing) setJoined((j) => ({ count: j.count + 1, name: label }));
-      setSaid(playing ? `${label} saved.` : `${label} joined your party.`);
+      setSaid(playing ? `${label} saved.` : `${label} joined your roots.`);
       announceProfileChange();
     } catch {
       // The `await fetch` here had no try at all, so a dropped connection
@@ -331,10 +343,10 @@ export default function Characters() {
           {/* Small, because the picture is the headline. */}
           <div className="mb-4 flex flex-wrap items-baseline gap-x-3 gap-y-1">
             <h1 className="text-sm font-semibold uppercase tracking-widest text-sage">
-              Choose who you will be
+              {t({ message: "Choose your roots", context: "characters page heading" })}
             </h1>
             <p className="text-sm text-gray-700">
-              Play as many as you like. Every door stays open to every hand.
+              {t({ message: "Pick one to five. Every role and quest grows from these roots, and we show you what grows from yours first. Every door stays open to every hand.", context: "characters page lede" })}
             </p>
             {/*
               THE WAY OUT, AND IT USED TO ONLY EXIST FOR PEOPLE WHO GAVE UP.
@@ -378,9 +390,15 @@ export default function Characters() {
                 left on wide ones. */}
             <section className="order-1 lg:order-2">
               <div className="relative overflow-hidden rounded-2xl bg-white shadow-lg">
-                <div className="mx-auto aspect-[3/4] w-full max-w-sm">
+                {/* On a wide stage the drawing is narrower than the card, so the card
+                    beside it takes the drawing's own colours, softened, and never
+                    reads as a white frame around it. */}
+                {active && !heroBroken ? (
+                  <FramelessImg src={heroSrc} alt="" aria-hidden="true" className="absolute inset-0 h-full w-full scale-125 object-cover opacity-80 blur-2xl" />
+                ) : null}
+                <div className="relative mx-auto aspect-[3/4] w-full max-w-sm">
                   {active && !heroBroken ? (
-                    <img
+                    <FramelessImg
                       src={heroSrc}
                       alt={active.name}
                       onError={() => setBroken((b) => ({ ...b, [`${activeKey}-${presentation}-${tone}`]: true }))}
@@ -425,6 +443,10 @@ export default function Characters() {
               </div>
 
               {/*
+                PORTRAIT STYLE, NOT A GENDER (audit P8). The art comes in two cuts and
+                the stored value is an enum of two, so the choice is named for the art
+                and anybody can take either. A third value needs a migration.
+
                 TWO CHOICES THAT SAID NOTHING ABOUT THEMSELVES.
 
                 Both groups conveyed which option was live by COLOUR ALONE:
@@ -439,7 +461,7 @@ export default function Characters() {
                 enforces the 44px floor.
               */}
               <div className="mt-4 flex flex-wrap items-center justify-center gap-5">
-                <div role="radiogroup" aria-label="Presentation" className="flex items-center gap-2">
+                <div role="radiogroup" aria-label="Portrait style" className="flex items-center gap-2">
                   {(["f", "m"] as const).map((p) => (
                     <button
                       key={p}
@@ -455,7 +477,7 @@ export default function Characters() {
                           : "border-gray-300 bg-white text-gray-700"
                       }`}
                     >
-                      {p === "f" ? "She" : "He"}
+                      {p === "f" ? "Style one" : "Style two"}
                     </button>
                   ))}
                 </div>
@@ -490,7 +512,7 @@ export default function Characters() {
                   disabled={busy}
                   className="min-h-11 rounded-xl bg-teal-deep px-8 py-3 font-semibold text-white shadow hover:bg-teal-deep-dark disabled:opacity-50"
                 >
-                  {playing ? "Save this look" : "Play this character"}
+                  {playing ? "Save this look" : t({ message: "Grow from this root", context: "characters page main act" })}
                 </button>
                 {error ? <p role="alert" className="mt-3 text-sm text-red-700">{error}</p> : null}
                 {/*
@@ -586,7 +608,7 @@ export default function Characters() {
                             {a.name.replace(/^The\s+/i, "").slice(0, 1)}
                           </span>
                         ) : (
-                          <img
+                          <FramelessImg
                             src={src}
                             alt={a.name}
                             onError={() => setBroken((b) => ({ ...b, [src]: true }))}
@@ -601,7 +623,7 @@ export default function Characters() {
                               aria-hidden="true"
                             />
                             <span id={`in-party-${a.key}`} className="sr-only">
-                              In your party
+                              {t({ message: "One of your roots", context: "characters rail, a root already picked" })}
                             </span>
                           </>
                         ) : null}
@@ -616,8 +638,16 @@ export default function Characters() {
             <aside className="order-3 rounded-2xl bg-white p-6 shadow-lg">
               {active ? (
                 <>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-sage">{active.subtitle}</p>
-                  <p className="mt-2 text-gray-800">{active.blurb}</p>
+                  <div className="flex items-center gap-3">
+                    {/* The root itself, the same drawing every tag of it carries. */}
+                    <RootGlyph rootKey={active.key} className="size-12" />
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-sage">{t({ message: "A root", context: "characters page, the class card's eyebrow" })}</p>
+                      <p className="font-display text-xl text-teal-deep">{active.name.replace(/^The\s+/i, "")}</p>
+                      <p className="text-xs font-semibold text-sage">{active.subtitle}</p>
+                    </div>
+                  </div>
+                  <p className="mt-3 text-gray-800">{active.blurb}</p>
                   {active.examples.length ? (
                     <ul className="mt-4 space-y-1.5">
                       {active.examples.map((e) => (
@@ -756,11 +786,11 @@ export default function Characters() {
           */}
           {partyStatus === "failed" ? (
             <section className="mt-10">
-              <h2 className="text-lg font-display font-bold text-sage">Your party</h2>
+              <h2 className="text-lg font-display font-bold text-sage">{t({ message: "Your roots", context: "characters page section" })}</h2>
               {/* On the page background, so the semantic pair. See the cast
                   failure line above for the measurements. */}
               <p role="status" className="mt-2 text-sm text-muted-foreground">
-                Your party did not load, so nothing here is the whole story.{" "}
+                {t({ message: "Your roots did not load, so nothing here is the whole story.", context: "characters page" })}{" "}
                 <button
                   type="button"
                   onClick={loadParty}
@@ -772,7 +802,12 @@ export default function Characters() {
             </section>
           ) : party.length > 0 ? (
             <section className="mt-10">
-              <h2 className="text-lg font-display font-bold text-sage">Your party</h2>
+              <h2 className="text-lg font-display font-bold text-sage">{t({ message: "Your roots", context: "characters page section" })}</h2>
+              {/* The roots as every list draws them, so the member sees here the tags they will meet on the boards. */}
+              <RootTags roots={party.map((c) => c.archetypeKey)} size="md" className="mt-2" />
+              <p className="mt-1 text-sm text-sage">
+                {t({ message: "The quests board shows what grows from these first. You can turn that off there with one press.", context: "characters page, your roots" })}
+              </p>
               <ul className="mt-3 flex flex-wrap gap-3">
                 {party.map((c) => {
                   const a = archetypes.find((x) => x.key === c.archetypeKey);
@@ -786,7 +821,7 @@ export default function Characters() {
                     >
                       <div className="aspect-[3/4] w-full bg-gray-50">
                         {c.avatar && !broken[c.avatar] ? (
-                          <img
+                          <FramelessImg
                             src={c.avatar}
                             alt={label}
                             onError={() => setBroken((b) => ({ ...b, [c.avatar as string]: true }))}
@@ -843,7 +878,7 @@ export default function Characters() {
                       {leaving === c.id ? (
                         <div className="px-2 pb-2">
                           <p className="text-xs text-red-700">
-                            Leaving removes {label} from your party for good.
+                            Leaving removes {label} from your roots for good.
                           </p>
                           <div className="mt-1.5 flex gap-1.5">
                             <button
@@ -853,7 +888,7 @@ export default function Characters() {
                                 act(
                                   `/api/me/characters/${c.id}`,
                                   "DELETE",
-                                  `${label} left your party.`,
+                                  `${label} left your roots.`,
                                   `${label} could not leave. Try again.`,
                                 )
                               }

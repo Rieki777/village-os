@@ -8,7 +8,7 @@
  * from. Pure: no database, no clock but the one handed in.
  */
 import { describe, expect, it } from "vitest";
-import { DEFAULT_NOTICE_DAYS, deriveAlignmentState, noticeDaysOf, readEndings, type EndingInput, type StateInput } from "./alignments";
+import { DEFAULT_NOTICE_DAYS, deriveAlignmentState, noticeDaysOf, readEndings, renderSeatTermsText, type EndingInput, type StateInput } from "./alignments";
 
 const NOW = "2027-03-01T12:00:00.000Z";
 const BEFORE = "2027-02-20T12:00:00.000Z";
@@ -114,5 +114,15 @@ describe("the notice's days", () => {
     expect(noticeDaysOf(null)).toEqual({ days: 14, from: "default" });
     // Zero is a number the terms chose: notice takes effect at once.
     expect(noticeDaysOf({ v: 1, ending: { noticeDays: 0 } })).toEqual({ days: 0, from: "ending" });
+  });
+});
+
+describe("the signed words name the partner once, on the card (verify B4)", () => {
+  it("leaves the open settings to fill together with no role named, unless the host names one", () => {
+    const settings = { v: 1 as const, pay: { kind: "none" as const } };
+    const plain = renderSeatTermsText(["Ledger keeper"], settings).body;
+    expect(plain).toMatch(/We'll fill these together: Term, Clocks/);
+    expect(plain).not.toContain("operations role");
+    expect(renderSeatTermsText(["Ledger keeper"], settings, "Care Steward").body).toMatch(/We'll fill this together with Care Steward: Term/);
   });
 });

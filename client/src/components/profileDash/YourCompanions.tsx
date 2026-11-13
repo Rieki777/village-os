@@ -119,10 +119,13 @@ export default function YourCompanions() {
     <section id="companions" aria-labelledby="comp-h" className={`${PANEL} flex scroll-mt-28 flex-col gap-4 p-4 sm:gap-[22px] sm:p-7`}>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="flex flex-col gap-1.5">
-          <p className={KICKER}>Your companions · {army.length}</p>
-          <h2 id="comp-h" className={H2}>
-            {plural(openQ, "question", "questions")} and {plural(openD, "draft", "drafts")} wait for you
-          </h2>
+          <p id={openQ + openD > 0 ? undefined : "comp-h"} className={KICKER}>Your companions · {army.length}</p>
+          {/* D-09: a heading that reads "0 questions and 0 drafts" shouts a zero. At zero the kicker names the section. */}
+          {openQ + openD > 0 ? (
+            <h2 id="comp-h" data-companions-waiting="" className={H2}>
+              {plural(openQ, "question", "questions")} and {plural(openD, "draft", "drafts")} wait for you
+            </h2>
+          ) : null}
           <p className="m-0 text-sm text-muted-foreground">
             Nothing moves until you say yes.<span className="max-sm:hidden"> Each companion asks at most {data.ceiling} questions a day.</span>
           </p>

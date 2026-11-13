@@ -20,6 +20,9 @@ import type { FieldSpec } from "./wizardConfig";
 import { loadOrg } from "./pickSources";
 import { pickedSeats } from "./SeatPicksField";
 import { termsChoiceOf } from "./roleApplicationType";
+import { publicTermsOf } from "@shared/seatTermsOffer";
+import { writtenKeys } from "@shared/termsWords";
+import TermsEight, { type TermsStepValue } from "./TermsEight";
 
 /** No terms written: the village agrees a role's terms with its holder (the open form sends the same). */
 export const NO_TERMS_YET = { v: 1 } as const;
@@ -61,54 +64,41 @@ export default function TermsOnOfferField({
   }, []);
   const seats = useMemo(() => (roles ?? []).filter((r) => ids.includes(String(r.id))), [roles, key]); // eslint-disable-line react-hooks/exhaustive-deps
   const settings = useMemo(() => (roles ? doorSettings(seats) : null), [roles, seats]);
+  const offers = useMemo(() => seats.map((seat) => ({ seat, ...publicTermsOf(seat?.termsOffer ?? null) })), [seats]);
+  const written = useMemo(() => writtenKeys(offers), [offers]);
   const now = termsChoiceOf(value);
-  const choose = (choice: "accept" | "talk", note = now?.note ?? "") => onChange({ choice, note, settings });
+  const step: TermsStepValue = { answers: now?.answers ?? {}, commitmentPct: now?.commitmentPct ?? null };
+  const send = (next: TermsStepValue) => onChange({ answers: next.answers, commitmentPct: next.commitmentPct, settings, written });
 
   // The terms shown are the terms sent: a change of roles refreshes what the answer carries.
   useEffect(() => {
-    if (now && settings && JSON.stringify(now.settings) !== JSON.stringify(settings)) onChange({ ...now, settings });
-  }, [settings]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (!settings) return;
+    if (!now || JSON.stringify(now.settings) !== JSON.stringify(settings) || JSON.stringify(now.written) !== JSON.stringify(written)) {
+      onChange({ answers: step.answers, commitmentPct: step.commitmentPct, settings, written });
+    }
+  }, [settings, written]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <fieldset className="grid gap-3" data-terms-on-offer="">
-      <legend className="mb-1 text-sm font-semibold text-foreground">{field.label}</legend>
+    <div className="grid gap-3" data-terms-on-offer="">
+      <p className="text-sm font-semibold text-foreground">{field.label}</p>
       {roles === null ? (
         <p className="text-sm text-muted-foreground">{t`Loading the terms on offer…`}</p>
       ) : (
-        seats.map((seat) => {
-          const roleName = String(seat.name ?? seat.id);
-          return (
-            <div key={String(seat.id)} className="rounded-xl border border-border bg-card p-3">
-              <p className="text-sm font-semibold text-card-foreground">{roleName}</p>
-              <div className="mt-2">{termsSlotFor(seat) ?? <p className="text-sm text-muted-foreground">{t`The village agrees this role's terms with whoever holds it.`}</p>}</div>
-            </div>
-          );
-        })
+        <>
+          <TermsEight roles={offers.map((o) => ({ id: String(o.seat.id), name: String(o.seat.name ?? o.seat.id), words: o.words, commitmentPct: o.commitmentPct }))} value={step} onChange={send} problem={problem} idPrefix="door-terms" />
+          {seats.some((seat) => termsSlotFor(seat)) && (
+            <details className="rounded-xl border border-border bg-card p-3">
+              <summary className="min-h-11 cursor-pointer py-2 text-sm font-semibold text-card-foreground">{t`Everything else on the role card's terms`}</summary>
+              {seats.map((seat) => (
+                <div key={String(seat.id)} className="mt-2">
+                  <p className="text-sm font-semibold text-card-foreground">{String(seat.name ?? seat.id)}</p>
+                  {termsSlotFor(seat)}
+                </div>
+              ))}
+            </details>
+          )}
+        </>
       )}
-      <label className="flex min-h-11 items-start gap-2 text-sm text-foreground">
-        <input type="radio" name="door-terms" className="mt-1 size-4 accent-primary" checked={now?.choice === "accept"} onChange={() => choose("accept")} disabled={!settings} />
-        {t`I accept the terms on offer.`}
-      </label>
-      <label className="flex min-h-11 items-start gap-2 text-sm text-foreground">
-        <input type="radio" name="door-terms" className="mt-1 size-4 accent-primary" checked={now?.choice === "talk"} onChange={() => choose("talk")} disabled={!settings} />
-        {t`I'd like to talk about the terms.`}
-      </label>
-      {now?.choice === "talk" && (
-        <textarea
-          aria-label={t`What you would like to talk about in the terms`}
-          rows={3}
-          maxLength={1000}
-          value={now.note}
-          onChange={(e) => choose("talk", e.target.value)}
-          className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground"
-        />
-      )}
-      <p className="text-xs text-muted-foreground">{t`Everyone who reads your application sees a wish to talk about the terms.`}</p>
-      {problem && (
-        <p role="alert" className="text-sm font-medium text-destructive">
-          {problem}
-        </p>
-      )}
-    </fieldset>
+    </div>
   );
 }

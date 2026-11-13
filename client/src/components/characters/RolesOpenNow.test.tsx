@@ -18,7 +18,7 @@ describe("RolesOpenNow", () => {
   it("lists open roles tagged for no character, each with its own propose link", async () => {
     loadOrg.mockResolvedValue({ roles: [{ name: "Water keeper" }] });
     render(<RolesOpenNow archetypeKey="building" alsoOpen={[{ id: "water", name: "Water keeper", recruiting: true }]} />);
-    const link = await screen.findByText("Propose for Water keeper");
+    const link = await screen.findByText("Apply for Water keeper");
     expect(link.closest("a")?.getAttribute("href")).toContain("seat=water");
     expect(screen.getByText("Also open in the village, for anyone:")).toBeTruthy();
   });

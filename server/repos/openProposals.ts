@@ -82,7 +82,8 @@ function rowOf(r: any): StoredOpenProposal {
 
 export async function insertOpenProposal(
   db: Db,
-  p: { id: string; name: string; email: string; emailKey: string; targetSeasonId: string | null; body: OpenProposalBody; confirmHash: string; linkId: string | null; now: Date },
+  /** An agent's proposal (0374) has no address: its keeper is signed in, and is told in the bell. */
+  p: { id: string; name: string; email: string | null; emailKey: string | null; targetSeasonId: string | null; body: OpenProposalBody; confirmHash: string; linkId: string | null; now: Date },
 ): Promise<void> {
   await db.query(
     "INSERT INTO open_role_proposals (id, name, email, email_key, status, target_season_id, body_json, confirm_hash, link_id, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
@@ -104,6 +105,29 @@ export async function openProposalsByIds(db: Db, ids: readonly string[]): Promis
 }
 
 /**
+ * WHEN AN ADOPTED PROPOSAL'S INVITATION LAST WENT, and whether the email did:
+ * kept in the body beside the decision, so no column is needed. Each send
+ * (the adoption, then every "send again") replaces it.
+ */
+export async function noteInvitationSent(db: Db, id: string, at: Date, emailed: boolean): Promise<void> {
+  await db.query(
+    "UPDATE open_role_proposals SET body_json = JSON_SET(COALESCE(body_json, JSON_OBJECT()), '$.invitationSentAt', ?, '$.invitationEmailed', ?) WHERE id = ? AND status = 'adopted'",
+    [at.toISOString(), emailed ? 1 : 0, id],
+  );
+}
+
+export async function invitationSentOf(db: Db, id: string): Promise<{ at: Date; emailed: boolean } | null> {
+  const [rows] = await db.query<RowDataPacket[]>(
+    "SELECT JSON_UNQUOTE(JSON_EXTRACT(body_json, '$.invitationSentAt')) AS at, JSON_EXTRACT(body_json, '$.invitationEmailed') AS emailed FROM open_role_proposals WHERE id = ? LIMIT 1",
+    [id],
+  );
+  const raw = rows[0]?.at;
+  if (!raw || raw === "null") return null;
+  const at = new Date(String(raw));
+  return Number.isNaN(at.getTime()) ? null : { at, emailed: Number(rows[0]?.emailed) === 1 };
+}
+
+/**
  * DECIDE A CONFIRMED PROPOSAL, once (part B): adopted or declined, the moment
  * it was decided, and the decision kept in the body. Guarded on `confirmed`, so
  * of two deciders at once exactly one moves it. True when this call did.
@@ -114,12 +138,14 @@ export async function decideOpenProposal(
   to: "adopted" | "declined",
   decision: OpenDecision,
   now: Date,
+  note: string | null = null,
 ): Promise<boolean> {
+  // A decider's note for the applicant rides in the same write, so it is there the moment the status is.
   const [result] = await db.query<ResultSetHeader>(
     "UPDATE open_role_proposals SET status = ?, decided_at = ?, " +
-      "body_json = JSON_SET(COALESCE(body_json, JSON_OBJECT()), '$.decidedWords', ?, '$.decidedAuthority', ?) " +
+      "body_json = JSON_SET(COALESCE(body_json, JSON_OBJECT()), '$.decidedWords', ?, '$.decidedAuthority', ?" + (note ? ", '$.note', ?" : "") + ") " +
       "WHERE id = ? AND status = 'confirmed'",
-    [to, now, decision.words ?? "", decision.authority ?? "", id],
+    note ? [to, now, decision.words ?? "", decision.authority ?? "", note, id] : [to, now, decision.words ?? "", decision.authority ?? "", id],
   );
   return Number(result.affectedRows ?? 0) === 1;
 }
@@ -165,7 +191,7 @@ export async function confirmOpenProposal(db: Db, confirmHash: string, notBefore
 export async function undoAdoption(db: Db, id: string): Promise<boolean> {
   const [result] = await db.query<ResultSetHeader>(
     "UPDATE open_role_proposals SET status = 'confirmed', decided_at = NULL, " +
-      "body_json = JSON_REMOVE(COALESCE(body_json, JSON_OBJECT()), '$.decidedWords', '$.decidedAuthority') WHERE id = ? AND status = 'adopted'",
+      "body_json = JSON_REMOVE(COALESCE(body_json, JSON_OBJECT()), '$.decidedWords', '$.decidedAuthority', '$.note') WHERE id = ? AND status = 'adopted'",
     [id],
   );
   return Number(result.affectedRows ?? 0) === 1;
@@ -202,7 +228,7 @@ export async function adoptedDecidedBefore(db: Db, before: Date): Promise<Stored
 /** Take the name and address off one proposal, once. True when this call did. */
 export async function anonymiseOpenProposal(db: Db, id: string, now: Date): Promise<boolean> {
   const [result] = await db.query<ResultSetHeader>(
-    "UPDATE open_role_proposals SET body_json = JSON_REMOVE(COALESCE(body_json, JSON_OBJECT()), '$.card.timeZone', '$.card.windows', '$.card.earliestStart', '$.links', '$.files'), name = NULL, email = NULL, email_key = NULL, anonymised_at = ? WHERE id = ? AND anonymised_at IS NULL",
+    "UPDATE open_role_proposals SET body_json = JSON_REMOVE(COALESCE(body_json, JSON_OBJECT()), '$.card.timeZone', '$.card.windows', '$.card.earliestStart', '$.links', '$.files', '$.references', '$.backgroundCheck', '$.about', '$.note'), name = NULL, email = NULL, email_key = NULL, anonymised_at = ? WHERE id = ? AND anonymised_at IS NULL",
     [now, id],
   );
   return Number(result.affectedRows ?? 0) === 1;
@@ -222,7 +248,7 @@ export async function deleteUnconfirmedBefore(db: Db, before: Date): Promise<num
 /** Take the name and address off every declined or withdrawn proposal decided before `before`. How many. */
 export async function anonymiseDecidedBefore(db: Db, before: Date, now: Date): Promise<number> {
   const [result] = await db.query<ResultSetHeader>(
-    "UPDATE open_role_proposals SET body_json = JSON_REMOVE(COALESCE(body_json, JSON_OBJECT()), '$.card.timeZone', '$.card.windows', '$.card.earliestStart', '$.links', '$.files'), name = NULL, email = NULL, email_key = NULL, anonymised_at = ? " +
+    "UPDATE open_role_proposals SET body_json = JSON_REMOVE(COALESCE(body_json, JSON_OBJECT()), '$.card.timeZone', '$.card.windows', '$.card.earliestStart', '$.links', '$.files', '$.references', '$.backgroundCheck', '$.about', '$.note'), name = NULL, email = NULL, email_key = NULL, anonymised_at = ? " +
       "WHERE status IN ('declined', 'withdrawn') AND decided_at < ? AND anonymised_at IS NULL",
     [now, before],
   );
@@ -237,7 +263,7 @@ export async function anonymiseDecidedBefore(db: Db, before: Date, now: Date): P
  */
 export async function expireUndecidedBefore(db: Db, before: Date, now: Date): Promise<number> {
   const [result] = await db.query<ResultSetHeader>(
-    "UPDATE open_role_proposals SET body_json = JSON_REMOVE(COALESCE(body_json, JSON_OBJECT()), '$.card.timeZone', '$.card.windows', '$.card.earliestStart', '$.links', '$.files'), status = 'withdrawn', decided_at = ?, name = NULL, email = NULL, email_key = NULL, anonymised_at = ? " +
+    "UPDATE open_role_proposals SET body_json = JSON_REMOVE(COALESCE(body_json, JSON_OBJECT()), '$.card.timeZone', '$.card.windows', '$.card.earliestStart', '$.links', '$.files', '$.references', '$.backgroundCheck', '$.about', '$.note'), status = 'withdrawn', decided_at = ?, name = NULL, email = NULL, email_key = NULL, anonymised_at = ? " +
       "WHERE status = 'confirmed' AND confirmed_at < ? AND anonymised_at IS NULL",
     [now, now, before],
   );
@@ -290,4 +316,17 @@ export async function proposalsKeepingFiles(db: Db, ids: readonly string[]): Pro
   if (!ids.length) return new Set();
   const [rows] = await db.query<RowDataPacket[]>("SELECT id FROM open_role_proposals WHERE id IN (?) AND anonymised_at IS NULL", [ids]);
   return new Set(rows.map((r) => String(r.id)));
+}
+
+/**
+ * Write a proposal's counter-offer (shared/counterOffer.ts), whole. Guarded on `confirmed`, so a
+ * decided proposal's terms never change under its decision. The caller holds the row lock
+ * (`readOpenProposal(conn, id, true)`) and has checked the revision it read. True when written.
+ */
+export async function setCounterOffer(db: Db, id: string, counterOffer: unknown): Promise<boolean> {
+  const [result] = await db.query<ResultSetHeader>(
+    "UPDATE open_role_proposals SET body_json = JSON_SET(COALESCE(body_json, JSON_OBJECT()), '$.counterOffer', CAST(? AS JSON)) WHERE id = ? AND status = 'confirmed'",
+    [JSON.stringify(counterOffer), id],
+  );
+  return Number(result.affectedRows ?? 0) === 1;
 }

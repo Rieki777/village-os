@@ -94,6 +94,21 @@ describe("a role with every CCOS word written", () => {
   });
 });
 
+describe("a role that states a commitment (audit M2)", () => {
+  it("hides the legacy time chip, since the card says the commitment", () => {
+    render(<PlayerRoleCardView data={payload({ ...WORDS, timeCommitment: "Roughly 40 hours a week", cardSeat: { commitmentPct: 60 } })} />);
+    expect(article().querySelector('[data-role-chip="time"]')).toBeNull();
+    expect(article().textContent).not.toContain("Roughly 40 hours a week");
+  });
+
+  it("hides it too when the commitment is the card's own card.commitmentPct, as the server sends it (verify B3)", () => {
+    render(<PlayerRoleCardView data={payload({ ...WORDS, timeCommitment: "Roughly 40 hours a week", settings: { clocks: { commitmentPct: 100 } }, cardSeat: { timeCommitment: "Roughly 40 hours a week", card: {} } })} />);
+    expect(article().querySelector('[data-role-chip="time"]')).toBeNull();
+    expect(article().textContent).not.toContain("Roughly 40 hours a week");
+    expect(article().textContent).toContain("100%");
+  });
+});
+
 describe("a role with none of the CCOS words written", () => {
   it("shows nothing extra: no section, no box, no chip", () => {
     render(<PlayerRoleCardView data={payload(NONE)} />);
@@ -121,7 +136,7 @@ describe("a role with none of the CCOS words written", () => {
       "Signs I'm stretched",
       "What flows back",
       "How I can step back",
-      "Time",
+      "Commitment",
     ]) {
       expect(screen.getByRole("button", { name: `Edit: ${heading}, ${TITLE}` }), heading).toBeTruthy();
     }

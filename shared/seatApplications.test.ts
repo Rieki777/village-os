@@ -52,7 +52,7 @@ describe("parseApplicationInput", () => {
   it("refuses terms the shared parser refuses, in its own words", () => {
     const r = parseApplicationInput(body({ seatSettings: { v: 1, commitmentPct: 40 } }));
     expect(r).toMatchObject({ ok: false, field: "seatSettings" });
-    if (!r.ok) expect(r.error).toMatch(/held whole/);
+    if (!r.ok) expect(r.error).toMatch(/set under Clocks/);
   });
 
   it("refuses payment details in the member's words, and lets a date through", () => {
@@ -203,7 +203,7 @@ describe("the subject", () => {
 describe("the member door's answers (0369, guide v2 B1)", () => {
   it("keeps the open form's field set, trimmed and capped, and reads a stored string", () => {
     const raw = { aim: "  Money kept true. ", servesGoal: "One set of numbers", timeZone: "America/Costa_Rica", windows: ["weekday-mornings", "", 3], earliestStart: "2026-12-01", terms: { choice: "talk", note: " The rate " } };
-    const want = { aim: "Money kept true.", servesGoal: "One set of numbers", timeZone: "America/Costa_Rica", windows: ["weekday-mornings"], earliestStart: "2026-12-01", terms: { choice: "talk", note: "The rate" } };
+    const want = { aim: "Money kept true.", servesGoal: "One set of numbers", timeZone: "America/Costa_Rica", windows: ["weekday-mornings"], earliestStart: "2026-12-01", terms: { choice: "talk", note: "The rate" }, goals: [] };
     expect(parseApplicationAnswers(raw)).toEqual(want);
     expect(parseApplicationAnswers(JSON.stringify(raw))).toEqual(want);
   });
@@ -232,5 +232,18 @@ describe("whose move it is (guide v2, Rye 10 Nov 2026)", () => {
     expect(whoseMove("withdrawn", { isCandidate: true })).toBe("Nobody's: this proposal is closed.");
     expect(whoseMove("not-adopted", null)).toBe("Nobody's: this proposal is closed.");
     expect(whoseMove("held-full", null)).toMatch(/waits for a place/);
+  });
+});
+
+describe("the season goals an adopted open proposal picked (verify item 7)", () => {
+  it("keeps each goal's words and how it serves, drops a blank or repeated one, and alone makes the answers non-empty", () => {
+    const a = parseApplicationAnswers({
+      serves: [{ goal: " Money we can read ", howItHelps: "a monthly cash view" }, { goal: "" }, { goal: "Money we can read" }, { goal: "Homes for families", howItHelps: " " }],
+    });
+    expect(a?.serves).toEqual([
+      { goal: "Money we can read", howItHelps: "a monthly cash view" },
+      { goal: "Homes for families", howItHelps: null },
+    ]);
+    expect(parseApplicationAnswers({ serves: "not a list" })).toBeNull();
   });
 });

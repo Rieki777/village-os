@@ -20,7 +20,19 @@
  * `/api/org` also tells a visitor. The links to the holders' cards need the
  * member holder rows (`map.viewPeople`), so below that tier a filled role
  * carries no link and the card says once that holder cards are for members.
+ *
+ * ── HOLDERS' FIRST NAMES, FOR A LIVE MEMBER ONLY (lead, 12 Nov 2026) ───────
+ *
+ * A signed-in member whose account is live (`ctx.namesFor`, decided by the
+ * route) reads each held role's holders by first name. A visitor reads none.
+ * Only a first name ever leaves here, never a surname, handle or address. An
+ * erased account names nobody: its tombstone is read on the users row, and
+ * erasure has already taken `display_name` off every seating. A member who
+ * left is named only by the name the seating kept (`keepName`,
+ * `releaseSeatingsForUser`), never off their account. An agent is not a person
+ * and is not named here.
  */
+import { anchorCircleId } from "../../shared/circlePicker";
 import type { Pool } from "mysql2/promise";
 import { buildCircleCard, type CircleCard, type CircleRoleIn } from "../../shared/circleCard";
 import { charterFromRow } from "../../shared/circleCharter";
@@ -33,7 +45,12 @@ import { readCircleLive } from "./circleLive";
 import { circleSummary, type RhythmDeps } from "./sessionRhythm";
 import type { CycleClock } from "../../shared/cycleClock";
 import { handlesOf } from "../repos/orgRoleHealth";
-import { openCircleWordProposals, readCharterRow, readCircleAdoptions } from "../repos/circleCard";
+import { holderAccountsOf, openCircleWordProposals, readCharterRow, readCircleAdoptions, type HolderAccountRow } from "../repos/circleCard";
+import { resolvedExitUserIds } from "../repos/formerMembers";
+import { DEPARTED_MEMBER_NAME, memberFirstName } from "../../shared/memberFirstName";
+import { isFormerMember } from "./formerMember";
+import { isTombstone } from "./oauthAccounts";
+import type { OrgAssignment } from "./orgChart";
 
 /** A circle as the circles store holds it (`circlesRepo`). */
 export interface StoredCircle {
@@ -65,6 +82,28 @@ export interface CircleCardCtx {
   sessionsDeps: RhythmDeps;
   /** Badges asleep this season, so a card names no multiplier the payment would skip. */
   dormantBadges?: readonly string[];
+  /** The reader is a signed-in member whose account is live, so the holders' first names are read. Never true for a visitor. */
+  namesFor?: boolean;
+}
+
+/** A first name, or null where the word is a placeholder or empty. */
+function firstOf(name: string | null | undefined): string | null {
+  const clean = String(name ?? "").trim();
+  if (!clean || clean === DEPARTED_MEMBER_NAME) return null;
+  return memberFirstName(clean, "") || null;
+}
+
+/**
+ * The first name a live holding is shown by, or null for none. An erased
+ * account never; a former member only by the name their seating kept; an agent never.
+ */
+export function holderFirstName(a: OrgAssignment, account: HolderAccountRow | undefined, leftIds: ReadonlySet<string>): string | null {
+  if (a.isAgent) return null;
+  if (a.holderKind !== "member") return firstOf(a.displayName);
+  if (!a.userId || !account) return null;
+  if (isTombstone({ email: account.email ?? "" })) return null;
+  if (isFormerMember(account, leftIds.has(String(a.userId)))) return firstOf(a.displayName);
+  return firstOf(account.name);
 }
 
 /**
@@ -95,6 +134,17 @@ export async function buildCircleCardFor(
 
   const memberIds = Array.from(new Set(held.filter((a) => a.holderKind === "member" && a.userId).map((a) => String(a.userId))));
   const handles = memberTier ? await handlesOf(pool, memberIds) : new Map<string, string | null>();
+  // The holders' first names, for a live member only: a visitor's card reads no account at all.
+  const namesByRole = new Map<string, string[]>();
+  if (ctx.namesFor === true) {
+    const [accounts, left] = await Promise.all([holderAccountsOf(pool, memberIds), resolvedExitUserIds(pool)]);
+    for (const a of held) {
+      const name = holderFirstName(a, a.userId ? accounts.get(String(a.userId)) : undefined, left);
+      if (name) namesByRole.set(a.orgRoleId, [...(namesByRole.get(a.orgRoleId) ?? []), name]);
+    }
+    // In alphabetical order, so the line reads the same on every read.
+    namesByRole.forEach((names) => names.sort((x: string, y: string) => x.localeCompare(y)));
+  }
 
   // The holders' names are never read: nameOf answers nothing a reader sees.
   const seats = projectSeats(inCircle, held, ctx.tier, {
@@ -141,6 +191,7 @@ export async function buildCircleCardFor(
           .filter((h: any) => h?.kind === "member" && !h?.isAgent)
           .map((h: any) => (typeof h.handle === "string" && h.handle ? h.handle : null))
       : undefined,
+    holderNames: ctx.namesFor === true ? (namesByRole.get(String(s.id)) ?? []) : undefined,
   }));
 
   const parent = circle.parentCircleId ? circles.find((c) => c.id === circle.parentCircleId) : undefined;
@@ -150,6 +201,7 @@ export async function buildCircleCardFor(
       name: circle.name,
       purpose: circle.purpose ?? null,
       status: circle.status ?? null,
+      anchor: anchorCircleId(circles as any[]) === String(circle.id),
       parent: parent ? { id: parent.id, name: parent.name } : null,
     },
     charter: charterFromRow(charterRow),

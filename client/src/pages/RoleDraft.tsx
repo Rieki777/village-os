@@ -42,17 +42,22 @@ import { useClassNames } from "@/components/power/useClassNames";
 import { readsTerms } from "@/components/characters/RolesThatFit";
 import { proposeRoleHref } from "@/components/roleProposal/QuickPath";
 import DiscoverStep from "@/components/roleDraft/DiscoverStep";
+import { BTN_PRIMARY, BTN_SECONDARY, CARD_FEATURED, CHIP_SOFT, DOOR, EYEBROW, H1, H2, LEDE, LINK, WORLD } from "@/components/journey/look";
 import SelectStepper from "@/components/roleDraft/SelectStepper";
 import ArtImage from "@/components/roleDraft/ArtImage";
 import Burst, { reducedMotion } from "@/components/roleDraft/Burst";
+import { Fireflies } from "@/components/journey/nature";
+import { BreathingLoader } from "@/components/natural";
+import Leaf from "@/components/journey/Leaf";
 import { useVillageName } from "@/hooks/useVillageName";
 import { gameFetch, useSeason } from "@/lib/gameApi";
+import { readFoundingTeam } from "@/components/roleCard/roleCardApi";
 import { useModuleOn } from "@/modules/ModuleProvider";
 import { readStoredJson, writeStoredJson } from "@/lib/safeStorage";
 import { fromOrgSeat, seasonForSheet } from "@shared/roleSheetInputs";
 import { OPEN_PROPOSAL_MAX_ROLES } from "@shared/openProposals";
 import { roleCardView } from "@shared/roleCardView";
-import { BEING_WRITTEN, roughHours } from "@shared/roleParams";
+import { BEING_WRITTEN } from "@shared/roleParams";
 import { termsSlotFor } from "@/components/power/SeatTermsSlot";
 import {
   ROLE_DRAFT_KEY,
@@ -64,8 +69,11 @@ import {
   fitCountFor,
   roleArtFor,
   draftFromStored,
+  draftWithArchetype,
+  archetypeFromSearch,
   openRolesFrom,
   rankForCharacters,
+  withoutFounding,
   type DraftRole,
 } from "@shared/roleDraft";
 
@@ -87,14 +95,14 @@ interface PlaceInvite {
   name: string;
 }
 
-type Load = { kind: "loading" } | { kind: "failed" } | { kind: "ready"; roles: DraftRole[]; org: any };
+type Load = { kind: "loading" } | { kind: "failed" } | { kind: "ready"; roles: DraftRole[]; org: any; founding: boolean };
 
 /**
  * Whether the open proposal takes applications now, and which roles it offers
  * (`GET /api/open-proposals/form`, public). A visitor's board shows only roles
  * the form would take, and no Apply when it is closed (red team, 9 Nov).
  */
-type FormRoleSteps = { id: string; name: string; conversations?: Array<{ role: string; minutes: number; finalApproval?: boolean }>; bookingUrl?: string | null };
+type FormRoleSteps = { id: string; name: string; terms?: { commitmentPct?: number | null }; conversations?: Array<{ role: string; minutes: number; finalApproval?: boolean }>; bookingUrl?: string | null };
 type FormState = { open: boolean; offered: Set<string> | null; message: string | null; term: OpenProposalTerm | null; roles: FormRoleSteps[] };
 
 function useProposalForm(): FormState | null {
@@ -187,6 +195,12 @@ export default function RoleDraft() {
   const cast = useCast();
   const places = usePlaceInvites();
   const form = useProposalForm();
+  /** What the role asks, read from its own terms first (a role that asks 100% says 100%), then from its card's line. */
+  const commitmentLine = (roleId: string, fromCard: string | null): string => {
+    const pct = form?.roles.find((r) => r.id === roleId)?.terms?.commitmentPct;
+    if (typeof pct === "number") return t({ message: `Commitment: ${pct}%`, context: "role draft stat" });
+    return /^Commitment: \d{1,3}%$/.test(fromCard ?? "") ? (fromCard as string) : t({ message: "Part or full commitment", context: "role draft stat" });
+  };
   const cardRef = useRef<HTMLDivElement | null>(null);
   const season = useSeason();
   const classNames = useClassNames();
@@ -194,7 +208,9 @@ export default function RoleDraft() {
   const [load, setLoad] = useState<Load>({ kind: "loading" });
   const stored = useMemo(() => {
     const read = readStoredJson("local", ROLE_DRAFT_KEY);
-    return { draft: draftFromStored(read.status === "value" ? read.value : null), blocked: read.status === "unavailable" };
+    // An archetype picked on /roles arrives in the address (?archetype=); it joins what this browser already held.
+    const arrived = typeof window === "undefined" ? null : archetypeFromSearch(window.location.search);
+    return { draft: draftWithArchetype(draftFromStored(read.status === "value" ? read.value : null), arrived), blocked: read.status === "unavailable" };
   }, []);
   const [chars, setChars] = useState<string[]>(stored.draft.chars);
   const [picks, setPicks] = useState<string[]>(stored.draft.picks);
@@ -203,17 +219,23 @@ export default function RoleDraft() {
   const [full, setFull] = useState(false);
   const [saveBlocked, setSaveBlocked] = useState(stored.blocked);
   const [step, setStep] = useState(0);
+  /** The steps the person has stood on, so the trail ticks only those. */
+  const [visited, setVisited] = useState<ReadonlySet<number>>(() => new Set([0]));
+  useEffect(() => setVisited((v) => (v.has(step) ? v : new Set(Array.from(v).concat(step)))), [step]);
   const [burst, setBurst] = useState(0);
   const [applyBurst, setApplyBurst] = useState(0);
   const [, navigate] = useLocation();
 
   useEffect(() => {
+    // The founding team is read beside the chart: its roles are applied for from their own card on /roles (QA2-01).
+    const founding = readFoundingTeam().then((a) => (a.on ? a.roleIds : []));
     gameFetch("/api/org")
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-      .then((org) => {
+      .then(async (org) => {
         if (!org || !Array.isArray(org.roles)) throw new Error("bad shape");
-        const roles = openRolesFrom(org);
-        setLoad({ kind: "ready", roles, org });
+        const foundingIds = await founding;
+        const roles = withoutFounding(openRolesFrom(org), foundingIds);
+        setLoad({ kind: "ready", roles, org, founding: foundingIds.length > 0 });
         // A drafted role that has since been filled or closed leaves the draft.
         setPicks((p) => p.filter((id) => roles.some((r) => r.id === id)));
       })
@@ -256,6 +278,14 @@ export default function RoleDraft() {
   };
   useEffect(() => {
     if (typeof window !== "undefined" && window.location.hash === "#sel-season") window.setTimeout(() => go(0), 300);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  // An archetype picked on /roles lands the person on the characters step, where that pick shows. Once, on arrival; a hash keeps its own place.
+  useEffect(() => {
+    if (typeof window === "undefined" || window.location.hash) return;
+    if (!archetypeFromSearch(window.location.search)) return;
+    document.getElementById("sel-chars")?.scrollIntoView?.({ behavior: reducedMotion() ? "auto" : "smooth", block: "start" });
+    document.getElementById("draft-chars")?.focus({ preventScroll: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   useEffect(() => {
@@ -313,37 +343,46 @@ export default function RoleDraft() {
 
   return (
     <Layout>
-      <div className="min-h-screen bg-background py-10 sm:py-14">
+      <div className={`${WORLD} py-10 sm:py-14`}>
         <div className="container max-w-6xl">
-          <p className="text-xs font-bold uppercase tracking-[0.14em] text-notice">{t({ message: "Open roles · select yours", context: "role draft eyebrow" })}</p>
-          <h1 className="mt-2 font-display text-4xl font-bold text-foreground text-balance">{t`Select your roles at ${villageName}`}</h1>
-          <p className="mt-3 max-w-[66ch] text-muted-foreground">
-            {t`Pick the characters you play, scout every open role by what it asks, open any card in full, and select up to three. Your selection stays in this browser until you propose, and nothing is sent before then.`}
+          <p className={EYEBROW}>{t({ message: "Open roles · select yours", context: "role draft eyebrow" })}</p>
+          <h1 className={`mt-2 text-balance ${H1}`}>{t`Find your roles at ${villageName}`}</h1>
+          <p className={`mt-3 ${LEDE}`}>
+            {t`Pick the characters you play, scout every open role by what it asks, open any card in full, and select up to three. Your selection stays in this browser until you apply, and nothing is sent before then.`}
           </p>
+          {load.kind === "ready" && load.founding && (
+            <p className="mt-3 text-sm text-muted-foreground" data-founding-elsewhere="">
+              {t({ message: "Looking for a founding role?", context: "role draft, founding roles live on /roles" })}{" "}
+              <Link href="/roles" className={LINK}>
+                {t({ message: "See the founding team.", context: "role draft, founding roles live on /roles" })}
+              </Link>
+            </p>
+          )}
 
           <div className="sm:sticky sm:top-24 z-20 -mx-4 bg-background/95 px-4 pb-3 pt-1 backdrop-blur">
             <SelectStepper
               labels={[
                 t({ message: "This season's goals", context: "role draft step" }),
-                t({ message: "Your R-Ikigai and your characters", context: "role draft step" }),
+                t({ message: "Your Ikigai (look it up) and your characters", context: "role draft step" }),
                 t({ message: "Scout the open roles", context: "role draft step" }),
                 t({ message: "Select up to three", context: "role draft step" }),
-                t({ message: "Propose", context: "role draft step" }),
+                t({ message: "Apply", context: "role draft step" }),
               ]}
               step={step}
               reached={4}
+              visited={visited}
               onGo={go}
-              barLabel={t({ message: "Your progress through the four steps", context: "role draft steps" })}
+              barLabel={t({ message: "Your progress through the five steps", context: "role draft steps" })}
             />
           </div>
 
-          <section id="sel-season" className="sel-rise mt-8 scroll-mt-52 rounded-2xl border-2 border-notice bg-card p-5" aria-labelledby="sel-season-h">
-            <h2 id="sel-season-h" className="font-display text-2xl font-bold text-card-foreground">
+          <section id="sel-season" className={`sel-rise mt-8 scroll-mt-52 ${CARD_FEATURED}`} aria-labelledby="sel-season-h">
+            <h2 id="sel-season-h" className={H2}>
               {seasonName ? t({ message: `This season's goals: ${seasonName}`, context: "role draft season" }) : t({ message: "This season's goals", context: "role draft season" })}
             </h2>
             {seasonDates && <p className="mt-1 text-sm font-semibold text-muted-foreground">{seasonDates}</p>}
             <p className="mt-2 max-w-[70ch] text-sm text-muted-foreground">
-              {t`A role card shows the work the village needs done. Your proposal is the other half: what you would like to contribute each moon and this season, and how it serves these goals.`}
+              {t`A role card shows the work the village needs done. Your proposal is the other half: what you would like to contribute each moon and this season, and how it serves our goals.`}
             </p>
             {goals.length > 0 ? (
               <ul className="mt-3 grid gap-2 sm:grid-cols-2">
@@ -352,7 +391,7 @@ export default function RoleDraft() {
                     <Check className={`mt-0.5 size-4 shrink-0 ${g.done ? "text-muted-foreground" : "text-notice"}`} aria-hidden="true" />
                     <span>
                       {g.text}
-                      {g.done && <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-muted-foreground">{t({ message: "Done", context: "role draft goal" })}</span>}
+                      {g.done && <span className={`ml-2 ${CHIP_SOFT}`}>{t({ message: "Done", context: "role draft goal" })}</span>}
                     </span>
                   </li>
                 ))}
@@ -361,16 +400,18 @@ export default function RoleDraft() {
               <p className="mt-3 text-sm text-muted-foreground">{t`No goals are set for this season yet.`}</p>
             )}
             <div className="mt-4 flex justify-end">
-              <button type="button" onClick={() => go(1)} className="inline-flex min-h-11 items-center gap-2 rounded-full bg-primary px-5 text-sm font-bold text-primary-foreground hover:bg-teal-deep-dark focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
-                {t({ message: "Next: your R-Ikigai and characters", context: "role draft next" })}
+              <NextAct here={step === 0} deskOnly>
+              <button type="button" onClick={() => go(1)} className={BTN_PRIMARY} data-select-next="">
+                {t({ message: "Next: your Ikigai and characters", context: "role draft next" })}
                 <ArrowRight className="size-4" aria-hidden="true" />
               </button>
+              </NextAct>
             </div>
           </section>
           <div id="sel-chars" className="scroll-mt-52"></div>
           <DiscoverStep cast={cast} chars={chars} onToggleChar={toggleChar} roles={roles} onDraft={(id) => { if (!picks.includes(id)) togglePick(id); }}>
           <section aria-labelledby="draft-chars">
-            <h2 id="draft-chars" className="font-display text-2xl font-bold text-foreground">{t`Who do you play? Pick one or more.`}</h2>
+            <h2 id="draft-chars" tabIndex={-1} className={`${H2} outline-none`}>{t`Who do you play? Pick one or more.`}</h2>
             {load.kind === "ready" && roles.length > 0 && !tagsKnown && (
               <p className="mt-1 text-sm text-muted-foreground">{t`This village has not tagged its roles by character for visitors yet, so every role is shown for every character.`}</p>
             )}
@@ -385,20 +426,23 @@ export default function RoleDraft() {
                     aria-pressed={on}
                     data-on={on}
                     onClick={() => toggleChar(c.key)}
-                    className={`sel-lift group relative flex min-h-11 flex-col overflow-hidden rounded-2xl border-2 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ${on ? "border-notice bg-primary text-primary-foreground" : "border-border bg-card text-card-foreground"}`}
+                    className={`sel-lift jw-pick group relative flex min-h-11 flex-col rounded-2xl border-2 text-left shadow-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ${on ? "border-notice bg-muted text-foreground" : "border-border bg-card text-card-foreground hover:border-notice/60"}`}
                   >
-                    <ArtImage src={characterArt(c.key)} className="relative aspect-[4/5] w-full" imgClassName="object-top" />
+                    <span className="relative block overflow-hidden rounded-t-xl">
+                      <ArtImage portrait src={characterArt(c.key)} className="relative aspect-[4/5] w-full" imgClassName="object-top" />
+                      {on && <span className="jw-ring rounded-t-xl" aria-hidden="true" />}
+                    </span>
                     {on && (
-                      <span className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-full bg-notice px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-background">
-                        <Check className="size-3.5" aria-hidden="true" />
+                      <span className="jw-unfurl absolute right-2 top-2 inline-flex items-center gap-1 rounded-full bg-notice px-2.5 py-1 text-xs font-bold uppercase tracking-wide text-background shadow-sm">
+                        <Leaf size={12} unfurl={false} />
                         {t({ message: "You play this", context: "role draft character" })}
                       </span>
                     )}
                     <span className="flex flex-col gap-1 p-3">
-                      <span className="font-display text-lg font-bold leading-tight">{c.name}</span>
-                      <span className={`text-xs ${on ? "text-primary-foreground/85" : "text-muted-foreground"}`}>{c.subtitle}</span>
+                      <span className="font-display text-lg leading-tight">{c.name}</span>
+                      <span className={`text-xs text-muted-foreground`}>{c.subtitle}</span>
                       {load.kind === "ready" && tagsKnown && (
-                        <span className={`text-xs font-semibold ${on ? "text-primary-foreground" : "text-foreground"}`}>
+                        <span className={`text-xs font-semibold text-foreground`}>
                           {n === 1 ? t({ message: "1 open role fits", context: "role draft character count" }) : t({ message: `${n} open roles fit`, context: "role draft character count" })}
                         </span>
                       )}
@@ -408,19 +452,21 @@ export default function RoleDraft() {
               })}
             </div>
             <div className="mt-4 flex justify-end">
-              <button type="button" onClick={() => go(2)} className="inline-flex min-h-11 items-center gap-2 rounded-full bg-primary px-5 text-sm font-bold text-primary-foreground hover:bg-teal-deep-dark focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+              <NextAct here={step === 1} deskOnly>
+              <button type="button" onClick={() => go(2)} className={BTN_PRIMARY} data-select-next="">
                 {t({ message: "Next: scout the open roles", context: "role draft next" })}
                 <ArrowRight className="size-4" aria-hidden="true" />
               </button>
+              </NextAct>
             </div>
           </section>
           </DiscoverStep>
 
           <div id="sel-scout" className="sel-rise mt-10 grid scroll-mt-52 gap-6 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
             <section aria-labelledby="draft-roles" className="min-w-0">
-              <h2 id="draft-roles" className="font-display text-2xl font-bold text-foreground">{t({ message: "Open roles", context: "role draft heading" })}</h2>
+              <h2 id="draft-roles" className={H2}>{t({ message: "Open roles", context: "role draft heading" })}</h2>
               <div className="mt-3 flex flex-wrap gap-2">
-                <button type="button" aria-pressed={!onlyFits} onClick={() => setOnlyFits(false)} className={`${CHIP} ${!onlyFits ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-card-foreground"}`}>
+                <button type="button" aria-pressed={!onlyFits} onClick={() => setOnlyFits(false)} className={`${CHIP} jw-btn ${!onlyFits ? "border-notice bg-notice text-background" : "border-border bg-card text-card-foreground"}`}>
                   {t({ message: "All open roles", context: "role draft filter" })}
                 </button>
                 <button
@@ -428,17 +474,21 @@ export default function RoleDraft() {
                   aria-pressed={onlyFits}
                   disabled={!chars.length || !tagsKnown}
                   onClick={() => setOnlyFits(true)}
-                  className={`${CHIP} disabled:opacity-50 ${onlyFits ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-card-foreground"}`}
+                  className={`${CHIP} jw-btn disabled:border-dashed disabled:opacity-50 ${onlyFits ? "border-notice bg-notice text-background" : "border-border bg-card text-card-foreground"}`}
                 >
                   {t({ message: "Only roles that fit", context: "role draft filter" })}
                 </button>
               </div>
 
-              {load.kind === "loading" && <p className="mt-6 text-muted-foreground">{t({ message: "Loading the open roles…", context: "role draft" })}</p>}
+              {load.kind === "loading" && (
+                <div className="mt-8 flex justify-center">
+                  <BreathingLoader label={t({ message: "Loading the open roles…", context: "role draft" })} showLabel />
+                </div>
+              )}
               {load.kind === "failed" && (
                 <p role="alert" className="mt-6 rounded-lg border border-border bg-muted p-4 text-sm text-foreground">
                   {t`We could not load the open roles just now. Refresh the page to try again, or see them on the Roles page.`}{" "}
-                  <Link href="/roles" className="font-semibold underline underline-offset-2">{t({ message: "Roles page", context: "role draft link" })}</Link>
+                  <Link href="/roles" className={LINK}>{t({ message: "Roles page", context: "role draft link" })}</Link>
                 </p>
               )}
               {load.kind === "ready" && shown.length === 0 && (
@@ -455,44 +505,41 @@ export default function RoleDraft() {
                   const isOpen = open === role.id;
                   const openPlaces = role.openPlaces;
                   const answers = role.accountabilities;
-                  const hours = role.timeCommitment ?? "";
                   const seats = role.seats;
                   return (
-                    <article key={role.id} data-on={drafted} className={`sel-lift flex min-w-0 flex-col overflow-hidden rounded-2xl border-2 bg-card ${isOpen ? "sm:col-span-2" : ""} ${drafted ? "border-notice" : "border-border"}`}>
-                      <div className="relative h-36 bg-primary text-primary-foreground">
+                    <article key={role.id} data-on={drafted} className={`sel-lift jw-pick flex min-w-0 flex-col overflow-hidden rounded-2xl border-2 bg-card shadow-sm ${isOpen ? "sm:col-span-2" : ""} ${drafted ? "border-notice" : "border-border"}`}>
+                      <div className="relative h-36 overflow-hidden bg-primary text-primary-foreground">
                         <ArtImage src={roleArtFor(role)} className="absolute inset-0" imgClassName="object-top" />
                         <div className="absolute inset-0 bg-gradient-to-t from-primary via-primary/55 to-transparent" aria-hidden="true" />
                         {fits.length > 0 && (
-                          <span className="absolute right-2 top-2 rounded-full bg-notice px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-background">
+                          <span className="absolute right-2 top-2 rounded-full bg-notice px-2.5 py-1 text-xs font-bold uppercase tracking-wide text-background">
                             <Sparkles className="mr-1 inline size-3" aria-hidden="true" />
                             {t({ message: `Fits ${fitsNames}`, context: "role draft badge" })}
                           </span>
                         )}
                         {drafted && (
-                          <span className="absolute left-2 top-2 grid size-8 place-items-center rounded-full bg-notice text-background" aria-hidden="true">
+                          <span className="jw-seal absolute left-2 top-2 grid size-9 place-items-center rounded-full border-2 border-background bg-notice text-background shadow-sm" aria-hidden="true">
                             <Check className="size-4" />
                           </span>
                         )}
                         <div className="absolute inset-x-0 bottom-0 px-4 pb-3">
-                          <h3 className="font-display text-lg font-bold leading-tight break-words">{roleName}</h3>
+                          <h3 className="font-display text-lg leading-tight break-words">{roleName}</h3>
                           <p className="text-sm text-primary-foreground/90">{role.circleName}</p>
                         </div>
                       </div>
                       <dl className="grid grid-cols-2 border-b border-border text-center text-sm">
                         <div className="border-r border-border px-2 py-2">
-                          <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                            <InfoTip tip={t`We don't pay for hours. We pay for contracted work and the contributions you lay out each moon and season. Hours are an estimate: full time is roughly 30 to 40 hours a week, half time roughly 20.`}>
-                              {t({ message: "Time", context: "role draft stat" })}
+                          <dt className="text-xs uppercase tracking-widest text-muted-foreground">
+                            <InfoTip triggerClassName="inline-flex min-h-11 items-center px-1" tip={t`We don't track time and we don't pay for it. We pay for contracted work and the contributions you lay out each moon and season. Commitment is how much energy and attention the role asks.`}>
+                              {t({ message: "Commitment", context: "role draft stat" })}
                             </InfoTip>
                           </dt>
                           <dd className="font-semibold text-foreground">
-                            {role.timeCommitment
-                              ? roughHours(hours)
-                              : t({ message: "~20 h half time, ~30 to 40 h full time", context: "role draft stat" })}
+                            {commitmentLine(role.id, role.timeCommitment)}
                           </dd>
                         </div>
                         <div className="px-2 py-2">
-                          <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">{t({ message: "Places", context: "role draft stat" })}</dt>
+                          <dt className="text-xs uppercase tracking-widest text-muted-foreground">{t({ message: "Places", context: "role draft stat" })}</dt>
                           <dd className="font-semibold text-foreground">
                             {role.openPlaces > 0
                               ? t({ message: `${openPlaces} of ${seats} open`, context: "role draft stat" })
@@ -506,12 +553,12 @@ export default function RoleDraft() {
                         <p className={role.aim ? "text-foreground" : "italic text-muted-foreground"}>{role.aim ?? t`This role has not written its aim yet.`}</p>
                         {role.accountabilities > 0 && (
                           <p className="mt-1 text-xs text-muted-foreground">
-                            {role.accountabilities === 1 ? t`Answers for 1 thing` : t({ message: `Answers for ${answers} things`, context: "role draft stat" })}
+                            {role.accountabilities === 1 ? t`Answers for 1 goal` : t({ message: `Answers for ${answers} goals`, context: "role draft stat" })}
                           </p>
                         )}
                       </div>
                       {isOpen && load.kind === "ready" && (
-                        <div ref={cardRef} tabIndex={-1} role="region" aria-label={t`The full card for ${roleName}`} className="border-t border-border p-3 outline-none">
+                        <div ref={cardRef} tabIndex={-1} role="region" aria-label={t`The full card for ${roleName}`} className="scroll-mt-52 border-t border-border p-3 outline-none">
                           <SeatTradingCard
                             input={fromOrgSeat(role.raw, load.org.circles, load.org.people, load.org.village, { raiseHand: false })}
                             ctx={ctx}
@@ -527,12 +574,12 @@ export default function RoleDraft() {
                           aria-expanded={isOpen}
                           aria-label={t({ message: `Full card for ${roleName}`, context: "role draft button label" })}
                           onClick={() => setOpen(isOpen ? null : role.id)}
-                          className="min-h-11 rounded-full border border-border px-4 text-sm font-semibold text-foreground hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring"
+                          className={BTN_SECONDARY}
                         >
                           {t({ message: "Full card", context: "role draft button" })}
                         </button>
                         {roleCardView(role.raw).beingWritten ? (
-                          <p className="flex min-h-11 flex-1 items-center justify-center rounded-full border border-dashed border-border px-4 text-sm font-semibold text-muted-foreground">
+                          <p className="flex min-h-11 flex-1 items-center justify-center rounded-lg border border-dashed border-border px-4 text-sm font-semibold text-muted-foreground">
                             {BEING_WRITTEN}
                           </p>
                         ) : (
@@ -542,9 +589,9 @@ export default function RoleDraft() {
                           aria-label={t({ message: `Select ${roleName}`, context: "role draft button label" })}
                           aria-disabled={!drafted && pickCount >= OPEN_PROPOSAL_MAX_ROLES}
                           onClick={() => togglePick(role.id)}
-                          className={`min-h-11 flex-1 rounded-full px-4 text-sm font-bold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring aria-disabled:opacity-50 ${drafted ? "border-2 border-primary bg-card text-primary" : "bg-primary text-primary-foreground"}`}
+                          className={`jw-btn inline-flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-lg border px-4 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring aria-disabled:opacity-50 ${drafted ? "border-notice bg-notice/15 text-foreground" : "border-notice bg-notice text-background hover:bg-notice/90"}`}
                         >
-                          {drafted && <Check className="mr-1 inline size-4" aria-hidden="true" />}
+                          {drafted && <Check className="jw-unfurl size-4 text-notice" aria-hidden="true" />}
                           {drafted ? t({ message: "Selected", context: "role draft button" }) : t({ message: "Select", context: "role draft button" })}
                         </button>
                         )}
@@ -553,17 +600,27 @@ export default function RoleDraft() {
                   );
                 })}
               </div>
-              <div className="mt-6 flex justify-end">
-                <button type="button" onClick={() => go(3)} className="inline-flex min-h-11 items-center gap-2 rounded-full bg-primary px-5 text-sm font-bold text-primary-foreground hover:bg-teal-deep-dark focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
-                  {t({ message: "Next: review my selection", context: "role draft next" })}
-                  <ArrowRight className="size-4" aria-hidden="true" />
-                </button>
-              </div>
+              {/* "Next: review my selection" stood here. It only scrolled to the tray beside it, so it read
+                  as a dead button (build list section 3): the tray is in view, and its Apply is the next act. */}
             </section>
 
-            <aside id="sel-select" aria-label={t({ message: "Your selection", context: "role draft tray" })} className="relative order-first scroll-mt-52 rounded-2xl border-2 border-primary bg-card p-4 lg:order-last lg:sticky lg:top-56">
+            <aside id="sel-select" aria-label={t({ message: "Your selection", context: "role draft tray" })} className="relative order-first scroll-mt-52 rounded-2xl border-2 border-notice/60 bg-card p-4 shadow-sm lg:order-last lg:sticky lg:top-56">
               <Burst play={burst} />
-              <h2 className="font-display text-xl font-bold text-card-foreground">{t({ message: "Your selection", context: "role draft tray" })}</h2>
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="font-display text-xl text-card-foreground">{t({ message: "Your selection", context: "role draft tray" })}</h2>
+                {/* Three seed slots: how much the selection holds, filled as you pick. Decoration; the list below is the record. */}
+                <span className="flex gap-1.5" aria-hidden="true" data-slots-filled={pickCount}>
+                  {Array.from({ length: OPEN_PROPOSAL_MAX_ROLES }, (_, i) =>
+                    i < pickCount ? (
+                      <span key={`f${i}`} className="grid size-7 place-items-center rounded-full border-2 border-notice text-notice">
+                        <Leaf size={14} />
+                      </span>
+                    ) : (
+                      <span key={`e${i}`} className="size-7 rounded-full border-2 border-dashed border-border" />
+                    ),
+                  )}
+                </span>
+              </div>
               <p className="mt-1 text-sm text-muted-foreground">
                 {chars.length ? t({ message: `Playing as ${playing}.`, context: "role draft tray" }) : t`No character picked yet.`}
               </p>
@@ -591,21 +648,23 @@ export default function RoleDraft() {
               {full && <p role="status" className="mt-2 text-sm text-foreground">{t`Your selection holds three. Take one off to select another.`}</p>}
               {visitorClosed && pickCount > 0 && (
                 <p role="status" className="mt-3 rounded-xl bg-muted p-3 text-sm text-foreground">
-                  {form?.message ?? t`Proposals are closed right now. Your selection stays here, and you can propose when they open.`}
+                  {form?.message ?? t`Applications are closed right now. Your selection stays here, and you can apply when they open.`}
                 </p>
               )}
               {applyHref && (
-                <Link href={applyHref} onClick={(e) => applyWithBurst(e, applyHref)} className="relative mt-3 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full bg-primary px-4 text-sm font-bold text-primary-foreground hover:bg-teal-deep-dark focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+                <NextAct here={step >= 3} block deskOnly className="mt-3">
+                <Link href={applyHref} onClick={(e) => applyWithBurst(e, applyHref)} className={`relative w-full ${BTN_PRIMARY}`} data-select-apply="">
                   {member
                     ? pickCount === 1
-                      ? t`Propose for this role`
-                      : t`Propose for these ${pickCount} roles`
+                      ? t`Apply for this role`
+                      : t`Apply for these ${pickCount} roles`
                     : pickCount === 1
-                      ? t`Propose with my pick`
-                      : t`Propose with my ${pickCount} picks`}
+                      ? t`Apply with my pick`
+                      : t`Apply with my ${pickCount} picks`}
                   <ArrowRight className="size-4" aria-hidden="true" />
-                  <Burst play={applyBurst} />
+                  <Burst play={applyBurst} size="sm" />
                 </Link>
+                </NextAct>
               )}
               <p className="mt-2 text-xs text-muted-foreground">
                 {saveBlocked
@@ -617,9 +676,9 @@ export default function RoleDraft() {
 
           <section id="sel-apply" className="mt-12 grid scroll-mt-52 gap-6 lg:grid-cols-2" aria-labelledby="draft-next">
             <div>
-              <h2 id="draft-next" className="font-display text-2xl font-bold text-foreground">{t`What happens after you propose`}</h2>
+              <h2 id="draft-next" className={H2}>{t`What happens after you apply`}</h2>
               {member ? (
-                <ol aria-label={t({ message: "After you propose", context: "role draft steps" })} className="mt-3 grid list-decimal gap-2 pl-5 text-sm text-foreground">
+                <ol aria-label={t({ message: "After you apply", context: "role draft steps" })} className="mt-3 grid list-decimal gap-2 pl-5 text-sm text-foreground">
                   <li>{t`One proposal carries all your picks, with the terms each role offers.`}</li>
                   <li>{t`Each role's circle is asked to consent, and a holder of the power to place people in roles adopts it, never their own.`}</li>
                   <li>{t`Once you are approved into a role, you align with the village's confidentiality agreement (NDA), before you see any confidential records.`}</li>
@@ -633,16 +692,16 @@ export default function RoleDraft() {
                   </li>
                 </ol>
               ) : (
-                <ol aria-label={t({ message: "After you propose", context: "role draft steps" })} className="mt-3 grid list-decimal gap-2 pl-5 text-sm text-foreground">
-                  <li>{t`You align with the Love Letter, the village's membership agreement, when you propose. Aligning is the village's way of signing.`}</li>
-                  <li>{t`You confirm your email within 48 hours. Nothing reaches the village before you do.`}</li>
-                  <li>{t`You meet the people the role works with, in the order the role sets, when it sets one.`}</li>
-                  <li>{t`Each role's circle is asked to consent. A holder of the power to place people in roles adopts or declines your proposal, and never their own.`}</li>
-                  <li>{t`If it is adopted, an invitation to make your account comes to your email.`}</li>
+                <ol aria-label={t({ message: "After you apply", context: "role draft steps" })} className="mt-3 grid list-decimal gap-2 pl-5 text-sm text-foreground">
+                  <li>{t`You align with the Love Letter, the village's membership agreement, when you apply.`}</li>
+                  <li>{t`You confirm your email within 48 hours.`}</li>
+                  <li>{t`You meet the people the role works closest with.`}</li>
+                  <li>{t`Each role's circle is asked to consent and pick who they'll co-create with.`}</li>
+                  <li>{t`If it is adopted, a formal invitation to make your account comes to your email.`}</li>
                   <li>{t`Once you are approved into a role, you align with the village's confidentiality agreement (NDA), before you see any confidential records.`}</li>
                   <li>
                     {form?.term
-                      ? t`Your role runs from adoption to the next new moon, ${moonEnds}. Each moon you lay out what you will contribute.`
+                      ? t`Your role runs from adoption to the next new moon, ${moonEnds}. Each new moon you lay out what you will contribute the next moon.`
                       : t`Your role starts on the first day of next season.`}
                   </li>
                 </ol>
@@ -651,12 +710,13 @@ export default function RoleDraft() {
               {!member && <NextForRoles roles={(form?.roles ?? []).filter((r) => picks.includes(r.id))} />}
             </div>
             <div>
-              <h2 className="font-display text-2xl font-bold text-foreground">{t({ message: "Other ways in", context: "role draft heading" })}</h2>
+              <h2 className={H2}>{t({ message: "Other ways in", context: "role draft heading" })}</h2>
               <ul className="mt-3 grid gap-2 text-sm">
                 <li>
-                  <Link href="/quests" className="inline-flex min-h-11 items-center gap-2 font-semibold text-foreground underline underline-offset-2">
-                    <Compass className="size-4" aria-hidden="true" />
-                    {t`Not ready for a role? Take a quest, alone or with others.`}
+                  <Link href="/quests" className={`jw-btn min-h-14 ${DOOR}`}>
+                    <Compass className="size-5 shrink-0 text-notice" aria-hidden="true" />
+                    <span className="min-w-0 flex-1">{t`Not ready for a role? Take a quest, alone or with others.`}</span>
+                    <ArrowRight className="size-4 shrink-0" aria-hidden="true" />
                   </Link>
                 </li>
                 {places.length > 0 ? (
@@ -668,24 +728,70 @@ export default function RoleDraft() {
                     <ul className="mt-1 flex flex-wrap gap-2 pl-6">
                       {places.map((p) => (
                         <li key={p.key}>
-                          <Link href="/map" className="inline-flex min-h-11 items-center rounded-full border border-border px-3 text-foreground hover:bg-muted">{p.name}</Link>
+                          <Link href="/map" className={BTN_SECONDARY}>{p.name}</Link>
                         </li>
                       ))}
                     </ul>
                   </li>
                 ) : (
                   <li>
-                    <Link href="/map" className="inline-flex min-h-11 items-center gap-2 font-semibold text-foreground underline underline-offset-2">
-                      <MapPin className="size-4" aria-hidden="true" />
-                      {t`See the places and their open roles on the Living Map`}
+                    <Link href="/map" className={`jw-btn min-h-14 ${DOOR}`}>
+                      <MapPin className="size-5 shrink-0 text-notice" aria-hidden="true" />
+                      <span className="min-w-0 flex-1">{t`See the places and their open roles on the Living Map`}</span>
+                      <ArrowRight className="size-4 shrink-0" aria-hidden="true" />
                     </Link>
                   </li>
                 )}
               </ul>
             </div>
           </section>
+
+          {/*
+            A PHONE'S THUMB: the one next act rides above the tab bar
+            (--tabbar-h, index.css), so nobody scrolls back up for Next. From
+            sm up the in-section buttons and the sticky trail carry it.
+          */}
+          <div className="sticky bottom-[calc(var(--tabbar-h)+0.5rem)] z-30 mt-8 overflow-x-clip py-3 sm:hidden" data-hides-fab-phone="" data-select-thumb="">
+            {/* Once a role is selected, proposing is the one next act; until then, the next step. The lights stay inside the screen's width. */}
+            {applyHref && pickCount > 0 ? (
+              <NextAct here block>
+                <Link href={applyHref} onClick={(e) => applyWithBurst(e, applyHref)} className={`relative w-full shadow-sm ${BTN_PRIMARY}`} data-select-thumb-apply="">
+                  {pickCount === 1 ? t`Apply for this role` : t`Apply for these ${pickCount} roles`}
+                  <ArrowRight className="size-4" aria-hidden="true" />
+                </Link>
+              </NextAct>
+            ) : step < 2 ? (
+              <NextAct here block>
+                <button type="button" onClick={() => go(step + 1)} className={`${BTN_PRIMARY} w-full shadow-sm`}>
+                  {step === 0
+                    ? t({ message: "Next: your Ikigai and characters", context: "role draft next" })
+                    : t({ message: "Next: scout the open roles", context: "role draft next" })}
+                  <ArrowRight className="size-4" aria-hidden="true" />
+                </button>
+              </NextAct>
+            ) : (
+              <button type="button" onClick={() => go(2)} className={`${BTN_PRIMARY} w-full shadow-sm`}>
+                {t({ message: "Select a role to apply for", context: "role draft next" })}
+                <ArrowRight className="size-4" aria-hidden="true" />
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </Layout>
+  );
+}
+
+/**
+ * THE ONE NEXT ACT gets the fireflies (wave 2 motion rule): only the act for
+ * the step you are on, so a long page never glows in several places at once.
+ */
+function NextAct({ here, block = false, deskOnly = false, className = "", children }: { here: boolean; block?: boolean; deskOnly?: boolean; className?: string; children: React.ReactNode }) {
+  if (!here) return <div className={className}>{children}</div>;
+  // On a phone the thumb bar holds the lit act, so an in-section copy stays unlit there.
+  return (
+    <Fireflies block={block} className={`${deskOnly ? "max-sm:[&>.nk-ff-layer]:hidden " : ""}${className}`}>
+      {children}
+    </Fireflies>
   );
 }

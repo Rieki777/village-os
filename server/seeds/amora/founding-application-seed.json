@@ -1,0 +1,10 @@
+{
+  "_readme": "Amora's own words for the founding-team application (/propose-a-role), Phase A, 11 Nov 2026. Nothing loads this file at boot. Each value is a village setting, applied by hand in Admin, Game Mechanics, or with PUT /api/admin/variables/<key>. The four org.founding_* settings are the application's own (The founding team). The three org.pay_shape* settings are the role cards' pay shape, registered by lane A3, shown on every card and on the application's terms step alike; they are here because the plain word on risk (traceability T68) and the default split were asked of this lane; the lead set it to 60/40/0 on 12 to 13 Nov 2026 (cash and equity now, credits shown at 0% until they come later). Sources: the role-process build list (1.12, 6.7, 7.1, 7.5), the lead's rulings of 11 Nov evening, and T68. The shares are a design placeholder and never anyone's pay.",
+  "org.founding_know_us": "Attend the webinar / community call (live, or watch the recording)\nCome on a land tour (weekly, right after the potluck)\nJoin the potluck",
+  "org.founding_know_us_note": "We encourage you to do these, but if you haven't, you can still apply, especially if you've been invited to, or if you're not in Costa Rica and the next webinar is more than a week away, or if you feel you're an incredibly strong candidate.",
+  "org.founding_first_cycle": "Your first cycle is one paid month, from the end of November to the end of December. At its end, either of us may choose to stop there, with thanks.",
+  "org.founding_first_conversations": "Technical Operations: your accounts, your tools and the systems you will work in",
+  "org.pay_shape": "cash 60, equity 40, credits 0",
+  "org.pay_shape_at_risk": "Equity and credits are at risk. They represent a share of ownership in Amora and have value only if Amora succeeds. Amora credits come later.",
+  "org.pay_shape_note": "*The total shown is the full band available for this role. It starts lower for the first month's engagement, as it is tied to deliverables. Indicative only: equity and credit terms are still being defined and are subject to legal review."
+}

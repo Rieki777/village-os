@@ -16,10 +16,11 @@
  * player card uses (`bg-card`, `text-card-foreground`, `text-muted-foreground`,
  * `text-notice`); no colour of its own.
  */
+import CircleName from "@/components/circles/CircleName";
 import { useState, type ReactNode } from "react";
 import { Link } from "wouter";
 import { Pencil } from "lucide-react";
-import InfoTip from "@/components/InfoTip";
+import InfoTip, { WORDED_TAP } from "@/components/InfoTip";
 import { BOX, EYEBROW, LINK, QUIET_BUTTON, SECTION, SlotView } from "@/components/playerCard/cardParts";
 import type { CircleCard, CircleSection, RoleRowOut, SignOut, Slot } from "@shared/circleCard";
 import { CIRCLE_CARD_WORDS as W } from "@shared/circleCardWords";
@@ -33,10 +34,10 @@ const H2 = "font-display text-xl font-bold text-card-foreground sm:text-2xl";
 const H3 = "text-sm font-semibold text-card-foreground";
 const HEADING_TAP = "inline-flex min-h-11 items-center text-left";
 /**
- * An inline trigger inside a sentence keeps the sentence's line height, and an
- * invisible inset grows its touch target to 44px, the bare InfoTip's own trick.
+ * An inline trigger inside a sentence keeps the sentence's line height, and its
+ * own box grows to a 44px touch target (WORDED_TAP, the InfoTip default).
  */
-const INLINE_TAP = "relative before:absolute before:-inset-x-1 before:-inset-y-3 before:content-['']";
+const INLINE_TAP = WORDED_TAP;
 
 /** A heading, with its CCOS term on hover or tap when the village shows the terms. */
 function Heading({ text, term, level }: { text: string; term: string | null; level: 2 | 3 }) {
@@ -143,6 +144,11 @@ function RoleRow({ role }: { role: RoleRowOut }) {
           {role.stateWords}
         </span>
       </div>
+      {role.holderLine ? (
+        <p className="text-sm text-card-foreground" data-circle-role-holders="">
+          {role.holderLine}
+        </p>
+      ) : null}
       {/* What it pays, before the Apply link (Rye, 2026-10-30). */}
       {role.pay ? (
         <div className="text-xs">
@@ -275,22 +281,30 @@ export default function CircleCardView({
   circleId = "",
   mayPropose = false,
   reload = () => undefined,
+  omit = [],
+  arrange,
 }: {
   card: CircleCard;
   circleId?: string;
   /** A holder of a role in this circle, or an admin (`viewer.mayPropose`). */
   mayPropose?: boolean;
   reload?: () => void;
+  /** Sections another part of the page draws (the hearth draws the roles, the meeting and the adoption). */
+  omit?: readonly string[];
+  /**
+   * Where the parts go. Left out, the card stacks them as one column; the
+   * hearth page places the header and the rest in its own grid, inside this
+   * card's edit context, so "Propose new words" still reaches every word.
+   */
+  arrange?: (parts: { header: ReactNode; proposals: ReactNode; rest: ReactNode }) => ReactNode;
 }) {
   const [editing, setEditing] = useState(false);
   // A decided proposal's confirmation, kept here: adopting the last one empties the panel.
   const [decided, setDecided] = useState<string | null>(null);
   const { header } = card;
   const purpose = card.sections.find((s) => s.kind === "text");
-  return (
-    <CircleEditContext.Provider value={{ editing: mayPropose && editing, circleId, pending: card.pending ?? [], reload }}>
-    <div data-circle-card="" className="grid gap-4 sm:gap-6">
-      <section className={`${SECTION} grid gap-4`}>
+  const headerPart = (
+    <section className={`${SECTION} grid gap-4`}>
         {mayPropose ? (
           <div className="flex justify-end">
             <button type="button" onClick={() => setEditing((e) => !e)} aria-pressed={editing} className={QUIET_BUTTON}>
@@ -301,7 +315,7 @@ export default function CircleCardView({
         ) : null}
         <div className="grid gap-1">
           <p className={EYEBROW}>{header.eyebrow}</p>
-          <h1 className="font-display text-3xl font-bold text-card-foreground break-words sm:text-4xl">{header.name}</h1>
+          <h1 className="font-display text-3xl font-bold text-card-foreground break-words sm:text-4xl"><CircleName name={header.name} anchor={header.anchor} /></h1>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
             {header.parent ? (
               <span>
@@ -340,17 +354,29 @@ export default function CircleCardView({
         ) : null}
         {header.termsKey ? <p className="text-xs text-muted-foreground">{header.termsKey}</p> : null}
       </section>
-      {(card.proposals ?? []).length ? (
-        <ProposalsPanel proposals={card.proposals ?? []} reload={reload} onDone={setDecided} />
-      ) : decided ? (
-        <p role="status" className={`${SECTION} text-sm font-medium`}>
-          {decided}
-        </p>
-      ) : null}
-      {panels(card.sections.filter((s) => s.kind !== "text")).map((g) => (
-        <SectionPanel key={g[0]!.key} group={g} />
-      ))}
-    </div>
+  );
+  const proposalsPart =
+    (card.proposals ?? []).length ? (
+      <ProposalsPanel proposals={card.proposals ?? []} reload={reload} onDone={setDecided} />
+    ) : decided ? (
+      <p role="status" className={`${SECTION} text-sm font-medium`}>
+        {decided}
+      </p>
+    ) : null;
+  const restPart = panels(card.sections.filter((s) => s.kind !== "text" && !omit.includes(s.key))).map((g) => (
+    <SectionPanel key={g[0]!.key} group={g} />
+  ));
+  return (
+    <CircleEditContext.Provider value={{ editing: mayPropose && editing, circleId, pending: card.pending ?? [], reload }}>
+      {arrange ? (
+        arrange({ header: headerPart, proposals: proposalsPart, rest: <>{restPart}</> })
+      ) : (
+        <div data-circle-card="" className="grid gap-4 sm:gap-6">
+          {headerPart}
+          {proposalsPart}
+          {restPart}
+        </div>
+      )}
     </CircleEditContext.Provider>
   );
 }

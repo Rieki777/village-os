@@ -1,0 +1,15 @@
+{
+  "note": "The steward questions as they should read after the joining flow landed (2026-11-10). stw-1 is unchanged and still needs a person to confirm them. Apply by hand through Admin, FAQs. Not loaded by any boot step.",
+  "faqs": [
+    {
+      "id": "stw-1",
+      "question": "How are decisions made?",
+      "answer": "Through sociocratic circles using consent-based decision making. No single person, including the founders, can override a community consent vote."
+    },
+    {
+      "id": "stw-3",
+      "question": "How much time does stewardship require?",
+      "answer": "Each role card states the commitment the role asks. Roles run from new moon to new moon, and we pay for work delivered, never for hours."
+    }
+  ]
+}

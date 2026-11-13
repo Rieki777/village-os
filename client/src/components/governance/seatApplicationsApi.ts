@@ -6,6 +6,7 @@
  * does not hold terms.read, and the page says "members read applications"
  * rather than "something went wrong", so the status travels with the answer.
  */
+import type { ProposalGoal } from "@shared/proposalGoals";
 import { authToken } from "@/lib/gameApi";
 import type { ApplicationStatus } from "@shared/seatApplications";
 import type { ServedAlignment } from "@/components/alignment/alignmentsApi";
@@ -21,6 +22,15 @@ export interface ServedApplication {
   candidate: { id: string; name: string | null };
   seats: Array<{ id: string; name: string; aim: string | null }>;
   note: string | null;
+  /** The goals for the first moon: the member's list, or an older application's words as one goal (joining lane PR 1). */
+  goals?: ProposalGoal[];
+  /** About you (joining lane PR 2): sent only to the people who decide it, never to anybody else. */
+  /** The terms we offer, with the history: the deciders only (joining lane PR 4). */
+  offer?: import("@/components/openProposal/TermsWeOffer").ServedDeciderOffer | null;
+  aboutYou?: { references: Array<{ name: string; how: string; contact: string }>; about: { based?: string; languages?: string; story?: string }; backgroundCheck: { needed: boolean; because: "no_references" | "role" | null; consent?: { at: string; version: string } } | null } | null;
+  /** For the candidate: how many references they gave, a count and nothing more. */
+  referencesGiven?: number | null;
+  /** What is left of the older words beside the goals: the aim and the terms choice. */
   deliverables: string | null;
   settings: unknown;
   term: { endsOn: string; followsSeason: boolean; seasonId: string | null };
@@ -47,6 +57,7 @@ export interface ServedApplication {
   you?: {
     isCandidate: boolean;
     mayAdopt: boolean;
+    mayEditTerms?: boolean;
     mayPutToVillage: boolean;
     mayWithdraw: boolean;
     holdsThePower: boolean;

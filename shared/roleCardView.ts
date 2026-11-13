@@ -18,16 +18,16 @@ import {
   beingWrittenLine,
   interviewLines,
   interviewTotalWords,
-  roughHours,
   type CardPart,
   type InterviewStepView,
   type RoleTrack,
   type WhereWorked,
 } from "./roleParams";
 import { publicPayWords, type PublicPay } from "./rolePublicPay";
+import { HELD_BY_LABEL, HELD_BY_WORDS, readHeldBy } from "./agentHolders";
 
 export interface CardRow {
-  id: "hours" | "track" | "goals" | "where" | "languages" | "review" | "interviews" | "criteria" | "budget";
+  id: "heldBy" | "commitment" | "track" | "goals" | "where" | "languages" | "review" | "interviews" | "criteria" | "budget";
   label: string;
   lines: string[];
 }
@@ -51,8 +51,13 @@ export function roleCardView(seat: unknown, locale = "en-GB"): RoleCardView {
   const card: Record<string, any> = s.card && typeof s.card === "object" ? s.card : {};
   const rows: CardRow[] = [];
 
-  const hours = roughHours(typeof s.timeCommitment === "string" ? s.timeCommitment : null);
-  if (hours) rows.push({ id: "hours", label: "Hours", lines: [hours] });
+  // Who may hold it (0374), only when the card says: nothing is invented.
+  const heldBy = readHeldBy(card.heldBy);
+  if (heldBy) rows.push({ id: "heldBy", label: HELD_BY_LABEL, lines: [HELD_BY_WORDS[heldBy]] });
+
+  // Commitment replaced "Roughly N hours a week" (joining lane PR 3). A role card written before it keeps its text, unshown.
+  const commitment = Number.isInteger(card.commitmentPct) ? (card.commitmentPct as number) : null;
+  if (commitment !== null) rows.push({ id: "commitment", label: "Commitment", lines: [`${commitment}%`] });
 
   const track = card.track as RoleTrack | null | undefined;
   // Read through the one list, so a track stored in older words ("paid", "local") still shows (guide v2).

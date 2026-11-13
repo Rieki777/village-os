@@ -26,7 +26,7 @@ import { describe, expect, it } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-import InfoTip from "./InfoTip";
+import InfoTip, { BARE_TAP_BOX, TAP_MIN, widenStyle } from "./InfoTip";
 
 // The real sentence from client/src/pages/Crowdpool.tsx, so this test names
 // the copy that produced the reported defect rather than a stand-in.
@@ -254,5 +254,53 @@ describe("InfoTip, keyboard", () => {
 
     await user.keyboard(" ");
     expect(within(host).queryByRole("tooltip")).toBeNull();
+  });
+});
+
+describe("a short worded trigger's own box reaches 44px wide (rehearsal, /roles at 390)", () => {
+  it("grows a 35px word to at least 44px and gives the space back, so the words do not move", () => {
+    const s = widenStyle(35)!;
+    const side = s.paddingLeft as number;
+    expect(35 + 2 * side).toBeGreaterThanOrEqual(TAP_MIN);
+    expect(s.paddingRight).toBe(side);
+    expect(s.marginLeft).toBe(-side);
+    expect(s.marginRight).toBe(-side);
+    // A word that short never wraps, so the padding cannot stack it one letter per line.
+    expect(s.whiteSpace).toBe("nowrap");
+    // The class max-w-full would clamp the grown box back to the words' width.
+    expect(s.maxWidth).toBe("none");
+  });
+
+  it("leaves a wide trigger, and one not laid out yet, exactly as it was", () => {
+    expect(widenStyle(TAP_MIN)).toBeUndefined();
+    expect(widenStyle(120)).toBeUndefined();
+    expect(widenStyle(0)).toBeUndefined();
+  });
+});
+
+describe("the bare mark's own box reaches 44px when asked (rehearsal, /quests at 390)", () => {
+  /** Tailwind's spacing step is 4px; `size-11` is 44, `-my-3.5` is 14. */
+  const px = (cls: string, re: RegExp) => Number((cls.match(re) ?? [])[1]) * 4;
+
+  it("draws a 44px box and gives the space back, so the 16px circle keeps its place in the sentence", () => {
+    render(<p>Value set<InfoTip tip="What a value is." label="What a value is" tapBox /></p>);
+    const button = screen.getByRole("button", { name: "What a value is" });
+    const box = px(button.className, /\bsize-(\d+(?:\.\d+)?)\b/);
+    expect(box).toBeGreaterThanOrEqual(TAP_MIN);
+    // What the margins give back leaves the footprint the bare mark always had: ml-1 plus a 16px circle.
+    const y = px(button.className, /-my-(\d+(?:\.\d+)?)\b/);
+    const left = px(button.className, /-ml-(\d+(?:\.\d+)?)\b/);
+    const right = px(button.className, /-mr-(\d+(?:\.\d+)?)\b/);
+    expect(box - 2 * y).toBe(16);
+    expect(box - left - right).toBe(20);
+    expect(button.firstElementChild?.className).toMatch(/\bw-4\b.*\bh-4\b/);
+    expect(button.className).toBe(BARE_TAP_BOX);
+  });
+
+  it("leaves every other bare mark the 16px circle it was", () => {
+    render(<p>Value set<InfoTip tip="What a value is." label="What a value is" /></p>);
+    const button = screen.getByRole("button", { name: "What a value is" });
+    expect(button.className).toMatch(/\bw-4\b/);
+    expect(button.className).not.toMatch(/\bsize-11\b/);
   });
 });

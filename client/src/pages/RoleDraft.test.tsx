@@ -35,7 +35,7 @@ const ORG = {
     { id: "land", name: "Land Circle" },
   ],
   roles: [
-    { id: "lfs", name: "Lead Financial Steward", circleId: "anchor", seats: 1, holderCount: 0, state: "open", archetypes: ["catalyzing"], timeCommitment: "25 to 30 hours a week", aim: "Money kept true." },
+    { id: "lfs", name: "Lead Financial Steward", circleId: "anchor", seats: 1, holderCount: 0, state: "open", archetypes: ["catalyzing"], timeCommitment: "Commitment: 60%", aim: "Money kept true." },
     { id: "garden", name: "Gardener", circleId: "land", seats: 1, holderCount: 0, state: "open", archetypes: ["building"] },
     { id: "host", name: "Welcome Host", circleId: "land", seats: 1, holderCount: 0, state: "open", archetypes: ["facilitating"] },
     { id: "cook", name: "Cook", circleId: "land", seats: 1, holderCount: 0, state: "open", archetypes: [] },
@@ -45,13 +45,14 @@ const ORG = {
 
 const OPEN_FORM = { open: true, roles: ORG.roles.map((r) => ({ id: r.id, name: r.name })) };
 
-function serve(over: { org?: unknown; places?: unknown; form?: unknown; season?: unknown } = {}) {
+function serve(over: { org?: unknown; places?: unknown; form?: unknown; season?: unknown; founding?: unknown } = {}) {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string) => {
       const u = String(url);
       const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
       if (u.includes("/api/archetypes")) return json(CAST);
+      if (u.includes("/api/org/founding-team")) return json(over.founding ?? { on: false, roleIds: [] });
       if (u.includes("/api/org")) return json(over.org ?? ORG);
       if (u.includes("/api/open-proposals/form")) return json(over.form ?? OPEN_FORM);
       if (u.includes("/api/place-registry")) return over.places ? json(over.places) : json({ error: "not here" }, 404);
@@ -72,6 +73,39 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+describe("QA2-01: the founding team's roles stay off the game's board", () => {
+  it("leaves a featured founding role off the board, and points to the founding team instead", async () => {
+    serve({ founding: { on: true, roleIds: ["lfs"], sections: {} } });
+    render(<RoleDraft />);
+    await screen.findByRole("heading", { level: 3, name: "Gardener" });
+    expect(screen.queryByRole("heading", { level: 3, name: "Lead Financial Steward" })).toBeNull();
+    const line = document.querySelector("[data-founding-elsewhere]") as HTMLElement;
+    expect(line.textContent).toBe("Looking for a founding role? See the founding team.");
+    expect(within(line).getByRole("link", { name: "See the founding team." }).getAttribute("href")).toBe("/roles");
+  });
+
+  it("drops a founding role a visitor drafted before, so it never rides into an application", async () => {
+    localStorage.setItem(ROLE_DRAFT_KEY, JSON.stringify({ chars: [], picks: ["lfs", "garden"] }));
+    serve({ founding: { on: true, roleIds: ["lfs"], sections: {} } });
+    render(<RoleDraft />);
+    await screen.findByRole("heading", { level: 3, name: "Gardener" });
+    await waitFor(() => expect(JSON.parse(localStorage.getItem(ROLE_DRAFT_KEY) ?? "{}").picks).toEqual(["garden"]));
+  });
+
+  it("lists every open role and says nothing of a founding team while the section is off (control)", async () => {
+    serve();
+    render(<RoleDraft />);
+    expect(await screen.findByRole("heading", { level: 3, name: "Lead Financial Steward" })).toBeTruthy();
+    expect(document.querySelector("[data-founding-elsewhere]")).toBeNull();
+  });
+
+  it("titles the board Find your roles", async () => {
+    serve();
+    render(<RoleDraft />);
+    expect(await screen.findByRole("heading", { level: 1, name: "Find your roles at Hollow Oak" })).toBeTruthy();
+  });
+});
+
 describe("the board, read live", () => {
   it("lists every open role from the chart, with its circle and only the stats it has written", async () => {
     serve();
@@ -80,9 +114,17 @@ describe("the board, read live", () => {
     expect(screen.queryByRole("heading", { level: 3, name: "Water Keeper" })).toBeNull();
     const lfs = card("Lead Financial Steward");
     expect(within(lfs).getByText("Anchor Circle")).toBeTruthy();
-    expect(within(lfs).getByText("Roughly 25 to 30 hours a week")).toBeTruthy();
-    // A role that wrote no hours shows the village's estimate, never a blank (Rye, 9 Nov).
-    expect(within(card("Cook")).getByText("~20 h half time, ~30 to 40 h full time")).toBeTruthy();
+    expect(within(lfs).getByText("Commitment: 60%")).toBeTruthy();
+    // A role that wrote no commitment (or wrote hours before) shows a plain line, never a blank (Rye, 9 Nov).
+    expect(within(card("Cook")).getByText("Part or full commitment")).toBeTruthy();
+  });
+
+  it("P1: the tile reads the commitment the role's terms ask, not a vague line", async () => {
+    serve({ form: { open: true, roles: ORG.roles.map((r) => ({ id: r.id, name: r.name, terms: { words: {}, commitmentPct: r.id === "cook" ? 100 : null } })) } });
+    render(<RoleDraft />);
+    await screen.findByRole("heading", { level: 3, name: "Cook" });
+    await waitFor(() => expect(within(card("Cook")).getByText("Commitment: 100%")).toBeTruthy());
+    expect(within(card("Cook")).queryByText("Part or full commitment")).toBeNull();
   });
 
   it("offers the village's own cast, and more than one character can be picked", async () => {
@@ -123,6 +165,62 @@ describe("the board, read live", () => {
   });
 });
 
+describe("an archetype picked on /roles", () => {
+  it("arrives already picked, joins what the browser held, and is kept", async () => {
+    localStorage.setItem(ROLE_DRAFT_KEY, JSON.stringify({ chars: ["catalyzing"], picks: [] }));
+    window.history.replaceState(null, "", "/roles/select?archetype=building");
+    serve();
+    render(<RoleDraft />);
+    await screen.findByRole("heading", { level: 3, name: "Gardener" });
+    expect(screen.getByRole("button", { name: /The Builder/ }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: /The Catalyst/ }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: /The Spaceholder/ }).getAttribute("aria-pressed")).toBe("false");
+    await waitFor(() => expect(JSON.parse(localStorage.getItem(ROLE_DRAFT_KEY) ?? "{}").chars).toEqual(["catalyzing", "building"]));
+    window.history.replaceState(null, "", "/");
+  });
+});
+
+describe("the selection board opening with an archetype", () => {
+  // jsdom has no scrollIntoView; record which element each call was made on.
+  function stubScroll() {
+    const scrolled: string[] = [];
+    Element.prototype.scrollIntoView = vi.fn(function (this: Element) { scrolled.push(this.id); });
+    return scrolled;
+  }
+  afterEach(() => {
+    delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+    window.history.replaceState(null, "", "/");
+  });
+
+  it("scrolls to the characters step once, when it arrives with an archetype in the address", async () => {
+    const scrolled = stubScroll();
+    window.history.replaceState(null, "", "/roles/select?archetype=catalyzing");
+    serve();
+    render(<RoleDraft />);
+    await screen.findByRole("heading", { level: 3, name: "Lead Financial Steward" });
+    expect(scrolled).toEqual(["sel-chars"]);
+    expect(document.activeElement?.id).toBe("draft-chars");
+  });
+
+  it("does not scroll without an archetype in the address", async () => {
+    const scrolled = stubScroll();
+    window.history.replaceState(null, "", "/roles/select");
+    serve();
+    render(<RoleDraft />);
+    await screen.findByRole("heading", { level: 3, name: "Lead Financial Steward" });
+    expect(scrolled).toEqual([]);
+  });
+
+  it("keeps its place when the address carries a hash", async () => {
+    const scrolled = stubScroll();
+    window.history.replaceState(null, "", "/roles/select?archetype=catalyzing#sel-select");
+    serve();
+    render(<RoleDraft />);
+    await screen.findByRole("heading", { level: 3, name: "Lead Financial Steward" });
+    expect(scrolled).not.toContain("sel-chars");
+  });
+});
+
 describe("the draft", () => {
   it("selects up to three in order, keeps them in this browser, and applies with all of them", async () => {
     serve();
@@ -141,7 +239,7 @@ describe("the draft", () => {
       expect.stringContaining("Gardener"),
       expect.stringContaining("Welcome Host"),
     ]);
-    const apply = within(tray).getByRole("link", { name: /Propose with my 3 picks/ });
+    const apply = within(tray).getByRole("link", { name: /Apply with my 3 picks/ });
     expect(apply.getAttribute("href")).toBe("/propose-a-role?role=lfs&role=garden&role=host&from=%2Froles%2Fdraft");
     expect(JSON.parse(localStorage.getItem(ROLE_DRAFT_KEY) ?? "{}")).toEqual({ chars: [], picks: ["lfs", "garden", "host"] });
 
@@ -167,7 +265,7 @@ describe("the draft", () => {
     fireEvent.click(within(card("Gardener")).getByRole("button", { name: "Select Gardener" }));
     fireEvent.click(within(card("Cook")).getByRole("button", { name: "Select Cook" }));
     const tray = screen.getByRole("complementary", { name: "Your selection" });
-    expect(within(tray).getByRole("link", { name: /Propose for these 2 roles/ }).getAttribute("href")).toBe("/propose?type=role_application&seat=garden&seat=cook&from=%2Froles%2Fdraft");
+    expect(within(tray).getByRole("link", { name: /Apply for these 2 roles/ }).getAttribute("href")).toBe("/propose?type=role_application&seat=garden&seat=cook&from=%2Froles%2Fdraft");
   });
 
   it("offers no Apply to a visitor while applications are closed, and keeps the selection", async () => {
@@ -199,10 +297,10 @@ describe("what happens next", () => {
   it("walks a visitor through the steps in Rye's order: the Love Letter at application, then confirm, conversations, consent, invitation, NDA", async () => {
     serve();
     render(<RoleDraft />);
-    const steps = await screen.findByRole("list", { name: "After you propose" });
+    const steps = await screen.findByRole("list", { name: "After you apply" });
     const items = within(steps).getAllByRole("listitem").map((li) => li.textContent ?? "");
     // Rye's answer 8 (9 Nov): membership is aligned with at application.
-    expect(items[0]).toMatch(/Love Letter.*when you propose/);
+    expect(items[0]).toMatch(/Love Letter.*when you apply/);
     expect(items[1]).toMatch(/confirm/i);
     expect(items.some((t) => /Love Letter/.test(t))).toBe(true);
     // Rye, 9 Nov: the NDA comes after approval, before any confidential record.
@@ -221,7 +319,7 @@ describe("what happens next", () => {
     placesOnRef.value = false;
     serve({ places: { places: [{ key: "greenhouse", name: "Greenhouse", invitationOpen: true }] } });
     render(<RoleDraft />);
-    await screen.findByText(/What happens after you propose/);
+    await screen.findByText(/What happens after you apply/);
     expect(screen.queryByText("Greenhouse")).toBeNull();
     placesOnRef.value = true;
     cleanup();

@@ -66,13 +66,11 @@ import { useGameConfig } from "@/lib/gameApi";
 import BreathingLoader from "@/components/natural/BreathingLoader";
 import { gateLine, nameList } from "./gateCopy";
 import { internalPath } from "@/lib/internalPath";
+import { BTN_PRIMARY, BTN_SECONDARY, WORLD } from "@/components/journey/look";
 
 
-const DOOR =
-  "inline-flex items-center justify-center min-h-[44px] px-5 rounded-lg font-semibold" +
-  " focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep focus-visible:ring-offset-2";
-const DOOR_PRIMARY = `${DOOR} bg-teal-deep text-white hover:bg-teal-deep-dark`;
-const DOOR_SECOND = `${DOOR} border border-teal-deep text-teal-deep hover:bg-teal-deep/5`;
+const DOOR_PRIMARY = BTN_PRIMARY;
+const DOOR_SECOND = BTN_SECONDARY;
 
 /**
  * BOTH DOORS, WITH NO CARD AROUND THEM.
@@ -126,10 +124,13 @@ export function SignInDoors({
 function GateShell({ name, children }: { name: string; children: React.ReactNode }) {
   return (
     <Layout>
-      <div className="container py-16">
-        <div className="mx-auto max-w-xl text-center">
-          <h1 className="font-display text-3xl font-bold mb-3">{name}</h1>
-          {children}
+      {/* D-10: the gate stands in the night world the room it guards would open into. */}
+      <div className={WORLD} data-world="night">
+        <div className="container py-16">
+          <div className="mx-auto max-w-xl text-center">
+            <h1 className="font-display text-3xl font-bold text-foreground mb-3">{name}</h1>
+            {children}
+          </div>
         </div>
       </div>
     </Layout>

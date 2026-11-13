@@ -39,7 +39,7 @@ describe("TypographyPanel save", () => {
     const display = offeringsFor("display")[0];
     const selects = await screen.findAllByRole("combobox");
     await userEvent.selectOptions(selects[0], display.id);
-    await userEvent.click(screen.getByRole("button", { name: /save typography/i }));
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(puts).toHaveLength(1));
     const sent = (puts[0] as { theme: Record<string, string> }).theme;

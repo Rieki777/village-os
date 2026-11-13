@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { GROUP_PLAIN, guideName, honestyLine, operationsRoleName, OPS_FALLBACK, opsPartner, seasonHeading } from "./roleProposalHonesty";
+import { GROUP_PLAIN, guideName, honestyLine, onboardingRoleName, operationsRoleName, OPS_FALLBACK, opsPartner, seasonHeading } from "./roleProposalHonesty";
 import { SETTINGS_GROUPS } from "./seatSettings";
 
 describe("season heading", () => {
@@ -49,6 +49,29 @@ describe("the operations role", () => {
     expect(guideName([{ name: "Operations Steward", holders: [{ name: "Rye Cordon" }, { name: "ops@example.org" }] }])).toBe("Rye");
     expect(guideName([{ name: "Operations Steward", holders: [{ name: "ops@example.org" }] }])).toBe("Operations Steward");
     expect(guideName([])).toBe(OPS_FALLBACK);
+  });
+});
+
+describe("the role that welcomes people (verify B4)", () => {
+  const chart = [
+    { id: "tech-ops", name: "Technical Operations Steward", active: true },
+    { id: "people", name: "Human Care & Onboarding Steward", active: true },
+    { id: "gone", name: "Old Welcome Role", active: false },
+    { id: "demo", name: "Example Welcome", isExample: true },
+  ];
+
+  it("is the role the village names by id, never a role that says Operations", () => {
+    expect(onboardingRoleName(chart, "people")).toBe("Human Care & Onboarding Steward");
+    expect(onboardingRoleName(chart, "  people ")).toBe("Human Care & Onboarding Steward");
+  });
+
+  it("names nobody when the village names none, or a role that is gone", () => {
+    expect(onboardingRoleName(chart, "")).toBeNull();
+    expect(onboardingRoleName(chart, null)).toBeNull();
+    expect(onboardingRoleName(chart, "gone")).toBeNull();
+    expect(onboardingRoleName(chart, "demo")).toBeNull();
+    expect(onboardingRoleName(chart, "nope")).toBeNull();
+    expect(opsPartner(onboardingRoleName(chart, ""))).toBe(OPS_FALLBACK);
   });
 });
 

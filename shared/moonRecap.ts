@@ -2911,15 +2911,30 @@ export interface QueueRow {
    * `APPROVAL_REFUSALS.hashChanged` when the recap moved since.
    */
   hash: string;
-  /** A4: the reading first, the numbers second. Never an amount. */
-  taskReading: Reading | null;
-  seatReading: Reading | null;
-  score: Score;
+  /*
+   * No task score, band or role coverage (Phase C, decision 2): a row is read
+   * by the people who approve the member's pay, and the reading is the
+   * member's own (`MyMoonResponse`). `QUEUE_ROW_KEYS` below lists every key a
+   * row carries, and the review's test holds the server to it.
+   */
   /** The recap's items, for an approver to approve or return each one (lane B, for the client lane). */
   items: RecapItem[];
   /** `cash.pay` view only. `hash` is the row's, for `BulkApproveRequest`. */
   invoice: (InvoiceView & { routeCheck: string | null; taxFormValid: boolean; authorityNote: string | null; queueNote: string | null; hash: string }) | null;
 }
+
+/**
+ * Every key a queue row carries, and nothing else (Phase C, decision 2). A key
+ * added to `QueueRow` that is missing here fails the compile; a key the server
+ * sends that is not here fails `server/lib/moonReview.test.ts`.
+ */
+export const QUEUE_ROW_KEYS = [
+  "recapId", "userId", "name", "status", "waitingOn", "dueOn", "selfApproved", "workApprovers", "invoiceApprovers",
+  "roles", "outsideMyRoles", "hash", "items", "invoice",
+] as const satisfies ReadonlyArray<keyof QueueRow>;
+type MissingQueueKey = Exclude<keyof QueueRow, (typeof QUEUE_ROW_KEYS)[number]>;
+/** Compile-time: every key of `QueueRow` is listed above. */
+export const QUEUE_ROW_KEYS_COMPLETE: [MissingQueueKey] extends [never] ? true : never = true;
 
 /** `GET /api/moon-review/queue?cycle=`. The `moon.approve` view carries no invoice. */
 export interface QueueResponse {

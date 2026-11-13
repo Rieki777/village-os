@@ -77,6 +77,8 @@ export interface CirclePayload {
   purpose: string;
   parentCircleId?: string | null;
   status?: CircleStatus;
+  /** A suggestion may name this circle the anchor; a person approves it like the rest. */
+  isAnchor?: boolean;
 }
 
 /** An RSVP the assistant proposed and the member has not yet confirmed. */
@@ -107,7 +109,7 @@ type AnyDraftKind = DraftKind | MemberDraftKind | SuggestionDraftKind;
 
 const ALLOWED_KEYS: Record<AnyDraftKind, string[]> = {
   role: ["name", "description", "capabilities", "minStage", "sortOrder"],
-  circle: ["name", "purpose", "parentCircleId", "status"],
+  circle: ["name", "purpose", "parentCircleId", "status", "isAnchor"],
   event_rsvp: ["eventId", "status", "occurrenceKey"],
   admin_edit: ["control", "capability", "version", "base", "payload"],
 };
@@ -181,6 +183,9 @@ export function validateDraftPayload(kind: string, payload: unknown): string | n
   if (p.status !== undefined && !["active", "forming", "dormant"].includes(String(p.status))) {
     return "status must be active, forming, or dormant";
   }
+  if (p.isAnchor !== undefined && typeof p.isAnchor !== "boolean") {
+    return "isAnchor must be true or false";
+  }
   return null;
 }
 
@@ -253,7 +258,7 @@ export const CAPABILITY_CONSEQUENCE: Record<Capability, string> = {
   "operator.config": "change the village's general settings, tools, training, setup assistant and imported pages, accept or reject drafts, and close a gratitude cycle",
   "operator.secrets": "write the provider keys and the email sender the village runs on, which nobody can ever read back",
   "operator.recover": "reconcile the ledger, remove uploads nothing uses, and land the decisions that are due",
-  "companion.use": "keep AI companions on their profile, answer what they ask, and say yes or no to what they draft, each yes going through that draft's own door",
+  "companion.use": "keep Digital Companions on their profile, answer what they ask, and say yes or no to what they draft, each yes going through that draft's own door",
   "comms.manage":
     "run the village's email: turn automations on and off, change their words, send letters to people who agreed to get them, and see the village's address book and every email the village still keeps: who it went to, its subject, whether it arrived, and its words",
 };

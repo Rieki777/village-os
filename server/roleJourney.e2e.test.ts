@@ -175,7 +175,7 @@ describe.skipIf(!DB_CONFIGURED)("the role journey: one stranger takes one role t
     const card = {
       roles: [{ roleId: state.roleId, moves: [{ text: "A cash view every Monday", target: "every Monday" }], firstMoon: [{ quest: "Publish the first cash view", doneWhen: "every circle lead has it" }] }],
       serves: [{ goalId: state.goalId, how: "One model every figure traces to." }],
-      hours: "roughly 40 a week",
+      commitmentPct: 50,
       agreed: { loveLetter: true, nda: true },
       terms: { choice: "accept", note: "" },
       timeZone: "America/Costa_Rica",
@@ -187,7 +187,7 @@ describe.skipIf(!DB_CONFIGURED)("the role journey: one stranger takes one role t
     const sent = await call("POST", "/api/open-proposals", { ...body, aim: "Money kept true, every Monday." });
     expect(sent.status, JSON.stringify(sent.json)).toBe(200);
 
-    const confirm = mailTo(APPLICANT.email, /^Confirm your proposal/).pop();
+    const confirm = mailTo(APPLICANT.email, /^Confirm your application/).pop();
     expect(confirm, "the confirmation email went").toBeTruthy();
     expect(String(confirm!.body.text)).toContain("for this moon");
     const token = new URL(linkIn(confirm!.body.text, "/propose-a-role/confirm")).searchParams.get("token");
@@ -245,8 +245,45 @@ describe.skipIf(!DB_CONFIGURED)("the role journey: one stranger takes one role t
     const apps = (await call("GET", "/api/governance/role-applications", undefined, state.founder)).json?.applications ?? [];
     const app = apps.find((a: any) => String(a?.candidate?.id) === state.applicantId);
     expect(app?.status).toBe("adopted");
-    expect(String(app?.deliverables ?? "")).toContain("First task: Publish the first cash view");
+    expect(String(app?.deliverables ?? "")).toContain("Goal: Publish the first cash view");
     expect(String(app?.deliverables ?? "")).toContain("Accepts the terms on offer.");
+  });
+
+  it("audit B3: a second person for the full one-seat role is refused by default, adopted only for when a seat opens, and never told 'within the hour'", async () => {
+    const SECOND = { email: `journey-second-${PORT}@example.test`, name: "Ivy Lane", password: "JourneySecond123!" };
+    const card = { roles: [{ roleId: state.roleId, moves: [], firstMoon: [{ quest: "Read last moon's books", doneWhen: "the notes are shared" }] }], serves: [{ goalId: state.goalId, how: "Fresh eyes on the numbers." }], commitmentPct: 40, agreed: { loveLetter: true, nda: true }, terms: { choice: "accept", note: "" } };
+    const sent = await call("POST", "/api/open-proposals", { name: SECOND.name, email: SECOND.email, roles: [{ roleId: state.roleId, note: "I audit cooperatives." }], why: "I can step in when the seat frees.", aim: "Books anyone can read.", hp: "", card });
+    expect(sent.status, JSON.stringify(sent.json)).toBe(200);
+    const confirm = mailTo(SECOND.email, /^Confirm your application/).pop();
+    const token = new URL(linkIn(confirm!.body.text, "/propose-a-role/confirm")).searchParams.get("token");
+    expect((await call("POST", "/api/open-proposals/confirm", { token })).status).toBe(200);
+    const id = String((await call("GET", "/api/admin/open-proposals", undefined, state.founder)).json.proposals.find((p: any) => p.email === SECOND.email).id);
+
+    // The decider reads the seat count before pressing anything.
+    const page = (await call("GET", `/api/governance/open-proposals/${id}`, undefined, state.founder)).json.proposal;
+    expect(page.beforeAdopt.seatsFull).toEqual([{ name: "Lead Financial Steward", seats: 1, taken: 1 }]);
+
+    const refused = await call("POST", `/api/governance/open-proposals/${id}/adopt`, {}, state.founder);
+    expect(refused.status, JSON.stringify(refused.json)).toBe(409);
+    expect(refused.json).toMatchObject({ error: "seats_full", canAdoptForWhenASeatOpens: true });
+    expect(refused.json.message).toContain("Lead Financial Steward has room for 1 person, and that place is filled");
+    expect(mailTo(SECOND.email, /adopted your proposal/)).toHaveLength(0);
+
+    const adopted = await call("POST", `/api/governance/open-proposals/${id}/adopt`, { whenASeatOpens: true }, state.founder);
+    expect(adopted.status, JSON.stringify(adopted.json)).toBe(200);
+    const letter = mailTo(SECOND.email, /adopted your proposal/).pop();
+    expect(String(letter!.body.text)).toContain("your role starts when a place opens");
+    expect(String(letter!.body.text)).not.toContain("within the hour");
+    expect(String(letter!.body.text)).not.toContain("Your roles run from");
+
+    // The account it makes is held, not seated, and the profile says the role starts when a seat opens.
+    const inviteToken = new URL(linkIn(letter!.body.text, "/register")).searchParams.get("invite");
+    const made = await call("POST", "/api/auth/register", { name: SECOND.name, email: SECOND.email, password: SECOND.password, paths: ["steward"], invite: inviteToken });
+    expect(made.status, JSON.stringify(made.json)).toBe(200);
+    const steps = (await call("GET", "/api/profile/role-start-steps", undefined, String(made.json.token))).json;
+    expect(steps.waiting).toMatchObject([{ roles: ["Lead Financial Steward"], waitsForSeat: true }]);
+    const held = (await call("GET", "/api/org/holders", undefined, state.founder)).json?.holdings ?? [];
+    expect(held.filter((h: any) => h?.orgRoleId === state.roleId)).toHaveLength(1);
   });
 
   it("D34: the moon term crosses the season's end; the turn leaves it running, and next season's goals apply from the turn", async () => {
@@ -273,6 +310,29 @@ describe.skipIf(!DB_CONFIGURED)("the role journey: one stranger takes one role t
     const form = (await call("GET", "/api/open-proposals/form")).json;
     expect(form.season?.id).toBe("s-next");
     expect(form.goals.map((g: any) => g.text)).toEqual(["Roots in the ground"]);
+  });
+
+  it("/api/circles keeps the listed-circle rule /api/org keeps: a circle holding only unlisted roles is hidden from a visitor, shown to an admin", async () => {
+    const F = state.founder;
+    expect((await call("PUT", "/api/admin/modules/map/lifecycle", { lifecycle: "public" }, F)).status).toBe(200);
+    expect((await call("POST", "/api/admin/circles", { id: "back-office", name: "Back Office Circle" }, F)).status).toBe(200);
+    const hidden = await call("POST", "/api/admin/org/roles", { name: "Filing Clerk", circleId: "back-office", seats: 1 }, F);
+    const hiddenId = String(hidden.json?.id ?? "");
+    expect(hiddenId).toBeTruthy();
+    const unlisted = await call("PUT", `/api/admin/org/roles/${hiddenId}`, { name: "Filing Clerk", circleId: "back-office", seats: 1, listed: false }, F);
+    expect(unlisted.status, JSON.stringify(unlisted.json)).toBe(200);
+
+    const visitor = await call("GET", "/api/circles");
+    expect(visitor.status).toBe(200);
+    const seen = (visitor.json as any[]).map((c) => c.id);
+    expect(seen).toContain("anchor");
+    expect(seen).not.toContain("back-office");
+    // The same answer /api/org gives the same visitor.
+    const org = await call("GET", "/api/org");
+    expect([...seen].sort()).toEqual(((org.json?.circles ?? []) as any[]).map((c) => c.id).sort());
+    // CONTROL: an admin sees the hidden circle, so its absence above is the rule and not a missing row.
+    const asAdmin = await call("GET", "/api/circles", undefined, F);
+    expect((asAdmin.json as any[]).map((c) => c.id)).toEqual(expect.arrayContaining(["anchor", "back-office"]));
   });
 
   // ── The brief's 6.5 steps other lanes own. Each becomes a test, with a control, when its PR lands. ──

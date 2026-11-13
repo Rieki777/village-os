@@ -3,20 +3,23 @@
  * with decisions 16 revised to 22 and addendum A1, A2, A4, A5, A7, B1).
  *
  * Phone first, one column, top to bottom:
- *   header           moon picker, dates, walkthrough day, send-by day, the
- *                    status line naming the role it waits on, the moon load,
- *                    the Room view switch and the guide link when set
+ *   header           the moon on a golden spiral with its four chapters
+ *                    (sow, tend, full moon, harvest) and the one next act
+ *                    (MoonSpiral, Phase C lane C2), then the moon picker,
+ *                    dates, walkthrough day, send-by day, the status line
+ *                    naming the role it waits on, the moon load, the Room
+ *                    view switch and the guide link when set
  *   gather           bring in my tasks, Ask Sera, Import from Claude, add by hand
  *   keep and tag     one card per item
- *   the score        two rings with their readings, member only
- *   role cards       coverage per role, season goals, Outside my roles
+ *   the score        the garden bed with its readings, member only
+ *   role cards       one garden bed per role, season goals, Outside my roles
  *   role audit, who helped, moon goals, in my own words, Send my recap
  *   invoice          only when a role's terms carry money
  *
  * It loads as its own chunk (`MyMoonMount`). `MyMoonView` takes the payload
  * and draws it, so a test can render any moon without a server.
  */
-import { useCallback, useEffect, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useState } from "react";
 import {
   GUIDE_WORDS,
   MOON_WORDS,
@@ -36,9 +39,22 @@ import ItemCard from "./ItemCard";
 import GatherPanel from "./GatherPanel";
 import InvoicePanel from "./InvoicePanel";
 import { RoleCardsBlock, ScoreBlock } from "./CoverageAndScore";
+import MoonSpiral from "./MoonSpiral";
+import { localToday } from "./moonGarden";
 import { GoalsPanel, RoleAuditPanel, ThanksPanel } from "./RecapParts";
 import { ERROR, H2, INPUT, KICKER, LABEL, LINK, MemberOnly, MUTED, PANEL, RoomViewContext, Section, SMALL_BTN, SMALL_BTN_ON } from "./moonUi";
 import VoiceArea from "@/components/voice/VoiceArea";
+import { claimMoment } from "@/lib/celebrated";
+
+const FernUnfurl = lazy(() => import("@/components/journey/nature/FernUnfurl"));
+
+/**
+ * The moment id for a sent recap. A fern unfurls once when a recap is sent
+ * (batch 157, C2 Q2), claimed through `claimMoment` the way LevelUpMoment's
+ * crossing is: once per recap, so a take back and a second send, a reload or
+ * a second tab never plays it again.
+ */
+export const recapSentMoment = (recapId: string) => `moon-recap:${recapId}`;
 
 export interface MyMoonViewProps {
   data: MyMoonData;
@@ -48,9 +64,11 @@ export interface MyMoonViewProps {
   reload: () => Promise<SeraState | null>;
   /** Room view to start in, for a test. */
   initialRoomView?: boolean;
+  /** The member's civil date, for a test; the browser's own date otherwise. */
+  today?: string;
 }
 
-export function MyMoonView({ data, villageRoles, onCycle, reload, initialRoomView = false }: MyMoonViewProps) {
+export function MyMoonView({ data, villageRoles, onCycle, reload, initialRoomView = false, today = localToday() }: MyMoonViewProps) {
   const [room, setRoom] = useState(initialRoomView);
   const recap = data.recap;
   const cycleId = data.moon.cycleId;
@@ -61,6 +79,7 @@ export function MyMoonView({ data, villageRoles, onCycle, reload, initialRoomVie
   const [error, setError] = useState<string | null>(null);
   const [line, setLine] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [fern, setFern] = useState(false);
   // Reset from the server only when the recap itself changes hands (a send, a
   // take back, a return), so a reload after an item save keeps what is typed.
   useEffect(() => {
@@ -85,6 +104,8 @@ export function MyMoonView({ data, villageRoles, onCycle, reload, initialRoomVie
     setBusy(false);
     if (!r.ok) return setError(r.error);
     setLine(MY_MOON_WORDS.sent);
+    const sentId = r.data?.recap?.id;
+    if (sentId && claimMoment(recapSentMoment(String(sentId)))) setFern(true);
     await reload();
   };
   const takeBack = async () => {
@@ -114,6 +135,7 @@ export function MyMoonView({ data, villageRoles, onCycle, reload, initialRoomVie
             </button>
           </div>
           {room ? <p className={MUTED} aria-live="polite">{MY_MOON_WORDS.roomViewOn}. {MOON_WORDS.roomViewLine}</p> : null}
+          <MoonSpiral moon={data.moon} today={today} editable={editable && !noRoles} />
           {data.moons.length > 1 ? (
             <label className={LABEL}>
               {MY_MOON_WORDS.whichMoon}
@@ -141,7 +163,9 @@ export function MyMoonView({ data, villageRoles, onCycle, reload, initialRoomVie
           <p className={MUTED}>{MOON_WORDS.noRecapRoles}</p>
         ) : (
           <>
-            <GatherPanel cycleId={cycleId} editable={editable} sera={recap?.sera ?? null} reload={reload} />
+            <div id="moon-gather" className="scroll-mt-28">
+              <GatherPanel cycleId={cycleId} editable={editable} sera={recap?.sera ?? null} reload={reload} />
+            </div>
 
             <Section title={MY_MOON_WORDS.keepAndTag}>
               {items.length === 0 ? <p className={MUTED}>{MY_MOON_WORDS.noItems}</p> : null}
@@ -158,7 +182,7 @@ export function MyMoonView({ data, villageRoles, onCycle, reload, initialRoomVie
             <ThanksPanel thanks={thanks} onChange={setThanks} editable={editable} />
             <GoalsPanel cycleId={cycleId} last={data.lastMoonGoals} goalScore={data.goalScore} next={data.nextMoonGoals} seasonGoals={data.seasonGoals} reload={reload} editable />
 
-            <Section title={MOON_WORDS.ownWords}>
+            <Section title={MOON_WORDS.ownWords} id="moon-own-words">
               <label className={LABEL}>
                 {MY_MOON_WORDS.ownWordsHint}
                 <VoiceArea value={ownWords} onValue={setOwnWords} disabled={!editable}>
@@ -176,7 +200,18 @@ export function MyMoonView({ data, villageRoles, onCycle, reload, initialRoomVie
                   <p className={MUTED}>{MOON_WORDS.takeBackLine}</p>
                 </>
               ) : null}
-              {line ? <p className={MUTED} aria-live="polite">{line}</p> : null}
+              {line ? (
+                <div className="flex items-center gap-3">
+                  {fern ? (
+                    <span data-testid="recap-fern" className="shrink-0">
+                      <Suspense fallback={null}>
+                        <FernUnfurl size="sm" />
+                      </Suspense>
+                    </span>
+                  ) : null}
+                  <p className={MUTED} aria-live="polite">{line}</p>
+                </div>
+              ) : null}
               {error ? <p role="alert" className={ERROR}>{error}</p> : null}
             </Section>
 

@@ -62,7 +62,7 @@ describe("the menu and footer names a renamed path gets", () => {
 });
 
 describe("the membership letter's version", () => {
-  it("never reads the path choices: the first village's letter keeps lv-a14aa38acde23a57 whatever its choices say", () => {
+  it("never reads the path choices: the first village's letter keeps lv-edefc00ad0babbd0 whatever its choices say", () => {
     const record = (f: string) => JSON.parse(fs.readFileSync(path.resolve(process.cwd(), "server/seeds/amora", f), "utf8")); // brand-ok: the first village's own records
     const village = { project: { name: "Amora", commitmentName: "Love Letter", memberName: "Amorian" }, currency: { name: "Gratitude" } }; // brand-ok: the first village's settings as production serves them
     const page = record("pages/page-love-letter.json");
@@ -72,8 +72,8 @@ describe("the membership letter's version", () => {
         legal: record("brochure-legal-seed.json"),
         [LETTER_PAGE_SECTION]: { ...page, form: { ...page.form, paths: choices } },
       });
-    expect(currentLetter(source(page.form.paths)).version).toBe("lv-a14aa38acde23a57");
-    expect(currentLetter(source([{ id: "investor", label: "Backer / Seed Partner" }])).version).toBe("lv-a14aa38acde23a57");
-    expect(currentLetter(source(undefined)).version).toBe("lv-a14aa38acde23a57");
+    expect(currentLetter(source(page.form.paths)).version).toBe("lv-edefc00ad0babbd0");
+    expect(currentLetter(source([{ id: "investor", label: "Backer / Seed Partner" }])).version).toBe("lv-edefc00ad0babbd0");
+    expect(currentLetter(source(undefined)).version).toBe("lv-edefc00ad0babbd0");
   });
 });

@@ -75,6 +75,10 @@ describe("the reward moment", () => {
     const seen = calls.filter((c) => c.method === "POST");
     expect(seen).toEqual([{ url: "/api/me/reward-moment/seen", method: "POST", body: { keys: moment.keys } }]);
 
+    // A bloom, never a burst (game feel wave 2): the Seed of Life opens in the halo, fireflies around, no scattered sparks.
+    await waitFor(() => expect(dialog.querySelector('[data-testid="seed-bloom"]')).toBeTruthy());
+    expect(dialog.querySelector("[data-reward-sky] [data-testid='fireflies']")).toBeTruthy();
+
     fireEvent.click(screen.getByRole("button", { name: "Thank you" }));
     expect(screen.queryByRole("dialog")).toBeNull();
   });

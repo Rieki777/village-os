@@ -12,7 +12,10 @@
  *
  * Limits: 1 to 6 steps, 5 to 240 minutes each, at most one final approval, no
  * role twice. `org_roles.conversation_mode` says whether the village holds the
- * conversations as one block (the default when NULL) or separately (D30).
+ * conversations as one block or separately (D30). Empty reads as separately:
+ * since 12 Nov 2026 the applicant books each conversation at times they
+ * choose, in order (the lead's one booking story), and no applicant's words
+ * depend on this value.
  *
  * Pure: no Node builtins. Shared by the server projection, the admin write, the
  * card and the interview lane.
@@ -134,9 +137,9 @@ export function parseConversationMode(raw: unknown): Parsed<ConversationMode | n
     : { ok: false, problem: `The conversations are held as one of: ${CONVERSATION_MODES.join(", ")}.` };
 }
 
-/** NULL reads as one block. */
+/** Only a stored "block" reads as one block. Empty or unknown reads as separately, the one booking story (12 Nov 2026). */
 export function conversationModeOf(raw: unknown): ConversationMode {
-  return raw === "separate" ? "separate" : "block";
+  return raw === "block" ? "block" : "separate";
 }
 
 /** The total time of a list of conversations, in minutes. */
@@ -144,26 +147,22 @@ export function conversationMinutes(steps: readonly InterviewStep[]): number {
   return steps.reduce((n, s) => n + s.minutes, 0);
 }
 
+/**
+ * A conversation's length is always said in minutes ("60 minutes", "100 minutes"), on every page
+ * and in every email, so the same length never reads two ways (verify report, 11 Nov).
+ */
 function minutesWords(m: number): string {
-  if (m % 60 === 0) {
-    const h = m / 60;
-    return `${h} ${h === 1 ? "hour" : "hours"}`;
-  }
-  return `${m} minutes`;
+  return `${m} ${m === 1 ? "minute" : "minutes"}`;
 }
 
-/** The total in words: "2 hours", "1 hour 40 minutes". */
+/** The total in words, in minutes: "120 minutes", "100 minutes". */
 export function interviewTotalWords(steps: readonly InterviewStep[]): string {
   const total = conversationMinutes(steps);
   if (total <= 0) return "";
-  const h = Math.floor(total / 60);
-  const m = total % 60;
-  if (h === 0) return `${m} minutes`;
-  const hours = `${h} ${h === 1 ? "hour" : "hours"}`;
-  return m === 0 ? hours : `${hours} ${m} minutes`;
+  return minutesWords(total);
 }
 
-/** One line per conversation, in order: "1. Some Role, 1 hour". The final approval says so. */
+/** One line per conversation, in order: "1. Some Role, 60 minutes". The final approval says so. */
 export function interviewLines(steps: ReadonlyArray<InterviewStep & { roleName?: string | null }>): string[] {
   return steps.map((s, i) => `${i + 1}. ${s.roleName ?? "An interviewer"}, ${minutesWords(s.minutes)}${s.final ? ", final approval" : ""}`);
 }

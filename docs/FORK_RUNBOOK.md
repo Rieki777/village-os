@@ -2185,3 +2185,31 @@ Admin, Integrations has two new cards, `railway_project_token` (one Railway proj
 ## Living places (module `places`, migration 0354)
 
 - No env var and nothing at boot. A village's places start as a seed file beside its other records (Amora's is `server/seeds/amora/places-seed.json`); a holder of `place.tend` imports it by posting `{ seed }` to `POST /api/place-registry/import`, which refuses the whole seed, naming every problem, when it drops a key on the published map or claims a standing stage for an unconfirmed place. A second import adds only what is new. The module ships off.
+
+## Lead-approved connector writes (game variable `agents.lead_approved_writes`, 2026-11-11, no migration)
+
+- On by default since 2026-11-11 (the lead): it opens nothing by itself, because the agent paths list is still saved only by a person and every write still carries a person's approval note. A village sets `agents.lead_approved_writes` off in Admin, Game Mechanics, Connector, and then nothing changes for it. To use it: with the variable on (the default); the connector acts as the admin who connected it (its `vat_` token or OAuth grant carries the `admin` scope, given only to an admin), so the route gates (`story.tell`, `org.seat`, `dial.set`) ask that person's own account: an admin passes on a key the village has not taken up, and on a key the village holds they need a live seat carrying it, as in the app; nothing extra is granted to any agent account; then a person saves the agent paths list (Admin, Agents) naming the lead-approved routes with confirm `agent`. Amora's list is `server/seeds/amora/agent-paths-seed.json`. The rules are `LEAD_APPROVED_WRITES` in `shared/agentAdmin.ts`.
+
+## The nightly rehearsal (`.github/workflows/rehearsal.yml`, 2026-11-11, no migration)
+
+- Nothing for a village to set: it runs in CI only, against its own scratch database, and the server it boots reads no new variable. Its `REHEARSAL_*` variables (base URL, port, database server, scratch schema, the folder holding Playwright and axe-core) belong to the runner and are listed in `docs/REHEARSAL.md`; its seed (`scripts/rehearsal/seed.mjs`) builds a made-up example village through the founder's own routes and never touches a real one. A fork that keeps the workflow gets it nightly with no setup.
+
+## The five archetypes as roots (2026-11-11, no migration)
+
+- Nothing to set. The boot seed (`seedEconomy`) now also moves a class still holding a name the platform retired ("The Catalyst", "The Spaceholder") to the new one, and only when nobody has made that class their own (`customized = 0`); a typed name is never touched. Roots on quests are set in Admin, Quests, "Roots it grows from" (`PUT /api/admin/quests/:id/roots`), one to three per quest; roles keep `archetypes` on `PUT /api/admin/org/roles/:id`, now capped at three. The rules are in `shared/archetypeRoots.ts`.
+
+## Our review before the conversations (Phase A, 2026-11-11, no migration)
+
+- No env var and nothing at boot. Off by default: a village turns on `org.review_before_conversations` (Admin, Game Mechanics, The village's people), and from then each newly confirmed application waits for a decider to invite it to the conversations or send the not-invited letter; one already in flight keeps the path it confirmed under. The not-invited letter and status page point first to the village's own way to stay close when it sets `org.stay_close_name` and `org.stay_close_link` (Amora: its Founding Seeders name and page). The conversations come from each role's own list (Admin, Roles, conversations). Amora's Technical Operations conversation moved to onboarding as data: `server/seeds/amora/onboarding-technical-operations-seed.json`, applied by hand in Admin, Onboarding path.
+
+## The founding-team application (Phase A, 2026-11-11, no migration)
+
+- No env var and nothing at boot. Four village settings under Admin, Game Mechanics, The founding team (`FOUNDING_KEYS` in `shared/foundingApplication.ts`) hold the application's own words at `/propose-a-role`: the ways to get to know us, the note beside them, the first cycle and the first conversations. Its terms step shows the role cards' pay shape (`org.pay_shape`, `org.pay_shape_at_risk`, `org.pay_shape_note`, in the same Admin category), reading "N%" until a village writes one. A new village sees neutral defaults; Amora's own values are `server/seeds/amora/founding-application-seed.json`, applied by hand.
+
+## Profile Today and our first 14 days (Phase B, 2026-11-11, no migration)
+
+- No env var and nothing at boot. Every sign-in lands on Profile Today (`client/src/lib/internalPath.ts`). A newly seated holder sees the village's onboarding path as a strip of fourteen days; everyone else sees their week. The steps are village data, edited field by field in Admin, Org chart, Onboarding path (a step's link may now be a page of the site, such as `/training/steward`). Amora's whole first 14 days are `server/seeds/amora/onboarding-path-seed.json`, applied by hand there; it supersedes `onboarding-technical-operations-seed.json` and puts the Technical Operations conversation on day 3.
+
+## Proposed changes, reviewed on one page (migration 0379, 2026-11-12)
+
+- No env var and nothing to set. Migration 0379 adds `proposed_change_batches` and `proposed_changes` at boot. An admin's agent proposes through the connector's `propose_changes` (or `POST /api/admin/proposals`); a person reviews, edits and accepts on `/admin/proposals`, linked from Admin with a count, and each change runs through its own admin route as that person. What people edit before accepting is kept and read back by `read_proposal_lessons`.

@@ -17,6 +17,7 @@
  * a tier (or a deploy) that does not carry it, and the card must not say "not
  * written down" about something it was never sent.
  */
+import { anchorCircleId } from "./circlePicker";
 import type { RoleInput } from "./permissionSheet";
 import { isSeatState, SHEET_WORDS, type SeatHolderIn, type SeatInput, type SheetContext } from "./roleSheet";
 
@@ -50,9 +51,10 @@ const whole = (v: unknown, fallback: number, min = 0): number => {
 const bool = (v: unknown): boolean | undefined => (typeof v === "boolean" ? v : undefined);
 
 /** A circle as either payload serves it (both go through `circleView`). */
-function circleIn(c: any): SeatInput["circle"] {
+function circleIn(c: any, all: any[] = []): SeatInput["circle"] {
   if (!c || typeof c !== "object") return null;
   return {
+    anchor: anchorCircleId(all) === String(c.id ?? ""),
     id: String(c.id ?? ""),
     name: String(c.name ?? ""),
     decidesBy: str(c.decidesBy),
@@ -112,6 +114,7 @@ function holderIn(h: any, opts: { literalAgent: boolean }): SeatHolderIn {
     kind: h?.kind === "member" || h?.kind === "documented" ? h.kind : undefined,
     isAgent: bool(h?.isAgent) ?? (opts.literalAgent && orgRowIsAgent(h) ? true : undefined),
     focus: has(h, "focus") ? str(h.focus) : undefined,
+    ...(typeof h?.keeper === "string" && h.keeper.trim() ? { keeper: h.keeper.trim() } : {}),
     lapsed: bool(h?.lapsed),
     avatar: typeof h?.avatar === "string" && h.avatar ? h.avatar : null,
     termEndsAt: typeof h?.termEndsAt === "string" && h.termEndsAt ? h.termEndsAt : null,
@@ -171,7 +174,7 @@ export function fromMapSeat(seat: any, data: any, opts: { signedIn: boolean }): 
   return {
     mode: "seat",
     ...sharedSeatFields(seat),
-    circle: circleIn(circles.find((c) => c?.id === seat?.circleId)),
+    circle: circleIn(circles.find((c) => c?.id === seat?.circleId), circles),
     circleNameOnly: null,
     // The map spells the aim `description`, and sends "" for none.
     aim: str(seat?.description),
@@ -206,7 +209,7 @@ export function fromOrgSeat(
   return {
     mode: "seat",
     ...sharedSeatFields(row),
-    circle: circleIn(list.find((c) => c?.id === row?.circleId)),
+    circle: circleIn(list.find((c) => c?.id === row?.circleId), list),
     circleNameOnly: null,
     aim: str(row?.aim),
     holderCount: whole(row?.holderCount, holders.length),

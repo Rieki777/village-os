@@ -45,10 +45,11 @@
  * written for a free one. Absent, this is exactly the screen it was.
  */
 import { useState } from "react";
-import { Loader2, MessageCircleQuestion } from "lucide-react";
+import { MessageCircleQuestion } from "lucide-react";
 import InfoTip from "@/components/InfoTip";
 import { openAdvisory } from "./governanceApi";
 import { subjectNoun, type WizardType } from "./wizardConfig";
+import BreathingLoader from "@/components/natural/BreathingLoader";
 
 /**
  * The methods a practice vote may run, in the order a member meets them.
@@ -240,7 +241,7 @@ export default function PracticeVote({
           onClick={ask}
           className="inline-flex min-h-[44px] items-center gap-2 rounded-lg bg-teal-deep px-5 text-sm font-semibold text-white hover:bg-teal-deep-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep focus-visible:ring-offset-2 disabled:opacity-60"
         >
-          {busy && <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />}
+          {busy && <BreathingLoader decorative size={16} />}
           {asking ? asking.submitLabel : "Open the practice vote"}
         </button>
         <button

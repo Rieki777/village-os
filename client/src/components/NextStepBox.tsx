@@ -162,9 +162,9 @@ export default function NextStepBox({ questId, claimStatus }: { questId: string;
       aria-live="polite"
       className="mx-6 mb-4 rounded-xl border border-teal-deep/30 bg-teal-deep/5 p-4"
     >
-      <h3 id="next-step-heading" ref={heading} tabIndex={-1} className="font-semibold text-foreground mb-2.5">
+      <h2 id="next-step-heading" ref={heading} tabIndex={-1} className="font-semibold text-foreground mb-2.5">
         <Trans context="next step box heading">Your next step</Trans>
-      </h3>
+      </h2>
       <NextStepParts next={next} questId={questId} />
     </section>
   );

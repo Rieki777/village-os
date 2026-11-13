@@ -31,7 +31,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "wouter";
-import { ExternalLink, Loader2, Printer } from "lucide-react";
+import { ExternalLink, Printer } from "lucide-react";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { useIsAdmin } from "@/contexts/AuthContext";
 import { authToken } from "@/lib/gameApi";
@@ -52,6 +52,7 @@ import { RecordReadingForm } from "./RecordReadingForm";
 import { CanvasFrameSay } from "./CanvasFrameSay";
 import { CanvasFrameAdopt } from "./CanvasFrameAdopt";
 import { AskButton } from "@/components/companion/Companion";
+import BreathingLoader from "@/components/natural/BreathingLoader";
 
 const headers = (): Record<string, string> => {
   const t = authToken();
@@ -205,7 +206,7 @@ export default function CanvasBlockFrames({
         </div>
       ) : needsBlock && !payload ? (
         <p className="text-sm text-stone-600 py-4 text-center">
-          <Loader2 className="w-4 h-4 animate-spin inline mr-2" />
+          <BreathingLoader decorative size={16} className="mr-2 align-middle" />
           <Trans context="a canvas block is loading">Reading {name}</Trans>
         </p>
       ) : null}

@@ -13,6 +13,8 @@
  *   POST /api/org/role-edit/:id              SAVE: one human org draft, published at once
  *   GET  /api/org/role-edit/:id/history      who changed this role, when and what
  *   POST /api/org/role-edit/:id/history/:draftId/revert   put the newest change back
+ *   GET  /api/org/founding-team              anyone: the roles the founding team section features, and their sections
+ *   GET  /api/org/role-card/:id              anyone, for a listed role: its founding sections and who last edited it
  *
  * ── WHO MAY ────────────────────────────────────────────────────────────────
  *
@@ -54,6 +56,12 @@ import {
 import { canonicalJson } from "../../shared/canonicalJson";
 import type { PaySettings } from "../../shared/seatSettings";
 import crypto from "node:crypto";
+import { boolVar, stringVar } from "../lib/variables";
+import { isListed } from "../../shared/roleListing";
+import { foundingRoles } from "../../shared/foundingTeam";
+import { otherWaysFrom } from "../../shared/otherWays";
+import { hasSections, villagePayFrom, type RoleCardSections } from "../../shared/roleCardSections";
+import { lastEditedOf, sectionsFor, sectionsForMany } from "../lib/roleCardSections";
 
 type Gate = {
   authedUser(req: any): Promise<any | null>;
@@ -112,6 +120,58 @@ export function registerRoleEditRoutes(app: Express, g: Gate): void {
     }
     return { role, roles };
   };
+
+  // ── The full card's founding sections and the founding team (phase A, lane A3) ──
+  //
+  // Read by every reader of the Roles page. Only a LISTED, live role answers, so
+  // nothing here reaches a role the village keeps out of view; a holder of the
+  // editor's door reads every role, as the editor does.
+
+  /** The village's pay shape, read fresh on each ask so a changed setting shows at once (lead, 11 Nov). */
+  const villagePay = () => villagePayFrom({ shape: stringVar("org.pay_shape"), atRisk: stringVar("org.pay_shape_at_risk"), note: stringVar("org.pay_shape_note") });
+
+  app.get("/api/org/founding-team", async (req, res) => {
+    const key = (await g.authedUser(req))?.id ?? req.ip ?? "anon";
+    if (await g.overLimit(`founding-team:${String(key)}`, READS, WINDOW_MS)) return res.status(429).json({ error: "too_many_asks" });
+    const on = boolVar("org.founding_team");
+    const roles = on ? await listOrgRoles(g.getPool()) : [];
+    const featured = foundingRoles(on, stringVar("org.founding_team_roles"), roles);
+    const sections = await sectionsForMany(g.getPool(), featured.map((r) => r.id));
+    res.set("Cache-Control", "no-store").json({
+      on: on && featured.length > 0,
+      roleIds: featured.map((r) => r.id),
+      // Each featured role's name, so a page that speaks of the founding team (the steward page's
+      // band) names the roles that are open today and never a list typed once and left to go stale.
+      names: Object.fromEntries(featured.map((r) => [r.id, r.name])),
+      sections: Object.fromEntries(featured.map((r) => [r.id, sections.get(r.id) as RoleCardSections])),
+      showPayRanges: boolVar("org.show_pay_ranges"),
+      villagePay: villagePay(),
+      // The "Other ways to join" tiles beside the section (QA2-07): village words, sent whether the section is on or off.
+      otherWays: otherWaysFrom((k) => stringVar(k)),
+    });
+  });
+
+  app.get("/api/org/role-card/:id", async (req, res) => {
+    const user = await g.authedUser(req);
+    const key = user?.id ?? req.ip ?? "anon";
+    if (await g.overLimit(`role-card:${String(key)}`, READS, WINDOW_MS)) return res.status(429).json({ error: "too_many_asks" });
+    const roles = await listOrgRoles(g.getPool());
+    const role = roles.find((r) => r.id === String(req.params.id ?? ""));
+    const editor = user ? !!(await door(req))?.door : false;
+    if (!role || role.isExample || (!editor && (role.active === false || !isListed(role)))) {
+      return res.status(404).json({ error: "no_such_role", message: "There is no role by that id." });
+    }
+    const pool = g.getPool();
+    const { sections } = await sectionsFor(pool, role.id);
+    res.set("Cache-Control", "no-store").json({
+      roleId: role.id,
+      sections: hasSections(sections) ? sections : null,
+      lastEdited: await lastEditedOf(pool, role.id, { peopleShown: !!user || boolVar("org.public_people") }),
+      showPayRanges: boolVar("org.show_pay_ranges"),
+      villagePay: villagePay(),
+      mayEdit: editor,
+    });
+  });
 
   app.get(`${BASE}/access`, async (req, res) => {
     // Read by every card to decide whether to draw a button, so anybody may ask; the answer names no one.
@@ -312,6 +372,7 @@ export function registerRoleEditRoutes(app: Express, g: Gate): void {
       parameters: body.parameters,
       pay: body.pay,
       archetypes: body.archetypes,
+      sections: body.sections,
     });
     if (!out.ok) return res.status(out.status).json({ error: out.error, message: out.error, ...(out.fields ? { fields: out.fields } : {}) });
     const found = await roleOf(res, String(req.params.id ?? ""));
@@ -371,6 +432,10 @@ function parameterLines(state: EditorState, roles: readonly OrgRole[]): Record<s
   const titleOf = (id: string) => roles.find((r) => r.id === id)?.name ?? id;
   const put = (k: string, v: string[]) => v.length && (out[k] = v);
   if (p.listed !== undefined) put("listed", [p.listed ? "Yes" : "No"]);
+  if (p.alwaysChecked !== undefined) put("alwaysChecked", [p.alwaysChecked ? "Yes" : "No"]);
+  if (p.heldBy) put("heldBy", [p.heldBy]);
+  if (typeof p.commitmentPct === "number") put("commitmentPct", [`${p.commitmentPct}%`]);
+  if (p.commitmentRequired !== undefined) put("commitmentRequired", [p.commitmentRequired ? "Required" : "Flexible"]);
   if (p.recruiting !== undefined) put("recruiting", [p.recruiting ? "Open" : "Closed"]);
   if (p.track) put("track", [p.track]);
   if (p.whereWorked) put("whereWorked", [p.whereWorked]);

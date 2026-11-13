@@ -27,6 +27,13 @@ describe("characterTagsFrom", () => {
     expect(!r.ok && r.error).toContain("wizard");
   });
 
+  it("refuses a fourth root: a role grows from one to three", () => {
+    const r = characterTagsFrom(["building", "researching", "facilitating", "catalyzing"], CAST);
+    expect(r.ok).toBe(false);
+    expect(!r.ok && r.error).toContain("up to 3");
+    expect(characterTagsFrom(["building", "researching", "facilitating"], CAST).ok).toBe(true);
+  });
+
   it("refuses anything that is not a list of words", () => {
     expect(characterTagsFrom("catalyzing", CAST).ok).toBe(false);
     expect(characterTagsFrom([7], CAST).ok).toBe(false);

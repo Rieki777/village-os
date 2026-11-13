@@ -20,7 +20,7 @@
  * Raw SQL only, never `dbCollection`: its `replaceAll` resets every column a
  * caller leaves out.
  */
-import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
+import type { Pool, PoolConnection, ResultSetHeader, RowDataPacket } from "mysql2/promise";
 import type { SeatSettings } from "../../shared/seatSettings";
 import { parseApplicationAnswers, type ApplicationAnswers, type ApplicationStatus } from "../../shared/seatApplications";
 import { seatingsChanged } from "../lib/orgChart";
@@ -619,4 +619,59 @@ export async function inApplicationTransaction<T>(pool: Pool, work: (conn: PoolC
   } finally {
     conn.release();
   }
+}
+
+/** Each role's own goals (its accountabilities), trimmed, keyed by role id. A role with none maps to an empty list. */
+export async function goalsOfRoles(db: Db, roleIds: readonly string[]): Promise<Map<string, string[]>> {
+  const own = new Map<string, string[]>();
+  if (!roleIds.length) return own;
+  const [rows] = await db.query<RowDataPacket[]>(`SELECT id, accountabilities FROM org_roles WHERE id IN (${roleIds.map(() => "?").join(",")})`, [...roleIds]);
+  for (const r of rows) {
+    let list: unknown = r.accountabilities;
+    if (typeof list === "string") { try { list = JSON.parse(list); } catch { list = []; } }
+    own.set(String(r.id), Array.isArray(list) ? list.map((x) => String(x ?? "").trim()).filter(Boolean) : []);
+  }
+  return own;
+}
+
+/** Which of these roles are always background-checked (0370), whatever a candidate's references say. */
+/** The terms on offer of these roles, raw as stored, in the order asked (joining lane PR 3: which settings are written). */
+export async function termsOffersOf(db: Db, roleIds: readonly string[]): Promise<unknown[]> {
+  if (roleIds.length === 0) return [];
+  const [rows] = await db.query<RowDataPacket[]>(`SELECT id, terms_offer FROM org_roles WHERE id IN (${roleIds.map(() => "?").join(",")})`, [...roleIds]);
+  const by = new Map(rows.map((r: any) => [String(r.id), r.terms_offer ?? null]));
+  return roleIds.map((id) => by.get(id) ?? null);
+}
+
+export async function alwaysCheckedAmong(db: Db, roleIds: readonly string[]): Promise<string[]> {
+  if (!roleIds.length) return [];
+  const [rows] = await db.query<RowDataPacket[]>(`SELECT id FROM org_roles WHERE always_checked = 1 AND id IN (${roleIds.map(() => "?").join(",")})`, [...roleIds]);
+  return rows.map((r) => String(r.id));
+}
+
+/**
+ * Write a member-door application's counter-offer (shared/counterOffer.ts), whole, into its answers.
+ * Guarded on `awaiting-holder`. The caller holds the row lock (`readApplication(conn, id, true)`).
+ */
+export async function setApplicationCounterOffer(db: Db, id: string, counterOffer: unknown): Promise<boolean> {
+  const [result] = await db.query<ResultSetHeader>(
+    "UPDATE seat_applications SET answers = JSON_SET(COALESCE(answers, JSON_OBJECT()), '$.counterOffer', CAST(? AS JSON)) WHERE id = ? AND status = 'awaiting-holder'",
+    [JSON.stringify(counterOffer), id],
+  );
+  return Number(result.affectedRows ?? 0) === 1;
+}
+
+/**
+ * Take the references, the background-check consent and the "about you" section out of every application that was
+ * withdrawn or not adopted before `before`, as open proposals lose them at 90 days. The application itself, its
+ * words and its history stay. How many.
+ */
+export async function clearAboutYouDecidedBefore(db: Db, before: Date): Promise<number> {
+  const [result] = await db.query<ResultSetHeader>(
+    "UPDATE seat_applications SET answers = JSON_REMOVE(answers, '$.references', '$.backgroundCheck', '$.about') " +
+      "WHERE status IN ('withdrawn', 'not-adopted') AND decided_at < ? AND answers IS NOT NULL " +
+      "AND (JSON_CONTAINS_PATH(answers, 'one', '$.references', '$.backgroundCheck', '$.about'))",
+    [before],
+  );
+  return Number(result.affectedRows ?? 0);
 }

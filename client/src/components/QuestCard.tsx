@@ -20,9 +20,17 @@ import {
 } from "lucide-react";
 import type { QuestClaim } from "@/lib/gameApi";
 import WorkPayBlock from "@/components/WorkPayBlock";
+import RootTags from "@/components/roots/RootTags";
 import {
-  gateLabel, questScene, sceneGradient, statusIs, type BoardQuest,
+  gateLabel, questScene, sceneGradient, statusIs, type BoardQuest, type QuestSigns,
 } from "@/lib/questBoard";
+import { statusFor } from "@/lib/questStatus";
+import { PlantGlyph } from "@/components/openWork/StatusMark";
+import { useStatusWords } from "@/components/openWork/statusWords";
+import { usePlaceWords } from "@/components/openWork/placeWords";
+import { useLingui } from "@lingui/react/macro";
+import { Gauge, MapPin, Target } from "lucide-react";
+import { questFit, type QuestFit } from "@shared/commitment";
 
 export const QUEST_ICONS: Record<string, React.ElementType> = {
   Users, Sprout, ChefHat, TreePine, BookOpen, Home, Camera, Baby, Laptop,
@@ -32,16 +40,24 @@ export const QUEST_ICONS: Record<string, React.ElementType> = {
 export const iconFor = (name: string | null | undefined): React.ElementType =>
   QUEST_ICONS[String(name ?? "")] ?? Star;
 
+/*
+ * SEMANTIC TOKENS ONLY (night-contrast lane, 2026-11-11). The board stands in
+ * the sheet's night world and the quest's own page does not, and these chips
+ * are drawn on both. The brand and palette inks they used (`text-sage`,
+ * `text-teal-700`, `text-teal-deep`) are dark by design: on the night card the
+ * sage chip measured 2.52:1 and "See the quest" 1.58:1. `open`, `notice` and
+ * `foreground` re-theme with the ground they land on and clear AA on both.
+ */
 export const difficultyColors: Record<string, string> = {
-  Beginner: "bg-sage/10 text-sage",
-  Intermediate: "bg-teal/10 text-teal-700",
-  Advanced: "bg-primary/10 text-primary",
+  Beginner: "bg-open/10 text-open",
+  Intermediate: "bg-notice/10 text-notice",
+  Advanced: "border border-border bg-muted text-foreground",
 };
 
 const CLAIM_CHIP: Record<string, { label: string; cls: string }> = {
-  claimed: { label: "In progress", cls: "bg-amber text-foreground" },
-  submitted: { label: "Turned in", cls: "bg-white/90 text-teal-deep" },
-  consented: { label: "Complete", cls: "bg-emerald-500 text-white" },
+  claimed: { label: "In progress", cls: "bg-notice text-background" },
+  submitted: { label: "Turned in", cls: "bg-card text-foreground" },
+  consented: { label: "Complete", cls: "bg-open text-background" },
 };
 
 export function QuestPoster({
@@ -99,17 +115,38 @@ export default function QuestCard({
   claim,
   signs,
   stages,
+  goal = null,
   priority = false,
+  memberPct = null,
 }: {
   quest: BoardQuest;
   claim?: QuestClaim;
-  signs?: { active: number; done: number };
+  signs?: QuestSigns;
   stages?: { id: string; name: string }[] | null;
+  /** The season goal this quest grows, when the season still holds it (goal threads, decision 5). */
+  goal?: { id: string; text: string } | null;
   priority?: boolean;
+  /** What the reader says they can give now (0383), or null. The card says whether the quest fits it, for them alone. */
+  memberPct?: number | null;
 }) {
+  const { t } = useLingui();
   const Icon = iconFor(quest.icon);
+  // The status mark: seed (open), sprout (underway), flower (done this moon),
+  // from the village's own life signs (lib/questStatus.ts). It describes the
+  // work, and it is the only piece of the nature layer on the board.
+  const status = statusFor(signs);
+  const statusWords = useStatusWords();
+  const goalText = goal?.text ?? "";
+  const placeWords = usePlaceWords();
   const chip = claim && claim.status !== "declined" ? CLAIM_CHIP[claim.status] : null;
   const gate = gateLabel(quest, stages);
+  const commitment = typeof quest.commitmentPct === "number" ? quest.commitmentPct : null;
+  const fit = questFit(commitment, memberPct);
+  const fitWords: Record<QuestFit, string> = {
+    fits: t({ message: "Fits what you can give", context: "open work card: the quest's size beside the reader's own percent" }),
+    easier: t({ message: "Easier", context: "open work card: the quest asks less than the reader can give" }),
+    harder: t({ message: "Harder", context: "open work card: the quest asks more than the reader can give" }),
+  };
   const active = signs?.active ?? 0;
   const done = signs?.done ?? 0;
 
@@ -125,7 +162,7 @@ export default function QuestCard({
       aria-label={linkLabel}
     >
       <article className="h-full flex flex-col bg-card rounded-2xl border border-border shadow-sm overflow-hidden transition-shadow duration-300 group-hover:shadow-lg">
-        <QuestPoster quest={quest} className="aspect-[16/9]" priority={priority}>
+        <QuestPoster quest={quest} className="aspect-[5/2]" priority={priority}>
           <div className="absolute top-3 left-3 w-9 h-9 rounded-lg bg-white/20 backdrop-blur-sm flex items-center justify-center">
             <Icon className="w-5 h-5 text-white" />
           </div>
@@ -162,6 +199,14 @@ export default function QuestCard({
             )
           )}
 
+          {/* The goal thread: which season goal this work grows. */}
+          {goal && (
+            <p className="inline-flex items-start gap-1.5 text-sm font-medium text-foreground" data-goal={goal.id}>
+              <Target className="mt-0.5 w-4 h-4 shrink-0 text-open" aria-hidden="true" />
+              <span>{t({ message: `Grows: ${goalText}`, context: "open work card: the season goal this quest grows" })}</span>
+            </p>
+          )}
+
           <div className="flex flex-wrap items-center gap-2 text-xs">
             {/* What the quest is worth and pays, or to inquire (0265). Never Gratitude, which pays no quest. */}
             <WorkPayBlock pay={quest.pay} />
@@ -171,6 +216,23 @@ export default function QuestCard({
                 {quest.duration}
               </span>
             )}
+            {commitment !== null && (
+              <span className="inline-flex items-center gap-1 text-muted-foreground" data-commitment-pct={commitment}>
+                <Gauge className="w-3.5 h-3.5" aria-hidden="true" />
+                {t({ message: `${commitment}% of you`, context: "open work card: how much of a person the quest asks" })}
+              </span>
+            )}
+            {fit && (
+              <span className={`px-2 py-0.5 rounded-full font-medium ${fit === "harder" ? "bg-muted text-muted-foreground" : "bg-open/15 text-open"}`} data-fit={fit}>
+                {fitWords[fit]}
+              </span>
+            )}
+            {quest.place && (
+              <span className="inline-flex items-center gap-1 text-muted-foreground" data-place={quest.place}>
+                <MapPin className="w-3.5 h-3.5" aria-hidden="true" />
+                {placeWords[quest.place]}
+              </span>
+            )}
             {quest.difficulty && (
               <span className={`px-2 py-0.5 rounded-full font-medium ${difficultyColors[quest.difficulty] ?? "bg-muted text-muted-foreground"}`}>
                 {quest.difficulty}
@@ -178,12 +240,17 @@ export default function QuestCard({
             )}
           </div>
 
+          {/* The roots it grows from, drawn as small roots (shared/archetypeRoots.ts). */}
+          {quest.archetypes?.length ? <RootTags roots={quest.archetypes} size="sm" /> : null}
+
           {(active > 0 || done > 0) && (
             <div className="flex flex-wrap items-center gap-3 text-xs">
               {active > 0 && (
-                <span className="inline-flex items-center gap-1 font-medium text-teal-deep">
+                <span className="inline-flex items-center gap-1 font-medium text-open">
                   <Users className="w-3.5 h-3.5" />
-                  {active} in the field now
+                  {active === 1
+                    ? t({ message: "1 hand on this", context: "open work card: one person carries this quest now" })
+                    : t({ message: `${active} hands on this`, context: "open work card: people carrying this quest now" })}
                 </span>
               )}
               {done > 0 && (
@@ -196,13 +263,18 @@ export default function QuestCard({
           )}
 
           {gate && (
-            <p className="inline-flex items-center gap-1.5 text-xs font-medium text-gold">
+            <p className="inline-flex items-center gap-1.5 text-xs font-medium text-notice">
               <Sprout className="w-3.5 h-3.5" />
               {gate}
             </p>
           )}
 
-          <div className="mt-auto pt-2 flex items-center justify-between text-sm font-semibold text-teal-deep">
+          <p className="inline-flex items-center gap-1.5 text-xs text-muted-foreground" data-status={status}>
+            <PlantGlyph state={status} className="size-5" />
+            {statusWords[status]}
+          </p>
+
+          <div className="mt-auto pt-2 flex items-center justify-between text-sm font-semibold text-notice">
             <span>See the quest</span>
             <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
           </div>

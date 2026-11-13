@@ -52,7 +52,7 @@
         "bullet4": "No obligation to purchase",
         "actionLabel": "Become a Founding Seeder",
         "description": "Join the Founding Seeders, our waitlist of soul-aligned people securing first access to homes and land at {village}. This is how you raise your hand and say: I'm serious about this.",
-        "actionTarget": ""
+        "actionTarget": "https://amora.cr/founding-seeder/"
       },
       {
         "stage": "Participant",

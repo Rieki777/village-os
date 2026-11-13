@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_PHASES, cardItems, checkinDays, checkinsDue, dayOfPath, lastDayOf, mayFileCheckin, mayReadCheckins, mayTick, mergePath, openItems, ownerRoleNames, pathEnabled,
-  readCheckin, readVillageDoc, visibleItems,
+  isSitePath, readCheckin, readLink, readVillageDoc, visibleItems, LINK_HREF_MAX, LINK_LABEL_MAX,
 } from "./onboardingPath";
 
 const village = {
@@ -137,5 +137,58 @@ describe("saving the village's document", () => {
     expect(readVillageDoc({ phases: [{ name: "A", items: [{ title: "Fine" }, { owner: "buddy" }] }] })).toEqual({ ok: false, error: "Phase 1, step 2, needs a title." });
     expect(readVillageDoc({ phases: [{ items: [] }] })).toEqual({ ok: false, error: "Phase 1 needs a name." });
     expect(readVillageDoc("nope").ok).toBe(false);
+  });
+});
+
+describe("a step's link", () => {
+  const good = { label: "Open the guide", href: "https://example.org/guide" };
+  it("accepts an https address and a label, and normalises nothing else away", () => {
+    expect(readLink(good)).toEqual(good);
+    expect(readLink({ label: "  Open  ", href: " https://example.org/a?b=1#c " })).toEqual({ label: "Open", href: "https://example.org/a?b=1#c" });
+  });
+  it("refuses anything but https, a missing label, sign-in details, junk and over-long values", () => {
+    for (const href of ["http://example.org", "javascript:alert(1)", "data:text/html,hi", "//example.org", "example.org", "https://u:p@example.org", "https://", "ftp://example.org", ""]) {
+      expect(readLink({ label: "Go", href }), href).toBeNull();
+    }
+    expect(readLink({ label: "", href: good.href })).toBeNull();
+    expect(readLink({ label: "Go", href: `https://example.org/${"a".repeat(LINK_HREF_MAX)}` })).toBeNull();
+    expect(readLink(null)).toBeNull();
+    expect(readLink([good])).toBeNull();
+    expect(readLink({ label: "Go" })).toBeNull();
+  });
+  it("accepts a page of this site, so a step can open the steward training", () => {
+    expect(readLink({ label: "Open the steward training", href: "/training/steward" })).toEqual({ label: "Open the steward training", href: "/training/steward" });
+    expect(readLink({ label: "Go", href: "/" })).toEqual({ label: "Go", href: "/" });
+    expect(isSitePath("/training/resident#start")).toBe(true);
+  });
+  it("refuses a path that leaves the site or hides a scheme", () => {
+    for (const href of ["//evil.example", "/\\evil.example", "/\\/evil.example", "/a b", "/a\tb", "\\evil.example", "training/steward"]) {
+      expect(readLink({ label: "Go", href }), href).toBeNull();
+      expect(isSitePath(href), href).toBe(false);
+    }
+  });
+  it("cuts a long label at its cap", () => {
+    expect(readLink({ label: "x".repeat(200), href: good.href })?.label).toHaveLength(LINK_LABEL_MAX);
+  });
+  it("rides on the merged step, from a phase and from a circle, and is absent when none is given", () => {
+    const v = {
+      enabled: true,
+      phases: [{ name: "One", fromDay: 1, toDay: 3, items: [{ key: "a", title: "A", link: good }, { key: "b", title: "B", link: { label: "Bad", href: "http://x.org" } }] }],
+      circles: { c1: [{ key: "c", title: "C", link: good }] },
+    };
+    const items = mergePath({ village: v, circleId: "c1", first90: null });
+    expect(items.find((i) => i.key === "a")?.link).toEqual(good);
+    expect(items.find((i) => i.key === "b")).not.toHaveProperty("link");
+    expect(items.find((i) => i.key === "c")?.link).toEqual(good);
+  });
+  it("is kept by the editor's save, and a bad one is named instead of dropped", () => {
+    const ok = readVillageDoc({ phases: [{ name: "One", items: [{ title: "A", link: good }] }] });
+    expect(ok).toMatchObject({ ok: true });
+    expect(JSON.stringify(ok)).toContain("https://example.org/guide");
+    const bad = readVillageDoc({ phases: [{ name: "One", items: [{ title: "A", link: { label: "Go", href: "http://example.org" } }] }] });
+    expect(bad).toMatchObject({ ok: false });
+    expect((bad as { error: string }).error).toContain("Phase 1, step 1");
+    const badCircle = readVillageDoc({ circles: { c1: [{ title: "A", link: "https://example.org" }] } });
+    expect(badCircle).toMatchObject({ ok: false });
   });
 });

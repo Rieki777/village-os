@@ -7,6 +7,7 @@
  * holder, a tension's raiser, another member's application), so the test that
  * no person but the owner is named has something to catch.
  */
+import { OPEN_ROW_AGAIN } from "./roleProposalHonesty";
 import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -592,15 +593,15 @@ describe("proposal mode (PR 3): the card a role application asks for", () => {
       }),
     );
     const line = "We'll fill this together with Operations Steward.";
-    expect(card.across.growingEdge.text).toEqual({ kind: "empty", words: line });
-    expect(card.across.whoCouldHoldNext.text).toEqual({ kind: "empty", words: line });
-    expect(card.across.goals).toEqual({ kind: "empty", words: line });
+    // Audit P6: the role is named once, in one open row. The rest say "too".
+    const all = JSON.stringify(card);
+    expect(all.split(line).length - 1).toBe(1);
+    expect(all.split(OPEN_ROW_AGAIN).length - 1).toBeGreaterThanOrEqual(3);
     expect(card.across.load.own).toEqual({ kind: "empty", words: "We'll set the load together with Operations Steward." });
-    expect(card.roles[0].chips.join(" ")).toContain(line);
     expect(card.roles[0].chips.join(" ")).not.toContain("No review date set");
     const none = buildPlayerCard(input({ mode: "proposal", fillWith: null, loadRead: null, growingEdge: null, plan: null }));
     expect(none.across.load.own).toEqual({ kind: "empty", words: "We'll set the load together with the village's operations role." });
-    expect(none.across.growingEdge.text).toEqual({ kind: "empty", words: "We'll fill this together with the village's operations role." });
+    expect(JSON.stringify(none).split("fill this together with the village's operations role").length - 1).toBe(1);
     const live = buildPlayerCard(input({ loadRead: null, growingEdge: null, plan: { aim: null, goals: [] } }));
     expect(live.across.load.own).toEqual({ kind: "empty", words: "Not set this moon" });
     expect(live.across.growingEdge.text).toEqual({ kind: "empty", words: "Not written yet" });
@@ -697,5 +698,42 @@ describe("a role's powers", () => {
   it("a power suited through two classes is listed once", () => {
     const card = buildPlayerCard(input({ roles: [role(1, { powers: [], suited: [SEAT, MODERATE, SEAT] })] }));
     expect(value(card.roles[0].powers.items)).toEqual(["Places people in roles", "Moderates the intake"]);
+  });
+});
+
+describe("adopted mode (verify item 7): the application once the village adopted it", () => {
+  const AFTER = "Open for now. You'll add these once the role is adopted.";
+  const adopted = (over: Partial<PlayerCardInput> = {}) =>
+    buildPlayerCard(
+      input({
+        mode: "adopted",
+        fillWith: "Operations Steward",
+        viewerUserId: OWNER.userId,
+        plan: { aim: "A clean close every moon.", goals: [{ goal: "Money we can read", howItHelps: "a monthly cash view" }] },
+        roles: [role(1, { settings: { v: 1, term: { endsOn: "2026-12-31" } } })],
+        ...over,
+      }),
+    );
+
+  it("reads her aim and the village goals she picked, never the not-yet-adopted lines", () => {
+    const card = adopted();
+    expect(card.across.aim).toEqual({ kind: "shown", value: "A clean close every moon." });
+    expect(value(card.across.goals)).toEqual([{ goal: "Money we can read", howItHelps: "a monthly cash view" }]);
+    expect(JSON.stringify(card)).not.toContain(AFTER);
+    expect(JSON.stringify(card)).not.toContain(CARD_WORDS.noPlan);
+  });
+
+  it("this moon's tasks read as a holder's, and the heading is her roles", () => {
+    const card = adopted();
+    expect(value(card.across.tasks).map((t) => t.title)).toEqual(["Onboarding pipeline", "Circle rhythm"]);
+    expect(adopted({ tasks: [] }).across.tasks).toEqual({ kind: "empty", words: CARD_WORDS.noTasks });
+    expect(card.tiles.heading).toBe(CARD_WORDS.myRoles);
+    expect(card.header.rolesLine.startsWith("Proposes to hold ")).toBe(false);
+  });
+
+  it("is still drawn from the application: its open rows name who fills them, and no tile reads a health dot", () => {
+    const card = adopted({ plan: { aim: "A clean close every moon.", goals: [] } });
+    expect(card.across.goals).toEqual({ kind: "empty", words: "We'll fill this together with Operations Steward." });
+    for (const t of value(card.tiles.items)) expect(t.health).toBeNull();
   });
 });

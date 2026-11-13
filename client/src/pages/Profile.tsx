@@ -1,4 +1,5 @@
 import Layout from "@/components/Layout";
+import SaveBar, { type SaveResult } from "@/components/SaveBar";
 import GameDashboard from "@/components/GameDashboard";
 import ProfileJourney from "@/components/ProfileJourney";
 import NeedCard from "@/components/NeedCard";
@@ -12,6 +13,7 @@ import SendTokensCard from "@/components/SendTokensCard";
 import RedemptionPanel from "@/components/RedemptionPanel";
 import CashOwedPanel from "@/components/CashOwedPanel";
 import TimeZoneField from "@/components/TimeZoneField";
+import CommitmentField from "@/components/commitment/CommitmentField";
 import SeasonSummarySection from "@/components/seasonSummary/SeasonSummarySection";
 import MaturityLadder from "@/components/profile/MaturityLadder";
 import PowersMap from "@/components/profile/PowersMap";
@@ -28,7 +30,9 @@ import SeasonPlanSection from "@/components/profile/SeasonPlanSection";
 import AlignedSection from "@/components/profile/AlignedSection";
 import YourRolesSection from "@/components/profile/YourRolesSection";
 import PlayerRoleCard from "@/components/playerCard/PlayerRoleCard";
-import MyMoonMount from "@/components/myMoon/MyMoonMount";
+import { FirstDaysContext } from "@/components/playerCard/CardLower";
+import MyMoonMount, { holdsReviewPower } from "@/components/myMoon/MyMoonMount";
+import RolesBand from "@/components/profileDash/RolesBand";
 import ProposeBanner from "@/components/roleProposal/ProposeBanner";
 import ProposeRolesEntry from "@/components/roleProposal/ProposeRolesEntry";
 import YourMoveCard from "@/components/profile/YourMoveCard";
@@ -52,6 +56,12 @@ import { m, AnimatePresence } from "framer-motion";
 import { Heart, Edit2, LogOut, ArrowRight, CheckCircle2, UserPlus } from "lucide-react";
 import { useTokenName } from "@/hooks/useTokenNames";
 import { usePathLadders } from "@/hooks/usePathLadders";
+import { FIRST_DAYS } from "@shared/roleStartWords";
+import { PATH_MILESTONES } from "@shared/yourPath";
+import YourPathCard from "@/components/path/YourPathCard";
+import WeekStrip from "@/components/today/WeekStrip";
+import { SeedOfLife } from "@/components/journey/nature";
+import { rememberPath, type PathView } from "@/lib/usePath";
 import { lazy, Suspense, useEffect, useState } from "react";
 const OnboardingPath = lazy(() => import("@/components/profile/OnboardingPath"));
 import { Link, useLocation } from "wouter";
@@ -59,7 +69,6 @@ import { onProfileRefresh } from "@/lib/profileRefresh";
 import { useStoryPageShown } from "@/lib/brochure";
 import { roleWithHolders } from "@shared/roleHolderLabel";
 import type { StageAdvance } from "@/components/StageAdvanced";
-import StatRow from "@/components/profileDash/StatRow";
 import StagePanel from "@/components/profileDash/StagePanel";
 import TodayStrip from "@/components/profileDash/TodayStrip";
 import AsksPanel from "@/components/asks/AsksPanel";
@@ -70,7 +79,6 @@ import LevelUpMoment from "@/components/profileDash/LevelUpMoment";
 import ProfileTabs, { phoneTab, type ProfileTab } from "@/components/profileDash/ProfileTabs";
 import { useDashData } from "@/components/profileDash/useDashData";
 import PartiesCard from "@/components/profileDash/PartiesCard";
-import { abilitiesAtStage, nextRungProgress, pickTokens, stagePill } from "@/components/profileDash/dashModel";
 import { BTN_GOLD, BTN_LINE, H2, KICKER, LINK } from "@/components/profileDash/dashUi";
 
 /**
@@ -91,7 +99,7 @@ import { BTN_GOLD, BTN_LINE, H2, KICKER, LINK } from "@/components/profileDash/d
  * ── THE GAME DASHBOARD (Rye approved the design on 2026-10-30) ──────────────
  *
  * The page now reads top to bottom as the approved character sheet: the hero,
- * the stat row, Stage reached, Today, the treasury, then two columns (the
+ * the doors open to you, Today, the treasury, then two columns (the
  * quest log on the left, roles and powers on the right) and the settings
  * band. The sections under components/profileDash/ are new; everything below
  * them is the section it always was, moved and not rewritten. On a phone the
@@ -145,6 +153,16 @@ export default function Profile() {
   const [advance, setAdvance] = useState<StageAdvance | null>(null);
   /** Every read the dashboard takes, once for the page. */
   const dash = useDashData(user?.id ?? null);
+  /**
+   * THE FIRST DAYS (audit M8, P7). While steps wait before a role starts, or the
+   * holder's own onboarding path is within its first 14 days, the page asks for
+   * nothing about next season and shows no stage or rank: somebody who arrived an
+   * hour ago is not on a ladder yet.
+   */
+  const [startStepsShown, setStartStepsShown] = useState(false);
+  /** The reader's own onboarding day: undefined until the path is read, null with none. */
+  const [pathDay, setPathDay] = useState<number | null | undefined>(undefined);
+  const eventsOn = useModuleOn("events");
 
   /**
    * The progression read, once for the page.
@@ -194,6 +212,30 @@ export default function Profile() {
       .catch(() => setMeFailed(true));
   };
   useEffect(reloadMe, []);
+  /**
+   * THE PATH (the Root): the one next step, from the conductor the server runs
+   * (`me.path`, shared/yourPath.ts). The card, the strip and the whole-path
+   * page all read this one answer. Null on a server older than the path, where
+   * the page falls back to the cards it had.
+   */
+  const path: PathView | null = me?.path ? { ...me.path, visitor: false } : null;
+  useEffect(() => rememberPath(me), [me]);
+  /**
+   * THE FIRST DAYS, DECIDED BY THE ROLE'S START DAY (verify B6). It used to
+   * follow whether an onboarding path existed, so a new holder in a village
+   * with no path was shown a rank and "Next: Guide" in their first hour. The
+   * path's `fresh` reads the seating's start day and nothing else. Until the
+   * read lands the page shows no rank at all, because a rank that flashes and
+   * goes is still a rank shown.
+   */
+  const firstDays = me ? (path ? path.fresh : startStepsShown || (typeof pathDay === "number" && pathDay <= FIRST_DAYS)) : true;
+  /**
+   * PROFILE TODAY'S ONE STRIP OF TIME (Phase B, decision 1). Someone newly
+   * seated reads their first fourteen days (drawn inside the onboarding card);
+   * everyone else reads their week. Nothing is drawn until the path is read,
+   * so a newly seated holder never sees the week flash and go.
+   */
+  const weekShown = pathDay !== undefined && !(typeof pathDay === "number" && pathDay >= 1 && pathDay <= FIRST_DAYS);
   /*
    * ONE READ, AND IT RE-READS FOR EVERYBODY.
    *
@@ -266,14 +308,19 @@ export default function Profile() {
     }
   };
 
-  const saveBio = async () => {
+  // Saved from the floating save bar (components/SaveBar.tsx), which shows
+  // whatever the save answered.
+  const saveBio = async (): Promise<SaveResult> => {
     setSavingBio(true);
     setBioError("");
     try {
       await updateProfile({ bio: bioText });
       setEditingBio(false);
+      return { ok: true };
     } catch (e: any) {
-      setBioError(e?.message || "That didn't save. Try again.");
+      const why = e?.message || "That didn't save. Try again.";
+      setBioError(why);
+      return { ok: false, reason: why };
     } finally {
       setSavingBio(false);
     }
@@ -365,11 +412,7 @@ export default function Profile() {
   ];
 
   const stages = config?.stages ?? null;
-  const stageIndex = prog?.stageIndex ?? null;
-  const nextRung = stages && stageIndex !== null ? (stages[stageIndex + 1] ?? null) : null;
-  const progress = nextRungProgress(nextRung, { consentedQuests: prog?.consentedQuests ?? null, training: prog?.training ?? null });
   const rolesLine = (prog?.roles ?? []).map((r) => roleWithHolders(r.name, [user.name])).join(", ");
-  const { village: villageToken } = pickTokens(dash.wallet ?? [], config?.currency?.value?.slug);
   const seasonWords = dash.season
     ? [dash.season.name, dash.season.day !== null && dash.season.of !== null ? `day ${Math.min(dash.season.day, dash.season.of)} of ${dash.season.of}` : ""].filter(Boolean).join(" · ")
     : null;
@@ -395,28 +438,43 @@ export default function Profile() {
         <div className="relative mx-auto max-w-[1300px] px-4 sm:px-10">
           <ProfileTabs tab={tab} onTab={setTab} />
           <m.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col gap-6 sm:gap-8">
-            {/* THE STEPS BEFORE A ROLE STARTS, on every tab: a new holder lands
-                here after sign-up, on any tab, and is asked here (role journey L7). */}
-            <RoleStartSteps />
-            {/* The role proposal, first under the tabs. On a phone it is on
-                Today and on Roles, so it is the first thing on either tab.
-                A desktop shows it here, above the hero. */}
-            <div className={`flex flex-col gap-4 ${tabOf(["today", "roles"])}`}>
-              {/* Guide v2: whose move it is, first: what waits on you to align with, above proposing for next season. */}
-              <YourMoveCard />
-              <ProposeBanner />
-              <ProposeRolesEntry />
+            {/* YOUR PATH, the one featured card (the Root): the next step, what comes after, and the walk so
+                far. The steps before a role starts and the texts waiting on the reader are drawn inside it, so
+                the page has one "next" and no second card. On a server older than the path, the two cards stand alone. */}
+            {path ? (
+              <div className={tabOf(["today", "roles"])}>
+                <YourPathCard path={path}>
+                  <RoleStartSteps embedded skipHref={path.step.href} onShown={setStartStepsShown} />
+                  {!startStepsShown && <YourMoveCard embedded />}
+                </YourPathCard>
+              </div>
+            ) : (
+              <>
+                <RoleStartSteps onShown={setStartStepsShown} />
+                <div className={`empty:hidden ${tabOf(["today", "roles"])}`}>{!startStepsShown && <YourMoveCard />}</div>
+              </>
+            )}
+            {/* "Our first 14 days" sits directly under the path card, on Today and Roles (audit M8). */}
+            <div className={`empty:hidden ${tabOf(["today", "roles"])}`}>
+              <Suspense fallback={null}><OnboardingPath onDay={setPathDay} /></Suspense>
             </div>
-            {/* WHO YOU ARE PLAYING, FIRST. The ladder position comes from the
-                page's own reads (`prog.stageIndex`, `config.stages`), never a
-                second fetch inside the hero. */}
+            {weekShown ? (
+              <div className={tabOf("today")}>
+                <WeekStrip meetings={dash.meetings} taskDue={dash.tasks?.nextDue ?? null} eventsOn={eventsOn} />
+              </div>
+            ) : null}
+            {/* The door to proposing. The next-season banner is one of the path's own rules now, so it is
+                drawn only where there is no path to say it. */}
+            <div className={`flex flex-col gap-4 empty:hidden ${tabOf(["today", "roles"])}`}>
+              {!path && !firstDays && <ProposeBanner />}
+              {!firstDays && <ProposeRolesEntry />}
+            </div>
+            {/* WHO YOU ARE PLAYING, FIRST. No rung on the face (the prune): the hero
+                carries the person, their badges and their moons on the land. */}
             <div className={tabOf("today")}>
               <ProfileHero
                 name={user.name}
                 handle={user.handle}
-                stageIndex={stageIndex}
-                stageCount={stages?.length ?? null}
-                stageLabel={stagePill(stages, stageIndex)}
                 season={seasonWords}
                 rolesLine={rolesLine || null}
                 badges={dash.badgeList}
@@ -457,87 +515,46 @@ export default function Profile() {
                   </div>
                 }
                 footer={
-                  nextRung ? (
-                    <div className="mt-1 flex w-full max-w-[640px] flex-col gap-2 sm:mt-3.5">
-                      <div className="flex justify-between text-xs sm:text-sm">
-                        <span className="font-semibold text-dash-gold-lit">Next: {nextRung.name}</span>
-                        {progress ? (
-                          <span className="text-muted-foreground">
-                            {progress.done} of {progress.total} steps
-                            <span className="hidden sm:inline"> · {progress.total - progress.done} left</span>
-                          </span>
-                        ) : null}
-                      </div>
-                      {progress ? (
-                        <div
-                          role="progressbar"
-                          aria-label={`Toward ${nextRung.name}`}
-                          aria-valuemin={0}
-                          aria-valuemax={progress?.total ?? 1}
-                          aria-valuenow={progress?.done ?? 0}
-                          className="h-2.5 overflow-hidden rounded-md border border-dash-edge bg-dash-track sm:h-3.5"
-                        >
-                          <div
-                            className="h-full bg-[linear-gradient(90deg,var(--color-dash-gold),var(--color-dash-gold-lit))] shadow-[0_0_14px_color-mix(in_srgb,var(--color-dash-gold-lit)_60%,transparent)]"
-                            style={{ width: `${progress ? Math.round((progress.done / Math.max(1, progress.total)) * 100) : 0}%` }}
-                          />
-                        </div>
-                      ) : (
-                        /* A rung that is one act (a grant, being paid, signing)
-                           has no fraction to draw, so it says what opens it. */
-                        <p className="m-0 text-[13px] text-muted-foreground">{nextRung.description}</p>
-                      )}
-                      <a href="#invite" className={`${BTN_GOLD} mt-1.5 w-full sm:hidden`}>
-                        Invite a friend
-                      </a>
-                    </div>
-                  ) : null
+                  /* The walk so far, as the seed: the bar toward the next rung and its "Next:" are gone
+                     (the Root). A person's steps are their own walk, never a fill toward a rank. */
+                  <div className="mt-1 flex w-full max-w-[640px] flex-col items-center gap-3 sm:mt-3.5 sm:flex-row sm:items-center">
+                    {path ? (
+                      <Link href="/path" className="group inline-flex min-h-11 items-center gap-3 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-ring" data-hero-seed="">
+                        <SeedOfLife size="sm" total={PATH_MILESTONES.length} walked={path.walked.length} label={t({ message: `Your path: ${path.walked.length} of ${PATH_MILESTONES.length} steps walked`, context: "your path, the seed drawing" })} />
+                        <span className="underline-offset-4 group-hover:underline">{t({ message: `Your walk so far`, context: "your path, the profile hero" })}</span>
+                      </Link>
+                    ) : null}
+                    <a href="#invite" className={`${BTN_GOLD} w-full sm:hidden`}>
+                      Invite a friend
+                    </a>
+                  </div>
                 }
               />
             </div>
 
-            <div className={tabOf("today")}>
-              <StatRow
-                stats={[
-                  { key: "paths", glyph: "◎", value: user.paths.length, label: "Paths walked", short: "Paths", phone: true },
-                  { key: "quests", glyph: "✦", value: prog?.consentedQuests ?? null, label: "Quests done", short: "Quests", phone: true },
-                  { key: "badges", glyph: "❖", value: dash.badges, label: "Badges", short: "Badges", phone: true },
-                  {
-                    key: "tokens",
-                    glyph: "◐",
-                    value: villageToken ? villageToken.heldUnits / Math.pow(10, Math.max(0, villageToken.decimals)) : null,
-                    label: "Tokens",
-                    short: "Tokens",
-                    phone: true,
-                  },
-                  { key: "powers", glyph: "☾", value: prog ? prog.capabilityCatalogue.filter((c) => c.held).length : null, label: "Powers open", short: "Powers", phone: false },
-                ]}
-              />
-            </div>
-
-            {stages && prog ? (
+            {/* The stat row (Paths walked, Quests done, Badges, Tokens, Powers open) is retired: the prune
+                keeps no totals beside a person's name. What they hold is drawn where it lives. */}
+            {stages && prog && !firstDays ? (
               <div className={tabOf("today")}>
-                <StagePanel
-                  stages={stages}
-                  stageIndex={prog.stageIndex}
-                  abilities={abilitiesAtStage(prog.capabilityCatalogue ?? [], stages[prog.stageIndex]?.id ?? "")}
-                  nextAction={me?.nextAction ?? null}
-                  progress={progress}
-                  progressUnit={nextRung?.rule.type === "training-complete" ? "lessons" : "quests consented"}
-                  nextRuleWords={nextRung?.description ?? null}
-                  ladderTitle={config?.ladder?.title}
-                />
+                <StagePanel catalogue={prog.capabilityCatalogue ?? []} stages={stages} nextAction={path ? null : (me?.nextAction ?? null)} />
               </div>
             ) : null}
 
             <div className={tabOf("today")}>
-              <TodayStrip data={dash} />
+              <TodayStrip data={dash} stepsWaiting={startStepsShown} pathSpeaks={!!path} />
             </div>
 
             {/* WHO HELPS YOU: the member's guide, chosen once (2026-11-09). On Today, so a phone finds it first. */}
             <div className={tabOf("today")}>
               <GuideChoiceCard />
             </div>
+
+            {/* HOW MUCH CAN YOU GIVE (0383): a quiet percent the open work and roles fit to. Only this member sees it. */}
+            {user && (
+              <div className={tabOf("today")}>
+                <CommitmentField />
+              </div>
+            )}
 
             {/* ASKED OF YOU: what other members asked this member, and what they asked (shared/memberAsks.ts). */}
             <div id="waiting" className={`scroll-mt-28 ${tabOf("today")}`}>
@@ -584,15 +601,13 @@ export default function Profile() {
                     It heads the quest log: the stage panel above carries the
                     server's next step, and the design has nothing between it and Today.
                     `undefined` signing means the progression read has not landed. */}
-                <div className={tabOf("quests")}>
-                  <StartHereCard ownerId={user.id} me={me} signing={prog ? (prog.signing ?? null) : undefined} config={config} catalogue={prog?.capabilityCatalogue} />
+                {/* With a path the card at the top of the page is the one "start here"; this one stands only where there is none. */}
+                <div className={`empty:hidden ${tabOf("quests")}`}>
+                  {!path && <StartHereCard ownerId={user.id} me={me} signing={prog ? (prog.signing ?? null) : undefined} config={config} catalogue={prog?.capabilityCatalogue} />}
                 </div>
                 {/* The quest log: every task taken on in a live session, what
                     this member's roles hold, and what waits on a power they
                     hold. Emails and notices land on #my-tasks. */}
-                <div className={`empty:hidden ${tabOf(["today", "roles"])}`}>
-                  <Suspense fallback={null}><OnboardingPath /></Suspense>
-                </div>
                 <div className={tabOf(["today", "quests"])}>
                   <TasksWaitingCard enabled={sessionsOn} />
                 </div>
@@ -634,12 +649,19 @@ export default function Profile() {
                 In the narrow character column the headings wrapped a word at
                 a time and the applications card left a blank field beside it.
                 The proposal door itself stays at the top. */}
-            <div id="roles" className={`scroll-mt-28 flex flex-col gap-6 ${tabOf("roles")}`}>
-              <YourRolesSection />
-              <PlayerRoleCard />
-              <MyMoonMount />
-              <SeasonPlanSection />
-            </div>
+            {/* On a phone, My moon draws above the player card (RolesBand); a desktop keeps this order. */}
+            <RolesBand
+              id="roles"
+              className={`scroll-mt-28 ${tabOf("roles")}`}
+              roles={<YourRolesSection />}
+              card={
+                <FirstDaysContext.Provider value={firstDays}>
+                  <PlayerRoleCard />
+                </FirstDaysContext.Provider>
+              }
+              moon={<MyMoonMount reviewer={holdsReviewPower(prog?.capabilityCatalogue)} />}
+              season={!firstDays ? <SeasonPlanSection /> : null}
+            />
             {config && prog ? (
               <div className={tabOf("roles")}>
                 <PowersMap
@@ -711,28 +733,6 @@ export default function Profile() {
                         {bioError}
                       </p>
                     )}
-                    <div className="mt-3 flex items-center gap-3">
-                      {/* `border border-border`: the fill is the village's own
-                          colour, dark by construction, so the button takes an
-                          edge to clear 3:1 on the night panel. */}
-                      <button
-                        onClick={saveBio}
-                        disabled={savingBio}
-                        className="min-h-11 rounded-lg border border-border bg-teal-deep px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-                      >
-                        {savingBio ? "Saving…" : "Save"}
-                      </button>
-                      <button
-                        onClick={() => {
-                          setBioText(user.bio || "");
-                          setEditingBio(false);
-                          setBioError("");
-                        }}
-                        className="min-h-11 px-2 text-sm text-muted-foreground hover:text-foreground"
-                      >
-                        Cancel
-                      </button>
-                    </div>
                     <p aria-live="polite" role="status" className="sr-only">
                       {savingBio ? "Saving your bio." : ""}
                     </p>
@@ -742,6 +742,12 @@ export default function Profile() {
                     {user.bio || "No bio yet. Add one to help other villagers know you."}
                   </p>
                 )}
+                {/* Outside the editor, so "Saved" can still show once it closes. */}
+                <SaveBar
+                  count={editingBio && bioText !== (user.bio || "") ? 1 : 0}
+                  onSave={saveBio}
+                  onDiscard={() => { setBioText(user.bio || ""); setEditingBio(false); setBioError(""); }}
+                />
               </m.section>
 
               {/* The anchor the surfaced banner and "Walk another path" point at. */}
@@ -758,7 +764,7 @@ export default function Profile() {
               </div>
 
               {config && prog ? (
-                <MaturityLadder showNext={false} title={config.ladder?.title} stages={config.stages} stageIndex={prog.stageIndex} consentedQuests={prog.consentedQuests} />
+                <MaturityLadder title={config.ladder?.title} stages={config.stages} stageIndex={prog.stageIndex} />
               ) : null}
 
               {/* BORROWED AND BOOKED: loans, stays and homes asked about, live only.
@@ -858,7 +864,7 @@ export default function Profile() {
 
               {/* Round 4: your agent, the harness in every profile */}
               <div id="your-agent">
-                <YourAgentPanel />
+                <YourAgentPanel person={user?.id} />
               </div>
 
               <button type="button" onClick={() => logout()} className={`${BTN_LINE} self-start sm:hidden`}>
@@ -881,7 +887,6 @@ export default function Profile() {
               <TheVessel
                 gratitude={me?.gratitude ?? null}
                 here={me?.stage ?? null}
-                next={me && me.stages ? (me.stages[me.stageIndex + 1] ?? null) : null}
                 failed={meFailed}
                 onGiven={reloadMe}
               />
@@ -932,13 +937,11 @@ export default function Profile() {
         </div>
         <MoonDock />
       </div>
-      {advance && stages ? (
+      {advance ? (
         <LevelUpMoment
           advance={advance}
-          stages={stages}
           name={user.name}
           portrait={null}
-          ladderTitle={config?.ladder?.title}
           onClose={() => setAdvance(null)}
         />
       ) : null}

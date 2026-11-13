@@ -27,9 +27,9 @@ import { DAY, harness, iso, NEXT_ENDS, NEXT_STARTS, OWNER, P, PEOPLE, READER, SE
 const configured = testDbConfigured();
 if (!configured) console.warn("[roleProposals.cardSeason] TEST_DATABASE_URL not set - DB cases SKIPPED. A skip is not a pass.");
 
-/** "1 December 2026 to 18 June 2027": the season's first day to the day before the next one starts. */
+/** "1 December 2026 to 19 June 2027": the season's first day to its `endsOn`, shown as the civil day written (audit M12, #1169). */
 const spanOf = (startsOn: string, endsOn: string) =>
-  spanWords(civilDateInstant(startsOn, "UTC") as Date, new Date((civilDateInstant(endsOn, "UTC") as Date).getTime() - 1), "UTC");
+  spanWords(civilDateInstant(startsOn, "UTC") as Date, civilDateInstant(endsOn, "UTC") as Date, "UTC");
 
 describe.skipIf(!configured)("a role proposal's card names the season it is for, on a real schema (E9)", () => {
   const h = harness();

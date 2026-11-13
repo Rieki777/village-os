@@ -12,6 +12,7 @@ import {
   copyPartsIn,
 } from "./client/src/lib/routePreload";
 import { pointAtUnhintedFonts } from "./client/src/lib/unhintedFonts";
+import { allLazyInBoot, bootIntrudersMessage, lazyModulesInBoot, shortId, type BootChunkFacts } from "./client/src/lib/bootSet";
 import { CopyCollector, splitLongCopy } from "./client/src/i18n/copySplit";
 import { splitArtifact, type SplitResult } from "./server/lib/groundsSplit";
 
@@ -212,6 +213,82 @@ function routeChunkPreload(): Plugin {
 }
 
 /**
+ * PRELOAD THE SHEET'S DISPLAY FACE (go-live pass, M11).
+ *
+ * Every page in the night world sets its headings in the sheet's carved face
+ * (Marcellus, `--sheet-font-display`), and the browser only asks for the file
+ * once the stylesheet has parsed and a heading needs it, so a phone painted
+ * the hero in a fallback face and swapped it late. The file is hashed, so it
+ * cannot be named in index.html by hand: this finds it in the bundle and adds
+ * one preload link. One woff2 of about 30 KB, and nothing on the JS budgets.
+ */
+const PRELOADED_FACE = /^assets\/marcellus-latin-400-normal-[\w-]+\.woff2$/;
+function preloadDisplayFace(): Plugin {
+  let base = "/";
+  return {
+    name: "preload-display-face",
+    apply: "build",
+    configResolved(config) {
+      base = config.base;
+    },
+    transformIndexHtml: {
+      order: "post",
+      handler(_html, ctx) {
+        const file = Object.keys(ctx.bundle ?? {}).find((f) => PRELOADED_FACE.test(f));
+        if (!file) return;
+        return [{ tag: "link", attrs: { rel: "preload", as: "font", type: "font/woff2", href: base + file, crossorigin: "anonymous" }, injectTo: "head-prepend" }];
+      },
+    },
+  };
+}
+
+/**
+ * FAIL THE BUILD, BY NAME, WHEN A LAZY-ONLY MODULE JOINS THE FIRST PAGE.
+ *
+ * The size budgets (scripts/check-dist-budget.mjs) say the first page got
+ * heavier and cannot say which module moved. This reads the module graph and
+ * the finished bundle and does: see client/src/lib/bootSet.ts for the rule.
+ */
+function guardBootSet(): Plugin {
+  return {
+    name: "guard-boot-set",
+    apply: "build",
+    generateBundle(_options, bundle) {
+      // Everything the entry reaches by static imports, in the module graph.
+      const eager = new Set<string>();
+      const stack: string[] = [];
+      const chunks: BootChunkFacts[] = [];
+      for (const out of Object.values(bundle)) {
+        if (out.type !== "chunk") continue;
+        chunks.push({ fileName: out.fileName, imports: out.imports, isEntry: out.isEntry, moduleIds: Object.keys(out.modules) });
+        if (out.isEntry && out.facadeModuleId) stack.push(out.facadeModuleId);
+      }
+      while (stack.length) {
+        const id = stack.pop() as string;
+        if (eager.has(id)) continue;
+        eager.add(id);
+        for (const dep of this.getModuleInfo(id)?.importedIds ?? []) stack.push(dep);
+      }
+      const root = import.meta.dirname;
+      const name = (id: string) => shortId(id, root);
+      const baselineFile = path.resolve(root, "scripts", "boot-set-baseline.json");
+      const known = new Set<string>(fs.existsSync(baselineFile) ? (JSON.parse(fs.readFileSync(baselineFile, "utf8")).modules as string[]) : []);
+      const found = lazyModulesInBoot(chunks, eager, known, name);
+      if (found.length && !process.env.BOOT_SET_WRITE) this.error(bootIntrudersMessage(found, root));
+      const now = allLazyInBoot(chunks, eager, name);
+      if (process.env.BOOT_SET_WRITE) {
+        // Writing only ever shrinks the list, once it exists: a new intruder is fixed, not recorded.
+        if (known.size > 0 && now.some((m) => !known.has(m))) this.error(`BOOT_SET_WRITE refuses to add to the baseline.\n${bootIntrudersMessage(found, root)}`);
+        fs.writeFileSync(baselineFile, JSON.stringify({ modules: now }, null, 2) + "\n");
+        return;
+      }
+      const gone = Array.from(known).filter((m) => !now.includes(m));
+      if (gone.length) this.warn(`scripts/boot-set-baseline.json lists ${gone.length} module(s) that no longer ride the first page. Shrink it with BOOT_SET_WRITE=1 pnpm build: ${gone.join(", ")}`);
+    },
+  };
+}
+
+/**
  * SMALL SHARED MODULES SHARE TWO LAZY CHUNKS.
  *
  * Rollup gives every shared module its own chunk, and CI charges every file a
@@ -243,13 +320,18 @@ function routeChunkPreload(): Plugin {
  * - Two or more importers. A module with one importer already rides in that
  *   importer's chunk, so grouping it saves nothing and only grows the group.
  */
-const SMALL_MODULE_BYTES = 9000;
+const SMALL_MODULE_BYTES = 12000;
 /**
  * The modules the entry imports statically, worked out on the first call and
  * kept for the rest of the build. `vite build` is one build per process here;
  * a `--watch` rebuild would read a stale set and only lose some grouping.
  */
 let eagerModules: Set<string> | null = null;
+/** The brochure pages' words: leaf modules with no imports of their own (see "page-copy" below). */
+const PAGE_COPY = /shared[\\/]pageContent[\\/](team|circles|opportunities|masterPlan|loveLetter|training|howWeCreate)\.ts$/;
+/** A route page, and the size under which it rides the "smallpages" chunk below. */
+const SMALL_PAGE = /client[\\/]src[\\/]pages[\\/][^\\/]+\.tsx$/;
+const SMALL_PAGE_BYTES = 7500;
 /** The natural interface kit, grouped into its own chunk below. */
 const NATURAL_KIT = /components[\\/]natural[\\/]|lib[\\/]celebrated|shared[\\/]capabilities/;
 /**
@@ -288,6 +370,7 @@ function smallGroupOf(id: string, info: ModuleInfoOf, eager: Set<string>): Small
     !eager.has(id) &&
     m.importers.length >= 2 &&
     !NATURAL_KIT.test(id) &&
+    !PAGE_COPY.test(id) &&
     !m.importers.some((by) => NATURAL_KIT.test(by)) &&
     m.importedIds.every((dep) => {
       if (dep.includes("node_modules") || eager.has(dep)) return true;
@@ -308,7 +391,7 @@ const longCopy = new CopyCollector();
 const LONG_COPY_PARTS = path.resolve(import.meta.dirname, "dist", "i18n", "parts", "en");
 
 export default defineConfig({
-  plugins: [linguiMacros(longCopy), splitLongCopy(longCopy, LONG_COPY_PARTS), react(), tailwindcss(), serveGroundsInDev(), dropLegacyWoffFallback(), useUnhintedFonts(), routeChunkPreload()],
+  plugins: [linguiMacros(longCopy), splitLongCopy(longCopy, LONG_COPY_PARTS), react(), tailwindcss(), serveGroundsInDev(), dropLegacyWoffFallback(), useUnhintedFonts(), routeChunkPreload(), preloadDisplayFace(), guardBootSet()],
   resolve: {
     alias: {
       "@": path.resolve(import.meta.dirname, "client", "src"),
@@ -426,6 +509,24 @@ export default defineConfig({
               eagerModules.add(m);
               for (const dep of getModuleInfo(m)?.importedIds ?? []) stack.push(dep);
             }
+          }
+          /*
+           * THE PAGES' OWN COPY, one chunk (batch 158). Each brochure page's
+           * words (shared/pageContent/<page>.ts) are a leaf module of 1 to 4 KB
+           * shared by its page and the admin's page editor, so rollup gave each
+           * its own file and a whole 4 KB block. Grouped, they ride one file. Only
+           * lazy ones: whatever the first page already carries stays where it is.
+           */
+          if (PAGE_COPY.test(id) && !eagerModules.has(id)) return "page-copy";
+          /*
+           * SMALL LAZY PAGES, one chunk (batch 158). A route that is a few
+           * hundred lines (the password pages, a short list) was its own 2 to 4
+           * KB file and a whole 4 KB block. Nothing imports a page but the
+           * router's React.lazy, so the group can never be imported back.
+           */
+          if (SMALL_PAGE.test(id) && !eagerModules.has(id)) {
+            const code = getModuleInfo(id)?.code;
+            if (code && code.length < SMALL_PAGE_BYTES) return "smallpages";
           }
           return smallGroupOf(id, getModuleInfo, eagerModules) ?? undefined;
         },

@@ -42,7 +42,7 @@
  * down, so this file cannot grow a seventeenth.
  */
 import { useState, useEffect, useCallback, useRef } from "react";
-import { toast } from "sonner";
+import SaveBar, { saveEach, type SaveResult } from "@/components/SaveBar";
 import { stalemateWarningFor } from "@shared/ballotSubjects";
 import { API_BASE, authHeaders, refusal } from "@/components/admin/adminApi";
 
@@ -60,6 +60,20 @@ import { API_BASE, authHeaders, refusal } from "@/components/admin/adminApi";
 
 /** What an admin does that ends the settling scroll: the page is theirs again. */
 const ADMIN_MOVES = ["wheel", "touchstart", "keydown", "pointerdown"] as const;
+
+/** The categories Game Mechanics lists first, in this order. The rest keep the order the server sent. */
+export const FIRST_CATEGORIES: readonly string[] = ["Connector"];
+
+export function orderCategories<T>(entries: Array<[string, T]>): Array<[string, T]> {
+  const rank = (c: string) => {
+    const i = FIRST_CATEGORIES.indexOf(c);
+    return i === -1 ? FIRST_CATEGORIES.length : i;
+  };
+  return entries
+    .map((e, i) => ({ e, i }))
+    .sort((a, b) => rank(a.e[0]) - rank(b.e[0]) || a.i - b.i)
+    .map((x) => x.e);
+}
 
 export default function VariablesTab({ password }: { password: string }) {
   const [vars, setVars] = useState<any[]>([]);
@@ -132,25 +146,32 @@ export default function VariablesTab({ password }: { password: string }) {
     return stop;
   }, [loading, focusKey]);
 
-  const save = async (key: string, value: string) => {
-    setSaving(key);
-    try {
-      const res = await fetch(`${API_BASE}/admin/variables/${encodeURIComponent(key)}`, {
-        method: "PUT",
-        headers: authHeaders(password, { "Content-Type": "application/json" }),
-        body: JSON.stringify({ value }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(refusal(data, "Invalid value"));
-      toast.success("Saved. The rule is live");
-      setDrafts((d) => { const n = { ...d }; delete n[key]; return n; });
-      load();
-    } catch (e: any) {
-      // Fail-loud by design: the server names exactly what's wrong (bounds,
-      // type, unknown key). Show it verbatim.
-      toast.error(e?.message || "Save failed");
-    }
+  /*
+   * Every changed dial, saved from the floating bar, each to its own route.
+   * Fail-loud by design: the server names exactly what is wrong (bounds, type,
+   * unknown key), the bar shows it verbatim beside the dial's name, and that
+   * dial keeps its typed value while the ones that landed let go.
+   */
+  const changedDials = vars.filter((v) => drafts[v.key] !== undefined && drafts[v.key] !== v.value);
+  const saveAll = async (): Promise<SaveResult> => {
+    setSaving("all");
+    const { result, failedKeys } = await saveEach(changedDials.map((v) => ({
+      key: v.key,
+      label: String(v.label ?? v.key),
+      run: async () => {
+        const res = await fetch(`${API_BASE}/admin/variables/${encodeURIComponent(v.key)}`, {
+          method: "PUT",
+          headers: authHeaders(password, { "Content-Type": "application/json" }),
+          body: JSON.stringify({ value: drafts[v.key] }),
+        });
+        if (res.ok) return null;
+        return refusal(await res.json().catch(() => ({})), "Invalid value");
+      },
+    })));
+    setDrafts((d) => Object.fromEntries(Object.entries(d).filter(([k]) => failedKeys.has(k))));
     setSaving(null);
+    load();
+    return result;
   };
 
   // Search across everything a founder might remember a dial by: its label,
@@ -175,7 +196,14 @@ export default function VariablesTab({ password }: { password: string }) {
    */
   const filtered = vars.filter((v) => !(v.modules ?? []).length).filter(matches);
   const byCategory: Record<string, any[]> = {};
+  /*
+   * THE CONNECTOR COMES FIRST (the lead, 2026-11-11: "move this box to the top
+   * of the Game Mechanics part in Admin"). The server sends categories in
+   * registry order; this puts the one named here ahead of the rest and leaves
+   * every other category where the server put it.
+   */
   for (const v of filtered) (byCategory[v.category] ??= []).push(v);
+  const categoryEntries = orderCategories(Object.entries(byCategory));
 
   return (
     <div>
@@ -251,13 +279,12 @@ export default function VariablesTab({ password }: { password: string }) {
       </div>
       {loading ? <div className="text-center py-12 text-gray-400">Loading...</div> : (
         <div className="space-y-8">
-          {Object.entries(byCategory).map(([cat, list]) => (
+          {categoryEntries.map(([cat, list]) => (
             <div key={cat}>
               <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">{cat}</h3>
               <div className="space-y-3">
                 {list.map((v) => {
                   const draft = drafts[v.key] ?? v.value;
-                  const dirty = draft !== v.value;
                   /*
                    * The founder's ruling of 2026-09-02 (Q11): a village may
                    * set a bar above 97 and the Game warns it, in words, that
@@ -328,16 +355,9 @@ export default function VariablesTab({ password }: { password: string }) {
                             className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 w-40"
                           />
                         )}
-                        <button
-                          onClick={() => save(v.key, draft)}
-                          disabled={!dirty || saving === v.key}
-                          className="text-xs bg-teal-deep text-white rounded-lg px-3 py-1.5 font-medium disabled:opacity-40"
-                        >
-                          {saving === v.key ? "Saving…" : "Save"}
-                        </button>
                         {!v.isDefault && (
                           <button
-                            onClick={() => save(v.key, v.default)}
+                            onClick={() => setDrafts((d) => ({ ...d, [v.key]: String(v.default) }))}
                             title={`Back to the platform default (${v.default})`}
                             className="text-xs text-gray-500 hover:text-gray-700 border border-gray-200 rounded-lg px-2.5 py-1.5"
                           >
@@ -358,6 +378,7 @@ export default function VariablesTab({ password }: { password: string }) {
           ))}
         </div>
       )}
+      <SaveBar count={changedDials.length} onSave={saveAll} onDiscard={() => setDrafts({})} />
     </div>
   );
 }

@@ -37,6 +37,9 @@
  * Money in the terms is a record: the drawer prints "Recorded here. Paid
  * outside the platform." beside every money row.
  */
+import { AboutYouView } from "@/components/openProposal/AboutYou";
+import TermsWeOffer, { OpenTalksWarning } from "@/components/openProposal/TermsWeOffer";
+import { ABOUT_WORDS } from "@shared/proposalAbout";
 import WorkPayBlock from "@/components/WorkPayBlock";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "wouter";
@@ -64,6 +67,7 @@ import { parseSeatSettings } from "@shared/seatSettings";
 import { WHOSE_MOVE, applicationHref, seatList, whoseMove, type ApplicationStatus } from "@shared/seatApplications";
 import { civilDayWords } from "@shared/seasonPlans";
 import { ALIGN_WORDS, intentSentence } from "@shared/alignments";
+import { CARD, CARD_FEATURED, EYEBROW, H1, H2, WORLD } from "@/components/journey/look";
 import AlignButton from "@/components/alignment/AlignButton";
 import AlignmentCard from "@/components/alignment/AlignmentCard";
 import { call as alignCall } from "@/components/alignment/alignmentsApi";
@@ -71,13 +75,20 @@ import { call as alignCall } from "@/components/alignment/alignmentsApi";
 import { ApplicantGeneKeys } from "@/components/geneKeys/ProfileGeneKeys";
 import CircleConsent from "@/components/roleProposal/CircleConsent";
 import { CONSENT_WORDS } from "@shared/roleProposalConsent";
+import YourTurn from "@/components/governance/YourTurn";
+import ConsentSeal from "@/components/governance/ConsentSeal";
 
 export const APPLICATION_WORDS = {
   membersOnly: "Members read role proposals.",
   membersOnlyLine: "A proposal carries its terms, money included, so it opens at the member rung.",
   signIn: "Sign in to read this proposal",
   wordsHeading: "In their words",
-  deliverables: "By the end of the season",
+  deliverables: "Aim and terms",
+  goals: "Goals for the first moon",
+  doneWhen: (w: string) => `Done when ${w}`,
+  moves: (w: string) => `Moves: ${w}`,
+  serves: (w: string) => `Serves the season goal: ${w}`,
+  by: (d: string) => `By ${d}`,
   why: "Why them",
   wordsRemoved: "These words were removed at the member's request.",
   holderHeading: "For the village",
@@ -97,13 +108,19 @@ export const APPLICATION_WORDS = {
   readTheVote: "Read the vote",
   laterLine: "Adopted. The roles are taken up on the first day it names.",
   packageTerms: "One set of terms covers every role above.",
+  /** Decider calm: the side that holds the round, and the one door lit when it is the reader's turn. */
+  roundLabel: "The circle's answer",
+  turnConsent: "Go to the circle's answer",
+  turnConsentLine: "The circle asked you, and your answer is still open.",
+  turnAdopt: "Go to the village's card",
+  turnAdoptLine: "You hold the power to adopt this for the village.",
 } as const;
 
 /**
  * The application's terms in the Settings drawer, open. The card prints pay in
  * words only, so the drawer is where a holder reads the figures they adopt.
  */
-function TermsDrawer({ app }: { app: ServedApplication }) {
+function TermsDrawer({ app, namePartner = true }: { app: ServedApplication; namePartner?: boolean }) {
   const villagePresets = useVillagePresets();
   const parsed = parseSeatSettings(app.settings);
   const marks = app.alignment ? { state: app.alignment.state, sealed: app.alignment.sealed, parties: app.alignment.parties } : null;
@@ -131,6 +148,7 @@ function TermsDrawer({ app }: { app: ServedApplication }) {
       adopted={adopted}
       alignment={marks}
       defaultOpen
+      namePartner={namePartner}
     />
   );
 }
@@ -142,12 +160,14 @@ function ApplicationCard({ app }: { app: ServedApplication }) {
     <ApplicantGeneKeys userId={app.candidate.id} firstName={(app.candidate.name ?? "The candidate").split(" ")[0]} />
     <PlayerRoleCard
       applicationId={app.id}
-      mode="proposal"
+      // Once adopted the card reads as hers: the model fills it from the adopted application (verify item 7).
+      mode={app.status === "adopted" ? "adopted" : "proposal"}
       fallback={<SeatCards app={app} />}
       footer={
         <div data-package-terms="" className="sheet-night mt-6 rounded-xl bg-card p-4 text-foreground">
           {app.seats.length > 1 && <p className="mb-3 text-sm text-muted-foreground">{APPLICATION_WORDS.packageTerms}</p>}
-          <TermsDrawer app={app} />
+          {/* The card above names who fills an open row, so the drawer under it does not name them again (verify B4). */}
+          <TermsDrawer app={app} namePartner={false} />
         </div>
       }
     />
@@ -229,6 +249,8 @@ export default function SeatApplication() {
   const [said, setSaid] = useState<{ ok: boolean; text: string } | null>(null);
   // Withdraw asks once before it acts (red team U1).
   const [asking, setAsking] = useState(false);
+  // Adopting while a setting is still being talked about asks once more (joining lane PR 4).
+  const [knowsOpenTalks, setKnowsOpenTalks] = useState(false);
 
   const load = useCallback(async () => {
     const answer = await fetchApplication(id);
@@ -269,10 +291,25 @@ export default function SeatApplication() {
   // "Record the adoption", once the circle has consented to a role proposal (role proposals PR D).
   const record = app?.proposal?.consent?.record ?? null;
 
+  /*
+   * THE READER'S TURN (decider calm): the one place a light goes on this page.
+   * Asked by the circle and not yet answered comes first; then a holder of the
+   * power who may adopt. Each is the server's own answer (`you.mayAnswer`,
+   * `you.mayAdopt`), read here and never decided here, and the door leads to
+   * the round or the holder's card without choosing anything in it.
+   */
+  const waitsOnHolder = app?.status === "awaiting-holder";
+  const askedToConsent = !!(waitsOnHolder && !app?.proposal?.decided && app?.proposal?.consent?.you.mayAnswer);
+  const turn: { to: string; label: string; line: string } | null = askedToConsent
+    ? { to: "#the-round", label: APPLICATION_WORDS.turnConsent, line: APPLICATION_WORDS.turnConsentLine }
+    : waitsOnHolder && app?.you?.holdsThePower && app.you.mayAdopt && !app.you.isCandidate
+      ? { to: "#sa-holder-card", label: APPLICATION_WORDS.turnAdopt, line: APPLICATION_WORDS.turnAdoptLine }
+      : null;
+
   const back = (
     <Link
       href="/decisions"
-      className="inline-flex min-h-[44px] items-center gap-1.5 text-sm font-medium text-stone-600 hover:text-teal-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
+      className="inline-flex min-h-[44px] items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-notice focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
       <ArrowLeft className="w-4 h-4" aria-hidden="true" />
       Every decision
@@ -282,11 +319,12 @@ export default function SeatApplication() {
   if (!user || state === "members") {
     return (
       <Layout>
+        <div className={WORLD}>
         <div className="container max-w-3xl px-4 py-8">
           {back}
-          <div className="mt-6 rounded-xl border border-stone-200 bg-white p-8 text-center">
-            <h1 className="font-display text-2xl font-bold text-stone-900">{APPLICATION_WORDS.membersOnly}</h1>
-            <p className="mx-auto mt-2 max-w-md text-stone-600 leading-relaxed">{APPLICATION_WORDS.membersOnlyLine}</p>
+          <div className={`${CARD} mt-6 text-center`}>
+            <h1 className={H2}>{APPLICATION_WORDS.membersOnly}</h1>
+            <p className="mx-auto mt-2 max-w-md text-muted-foreground leading-relaxed">{APPLICATION_WORDS.membersOnlyLine}</p>
             {!user && (
               <div className="mt-5">
                 <SignInDoors next={`/role-applications/${encodeURIComponent(id)}`} />
@@ -294,30 +332,36 @@ export default function SeatApplication() {
             )}
           </div>
         </div>
+        </div>
       </Layout>
     );
   }
 
   return (
     <Layout>
-      <div className="container max-w-3xl px-4 py-8">
+      <div className={WORLD}>
+      {/* Decider calm: from lg up, the person's words at reading width on the left
+          and the round beside them, so nobody decides without the words in view.
+          A phone reads them one after the other, with the turn under the thumb. */}
+      <div className={`container max-w-3xl px-4 py-8 lg:max-w-6xl${turn ? " pb-32 lg:pb-8" : ""}`}>
         {back}
         {state === "loading" && (
           <div className="flex justify-center py-16">
             <BreathingLoader label="Reading the proposal" />
           </div>
         )}
-        {state === "missing" && <p className="mt-6 text-stone-700">There is no application at this address.</p>}
+        {state === "missing" && <p className="mt-6 text-foreground">There is no application at this address.</p>}
         {state === "error" && (
-          <p role="alert" className="mt-6 text-coral">
+          <p role="alert" className="mt-6 text-destructive">
             {error}
           </p>
         )}
         {state === "ready" && app && (
-          <article className="mt-3 space-y-8">
+          <article className="mt-3 space-y-8 lg:grid lg:grid-cols-[minmax(0,1fr)_24rem] lg:items-start lg:gap-10 lg:space-y-0">
+            <div className="min-w-0 max-w-3xl space-y-8">
             <header>
-              <p className="text-sm font-semibold text-teal-deep">{app.statusWords}</p>
-              <h1 className="mt-1 font-display text-3xl font-bold text-stone-900">
+              <p className={EYEBROW}>{app.statusWords}</p>
+              <h1 className={`${H1} mt-1`}>
                 {app.candidate.name ?? "A former member"} proposes to hold {seatList(app.seats.map((s) => s.name))}
               </h1>
               {/* Guide v2: whose move it is, first. */}
@@ -325,7 +369,7 @@ export default function SeatApplication() {
                 <span className="font-semibold">{`${WHOSE_MOVE}: `}</span>
                 {whoseMove(app.status as ApplicationStatus, app.you)}
               </p>
-              <p className="mt-2 text-stone-600 leading-relaxed">
+              <p className="mt-2 text-muted-foreground leading-relaxed">
                 {app.term.followsSeason
                   ? `Until the season ends on ${civilDayWords(app.term.endsOn)}.`
                   : `Until ${civilDayWords(app.term.endsOn)}.`}
@@ -338,81 +382,116 @@ export default function SeatApplication() {
             {/* THE WORDS EVERY PARTY ALIGNS WITH (PR5), as stored, with the parties' chips and, for a party, Align. */}
             {app.alignment && <AlignmentCard alignment={app.alignment} applicationId={app.id} onChanged={() => void load()} />}
             {app.supersedesId && (
-              <p className="text-sm text-stone-700">
+              <p className="text-sm text-foreground">
                 {APPLICATION_WORDS.amends}{" "}
-                <a href={applicationHref(app.supersedesId)} className="inline-flex min-h-11 items-center font-semibold text-teal-deep underline underline-offset-2">
+                <a href={applicationHref(app.supersedesId)} className="inline-flex min-h-11 items-center font-semibold text-notice underline underline-offset-2">
                   {APPLICATION_WORDS.readEarlier}
                 </a>
               </p>
             )}
 
-            <section aria-labelledby="sa-words">
-              <h2 id="sa-words" className="text-lg font-bold text-stone-900">
+            <section aria-labelledby="sa-words" className={CARD}>
+              <h2 id="sa-words" className={H2}>
                 {APPLICATION_WORDS.wordsHeading}
               </h2>
-              {app.deliverables || app.note ? (
+              {app.deliverables || app.note || app.goals?.length ? (
                 <dl className="mt-3 space-y-4">
                   {app.deliverables && (
                     <div>
-                      <dt className="text-sm font-semibold text-stone-700">{APPLICATION_WORDS.deliverables}</dt>
-                      <dd className="mt-1 whitespace-pre-wrap text-stone-900">{app.deliverables}</dd>
+                      <dt className="text-sm font-semibold text-foreground">{APPLICATION_WORDS.deliverables}</dt>
+                      <dd className="mt-1 whitespace-pre-wrap text-foreground">{app.deliverables}</dd>
+                    </div>
+                  )}
+                  {!!app.goals?.length && (
+                    <div data-application-goals="">
+                      <dt className="text-sm font-semibold text-muted-foreground">{APPLICATION_WORDS.goals}</dt>
+                      <dd className="mt-1">
+                        <ol className="space-y-3">
+                          {app.goals.map((g, i) => (
+                            <li key={i} className="rounded-lg border border-border bg-card p-3 text-foreground" data-goal={i + 1}>
+                              <p className="whitespace-pre-wrap font-medium">{g.title}</p>
+                              {g.doneWhen && <p className="mt-1 text-sm text-muted-foreground">{APPLICATION_WORDS.doneWhen(g.doneWhen)}</p>}
+                              {g.moves && <p className="mt-1 text-sm text-muted-foreground">{APPLICATION_WORDS.moves(g.moves)}</p>}
+                              {g.serves && <p className="mt-1 text-sm text-muted-foreground">{APPLICATION_WORDS.serves(g.serves)}</p>}
+                              {g.date && <p className="mt-1 text-sm text-muted-foreground">{APPLICATION_WORDS.by(g.date)}</p>}
+                            </li>
+                          ))}
+                        </ol>
+                      </dd>
                     </div>
                   )}
                   {app.note && (
                     <div>
-                      <dt className="text-sm font-semibold text-stone-700">{APPLICATION_WORDS.why}</dt>
-                      <dd className="mt-1 whitespace-pre-wrap text-stone-900">{app.note}</dd>
+                      <dt className="text-sm font-semibold text-foreground">{APPLICATION_WORDS.why}</dt>
+                      <dd className="mt-1 whitespace-pre-wrap text-foreground">{app.note}</dd>
                     </div>
                   )}
                 </dl>
               ) : (
-                <p className="mt-2 text-stone-600">{APPLICATION_WORDS.wordsRemoved}</p>
+                <p className="mt-2 text-muted-foreground">{APPLICATION_WORDS.wordsRemoved}</p>
               )}
             </section>
 
+            {app.offer && <TermsWeOffer offer={app.offer} mayEdit={!!app.you?.mayEditTerms} savePath={`/api/governance/role-applications/${encodeURIComponent(app.id)}/terms`} onSaved={() => void load()} />}
+            <AboutYouView about={app.aboutYou} />
+            {typeof app.referencesGiven === "number" && (
+              <p className="text-sm text-muted-foreground" data-references-given="">
+                {ABOUT_WORDS.given(app.referencesGiven)}
+              </p>
+            )}
+
+            </div>
+
+            <aside className="space-y-6 lg:sticky lg:top-24" aria-label={APPLICATION_WORDS.roundLabel} data-the-round-side="">
+            {turn && <YourTurn shape="sticky" to={turn.to} label={turn.label} line={turn.line} />}
+
             {/* A role proposal: where the circle's consent stands, and an asked holder's Consent or Object (PR D). */}
             {app.proposal?.consent && (
+              <div id="the-round" className="scroll-mt-24 rounded-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
               <CircleConsent
                 applicationId={app.id}
                 consent={app.proposal.consent}
                 decided={app.proposal.decided}
                 waiting={app.status === "awaiting-holder"}
                 onAnswered={() => void load()}
+                seal={ConsentSeal}
               />
+              </div>
             )}
 
             {/* Who adopts it in this village, read on the server from who holds the power (E8). */}
             {app.status === "awaiting-holder" && app.whoAdopts && (
-              <p className="text-sm text-stone-700" data-who-adopts="">
+              <p className="text-sm text-foreground" data-who-adopts="">
                 {app.whoAdopts}
               </p>
             )}
 
             {app.status === "voting" && app.ballotId && (
-              <section className="rounded-xl border border-stone-200 bg-stone-50 p-4">
-                <p className="text-stone-800">{app.carried ? `${app.statusWords}.` : APPLICATION_WORDS.votingLine}</p>
+              <section className="rounded-xl border border-border bg-muted p-4">
+                <p className="text-foreground">{app.carried ? `${app.statusWords}.` : APPLICATION_WORDS.votingLine}</p>
                 <Link
                   href={`/decisions/${app.ballotId}`}
-                  className="mt-2 inline-flex min-h-[44px] items-center font-semibold text-teal-deep hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
+                  className="mt-2 inline-flex min-h-[44px] items-center font-semibold text-notice hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   {APPLICATION_WORDS.readTheVote}
                 </Link>
               </section>
             )}
-            {app.status === "adopted" && app.startsOn && <p className="text-stone-700">{APPLICATION_WORDS.laterLine}</p>}
+            {app.status === "adopted" && app.startsOn && <p className="text-foreground">{APPLICATION_WORDS.laterLine}</p>}
 
             {app.you && app.status === "awaiting-holder" && app.you.holdsThePower && (
-              <section aria-labelledby="sa-holder" className="rounded-xl border-2 border-teal-deep/40 bg-white p-5">
-                <h2 id="sa-holder" className="text-lg font-bold text-stone-900">
+              <section id="sa-holder-card" aria-labelledby="sa-holder" className={`${CARD_FEATURED} scroll-mt-24 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring`}>
+                <h2 id="sa-holder" className="text-lg font-bold text-foreground">
                   {APPLICATION_WORDS.holderHeading}
                 </h2>
                 {app.you.isCandidate ? (
-                  <p className="mt-1 text-stone-700">{APPLICATION_WORDS.ownTerms}</p>
+                  <p className="mt-1 text-foreground">{APPLICATION_WORDS.ownTerms}</p>
                 ) : (
-                  <p className="mt-1 text-stone-700">
+                  <p className="mt-1 text-foreground">
                     {record ? CONSENT_WORDS.recordLine : app.proposal?.changesRoles ? APPLICATION_WORDS.powerLine : APPLICATION_WORDS.holderLine}
                   </p>
                 )}
+                {app.you.mayAdopt && app.offer && <div className="mt-3"><OpenTalksWarning settings={app.offer.openTalks} confirmed={knowsOpenTalks} onConfirm={setKnowsOpenTalks} /></div>}
                 <div className="mt-4 flex flex-wrap gap-2">
                   {app.you.mayAdopt && (
                     // The holder's adopt click IS the village's alignment. Money terms may ask the re-confirm first.
@@ -420,8 +499,8 @@ export default function SeatApplication() {
                     <AlignButton
                       label={record ?? ALIGN_WORDS.forTheVillage}
                       sentence={intentSentence(app.seats.map((x) => x.name), true)}
-                      disabled={busy}
-                      onAlign={() => alignCall<any>(`/api/governance/role-applications/${encodeURIComponent(app.id)}/adopt`, "POST")}
+                      disabled={busy || (!!app.offer?.openTalks.length && !knowsOpenTalks)}
+                      onAlign={() => alignCall<any>(`/api/governance/role-applications/${encodeURIComponent(app.id)}/adopt`, "POST", knowsOpenTalks ? { confirmOpenTalks: true } : undefined)}
                       onDone={(data) => {
                         // A role proposal answers with its decision record, which names a role, never a person.
                         const text = typeof data?.decided === "string" ? data.decided : typeof data?.message === "string" ? data.message : "Adopted for the village.";
@@ -435,7 +514,7 @@ export default function SeatApplication() {
                       type="button"
                       disabled={busy}
                       onClick={() => void act(() => putApplicationToVillage(app.id), "The village is voting on it now.")}
-                      className="inline-flex min-h-[44px] items-center gap-2 rounded-lg border border-stone-400 px-5 text-sm font-semibold text-stone-800 hover:bg-stone-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
+                      className="inline-flex min-h-[44px] items-center gap-2 rounded-lg border border-border px-5 text-sm font-semibold text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
                       <Send className="w-4 h-4" aria-hidden="true" />
                       {APPLICATION_WORDS.putToVillage}
@@ -450,15 +529,15 @@ export default function SeatApplication() {
                 type="button"
                 disabled={busy}
                 onClick={() => setAsking(true)}
-                className="inline-flex min-h-[44px] items-center gap-2 rounded-lg px-4 text-sm font-medium text-stone-700 hover:bg-stone-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep disabled:opacity-50"
+                className="inline-flex min-h-[44px] items-center gap-2 rounded-lg px-4 text-sm font-medium text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
               >
                 <Undo2 className="w-4 h-4" aria-hidden="true" />
                 {APPLICATION_WORDS.withdraw}
               </button>
             )}
             {app.you?.mayWithdraw && asking && (
-              <div role="group" aria-label={APPLICATION_WORDS.withdraw} className="rounded-xl border border-stone-300 bg-white p-4">
-                <p className="text-stone-800">{APPLICATION_WORDS.withdrawAsk}</p>
+              <div role="group" aria-label={APPLICATION_WORDS.withdraw} className="rounded-xl border border-border bg-card p-4">
+                <p className="text-foreground">{APPLICATION_WORDS.withdrawAsk}</p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   <button
                     type="button"
@@ -467,14 +546,14 @@ export default function SeatApplication() {
                       setAsking(false);
                       void act(() => withdrawApplication(app.id), "Withdrawn.");
                     }}
-                    className="inline-flex min-h-[44px] items-center rounded-lg bg-coral px-4 text-sm font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep disabled:opacity-50"
+                    className="inline-flex min-h-[44px] items-center rounded-lg bg-destructive px-4 text-sm font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
                   >
                     {APPLICATION_WORDS.withdrawYes}
                   </button>
                   <button
                     type="button"
                     onClick={() => setAsking(false)}
-                    className="inline-flex min-h-[44px] items-center rounded-lg border border-stone-300 px-4 text-sm font-medium text-stone-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
+                    className="inline-flex min-h-[44px] items-center rounded-lg border border-border px-4 text-sm font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     {APPLICATION_WORDS.withdrawNo}
                   </button>
@@ -483,12 +562,14 @@ export default function SeatApplication() {
             )}
 
             {said && (
-              <p role={said.ok ? "status" : "alert"} className={`text-sm font-medium ${said.ok ? "text-sage" : "text-coral"}`}>
+              <p role={said.ok ? "status" : "alert"} className={`text-sm font-medium ${said.ok ? "text-open" : "text-destructive"}`}>
                 {said.text}
               </p>
             )}
+            </aside>
           </article>
         )}
+      </div>
       </div>
     </Layout>
   );

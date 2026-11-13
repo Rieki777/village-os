@@ -64,6 +64,15 @@ describe("Register", () => {
     expect(screen.getByLabelText(/confirm password/i)).toBeInTheDocument();
   });
 
+  it("keeps the act within a thumb's reach on a phone and in the form's flow from sm up (rehearsal: 983px down at 390)", async () => {
+    renderRegister();
+    const submit = await screen.findByRole("button", { name: /create account/i });
+    const holder = submit.parentElement!;
+    expect(holder.className.split(/\s+/)).toEqual(expect.arrayContaining(["sticky", "bottom-3", "sm:static"]));
+    // Inside the form, so the pin ends where the form ends and the Google door below never sits under it.
+    expect(holder.closest("form")).not.toBeNull();
+  });
+
   it("refuses to submit when the passwords do not match, without calling register", async () => {
     const user = userEvent.setup();
     renderRegister();
@@ -154,8 +163,10 @@ describe("Register", () => {
     renderRegister();
     const signIn = screen.getByRole("link", { name: /sign in/i });
     const classes = signIn.className.split(/\s+/);
-    expect(classes).toContain("text-amber-ink");
+    // The page stands on the night ground now (docs/DESIGN_RULE.md): the link is gold, never a brand ink.
+    expect(classes).toContain("text-notice");
     expect(classes).not.toContain("text-amber");
+    expect(classes).not.toContain("text-amber-ink");
   });
 
   it("keeps the path pills off text-amber/text-teal/text-teal-light as foreground text (contrast regression guard)", async () => {
@@ -232,13 +243,16 @@ describe("Register, in a village that joins by invitation", () => {
     expect(await screen.findByText(/adopted your application for Garden Steward and Welcome Host/)).toBeInTheDocument();
     await waitFor(() => expect((screen.getByLabelText(/^name$/i) as HTMLInputElement).value).toBe("Juno Reed"));
     expect((screen.getByLabelText(/^email$/i) as HTMLInputElement).value).toBe("juno@example.com");
-    // Joining to hold roles: the steward's path is already picked, and can be changed.
+    // Joining to hold roles: the steward's path is the answer, so the picker is not asked again (audit M7).
+    expect(screen.queryByText(/choose your path/i)).toBeNull();
     registerMock.mockResolvedValueOnce(undefined);
     const user = userEvent.setup();
     await user.type(screen.getByLabelText(/^password$/i), "hunter2-long");
     await user.type(screen.getByLabelText(/confirm password/i), "hunter2-long");
     await user.click(screen.getByRole("button", { name: /create account/i }));
     expect(registerMock).toHaveBeenCalledWith("Juno Reed", "juno@example.com", "hunter2-long", ["steward"], "TOKEN-FROM-WREN");
+    // And they land on their profile, where the steps before the role starts are, not on the character picker.
+    await waitFor(() => expect(window.location.pathname).toBe("/profile"));
   });
 
   it("counts the days down only when the invitation is about to end (R47)", async () => {

@@ -13,7 +13,6 @@
  */
 import { useEffect, useState } from "react";
 import { useLingui } from "@lingui/react/macro";
-import { ALIGN_WORDS } from "@shared/alignments";
 import type { ServedLetter } from "@shared/membershipLetter";
 import { fetchMyAlignments } from "@/components/alignment/alignmentsApi";
 
@@ -109,14 +108,15 @@ export function MembershipAtApplication({
         <input
           type="checkbox"
           required
-          className="mt-1 size-4 shrink-0 accent-primary"
+          className="mt-0.5 size-5 shrink-0 accent-notice"
           checked={choice.kind === "aligned"}
           onChange={(e) => onChoice(e.target.checked ? { kind: "aligned", letterVersion: letter.version } : { kind: "none" })}
         />
         {letter.intent}
       </label>
       <p className="text-xs text-muted-foreground">
-        {ALIGN_WORDS.waysOfSigning} {t`It takes effect once you confirm your address, and you won't be asked again when you make your account. No payment is asked: any contribution the letter suggests stays your choice.`}
+        {/* The lead deleted "Aligning is the village's way of signing" from the review step (batch 158). */}
+        {t`It takes effect once you confirm your address, and you won't be asked again when you make your account. No payment is asked: any contribution the letter suggests stays your choice.`}
       </p>
     </div>
   );

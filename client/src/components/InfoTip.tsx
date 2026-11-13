@@ -69,9 +69,48 @@
  * crowdpool pieces), so the two tooltip families read as one voice.
  */
 import { decayReachSentence } from "@shared/tokenScale";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 
 const PLAQUE_MAX_W = 264;
+
+/**
+ * THE WORDED TRIGGER'S 44px TAP AREA (nightly rehearsal, 11 Nov 2026). The
+ * rehearsal measured worded triggers at 16 to 22px tall on a 390px phone (a
+ * role card's "Commitment", a card's eyebrow headings). Padding grows the
+ * button's own box, so the area a thumb hits IS the box every measurement
+ * reads, and an equal negative margin gives the same space back, so the line
+ * the words sit on keeps its height and nothing around it moves. A 16px line
+ * becomes a 44px target; a taller line only grows. The width grows by an
+ * invisible inset either side: horizontal padding with a matching negative
+ * margin was measured wrapping a short word one letter per line ("rol" became
+ * 24 by 116 on /roles at 390), because the trigger may break anywhere. It is
+ * the default for a worded trigger; a caller passing `triggerClassName`
+ * chooses its own.
+ */
+export const WORDED_TAP = "relative py-3.5 -my-3.5 before:absolute before:inset-y-0 before:-inset-x-2.5 before:content-['']";
+/** How far WORDED_TAP grows the box on each side vertically, so the plaque still opens beside the words. */
+const WORDED_PAD_Y = 14;
+/** The smallest box a thumb is asked to hit, in CSS pixels (WCAG 2.5.5). */
+export const TAP_MIN = 44;
+
+/**
+ * How far a worded trigger narrower than TAP_MIN grows on each side, and the
+ * style that does it. The rehearsal (11 Nov 2026) measured "role" at 35px wide
+ * on /roles at 390: WORDED_TAP's inset widens the hit area, and a measurement
+ * of the button's own box cannot see a pseudo-element. Padding with an equal
+ * negative margin grows the box and gives the space back, so the words stay
+ * where they were. A word that short never needs to wrap, and `nowrap` with no
+ * max width is what stops the padding wrapping it one letter per line.
+ */
+export function widenStyle(naturalWidth: number): React.CSSProperties | undefined {
+  if (!(naturalWidth > 0) || naturalWidth >= TAP_MIN) return undefined;
+  // One pixel spare: offsetWidth rounds, and a 23.6px word read as 24 fell 0.4px short.
+  const side = Math.ceil((TAP_MIN + 1 - naturalWidth) / 2);
+  // maxWidth: the trigger's `max-w-full` is measured against its wrapper, which
+  // the negative margins keep at the words' own width, so it would clamp the
+  // grown box straight back to the words (measured: "role" stayed 35px).
+  return { paddingLeft: side, paddingRight: side, marginLeft: -side, marginRight: -side, whiteSpace: "nowrap", maxWidth: "none" };
+}
 
 interface InfoTipProps {
   /** The plain mechanics, one to three short sentences. Text only. */
@@ -87,9 +126,25 @@ interface InfoTipProps {
    * its own fixed size.
    */
   triggerClassName?: string;
+  /**
+   * The bare mark's own box at 44px (TAP_MIN), for a page whose phone layout
+   * is measured box by box (the /quests board, 12 Nov 2026). The circle stays
+   * 16px and sits in the middle; negative margins give the extra space back,
+   * so the sentence around it keeps its line and nothing moves.
+   */
+  tapBox?: boolean;
 }
 
-export default function InfoTip({ tip, children, label, className = "", triggerClassName = "" }: InfoTipProps) {
+/** The bare mark grown to a 44px box with its 16px footprint kept (`tapBox`). */
+export const BARE_TAP_BOX =
+  "group relative inline-flex items-center justify-center align-middle size-11 -my-3.5 -ml-2.5 -mr-3.5 rounded-full cursor-help select-none focus-visible:outline-none";
+/** The 16px circle drawn inside BARE_TAP_BOX. */
+const BARE_TAP_MARK =
+  "inline-flex items-center justify-center w-4 h-4 rounded-full border border-current/40 text-[10px] leading-none opacity-70 group-hover:opacity-100 group-focus-visible:opacity-100 group-focus-visible:ring-2 group-focus-visible:ring-teal-deep/60";
+
+export default function InfoTip({ tip, children, label, className = "", triggerClassName = "", tapBox = false }: InfoTipProps) {
+  const tap = triggerClassName || WORDED_TAP;
+  const padded = children != null && tap.includes(WORDED_TAP);
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<{ top: number; left: number; above: boolean } | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
@@ -100,11 +155,32 @@ export default function InfoTip({ tip, children, label, className = "", triggerC
   // ignores mouseleave and closes on outside tap, Escape, or a second tap.
   const pinned = useRef(false);
   const id = useId();
+  // A short worded trigger's natural width, measured once it is laid out.
+  const [natural, setNatural] = useState(0);
+  useLayoutEffect(() => {
+    const el = triggerRef.current;
+    if (!padded || !el) return;
+    // offsetWidth is the laid-out box, untouched by an entrance animation's
+    // transform, and the observer measures again whenever the words change
+    // size (a web font arriving, a language switch).
+    const measure = () => {
+      const pad = (parseFloat(el.style.paddingLeft) || 0) * 2;
+      setNatural(el.offsetWidth - pad);
+    };
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const watch = new ResizeObserver(measure);
+    watch.observe(el);
+    return () => watch.disconnect();
+  }, [padded, children]);
 
   const place = () => {
     const el = triggerRef.current;
     if (!el) return;
-    const r = el.getBoundingClientRect();
+    const box = el.getBoundingClientRect();
+    // The padded tap area is not where the words are: open beside the words.
+    const pad = padded ? WORDED_PAD_Y : 0;
+    const r = { left: box.left, width: box.width, top: box.top + pad, bottom: box.bottom - pad };
     const vw = window.innerWidth;
     const vh = window.innerHeight;
     const w = Math.min(PLAQUE_MAX_W, vw - 16);
@@ -176,8 +252,11 @@ export default function InfoTip({ tip, children, label, className = "", triggerC
         onMouseLeave={() => {
           if (!pinned.current) setOpen(false);
         }}
+        style={padded ? widenStyle(natural) : undefined}
         className={
-          bare
+          bare && tapBox
+            ? BARE_TAP_BOX
+            : bare
             // `before:-inset-1.5` grows the TOUCH TARGET and nothing else.
             // Measured on a real 390px phone: this control is 16 by 16 CSS
             // pixels, and WCAG 2.5.8 asks 24 by 24 at AA, so a thumb was being
@@ -186,10 +265,10 @@ export default function InfoTip({ tip, children, label, className = "", triggerC
             // reflow every one of them; an invisible inset pseudo-element
             // takes the hit area to 28 by 28 and moves no layout anywhere.
             ? "relative inline-flex items-center justify-center align-middle w-4 h-4 ml-1 rounded-full border border-current/40 text-[10px] leading-none opacity-70 hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep/60 cursor-help select-none before:absolute before:-inset-1.5 before:content-['']"
-            : `underline decoration-dotted decoration-1 underline-offset-4 cursor-help rounded-sm max-w-full text-left [overflow-wrap:anywhere] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep/60 ${triggerClassName}`
+            : `underline decoration-dotted decoration-1 underline-offset-4 cursor-help rounded-sm max-w-full text-left [overflow-wrap:anywhere] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep/60 ${tap}`
         }
       >
-        {bare ? <span aria-hidden="true">?</span> : children}
+        {bare ? <span aria-hidden="true" className={tapBox ? BARE_TAP_MARK : undefined}>?</span> : children}
       </button>
       <span
         id={id}

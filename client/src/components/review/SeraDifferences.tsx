@@ -146,7 +146,7 @@ export function SeraSummaryLine({ read, witness }: { read: SeraRead; witness: nu
   if (sera === 0 && witness === 0) return null;
   const agent = read.phase === "listed" ? read.list.agent : "";
   const parts: ReactNode[] = [];
-  const link = "text-teal-deep underline hover:text-teal-deep-dark";
+  const link = "text-notice underline hover:text-foreground";
   if (sera > 0)
     parts.push(
       <a key="sera" href="#sera-changes" className={link}>
@@ -433,7 +433,7 @@ function SeraList({
 
   const pressed = (on: boolean) =>
     `min-h-[44px] px-3.5 rounded-full border text-sm ${
-      on ? `bg-teal-deep border-teal-deep text-white font-semibold hover:bg-teal-deep-dark ${ring}` : "bg-card border-border text-foreground font-medium hover:bg-muted"
+      on ? `bg-teal-deep border-notice text-white font-semibold hover:bg-teal-deep-dark ${ring}` : "bg-card border-border text-foreground font-medium hover:bg-muted"
     }`;
   const chipRow = waiting.length > 0 && (
     <div className="flex flex-col gap-3">
@@ -561,8 +561,8 @@ function SeraList({
   const troubleCards = trouble && (
     <>
       {trouble.noAnswer ? (
-        <section aria-labelledby={`${ids}-err`} className={`bg-card border border-coral rounded-xl p-3.5 flex flex-col gap-2.5`}>
-          <h3 id={`${ids}-err`} className="text-base font-bold text-coral">
+        <section aria-labelledby={`${ids}-err`} className={`bg-card border border-destructive rounded-xl p-3.5 flex flex-col gap-2.5`}>
+          <h3 id={`${ids}-err`} className="text-base font-bold text-destructive">
             <Trans context="sera changes">{agent} didn't answer at {lastAt}</Trans>
           </h3>
           {trouble.lines.map((l) => (

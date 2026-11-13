@@ -15,6 +15,7 @@
  */
 import type { Pool, PoolConnection, ResultSetHeader, RowDataPacket } from "mysql2/promise";
 import type { InterviewState, ScoreEntry, ScoreLevel, StepKind } from "../../shared/applicationReview";
+import { parseBookingUrl } from "../../shared/roleBooking";
 
 type Db = Pool | PoolConnection;
 
@@ -115,11 +116,13 @@ const ivOf = (r: any): StoredInterview => ({
 });
 
 /** Write the ordered interviews; the first opens now, the rest wait. Idempotent on (ref, position). */
-export async function insertInterviews(db: Db, ref: string, list: ReadonlyArray<{ roleId: string; minutes: number; final: boolean }>, at: Date): Promise<void> {
+/** The role's conversations, copied in order. The first opens at once unless our review comes first (`openFirst` false): then every one waits for the invitation. */
+export async function insertInterviews(db: Db, ref: string, list: ReadonlyArray<{ roleId: string; minutes: number; final: boolean }>, at: Date, openFirst = true): Promise<void> {
   for (let i = 0; i < list.length; i++) {
+    const open = i === 0 && openFirst;
     await db.query(
       "INSERT IGNORE INTO application_interviews (application_ref, position, interviewer_role_id, minutes, is_final, state, opened_at) VALUES (?,?,?,?,?,?,?)",
-      [ref, i + 1, list[i].roleId, list[i].minutes, list[i].final ? 1 : 0, i === 0 ? "open" : "waiting", i === 0 ? at : null],
+      [ref, i + 1, list[i].roleId, list[i].minutes, list[i].final ? 1 : 0, open ? "open" : "waiting", open ? at : null],
     );
   }
 }
@@ -322,6 +325,16 @@ export async function agentRoleNamesInCircles(db: Db, circleIds: readonly string
     [[...circleIds]],
   );
   return rows.map((r: any) => String(r.name));
+}
+
+/**
+ * Each role's booking link (`org_roles.booking_url`, 0362), read as `parseBookingUrl` allows it: an https
+ * link or nothing. The applicant books a conversation through the link of the role that holds it.
+ */
+export async function bookingUrlsById(db: Db, ids: readonly string[]): Promise<Map<string, string | null>> {
+  if (!ids.length) return new Map();
+  const [rows] = await db.query<RowDataPacket[]>("SELECT id, booking_url FROM org_roles WHERE id IN (?)", [[...ids]]);
+  return new Map(rows.map((r: any) => [String(r.id), parseBookingUrl(r.booking_url)]));
 }
 
 export async function roleNamesById(db: Db, ids: readonly string[]): Promise<Map<string, string>> {

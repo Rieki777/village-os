@@ -28,11 +28,13 @@
  * Phone first: the design's own breakpoints, one column at 375px, every
  * control at least 44px, long words wrap, nothing wider than the screen.
  */
+import CircleName from "@/components/circles/CircleName";
 import { useContext, useState, type ReactNode } from "react";
 import { Link } from "wouter";
 import { CARD_WORDS as W, type RoleOut, type Slot } from "@shared/playerCard";
 import type { RoleEditKey } from "@shared/playerCardEdit";
 import type { HealthOut } from "@shared/playerCardHealth";
+import { roleCommitmentPct } from "@shared/playerCardHero";
 import { ROLE_HANDOVER_WORDS, runbookIsLink } from "@shared/roleHandover";
 import { ROLE_CCOS_WORDS } from "@shared/roleCcos";
 import type { HoldingKey } from "@shared/playerCardCcos";
@@ -144,6 +146,10 @@ export function RoleInFull({ role, health = null }: { role: RoleOut; health?: He
   const draws = (slot: Slot<unknown>): boolean => slot.kind === "shown" || (slot.kind === "empty" && editing);
   const headingId = `${role.anchor}-h`;
   const time = role.time.text;
+  // A role whose card states a commitment shows that (in the parameters block below), and its legacy time chip stays quiet (audit M2).
+  // The card's own `card.commitmentPct` counts, and so do agreed terms the model laid over it (verify report B3).
+  const statesCommitment = roleCommitmentPct({ cardSeat: role.cardSeat }) !== null;
+  const chipTime = time.kind === "shown" && !statesCommitment;
   const exists = role.existsWhile.text;
   const holding = role.holdingWell.parts.filter((p) => draws(p.text));
   // A decided proposal's confirmation, kept here: adopting the last one empties its panel.
@@ -166,14 +172,14 @@ export function RoleInFull({ role, health = null }: { role: RoleOut; health?: He
         {role.title}
       </h3>
 
-      {role.chips.length || role.circle || time.kind === "shown" || powers.length || role.plays ? (
+      {role.chips.length || role.circle || chipTime || powers.length || role.plays ? (
         <ul className="pc-chips" aria-label="About this role">
           {keyRole ? <li className="pc-chip pc-gold">{W.keyRole}</li> : null}
           {role.circle ? (
             <li>
               {/* The circle this role sits in, linked to that circle's card. */}
               <Link href={role.circle.href} className="pc-chip">
-                {role.circle.name}
+                <CircleName name={role.circle.name} anchor={role.circle.anchor} />
               </Link>
             </li>
           ) : null}
@@ -182,7 +188,7 @@ export function RoleInFull({ role, health = null }: { role: RoleOut; health?: He
               {c}
             </li>
           ))}
-          {time.kind === "shown" ? (
+          {chipTime && time.kind === "shown" ? (
             <li className={`pc-chip${timeChanged ? ` ${GOLD_FRAME}` : ""}`} data-role-chip="time">
               <CardTerm term={role.time.term}>{time.value}</CardTerm>
             </li>

@@ -27,6 +27,7 @@ import { MINT_RULE, SUBJECT_THRESHOLDS, VILLAGE_LAUNCH } from "./ballotSubjects"
 import { isAnchorDateAcceptable } from "./villageMoon";
 import { villageSeasonsProblem } from "./villageSeasons";
 import { CHANGE_SET_CAP_DEFAULT, CHANGE_SET_CAP_KEY, CHANGE_SET_CAP_MAX, CHANGE_SET_CAP_MIN } from "./changeSetCap";
+import { CONFLICT_INTRO_DEFAULT, CONFLICT_INTRO_KEY } from "./conflictIntro";
 import { GATHERING_LIMIT_DEFAULT, GATHERING_LIMIT_KEY, REVIEW_DAYS_DEFAULT, REVIEW_DAYS_KEY } from "./changeRequestLimits";
 
 export type VariableType = "integer" | "decimal" | "percentage" | "boolean" | "choice" | "text" | "longtext";
@@ -2521,6 +2522,45 @@ export const VARIABLES: VariableDef[] = [
     default: "",
   },
   {
+    key: "org.applicant_reply_days",
+    category: "The village's people",
+    label: "Days we promise to reply to a role proposal",
+    description:
+      "The number of days the applicant's status page says we reply within. It is a promise to the person, so set the number the people who reply can keep. The reminder to the role that sends first replies runs on its own clock (3 business days) and is not changed by this.",
+    type: "integer",
+    default: "7",
+    min: 1,
+    max: 60,
+    unit: "days",
+  },
+  {
+    key: "org.review_before_conversations",
+    category: "The village's people",
+    label: "Review each application before the conversations",
+    description:
+      "On, an application waits for our review once its address confirms: a holder of the power to place people in roles invites the applicant to the conversations, in the order the role names them, or sends the not-invited letter, which thanks them and points to open ways to stay close. The first conversation opens only with the invitation, and the circle is asked to consent once the conversations are written up. Off, the first conversation opens as the address confirms. An application keeps the setting it confirmed under.",
+    type: "boolean",
+    default: "false",
+  },
+  {
+    key: "org.stay_close_name",
+    category: "The village's people",
+    label: "The way to stay close, named in the not-invited letter",
+    description:
+      "The name of the village's open way in for someone not invited to a role, such as its supporters' circle. The not-invited letter and the status page point to it first, then to quests and events. Leave it empty and they point to quests and events only.",
+    type: "text",
+    default: "",
+  },
+  {
+    key: "org.stay_close_link",
+    category: "The village's people",
+    label: "Where the way to stay close is",
+    description:
+      "A page of this site, such as /resident, or an https address. Used only when the way to stay close has a name.",
+    type: "text",
+    default: "",
+  },
+  {
     key: "org.sync_starts_unlisted",
     category: "The village's people",
     label: "Roles accepted from a sync start unlisted",
@@ -2543,7 +2583,7 @@ export const VARIABLES: VariableDef[] = [
     category: "The village's people",
     label: "A role needs a complete card before anyone can apply",
     description:
-      "On, a role whose card is not complete shows \"Being written\" in place of Apply, and the open form leaves it out. A card is complete when its aim, what it decides on, what it answers for, rough hours, track, reward type, term, a village goal, selection criteria and interviewing roles are written, and, for a paid role, a pay range is on offer. Off, Apply shows on every open role as before.",
+      "On, a role whose card is not complete shows \"Being written\" in place of Apply, and the open form leaves it out. A card is complete when its aim, what it decides on, what it answers for, commitment, track, reward type, term, a village goal, selection criteria and interviewing roles are written, and, for a paid role, a pay range is on offer. Off, Apply shows on every open role as before.",
     type: "boolean",
     default: "false",
   },
@@ -2573,6 +2613,154 @@ export const VARIABLES: VariableDef[] = [
       "Each heading on a circle card, and on each role in full on a player's card, is plain words, like \"What we look after\" or \"What I can decide on my own\". On, hovering or tapping a heading also shows the matching heading in the CCOS Circle Charter or Role Card, like \"CCOS: Domains\", for a village that writes its charters and roles with it. Off keeps the plain headings and shows no term.",
     type: "boolean",
     default: "true",
+  },
+  {
+    key: CONFLICT_INTRO_KEY,
+    category: "The village's people",
+    label: "How we see conflict, before the conflict steps",
+    description:
+      "The paragraph above the conflict steps on /roles and /governance, under How we evolve through conflict: how this village sees conflict, in its own words. Empty, the steps show with no paragraph above them.",
+    type: "longtext",
+    default: CONFLICT_INTRO_DEFAULT,
+  },
+  {
+    key: "org.founding_team",
+    category: "The village's people",
+    label: "Feature the founding team on the Roles page",
+    description:
+      "On, the top of the Roles and Circles page is a quiet \"Join the founding team\" section: the paid founding roles the village is hiring for, each with its full card and one Apply act. The roles are the ones written in \"The founding team's roles\". Off, the page opens on the roles and circles as before.",
+    type: "boolean",
+    default: "false",
+  },
+  {
+    key: "org.founding_team_roles",
+    category: "The village's people",
+    label: "The founding team's roles",
+    description:
+      "The roles the founding team section features, in the order they show: paste each role id from the org chart, separated by commas or new lines. A role that is unlisted, ended or held as an example is left out of the section. Empty, the section shows nothing.",
+    type: "text",
+    default: "",
+  },
+  {
+    key: "org.show_pay_ranges",
+    category: "The village's people",
+    label: "Show pay ranges on role cards",
+    description:
+      "Off, no role card shows a pay range or an amount to visitors or members, whatever a role's terms hold: a card shows how pay works (its shares) instead. On, an open listed role whose terms name a pay range shows that range on its card to everyone. People who hold the power to read terms still read the full terms either way.",
+    type: "boolean",
+    default: "false",
+  },
+  {
+    key: "org.pay_shape",
+    category: "The founding team",
+    label: "How rewards work, on every role card",
+    description:
+      "The shape of the pay every role card shows under \"How rewards work\", as shares of the whole, never an amount: write each share's name and percent, separated by commas, like Cash 60, Equity 40, Credits 0. The shares add up to 100 or less, and a share at 0 still shows, as 0%. A role whose card writes its own shares shows those instead. Empty, cards show no pay shape.",
+    type: "text",
+    default: "",
+  },
+  {
+    key: "org.pay_shape_at_risk",
+    category: "The founding team",
+    label: "The at-risk line under the pay shape",
+    description:
+      "One line under the shares on every role card, in the village's words, saying which part of the pay depends on what the village raises or earns. No amounts. Empty, no line.",
+    type: "text",
+    default: "",
+  },
+  {
+    key: "org.pay_shape_note",
+    category: "The founding team",
+    label: "The note under the pay shape",
+    description:
+      "The last line under the pay shape on every role card, like Indicative only. Terms are still being defined and are subject to legal review. No amounts. A role's card may write its own. A note that starts with * puts a matching * after the card's total compensation line, so it reads as that line's fine print. Empty, no note.",
+    type: "text",
+    default: "",
+  },
+
+  // ── The founding team (Phase A, 11 Nov 2026) ─────────────────────────────
+  //
+  // The application for a listed role (/propose-a-role) reads its own village
+  // words from here (shared/foundingApplication.ts): the ways to get to know
+  // us and the first cycle. The pay shape it shows is the role cards' own
+  // setting (`org.pay_shape` and its two lines), so the two never disagree.
+  {
+    key: "org.founding_know_us",
+    category: "The founding team",
+    label: "Ways to get to know us before applying",
+    description:
+      "The first step of the application lists these, one per line, and the applicant ticks the ones they have done. The step never stops anyone applying. Up to eight lines.",
+    type: "longtext",
+    default: "Join a community call\nVisit the land\nShare a meal with us",
+  },
+  {
+    key: "org.founding_know_us_note",
+    category: "The founding team",
+    label: "The note while a way to get to know us is not ticked",
+    description: "Shown on the first step of the application whenever a way is not ticked yet. It encourages, and the applicant can always continue.",
+    type: "longtext",
+    default:
+      "We encourage you to do these, but if you haven't, you can still apply, especially if you've been invited to, or if you live far away and the next call is more than a week away, or if you feel you're an incredibly strong candidate.",
+  },
+  {
+    key: "org.founding_first_cycle",
+    category: "The founding team",
+    label: "What the first cycle looks like",
+    description: "Shown on the Your first day step of the application: how long the first cycle is, when it runs, and that either side may end it there after the first full moon cycle.",
+    type: "longtext",
+    default: "Your first cycle is one month. At its end, either side may choose to stop there, with thanks.",
+  },
+  {
+    key: "org.founding_first_conversations",
+    category: "The founding team",
+    label: "The first conversations after joining",
+    description: "Shown on the Your first day step: the first conversations a new team member has once they are chosen, one per line. Leave it empty and none are listed.",
+    type: "longtext",
+    default: "",
+  },
+  {
+    key: "org.founding_updated_note",
+    category: "The founding team",
+    label: "A note when the application changes",
+    description:
+      "Shown under the application's title while it is set, for example: We updated this application on 14 November. Your saved answers are still here. Empty, no note.",
+    type: "text",
+    default: "",
+  },
+  // "Other ways to join" on the Roles page: the resident path and the gifts tile. shared/otherWays.ts
+  // holds the same keys and defaults, and shared/otherWays.test.ts holds the two equal.
+  // The resident path tile goes to the way to stay close (org.stay_close_link), or /resident while that is empty.
+  {
+    key: "org.other_ways_seeder_title",
+    category: "The founding team",
+    label: "Other ways to join: the resident path tile",
+    description: "The first tile under Other ways to join on the Roles page. It goes to the way to stay close, or to the resident page while that is empty.",
+    type: "text",
+    default: "Become a Founding Seeder",
+  },
+  {
+    key: "org.other_ways_seeder_line",
+    category: "The founding team",
+    label: "Other ways to join: the line under the resident path tile",
+    description: "One short line under the resident path tile.",
+    type: "text",
+    default: "Live here one day? Start on the resident path.",
+  },
+  {
+    key: "org.other_ways_gifts_title",
+    category: "The founding team",
+    label: "Other ways to join: the gifts tile",
+    description: "The tile under Other ways to join that goes to the work-with-us page, for volunteering and work-trade.",
+    type: "text",
+    default: "Offer your gifts",
+  },
+  {
+    key: "org.other_ways_gifts_line",
+    category: "The founding team",
+    label: "Other ways to join: the line under the gifts tile",
+    description: "One short line under the gifts tile.",
+    type: "text",
+    default: "Volunteer or work-trade: tell us what you would like to give.",
   },
 
   // ── Events (0059; visible in Admin only while the module is non-off) ─────
@@ -3711,6 +3899,26 @@ export const VARIABLES: VariableDef[] = [
     label: "Every member has a task board unless a steward turns one off",
     description:
       "When on, every member has a task board on their profile unless a steward turns theirs off, and a member linked to Organisational Memory has their tasks brought in. When off, a board stays off until a steward turns it on for that member, which is how boards worked before.",
+    type: "boolean",
+    default: "true",
+  },
+
+  // ── The connector: writes the lead approves in the chat ───────────────────
+  //
+  // READ by server/routes/agentMcp.ts on every `admin_request` call, and by
+  // the agent paths list when a person saves it (server/routes/agentAccounts.ts).
+  // The ruling and the exact list are in shared/agentAdmin.ts, beside
+  // LEAD_APPROVED_WRITES. ON by default since 2026-11-11 (the lead's ruling): the
+  // agent's allow-list (agent-admin-paths) is still saved only by a person, and
+  // every write still carries a person's approval note, so on opens nothing by
+  // itself. With it set off, the connector does only what it did before. No
+  // variable under `agents.` is one an agent may set itself.
+  {
+    key: "agents.lead_approved_writes",
+    category: "Connector",
+    label: "Our agent may make the changes we approve in the chat",
+    description:
+      "When on, the village connector, acting for the person who connected it, may write a role's words, draft the wording of its terms, seat and unseat a person, and change the village's own wording, each time a person has approved it in the chat. Every seating names who approved it and quotes the approval, and every admin and founder is told. Pay, money, erasure, secrets, agent accounts and powers stay a person's act. It is on by default because it opens nothing by itself: the list of paths the agent may use is still edited only by a person, and every write still needs the approval note from the person in the chat. Off, the connector does only what it did before.",
     type: "boolean",
     default: "true",
   },

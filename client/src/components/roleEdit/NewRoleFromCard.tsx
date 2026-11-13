@@ -6,6 +6,8 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { Trans, useLingui } from "@lingui/react/macro";
+import CirclePicker from "@/components/circles/CirclePicker";
+import type { PickerCircle } from "@shared/circlePicker";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { FOCUS, INPUT, LEDE, PRIMARY, SECONDARY } from "@/components/roleProposal/parts";
 import { newFromFile, newFromText, type NewFromCard } from "./roleEditApi";
@@ -14,7 +16,7 @@ type Mode = "paste" | "file" | "link";
 
 export default function NewRoleFromCard({ onClose, onMade }: { onClose: () => void; onMade?: (roleId: string) => void }) {
   const { t } = useLingui();
-  const [circles, setCircles] = useState<Array<{ id: string; name: string }>>([]);
+  const [circles, setCircles] = useState<PickerCircle[]>([]);
   const [circleId, setCircleId] = useState("");
   const [mode, setMode] = useState<Mode>("paste");
   const [pasted, setPasted] = useState("");
@@ -30,7 +32,7 @@ export default function NewRoleFromCard({ onClose, onMade }: { onClose: () => vo
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         if (!live || !d || !Array.isArray(d.circles)) return;
-        setCircles(d.circles.filter((c: any) => c && !c.isExample && typeof c.id === "string").map((c: any) => ({ id: String(c.id), name: String(c.name ?? c.id) })));
+        setCircles(d.circles.filter((c: any) => c && !c.isExample && typeof c.id === "string").map((c: any) => ({ id: String(c.id), name: String(c.name ?? c.id), status: c.status ? String(c.status) : null, isAnchor: !!c.isAnchor, parentCircleId: c.parentCircleId ?? null })));
       })
       .catch(() => {});
     return () => {
@@ -70,10 +72,7 @@ export default function NewRoleFromCard({ onClose, onMade }: { onClose: () => vo
         </DialogDescription>
         <label className="space-y-1 text-sm font-semibold">
           <span><Trans context="new role from a card">Circle</Trans></span>
-          <select className={INPUT} value={circleId} onChange={(e) => setCircleId(e.target.value)} aria-label={t({ message: "Circle", context: "new role from a card" })}>
-            <option value="">{"-"}</option>
-            {circles.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
+          <CirclePicker className={INPUT} circles={circles} value={circleId} onChange={setCircleId} autoDefault leading={<option value="">{"-"}</option>} />
         </label>
         <div className="flex flex-wrap gap-2">
           {(["paste", "file", "link"] as const).map((m) => (

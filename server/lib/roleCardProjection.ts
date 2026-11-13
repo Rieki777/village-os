@@ -19,8 +19,10 @@ import { invitesApplications, isListed } from "../../shared/roleListing";
 import { conversationModeOf } from "../../shared/interviewerRoles";
 import { roleCardGate } from "../../shared/roleParams";
 import { payStatesRange, publicPayOf } from "../../shared/rolePublicPay";
-import { readTermsOffer } from "../../shared/seatTermsOffer";
+import { publicTermsOf, readTermsOffer } from "../../shared/seatTermsOffer";
 import type { OrgRole } from "./orgChart";
+import { mayHold, readHeldBy } from "../../shared/agentHolders";
+import { boolVar } from "./variables";
 
 export interface RoleCardTier {
   terms: boolean;
@@ -48,6 +50,7 @@ export function gateOf(role: OrgRole, defaultTrack?: string | null) {
       domain: role.domain,
       accountabilities: role.accountabilities,
       timeCommitment: role.timeCommitment,
+      commitmentPct: role.commitmentPct ?? settings?.clocks?.commitmentPct ?? null,
       track: trackOf(role.track, defaultTrack),
       payKind: pay?.kind ?? null,
       hasRange: payStatesRange(pay),
@@ -69,6 +72,12 @@ export interface CardVillageWords {
   paidConsentCircle?: string | null;
   /** The track a role without one reads as (`org.default_track`, guide v2), or null for none. */
   defaultTrack?: string | null;
+  /**
+   * Whether a card shows its pay range to everyone (`org.show_pay_ranges`, phase A). Absent reads
+   * the village's setting, so every host that builds a card (the org, the map, a circle's card)
+   * hides the range the moment the village turns it off.
+   */
+  showPayRanges?: boolean;
 }
 
 export function roleCard(
@@ -94,9 +103,19 @@ export function roleCard(
     whereWorked: role.whereWorked ?? null,
     languages: role.languages ?? null,
     reviewAfterDays: role.reviewAfterDays ?? null,
+    // The commitment the role asks (joining lane PR 3): energy and attention, never hours. A planning signal read by no pay code.
+    // 0383: the stored value wins; a role with none still reads its terms on offer.
+    commitmentPct: role.commitmentPct ?? publicTermsOf(role.termsOffer).commitmentPct,
+    // 0383: whether the role needs its whole commitment. The roles list hides a required role that asks more than a member can give.
+    commitmentRequired: role.commitmentRequired === true,
+    // Joining lane PR 2 (0370): a check happens for this role whatever the references say; the forms tell the applicant.
+    alwaysChecked: role.alwaysChecked === true,
+    // 0374: who the card says may hold it (null: not said), and whether an agent may, the unsaid read as either.
+    heldBy: readHeldBy(role.heldBy),
+    agentMayHold: mayHold(role.heldBy, "agent"),
     firstConversation: opts.words?.firstConversationRole ?? null,
     ...(isPaid(role, pay?.kind, opts.words?.defaultTrack) && opts.words?.paidConsentCircle ? { consentCircle: opts.words.paidConsentCircle } : {}),
-    ...(pay && open && isListed(role) ? { publicPay: pay } : {}),
+    ...(pay && open && isListed(role) && (opts.words?.showPayRanges ?? boolVar("org.show_pay_ranges")) ? { publicPay: pay } : {}),
     ...(tier.terms ? { budgetLine: role.budgetLine ?? null, fundedFrom: role.fundedFrom ?? null } : {}),
     ...(tier.editing ? { accessBundle: role.accessBundle ?? null, bookingUrl: role.bookingUrl ?? null } : {}),
   };

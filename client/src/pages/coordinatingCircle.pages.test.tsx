@@ -17,7 +17,7 @@
  * with nothing saved, beside them.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { Router } from "wouter";
 import type { ReactNode } from "react";
 
@@ -131,6 +131,13 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+/** The roles sit behind step one (the archetype pick) until "See all roles"; a seat link, or a URL a test before left behind, opens them already. */
+async function openAllRoles() {
+  await waitFor(() => expect(screen.queryByRole("button", { name: "See all roles" }) ?? screen.queryAllByRole("heading", { level: 3 })[0]).toBeTruthy());
+  const seeAll = screen.queryByRole("button", { name: "See all roles" });
+  if (seeAll) fireEvent.click(seeAll);
+}
+
 const page = (node: ReactNode) => render(<Router>{node}</Router>);
 
 describe("/circles", () => {
@@ -147,7 +154,7 @@ describe("/circles", () => {
 
   it("never tells the top circle it is linked to itself", async () => {
     page(<Circles />);
-    fireEvent.click((await screen.findByRole("heading", { level: 3, name: "Hearth Council" })).closest("button")!);
+    fireEvent.click((await screen.findByRole("heading", { level: 3, name: /Hearth Council$/ })).closest("button")!);
 
     expect(document.body.textContent).not.toContain("double-linked to the Hearth Council so information flows");
     expect(screen.getByText(/Each circle has autonomy within its domain and budget and uses consent-based decision-making\./)).toBeInTheDocument();
@@ -183,7 +190,7 @@ describe("/circles with nothing saved (a new village's starter words)", () => {
   it("never tells the top circle it sits under itself", async () => {
     circlesWords = null;
     page(<Circles />);
-    fireEvent.click((await screen.findByRole("heading", { level: 3, name: "Hearth Council" })).closest("button")!);
+    fireEvent.click((await screen.findByRole("heading", { level: 3, name: /Hearth Council$/ })).closest("button")!);
 
     expect(document.body.textContent).not.toContain(said("card", "linked").replace("{coordinator}", "Hearth Council"));
     expect(document.body.textContent).toContain(said("card", "flat"));
@@ -203,6 +210,8 @@ describe("/circles with nothing saved (a new village's starter words)", () => {
 describe("/roles", () => {
   it("names the village's own top circle where its circles nest under one", async () => {
     page(<Roles />);
+    // The roles sit behind step one (the archetype pick) until "See all roles".
+    await openAllRoles();
     await screen.findByRole("heading", { level: 3, name: "Water Keeper" });
 
     expect(screen.getByText(/and links back to the Hearth Council\.$/)).toBeInTheDocument();
@@ -212,6 +221,8 @@ describe("/roles", () => {
   it("names no circle in a village whose circles are flat", async () => {
     org = FLAT;
     page(<Roles />);
+    // The roles sit behind step one (the archetype pick) until "See all roles".
+    await openAllRoles();
     await screen.findByRole("heading", { level: 3, name: "Water Keeper" });
 
     expect(screen.getByText("Working groups with real authority. Each circle has an aim (what it works toward) and a domain (what it decides on).")).toBeInTheDocument();

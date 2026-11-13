@@ -18,9 +18,12 @@
  *      draws nothing. `null` or an empty list is "read, and empty", and comes
  *      out with its own words.
  *   2. A ROLE IS NAMED BY ITS FULL TITLE, `org_roles.name` verbatim.
- *   3. NO PERSON IS NAMED. A holder arrives as a handle for the link to their
- *      card and nothing else, and the link's words name the role. The adoption
- *      record says how the words were adopted, never by whom.
+ *   3. NO PERSON IS NAMED TO A VISITOR. A holder arrives as a handle for the
+ *      link to their card, and the link's words name the role. A signed-in
+ *      member whose account is live also reads each holder's FIRST NAME
+ *      (`holderNames`, lead 12 Nov 2026), decided on the server; a visitor's
+ *      card carries none, and never a surname. The adoption record says how
+ *      the words were adopted, never by whom.
  *   4. EVERY HEADING IS PLAIN WORDS, with its CCOS term beside it for the
  *      hover, or `null` where the village turned the terms off.
  */
@@ -67,6 +70,8 @@ export interface CircleIn {
   purpose: string | null;
   /** `circles.status`: active, forming or dormant. */
   status: string | null;
+  /** This circle is the village's anchor (from data, shared/circlePicker.ts). */
+  anchor?: boolean;
   /** The circle this one sits in, when it sits in one. */
   parent: { id: string; name: string } | null;
 }
@@ -90,6 +95,11 @@ export interface CircleRoleIn {
    * A holder with no account or no handle is `null` and gets no link.
    */
   holderHandles: Read<(string | null)[]>;
+  /**
+   * The holders' first names, read only for a signed-in member whose account
+   * is live (server/lib/circleCardData.ts); `undefined` for a visitor.
+   */
+  holderNames?: Read<string[]>;
   /**
    * What the role pays (server/lib/workPay.ts), at the `terms.read` tier, so
    * the Apply link never sits beside a role whose pay the reader has not seen
@@ -191,6 +201,8 @@ export interface RoleRowOut {
   filled: boolean;
   /** One link per member holder with a card, each named by the role it holds. */
   holderCards: { href: string; label: string; ariaLabel: string }[];
+  /** "Held by Ana and Cai", for a live member only; null for a visitor and for a role nobody holds. */
+  holderLine: string | null;
   /** Apply for it: an open or partly filled real role. */
   applyHref: string | null;
   applyLabel: string;
@@ -227,6 +239,7 @@ export interface CircleCard {
   header: {
     eyebrow: string;
     name: string;
+    anchor?: boolean;
     parent: { name: string; href: string; label: string } | null;
     /** "Forming" or "Resting"; null for an active circle. */
     status: string | null;
@@ -294,6 +307,7 @@ function roleRow(r: CircleRoleIn, asMember: boolean, circleId: string): RoleRowO
     stateWords: words,
     filled,
     holderCards,
+    holderLine: W.heldByNames((r.holderNames ?? []).map((n) => n.trim()).filter(Boolean)),
     // The member door, back to this circle's card; a visitor gets the open form (role audit, 10 Nov 2026).
     applyHref: mayApply ? (asMember ? applySeatsHref([r.id], { from: circleCardHref(circleId) }) : openProposalHref(r.id)) : null,
     applyLabel: W.apply,
@@ -432,6 +446,7 @@ export function buildCircleCard(input: CircleCardIn): CircleCard {
     header: {
       eyebrow: W.eyebrow,
       name: clean(circle.name) ?? circle.id,
+      anchor: circle.anchor === true,
       parent: circle.parent
         ? { name: circle.parent.name, href: circleCardHref(circle.parent.id), label: W.partOf }
         : null,
@@ -462,4 +477,37 @@ export function buildCircleCard(input: CircleCardIn): CircleCard {
     pendingWords: W.pending,
     proposals: (input.proposals ?? []).map((p) => proposalOut(p, timeZone)),
   };
+}
+
+// ── What a reader who cannot propose words sees ─────────────────────────────
+
+/**
+ * THE CARD WITH ONLY ITS WRITTEN WORDS (QA2-06, 12 Nov 2026): a visitor, or a
+ * member who cannot propose words for this circle, sees only the headings that
+ * have words. Each of the circle's own words that is "read, and empty" (the
+ * charter lists, the values, the purpose and "This circle exists while") is
+ * turned into "unread", which draws nothing, so the public page never reads
+ * "Not written yet" under heading after heading. Those who may propose words
+ * keep the empty slots, because that is where "Propose new words" sits.
+ *
+ * Facts the village reads for itself (the roles, the signs, the meetings, the
+ * review and the adoption record) are left as they are: their empty words
+ * say something true, such as "No roles yet".
+ *
+ * The purpose section stays while "This circle exists while" is written, since
+ * the header draws that line inside it.
+ */
+export function writtenOnly(card: CircleCard): CircleCard {
+  const quiet = <T>(slot: Slot<T>): Slot<T> => (slot.kind === "empty" ? UNREAD : slot);
+  const existsWhile = quiet(card.header.existsWhile);
+  const sections: CircleSection[] = [];
+  for (const s of card.sections) {
+    if (s.kind === "text") {
+      if (s.slot.kind === "empty" && existsWhile.kind !== "shown") continue;
+      sections.push({ ...s, slot: quiet(s.slot) });
+    } else if (s.kind === "list") sections.push({ ...s, slot: quiet(s.slot) });
+    else if (s.kind === "values") sections.push({ ...s, slot: quiet(s.slot) });
+    else sections.push(s);
+  }
+  return { ...card, header: { ...card.header, existsWhile }, sections };
 }

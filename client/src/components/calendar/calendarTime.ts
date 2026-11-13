@@ -294,11 +294,20 @@ export function moonDayLine(info: LunarDayInfo, moonOneCycle: number | null): st
 /** Kinds the sky writes; drawn as glyphs in cells rather than as list rows. */
 export const SKY_KINDS = new Set(["sky"]);
 
+/**
+ * A gathering's dot is the night world's gold (batch 157, C3 Q4): the same
+ * `notice` token the moon spiral rings a gathering day with and the legend
+ * names, so the list, the month, the week and the year all mark a gathering
+ * in the colour the moon does. In the night world it resolves to
+ * `--sheet-earned` (8.95:1 on the ground); the fallback is that gold.
+ */
+export const GATHERING_DOT = "var(--color-notice, #dfab4d)";
+
 /** A colour per kind when the row carries none. */
 export function kindColour(item: Pick<CalendarItem, "kind" | "colour">): string {
   if (item.colour) return item.colour;
   switch (item.kind) {
-    case "gathering": return "var(--tone-brand, #157f7d)";
+    case "gathering": return GATHERING_DOT;
     case "festival": return "var(--tone-sun, #ecb163)";
     case "quest-window": return "#15803d";
     case "season": return "#65a30d";

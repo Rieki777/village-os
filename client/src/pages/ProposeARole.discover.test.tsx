@@ -11,12 +11,15 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { OPEN_WORDS } from "@shared/openProposals";
 import { IKIGAI_KEY } from "@shared/roleDiscover";
 
+// fillGoals is audit B1's helper; the walk along the six steps is the test kit's.
+import { SETUP, fillGoals, sendNow } from "@/test/proposeStones";
+
 vi.mock("@/components/Layout", () => ({ default: ({ children }: { children: React.ReactNode }) => <div>{children}</div> }));
 vi.mock("@/contexts/AuthContext", () => ({ useOptionalAuth: () => ({ user: null }) }));
 
 import ProposeARole from "./ProposeARole";
 
-const FORM = { open: true, village: "Test Village", season: { id: "s", name: "S", startsOn: "2099-01-01" }, roles: [{ id: "r-gate", name: "Gate Keeper", circle: "Land Circle", aim: null }] };
+const FORM = { open: true, village: "Test Village", season: { id: "s", name: "S", startsOn: "2099-01-01" }, roles: [{ id: "r-gate", name: "Gate Keeper", circle: "Land Circle", aim: null }], founding: SETUP };
 /** The membership letter the form aligns with (PR-E, Rye's answer 8): its own sentence is the one box about it. */
 const LETTER = { version: "lv-0123456789abcdef", title: "Membership agreement", body: "Dear friend, welcome home.", intent: "I align with the Membership agreement.", parts: {} };
 let posted: any[] = [];
@@ -37,24 +40,28 @@ function serve() {
 }
 
 async function fillAndSend() {
-  fireEvent.click((await screen.findByText("Gate Keeper")).closest("[data-role]")!.querySelector("input[type=checkbox]")!);
+  await screen.findByRole("heading", { name: OPEN_WORDS.heading("Gate Keeper") });
   fireEvent.change(screen.getByLabelText(OPEN_WORDS.nameLabel), { target: { value: "Rowan" } });
   fireEvent.change(screen.getByLabelText(OPEN_WORDS.emailLabel), { target: { value: "a@b.test" } });
-  // Form v2 (#1071): the aim and the terms are required.
+  // Form v2 (#1071): the aim and the commitment are required (the terms step, joining lane PR 3).
   fireEvent.change(screen.getByLabelText(OPEN_WORDS.aimLabel), { target: { value: "Food grown here." } });
-  fireEvent.click(screen.getByLabelText("I accept the terms on offer."));
+  fireEvent.change(screen.getByLabelText("Your commitment"), { target: { value: "50" } });
   const why = screen.getByLabelText(OPEN_WORDS.whyLabel) as HTMLTextAreaElement;
   const before = why.value;
   // The agreements as PR-E draws them: the membership letter aligned with here, the NDA promised for once approved.
   fireEvent.click(await screen.findByLabelText(LETTER.intent));
   fireEvent.click(screen.getByLabelText(/confidentiality agreement before I see/));
-  fireEvent.click(screen.getByRole("button", { name: OPEN_WORDS.send }));
+  // About you: no references, so the background-check consent is ticked (joining lane PR 2).
+  fireEvent.click(screen.getByLabelText(/agree to the background check/i));
+  fillGoals();
+  sendNow();
   await screen.findByRole("heading", { name: "Check your email" });
   return before;
 }
 
 beforeEach(() => {
   try { localStorage.clear(); } catch { /* jsdom */ }
+  window.history.pushState({}, "", "/propose-a-role?role=r-gate");
 });
 afterEach(() => {
   cleanup();
@@ -73,7 +80,7 @@ describe("the open form after the discover step", () => {
     expect(posted).toHaveLength(1);
     const keys = Object.keys(posted[0].body).sort();
     // `membership` is PR-E's letter version (Rye's answer 8): an `lv-` fingerprint, never a discover value.
-    expect(keys).toEqual(["aim", "card", "email", "hp", "link", "membership", "name", "roles", "why"].filter((k) => keys.includes(k)));
+    expect(keys).toEqual(["about", "aim", "card", "checkConsent", "email", "hp", "knowUs", "link", "locale", "membership", "name", "references", "roles", "why"].filter((k) => keys.includes(k)));
     expect(posted[0].body.membership).toEqual({ letterVersion: LETTER.version });
     expect(posted[0].body.why).toContain("growing food");
     expect(posted[0].raw).not.toMatch(/Projector|humanDesign|geneKeys|ikigai/i);
@@ -83,7 +90,7 @@ describe("the open form after the discover step", () => {
     localStorage.setItem(IKIGAI_KEY, JSON.stringify({ answers: { love: "growing food" }, carry: false }));
     serve();
     render(<ProposeARole />);
-    await screen.findByText("Gate Keeper");
+    await screen.findByRole("heading", { name: OPEN_WORDS.heading("Gate Keeper") });
     expect((screen.getByLabelText(OPEN_WORDS.whyLabel) as HTMLTextAreaElement).value).toBe("");
   });
 });

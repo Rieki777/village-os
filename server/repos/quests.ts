@@ -12,9 +12,11 @@
  * paths; `consentedCounts()` (grouped) exists so listing N members costs one
  * query, not N.
  */
-import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
+import type { Pool, PoolConnection, ResultSetHeader, RowDataPacket } from "mysql2/promise";
+import { rootsFrom } from "../../shared/archetypeRoots";
 import { parseRewardRange } from "../../shared/questRewards";
 import { readValueTokens, readWorkValue, valueTokensToStore, type TokenAmount } from "../../shared/workValue";
+import { storedCommitmentPct } from "../../shared/commitment";
 import { lostConcurrencyRace } from "../db/concurrency";
 import { calendarRemove, calendarUpsert } from "../lib/calendar";
 import { questCalendarInput } from "../lib/calendarProviders";
@@ -88,6 +90,12 @@ export interface QuestRecord {
   /** The advertised label, verbatim â€” "50-100", "75". A contract, never coerced. */
   gratitude: string;
   duration?: string | null;
+  /**
+   * How much of a person the quest asks, a whole percent from 1 to 100 (0383),
+   * beside the `duration` words. NULL: not sized. Store and display only:
+   * nothing that pays reads it (shared/commitment.ts).
+   */
+  commitmentPct?: number | null;
   difficulty?: string | null;
   circle?: string | null;
   status: string;
@@ -131,6 +139,16 @@ export interface QuestRecord {
   cashMinor?: number | null;
   /** The village's currency when the cash was set, stamped by the server. */
   cashCurrency?: string | null;
+  /**
+   * The roots this quest grows from (0069's `archetypes`; the five archetypes
+   * as roots, 11 Nov 2026): one to three archetype keys, or none yet. A lens
+   * and never a gate: no claim reads it. Written only by `setQuestRoots`, never
+   * by the save path above, so an older editor that does not send it cannot
+   * clear it.
+   */
+  archetypes?: string[];
+  /** True while the roots are still the boot seed's guess and nobody has confirmed them. */
+  archetypesSuggested?: boolean;
 }
 
 /**
@@ -194,7 +212,7 @@ const QUEST_SELECT =
   // is_example is selected so consumers can filter. Without it no downstream
   // code could tell an example quest from a real one â€” the work-exchange
   // suggester was offering seeded quests to real guests as paid work.
-  "SELECT id, title, subtitle, description, impact, story, first_step, steps, deliverable, tips, image_url, gratitude, duration, difficulty, circle, status, icon, role_required, min_stage, requires_role, stay_credit_reward, tags, sort_order, is_example, starts_at, ends_at, due_at, value_minor, value_currency, value_tokens, cash_minor, cash_currency FROM quests";
+  "SELECT id, title, subtitle, description, impact, story, first_step, steps, deliverable, tips, image_url, gratitude, duration, difficulty, circle, status, icon, role_required, min_stage, requires_role, stay_credit_reward, tags, sort_order, is_example, starts_at, ends_at, due_at, value_minor, value_currency, value_tokens, cash_minor, cash_currency, archetypes, archetypes_suggested, commitment_pct FROM quests";
 
 /** JSON column â†’ string array, tolerant of junk: an empty list renders fine. */
 function toList(v: unknown): string[] {
@@ -222,6 +240,7 @@ function rowToQuest(r: RowDataPacket): QuestRecord {
     imageUrl: r.image_url ?? null,
     gratitude: String(r.gratitude ?? ""),
     duration: r.duration ?? null,
+    commitmentPct: storedCommitmentPct(r.commitment_pct),
     difficulty: r.difficulty ?? null,
     circle: r.circle ?? null,
     status: String(r.status ?? "open"),
@@ -242,6 +261,8 @@ function rowToQuest(r: RowDataPacket): QuestRecord {
     valueTokens: readValueTokens(r.value_tokens),
     cashMinor: readWorkValue(r.cash_minor, r.cash_currency)?.minor ?? null,
     cashCurrency: readWorkValue(r.cash_minor, r.cash_currency)?.currency ?? null,
+    archetypes: rootsFrom(r.archetypes),
+    archetypesSuggested: Number(r.archetypes_suggested ?? 0) === 1,
   };
 }
 
@@ -298,11 +319,13 @@ function questParams(q: QuestRecord): any[] {
     // currency stores neither half: a quest that pays no cash has no row here.
     !q.cashMinor || !q.cashCurrency ? null : Math.trunc(Number(q.cashMinor)),
     !q.cashMinor || !q.cashCurrency ? null : String(q.cashCurrency).toUpperCase(),
+    // The commitment it asks (0383), appended for the same reason. Unreadable stores nothing.
+    storedCommitmentPct(q.commitmentPct),
   ];
 }
 
 const QUEST_COLS =
-  "(id, title, description, impact, gratitude, gratitude_min, gratitude_max, duration, difficulty, circle, status, icon, role_required, min_stage, requires_role, stay_credit_reward, tags, sort_order, subtitle, story, first_step, steps, deliverable, tips, image_url, starts_at, ends_at, due_at, value_minor, value_currency, value_tokens, cash_minor, cash_currency)";
+  "(id, title, description, impact, gratitude, gratitude_min, gratitude_max, duration, difficulty, circle, status, icon, role_required, min_stage, requires_role, stay_credit_reward, tags, sort_order, subtitle, story, first_step, steps, deliverable, tips, image_url, starts_at, ends_at, due_at, value_minor, value_currency, value_tokens, cash_minor, cash_currency, commitment_pct)";
 
 /**
  * The quest's calendar row (0085): written on the quest's own save path, so a
@@ -335,7 +358,7 @@ export function questsRepo(pool: Pool): QuestsRepo {
 
     async add(q) {
       await pool.query(
-        `INSERT INTO quests ${QUEST_COLS} VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        `INSERT INTO quests ${QUEST_COLS} VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         questParams(q),
       );
       await syncQuestCalendar(pool, q);
@@ -358,7 +381,7 @@ export function questsRepo(pool: Pool): QuestsRepo {
           "UPDATE quests SET title=?, description=?, impact=?, gratitude=?, gratitude_min=?, gratitude_max=?, " +
             "duration=?, difficulty=?, circle=?, status=?, icon=?, role_required=?, min_stage=?, requires_role=?, stay_credit_reward=?, tags=?, sort_order=?, " +
             "subtitle=?, story=?, first_step=?, steps=?, deliverable=?, tips=?, image_url=?, starts_at=?, ends_at=?, due_at=?, " +
-            "value_minor=?, value_currency=?, value_tokens=?, cash_minor=?, cash_currency=? WHERE id=?",
+            "value_minor=?, value_currency=?, value_tokens=?, cash_minor=?, cash_currency=?, commitment_pct=? WHERE id=?",
           [...p.slice(1), id],
         );
         await conn.commit();
@@ -405,6 +428,24 @@ export function questsRepo(pool: Pool): QuestsRepo {
       });
     },
   };
+}
+
+/**
+ * SET THE ROOTS A QUEST GROWS FROM, as a person's word.
+ *
+ * The one write of `quests.archetypes`. The guess flag clears in the same
+ * statement, so the boot seed (`suggestClassTags`, which only touches rows
+ * whose roots are NULL) never overwrites what a person chose. An empty list is
+ * stored as `[]`, which is a decision ("not tagged"), and is not NULL, so the
+ * seed leaves that alone too. The caller checks the keys against the cast
+ * first (`rootsForWork`, shared/archetypeRoots.ts).
+ */
+export async function setQuestRoots(pool: Pool, id: string, roots: readonly string[]): Promise<boolean> {
+  const [r] = await pool.query<ResultSetHeader>(
+    "UPDATE `quests` SET `archetypes` = ?, `archetypes_suggested` = 0 WHERE `id` = ?",
+    [JSON.stringify(roots), id],
+  );
+  return Number(r.affectedRows ?? 0) > 0;
 }
 
 /** What keeping a starter answers with. */
@@ -458,7 +499,7 @@ export async function keepExampleQuest(
       "UPDATE quests SET title=?, description=?, impact=?, gratitude=?, gratitude_min=?, gratitude_max=?, " +
         "duration=?, difficulty=?, circle=?, status=?, icon=?, role_required=?, min_stage=?, requires_role=?, stay_credit_reward=?, tags=?, sort_order=?, " +
         "subtitle=?, story=?, first_step=?, steps=?, deliverable=?, tips=?, image_url=?, starts_at=?, ends_at=?, due_at=?, " +
-        "value_minor=?, value_currency=?, value_tokens=?, cash_minor=?, cash_currency=?, " +
+        "value_minor=?, value_currency=?, value_tokens=?, cash_minor=?, cash_currency=?, commitment_pct=?, " +
         "is_example = 0, created_at = CURRENT_TIMESTAMP WHERE id = ? AND is_example = 1",
       [...p.slice(1), id],
     );
@@ -734,8 +775,13 @@ export interface ClaimsRepo {
   consentedCount(userId: string): Promise<number>;
   /** One grouped query for listing N members (admin players view). */
   consentedCounts(): Promise<Map<string, number>>;
-  /** Per-quest life signs, aggregated in SQL. Examples excluded, both kinds. */
-  fieldCounts(): Promise<Map<string, { active: number; done: number }>>;
+  /**
+   * Per-quest life signs, aggregated in SQL. Examples excluded, both kinds.
+   * `moon` counts the consents at or after `since` (the board passes the start
+   * of this moon), so a quest done this moon can be drawn as a flower; with no
+   * `since` it is 0.
+   */
+  fieldCounts(since?: Date): Promise<Map<string, { active: number; done: number; moon: number }>>;
   /** The newest consented claims, capped. Examples excluded, both kinds. */
   recentConsented(limit: number): Promise<FieldCompletion[]>;
   /**
@@ -1119,17 +1165,24 @@ export function claimsRepo(pool: Pool): ClaimsRepo {
       return new Map(rows.map((r) => [String(r.user_id), Number(r.n)]));
     },
 
-    async fieldCounts() {
+    async fieldCounts(since) {
+      // The moon column rides in the same grouped read: one more SUM, no
+      // second scan. A missing or unreadable `since` counts nothing.
+      const from = since && !Number.isNaN(since.getTime()) ? since : null;
       const [rows] = await pool.query<RowDataPacket[]>(
-        `SELECT c.quest_id, c.status, COUNT(*) AS n ${REAL_CLAIM_JOIN} ` +
+        `SELECT c.quest_id, c.status, COUNT(*) AS n, ` +
+          `SUM(CASE WHEN ? IS NOT NULL AND c.consented_at >= ? THEN 1 ELSE 0 END) AS moon ${REAL_CLAIM_JOIN} ` +
           "AND c.status IN ('claimed','submitted','consented') GROUP BY c.quest_id, c.status",
+        [from, from],
       );
-      const out = new Map<string, { active: number; done: number }>();
+      const out = new Map<string, { active: number; done: number; moon: number }>();
       for (const r of rows) {
         const id = String(r.quest_id);
-        const slot = out.get(id) ?? { active: 0, done: 0 };
-        if (r.status === "consented") slot.done += Number(r.n ?? 0);
-        else slot.active += Number(r.n ?? 0);
+        const slot = out.get(id) ?? { active: 0, done: 0, moon: 0 };
+        if (r.status === "consented") {
+          slot.done += Number(r.n ?? 0);
+          slot.moon += Number(r.moon ?? 0);
+        } else slot.active += Number(r.n ?? 0);
         out.set(id, slot);
       }
       return out;

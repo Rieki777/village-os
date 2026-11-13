@@ -10,14 +10,39 @@
  * Its own file because Profile.tsx sits under the file-lines ratchet.
  */
 import { useCallback, useEffect, useState } from "react";
+import { Check } from "lucide-react";
 import { gameFetch } from "@/lib/gameApi";
-import type { CheckinAnswers, PathItemState } from "@shared/onboardingPath";
+import {
+  BTN_PRIMARY,
+  BTN_SECONDARY,
+  CARD,
+  EYEBROW,
+  FIELD as FIELD_LOOK,
+  H2,
+  HINT,
+  LABEL,
+  LINK,
+  TILE,
+} from "@/components/journey/look";
+import { readLink, type CheckinAnswers, type PathItemState } from "@shared/onboardingPath";
+import FirstFourteenDays, { StepLink } from "@/components/today/FirstFourteenDays";
+import { showsStrip, splitSteps } from "@/components/today/fourteenDays";
+
+/** "2026-11-24" as "24 November". A date that does not read as one comes back as it was. */
+export function humanDate(iso: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+  if (!m) return iso;
+  const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString("en-GB", { day: "numeric", month: "long", timeZone: "UTC" });
+}
 
 export const ONBOARDING_WORDS = {
-  heading: (title: string, role: string) => `${title} in ${role}`,
-  line: (day: number, due: string) => `Day ${day}. The steps are due by ${due}.`,
+  heading: (role: string) => role,
+  line: (day: number, due: string) =>
+    `Day ${day}. The steps are due by ${due}.`,
   days: (a: number, b: number) => (a === b ? `Day ${a}` : `Days ${a} to ${b}`),
-  holderOf: (title: string, role: string) => `A new holder: ${title} in ${role}`,
+  holderOf: (role: string) => `A new holder in ${role}`,
   buddy: (name: string) => `Your buddy is ${name}.`,
   noBuddy: "No buddy is named yet. Ask the one who adopted you.",
   open: (n: number) => (n === 1 ? "1 step open" : `${n} steps open`),
@@ -25,6 +50,8 @@ export const ONBOARDING_WORDS = {
   tick: "Mark done",
   doneWhen: "Done when:",
   due: (d: number) => `by day ${d}`,
+  withOwner: (name: string) => `With ${name}.`,
+  later: "After the first fourteen days",
   checkins: "Check-ins",
   checkinOpen: (d: number) => `File your day ${d} check-in`,
   filed: (d: number) => `Day ${d} filed`,
@@ -33,7 +60,7 @@ export const ONBOARDING_WORDS = {
   connection: "Who have you worked with? Who do you still want to meet?",
   culture: "What has surprised you about how we work together?",
   basics: "Do you have the access and tools you need? What is missing?",
-  load: "Hours given against hours expected. Any early signs of stretch?",
+  load: "How stretched or steady do we feel against the commitment we agreed?",
   oneThing: "One thing that would help most next moon",
   file: "File check-in",
   failed: "The onboarding path did not load.",
@@ -49,18 +76,32 @@ interface Served {
   day: number;
   buddyName: string;
   mine: boolean;
-  items: Array<PathItemState & { mayTick: boolean }>;
+  /** `ownerName`: who a step waits on (server/lib/onboarding.ts); absent on an older server. */
+  items: Array<PathItemState & { mayTick: boolean; ownerName?: string }>;
   openCount: number;
   checkinsDue: number[];
-  checkins: Array<{ day: number; answers: CheckinAnswers | null; filedAt: string }> | null;
+  checkins: Array<{
+    day: number;
+    answers: CheckinAnswers | null;
+    filedAt: string;
+  }> | null;
   mayFile: boolean;
 }
 
-const FIELD = "mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-foreground";
-const BTN =
-  "inline-flex min-h-11 items-center rounded-lg border border-border px-4 text-sm font-semibold text-card-foreground hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring";
+const FIELD = `${FIELD_LOOK} mt-1 min-h-11`;
 
-function CheckinForm({ pathId, day, onFiled }: { pathId: string; day: number; onFiled: (paths: Served[]) => void }) {
+/** A step's link, read again here so only an https address ever becomes an href. */
+const linkOf = (it: Pick<PathItemState, "link">) => readLink(it.link);
+
+function CheckinForm({
+  pathId,
+  day,
+  onFiled,
+}: {
+  pathId: string;
+  day: number;
+  onFiled: (paths: Served[]) => void;
+}) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   async function submit(e: React.FormEvent<HTMLFormElement>) {
@@ -68,139 +109,271 @@ function CheckinForm({ pathId, day, onFiled }: { pathId: string; day: number; on
     const f = new FormData(e.currentTarget);
     setBusy(true);
     setError(null);
-    const body = Object.fromEntries(["clarity", "overall", "connection", "culture", "basics", "load", "oneThing"].map((k) => [k, String(f.get(k) ?? "")]));
-    const res = await gameFetch(`/api/onboarding/paths/${encodeURIComponent(pathId)}/checkins/${day}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
+    const body = Object.fromEntries(
+      [
+        "clarity",
+        "overall",
+        "connection",
+        "culture",
+        "basics",
+        "load",
+        "oneThing",
+      ].map(k => [k, String(f.get(k) ?? "")])
+    );
+    const res = await gameFetch(
+      `/api/onboarding/paths/${encodeURIComponent(pathId)}/checkins/${day}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }
+    );
     const out = await res.json().catch(() => ({}));
     setBusy(false);
     if (res.ok && Array.isArray(out.paths)) onFiled(out.paths);
-    else setError(typeof out.error === "string" ? out.error : ONBOARDING_WORDS.failed);
+    else
+      setError(
+        typeof out.error === "string" ? out.error : ONBOARDING_WORDS.failed
+      );
   }
   return (
-    <form onSubmit={submit} className="mt-3 space-y-3 rounded-lg border border-border/60 p-4">
-      <p className="font-semibold text-card-foreground">{ONBOARDING_WORDS.checkinOpen(day)}</p>
-      {(["clarity", "overall"] as const).map((k) => (
-        <label key={k} className="block text-sm text-foreground">
+    <form onSubmit={submit} className={`${TILE} mt-3 max-w-xl space-y-3`}>
+      <p className={H2}>{ONBOARDING_WORDS.checkinOpen(day)}</p>
+      {(["clarity", "overall"] as const).map(k => (
+        <label key={k} className={`block ${LABEL}`}>
           {ONBOARDING_WORDS[k]}
           <select name={k} required defaultValue="" className={FIELD}>
             <option value="" disabled />
-            {[1, 2, 3, 4, 5].map((n) => (
-              <option key={n} value={n}>{n}</option>
+            {[1, 2, 3, 4, 5].map(n => (
+              <option key={n} value={n}>
+                {n}
+              </option>
             ))}
           </select>
         </label>
       ))}
-      {(["connection", "culture", "basics", "load", "oneThing"] as const).map((k) => (
-        <label key={k} className="block text-sm text-foreground">
-          {ONBOARDING_WORDS[k]}
-          <textarea name={k} rows={2} maxLength={1000} className={FIELD} />
-        </label>
-      ))}
-      {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-      <button type="submit" disabled={busy} className={BTN}>{ONBOARDING_WORDS.file}</button>
+      {(["connection", "culture", "basics", "load", "oneThing"] as const).map(
+        k => (
+          <label key={k} className={`block ${LABEL}`}>
+            {ONBOARDING_WORDS[k]}
+            <textarea name={k} rows={2} maxLength={1000} className={FIELD} />
+          </label>
+        )
+      )}
+      {error && (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      )}
+      <button type="submit" disabled={busy} className={BTN_PRIMARY}>
+        {ONBOARDING_WORDS.file}
+      </button>
     </form>
   );
 }
 
 /** The steps grouped by phase, in the order the path holds them. */
-export function phasesOf<T extends { phase: string; phaseFrom: number; phaseTo: number }>(items: readonly T[]): Array<{ name: string; from: number; to: number; items: T[] }> {
+export function phasesOf<
+  T extends { phase: string; phaseFrom: number; phaseTo: number },
+>(
+  items: readonly T[]
+): Array<{ name: string; from: number; to: number; items: T[] }> {
   const out: Array<{ name: string; from: number; to: number; items: T[] }> = [];
   for (const it of items) {
-    const at = out.find((g) => g.name === it.phase);
+    const at = out.find(g => g.name === it.phase);
     if (at) at.items.push(it);
-    else out.push({ name: it.phase, from: it.phaseFrom, to: it.phaseTo, items: [it] });
+    else
+      out.push({
+        name: it.phase,
+        from: it.phaseFrom,
+        to: it.phaseTo,
+        items: [it],
+      });
   }
   return out;
 }
 
-function PathCard({ p, onPaths }: { p: Served; onPaths: (paths: Served[]) => void }) {
+function PathCard({
+  p,
+  onPaths,
+}: {
+  p: Served;
+  onPaths: (paths: Served[]) => void;
+}) {
   const [error, setError] = useState<string | null>(null);
   async function tick(key: string) {
     setError(null);
-    const res = await gameFetch(`/api/onboarding/paths/${encodeURIComponent(p.id)}/items/${encodeURIComponent(key)}/done`, { method: "POST" });
+    const res = await gameFetch(
+      `/api/onboarding/paths/${encodeURIComponent(p.id)}/items/${encodeURIComponent(key)}/done`,
+      { method: "POST" }
+    );
     const out = await res.json().catch(() => ({}));
     if (res.ok && Array.isArray(out.paths)) onPaths(out.paths);
-    else setError(typeof out.error === "string" ? out.error : ONBOARDING_WORDS.failed);
+    else
+      setError(
+        typeof out.error === "string" ? out.error : ONBOARDING_WORDS.failed
+      );
   }
+  // Someone newly seated reads their first fourteen days as a strip of days;
+  // the list below keeps only what comes after them (Phase B, decision 1).
+  const strip = showsStrip(p);
+  const listed = strip ? splitSteps(p.items).later : p.items;
   return (
-    <section aria-labelledby={`onb-${p.id}`} className="rounded-2xl border border-border bg-card p-6 shadow-sm sm:p-8">
-      <h2 id={`onb-${p.id}`} className="font-display text-2xl font-bold text-card-foreground">
-        {p.mine ? ONBOARDING_WORDS.heading(p.title, p.roleName) : ONBOARDING_WORDS.holderOf(p.title, p.roleName)}
+    <section aria-labelledby={`onb-${p.id}`} className={CARD} data-onboarding-path="">
+      <p className={EYEBROW}>{p.title}</p>
+      <h2 id={`onb-${p.id}`} className={`${H2} mt-1`}>
+        {p.mine
+          ? ONBOARDING_WORDS.heading(p.roleName)
+          : ONBOARDING_WORDS.holderOf(p.roleName)}
       </h2>
-      <p className="mt-2 text-foreground">{ONBOARDING_WORDS.line(p.day, p.dueOn)}</p>
-      <p className="mt-1 text-foreground">{p.buddyName ? ONBOARDING_WORDS.buddy(p.buddyName) : ONBOARDING_WORDS.noBuddy}</p>
-      <p className="mt-1 text-sm text-muted-foreground">{p.openCount > 0 ? ONBOARDING_WORDS.open(p.openCount) : ONBOARDING_WORDS.allDone}</p>
-      {phasesOf(p.items).map((ph) => (
+      {/* The strip says the day and each step's date itself. */}
+      {!strip && (
+        <p className="mt-2 text-foreground">
+          {ONBOARDING_WORDS.line(p.day, humanDate(p.dueOn))}
+        </p>
+      )}
+      <p className="mt-1 text-foreground">
+        {p.buddyName
+          ? ONBOARDING_WORDS.buddy(p.buddyName)
+          : ONBOARDING_WORDS.noBuddy}
+      </p>
+      <p className={`${HINT} mt-1`}>
+        {p.openCount > 0
+          ? ONBOARDING_WORDS.open(p.openCount)
+          : ONBOARDING_WORDS.allDone}
+      </p>
+      {strip && (
+        <div className="mt-5">
+          <FirstFourteenDays path={p} onTick={(key) => void tick(key)} linkOf={linkOf} />
+        </div>
+      )}
+      {strip && listed.length > 0 && (
+        <p className={`${EYEBROW} mt-6`}>{ONBOARDING_WORDS.later}</p>
+      )}
+      {phasesOf(listed).map(ph => (
         <div key={ph.name} className="mt-4">
-          <h3 className="font-semibold text-card-foreground">
-            {ph.name} <span className="text-sm font-normal text-muted-foreground">({ONBOARDING_WORDS.days(ph.from, ph.to)})</span>
+          <h3 className="font-display text-lg font-bold text-card-foreground">
+            {ph.name}{" "}
+            <span className="text-sm font-normal text-muted-foreground">
+              ({ONBOARDING_WORDS.days(ph.from, ph.to)})
+            </span>
           </h3>
           <ul className="mt-2 space-y-2">
-            {ph.items.map((it) => (
-              <li key={it.key} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/60 px-3 py-2">
-                <span className={it.doneAt ? "text-muted-foreground line-through" : "font-medium text-card-foreground"}>
-                  {it.title}
-                  <span className="block text-sm font-normal text-muted-foreground">
-                    {ONBOARDING_WORDS.doneWhen} {it.doneWhen} ({ONBOARDING_WORDS.due(it.dueDay)})
+            {ph.items.map(it => (
+              <li
+                key={it.key}
+                className={`${TILE} flex flex-wrap items-center justify-between gap-2 py-3`}
+              >
+                <span
+                  className={`flex items-start gap-3 ${it.doneAt ? "text-muted-foreground" : "font-medium text-card-foreground"}`}
+                >
+                  <span
+                    aria-hidden="true"
+                    className={`mt-0.5 inline-flex size-6 shrink-0 items-center justify-center rounded-full border-2 border-notice ${it.doneAt ? "bg-notice text-background" : ""}`}
+                  >
+                    {it.doneAt && <Check className="size-3.5" />}
+                  </span>
+                  <span>
+                    {it.title}
+                    <span className="block text-sm font-normal text-muted-foreground">
+                      {it.ownerName ? `${ONBOARDING_WORDS.withOwner(it.ownerName)} ` : ""}
+                      {ONBOARDING_WORDS.doneWhen} {it.doneWhen} (
+                      {ONBOARDING_WORDS.due(it.dueDay)})
+                    </span>
                   </span>
                 </span>
+                {linkOf(it) && (
+                  // A page of this site opens in place; an https address opens in a
+                  // new tab with noopener and noreferrer (StepLink).
+                  <StepLink link={linkOf(it)!} />
+                )}
                 {!it.doneAt && it.mayTick && (
-                  <button type="button" onClick={() => void tick(it.key)} className={BTN}>{ONBOARDING_WORDS.tick}</button>
+                  <button
+                    type="button"
+                    onClick={() => void tick(it.key)}
+                    className={BTN_SECONDARY}
+                  >
+                    {ONBOARDING_WORDS.tick}
+                  </button>
                 )}
               </li>
             ))}
           </ul>
         </div>
       ))}
-      {error && <p role="alert" className="mt-2 text-sm text-destructive">{error}</p>}
+      {error && (
+        <p role="alert" className="mt-2 text-sm text-destructive">
+          {error}
+        </p>
+      )}
       {p.checkins && (p.checkins.length > 0 || p.checkinsDue.length > 0) && (
         <div className="mt-4">
-          <h3 className="font-semibold text-card-foreground">{ONBOARDING_WORDS.checkins}</h3>
+          <h3 className="font-display text-lg font-bold text-card-foreground">
+            {ONBOARDING_WORDS.checkins}
+          </h3>
           <ul className="mt-1 text-sm text-foreground">
-            {p.checkins.map((c) => (
+            {p.checkins.map(c => (
               <li key={c.day}>
                 {ONBOARDING_WORDS.filed(c.day)}
-                {c.answers ? ` (${c.answers.clarity} and ${c.answers.overall} of 5)` : ""}
+                {c.answers
+                  ? ` (${c.answers.clarity} and ${c.answers.overall} of 5)`
+                  : ""}
               </li>
             ))}
           </ul>
-          {p.mayFile && p.checkinsDue.map((d) => <CheckinForm key={d} pathId={p.id} day={d} onFiled={onPaths} />)}
+          {p.mayFile &&
+            p.checkinsDue.map(d => (
+              <CheckinForm key={d} pathId={p.id} day={d} onFiled={onPaths} />
+            ))}
         </div>
       )}
     </section>
   );
 }
 
-export default function OnboardingPath() {
+/** The day the reader's own path is on, or null when they have none. */
+export function ownDay(paths: readonly Pick<Served, "mine" | "day">[]): number | null {
+  const mine = paths.filter((p) => p.mine);
+  return mine.length ? Math.min(...mine.map((p) => p.day)) : null;
+}
+
+export default function OnboardingPath({ onDay }: { onDay?: (day: number | null) => void } = {}) {
   const [paths, setPaths] = useState<Served[] | null>(null);
   const [failed, setFailed] = useState(false);
   const load = useCallback(() => {
     setFailed(false);
     void gameFetch("/api/onboarding/me")
-      .then(async (res) => {
+      .then(async res => {
         const out = await res.json().catch(() => ({}));
-        if (res.ok && Array.isArray(out.paths)) setPaths(out.paths);
-        else setFailed(true);
+        if (res.ok && Array.isArray(out.paths)) {
+          setPaths(out.paths);
+          onDay?.(ownDay(out.paths));
+        } else {
+          setFailed(true);
+          onDay?.(null);
+        }
       })
-      .catch(() => setFailed(true));
-  }, []);
+      .catch(() => {
+        setFailed(true);
+        onDay?.(null);
+      });
+  }, [onDay]);
   useEffect(() => load(), [load]);
 
   if (failed) {
     return (
       <p role="status" className="text-foreground">
         {ONBOARDING_WORDS.failed}{" "}
-        <button type="button" onClick={load} className="min-h-11 font-medium text-notice underline underline-offset-2">{ONBOARDING_WORDS.retry}</button>
+        <button type="button" onClick={load} className={`${LINK} min-h-11`}>
+          {ONBOARDING_WORDS.retry}
+        </button>
       </p>
     );
   }
   if (!paths || paths.length === 0) return null;
   return (
     <div id="onboarding" className="scroll-mt-28 flex flex-col gap-6">
-      {paths.map((p) => (
+      {paths.map(p => (
         <PathCard key={p.id} p={p} onPaths={setPaths} />
       ))}
     </div>

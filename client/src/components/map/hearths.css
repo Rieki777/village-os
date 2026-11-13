@@ -1,0 +1,64 @@
+/*
+ * THE HEARTHS on the circles map (Phase D, D2). Travels with HearthLens, in
+ * the circles map's own lazy chunk, so nothing here reaches the first page.
+ *
+ * The colours ride the night sheet's knobs when the page has them and the
+ * circle lens's own ink when it does not, so a village that re-tints its
+ * night re-tints its hearths.
+ *
+ * Motion: only the fireflies move, they drift and pulse slowly, and they rest
+ * after about twenty seconds without input (`data-rest`, from useRest). Every
+ * animation sits inside prefers-reduced-motion: no-preference, so a member who
+ * asked for stillness sees the same lights in the same places, still.
+ */
+.hl {
+  --hl-ember: var(--sheet-dash-gold-lit, #f3d891);
+  --hl-coal: var(--sheet-notice, #c98a3a);
+  --hl-thread: var(--circle-ink-dim, #a8a081);
+  pointer-events: none;
+}
+.hl-thread {
+  fill: none;
+  stroke: var(--hl-thread);
+  stroke-linecap: round;
+}
+.hl-ember-stop-0 {
+  stop-color: var(--hl-ember);
+}
+.hl-ember-stop-1 {
+  stop-color: var(--hl-coal);
+}
+.hl-ring {
+  fill: none;
+  stroke: var(--hl-ember);
+}
+.hl-ff-halo {
+  fill: var(--hl-ember);
+  opacity: 0.16;
+}
+.hl-ff-dot {
+  fill: var(--hl-ember);
+  opacity: 0.85;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes hl-drift {
+    from { transform: translate(0, 0); }
+    to { transform: translate(var(--hl-dx, 3px), var(--hl-dy, -4px)); }
+  }
+  @keyframes hl-pulse {
+    0%, 100% { opacity: 0.35; }
+    50% { opacity: 1; }
+  }
+  .hl[data-motion="live"] .hl-ff {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation:
+      hl-drift var(--hl-drift, 9s) ease-in-out var(--hl-delay, 0s) infinite alternate,
+      hl-pulse var(--hl-pulse, 3.4s) ease-in-out var(--hl-delay, 0s) infinite;
+  }
+  /* Rest: after about 20 seconds without input the lights stop where they are. */
+  .hl[data-rest="true"] .hl-ff {
+    animation-play-state: paused;
+  }
+}

@@ -69,7 +69,7 @@ describe("the fields are the card's", () => {
       "Signs I'm stretched",
       "What flows back",
       "How I can step back",
-      "Time",
+      "Commitment",
     ]);
   });
 

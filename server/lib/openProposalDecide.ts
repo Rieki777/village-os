@@ -43,13 +43,16 @@
  * No `recordEvent` and no `addActivity`: the rows are the record.
  */
 import { cardSummary } from "../../shared/openProposalCard";
+import { isCommitment, notesAsText, overallChoice } from "../../shared/termsWords";
+import { baseOf } from "./counterOffer";
 import type { Pool, PoolConnection } from "mysql2/promise";
 import { isVillageHeld, type Capability } from "../../shared/capabilities";
 import { civilDateKey } from "../../shared/lunar";
-import { greetingName, OPEN_NOTICE_WORDS, openInviteId, openProposalHref, proposalOfInvite } from "../../shared/openProposalDecide";
+import { agreedTerms, greetingName, OPEN_NOTICE_WORDS, openInviteId, openProposalHref, proposalOfInvite } from "../../shared/openProposalDecide";
 import { whoMayPutHandToVillage, type HandOpenerRule } from "../../shared/powerHands";
 import { CONSENT_WORDS, consentClosesAt } from "../../shared/roleProposalConsent";
 import { ADOPTING_POWER, parseApplicationInput } from "../../shared/seatApplications";
+import type { ProposalGoal } from "../../shared/proposalGoals";
 import { civilDateInstant, type SeatCalendar } from "../../shared/seatTerms";
 import { emailKeyOf } from "../../shared/comms/address";
 import type { WaitingOpenProposal } from "../../shared/waitingOnYou";
@@ -62,15 +65,17 @@ import type { InvitedArrival } from "./inviteDoor";
 import type { NotifyInput } from "./notify";
 import { isTombstone } from "./oauthAccounts";
 import { listOrgRoles, type LapseContext } from "./orgChart";
-import { adoptApplication, settleDepsOf, tellOutcome, wholeSecond } from "./seatApplicationCloser";
+import { adoptApplication, seatsWithoutRoom, settleDepsOf, tellOutcome, wholeSecond, type FullSeat } from "./seatApplicationCloser";
 import { prepareApplication, writeApplicationOn } from "./seatApplicationWrite";
 import { inTransaction } from "../repos/liveSessions";
 import { inviteById, revokeInvite } from "../repos/memberInvites";
 import * as store from "../repos/openProposals";
 import { asksFor, holdersInCircles, insertAsks } from "../repos/roleProposals";
 import { inApplicationTransaction, seatsForUpdate, seatsWithCircles } from "../repos/seatApplications";
-import { announceReview, beginReview, type ReviewDeps, type ReviewStart } from "./applicationReview";
+import { carryUpdatesToAccount } from "./applicantUpdates";
+import { announceReview, beginReview, reviewFirstOn, type ReviewDeps, type ReviewStart } from "./applicationReview";
 import { agentRoleNamesInCircles, stampStep } from "../repos/applicationReview";
+import * as review from "../repos/applicationReview";
 import { REVIEW_WORDS } from "../../shared/applicationReview";
 
 type Db = Pool | PoolConnection;
@@ -84,6 +89,8 @@ export interface DecideDeps extends Pick<AppDeps, "members" | "stageOf" | "recor
   calendar(): SeatCalendar;
   lapse(): LapseContext;
   now(): Date;
+  /** The village's name, for the updates an arrival carries onto the new profile. Absent skips them. */
+  projectName?(): string;
 }
 
 /** The address's account here, when it is a real, present person: never an example, never a tombstone. */
@@ -91,6 +98,16 @@ export async function accountFor(members: Pick<AppDeps["members"], "byEmail">, e
   if (!email) return null;
   const m: any = await members.byEmail(email);
   return m && !isExampleUser(m) && !isTombstone({ email: String(m.email ?? "") }) ? String(m.id) : null;
+}
+
+/**
+ * WHOSE PROPOSAL IT IS, as an account here: the person behind the address, or,
+ * for an agent (0374), the member who keeps it and proposed it. That account is
+ * never asked about it and never adopts or declines it.
+ */
+export async function ownAccountOf(members: Pick<AppDeps["members"], "byEmail">, p: Pick<store.StoredOpenProposal, "email" | "body">): Promise<string | null> {
+  if (p.body.agent) return p.body.agent.keeperUserId;
+  return accountFor(members, p.email);
 }
 
 /**
@@ -138,7 +155,7 @@ export interface Confirmed {
  * from now. Null when the token confirms nothing: used, run out, or unknown.
  */
 export async function confirmAndAsk(
-  deps: Pick<DecideDeps, "getPool" | "members" | "calendar"> & Pick<ReviewDeps, "consentAfterInterviews">,
+  deps: Pick<DecideDeps, "getPool" | "members" | "calendar"> & Pick<ReviewDeps, "consentAfterInterviews" | "reviewFirst">,
   confirmHash: string,
   notBefore: Date,
   at: Date,
@@ -149,7 +166,7 @@ export async function confirmAndAsk(
   return inTransaction(pool, async (conn) => {
     const proposal = await store.confirmOpenProposal(conn, confirmHash, notBefore, at);
     if (!proposal) return null;
-    const own = await accountFor(deps.members, proposal.email);
+    const own = await ownAccountOf(deps.members, proposal);
     const circles: string[] = [];
     for (const r of proposal.body.roles) {
       const c = circleOf.get(r.roleId);
@@ -164,7 +181,9 @@ export async function confirmAndAsk(
       }
     }
     // The review begins in this same transaction, so a proposal is never confirmed with half a review.
-    const review = await beginReview(conn, deps, { ref: proposal.id, roleIds: proposal.body.roles.map((r) => r.roleId), applicantUserId: own, at });
+    // Our review comes first where the village asks for it (Phase A). An agent's proposal is its keeper's, and is decided as it always was.
+    const reviewFirst = !proposal.body.agent && reviewFirstOn(deps);
+    const review = await beginReview(conn, deps, { ref: proposal.id, roleIds: proposal.body.roles.map((r) => r.roleId), applicantUserId: own, at, reviewFirst });
     // Where the village asked for it, the circle is asked once the interviews are scored (shared/applicationReview.ts).
     if (!review.holdConsent) {
       await insertAsks(conn, asked.map((a) => ({ proposalId: proposal.id, userId: a.userId, circleId: a.circleId, askedAt: at, closesAt })));
@@ -253,13 +272,130 @@ export type Placed =
  * their own role card (shared/openProposalCard.ts) in plain words, within the
  * application's 2000 characters.
  */
-function deliverablesOf(body: store.StoredOpenProposal["body"], seats: Array<{ id: string; name?: string }>): string {
+function deliverablesOf(body: store.StoredOpenProposal["body"], seats: Array<{ id: string; name?: string }>, agreed?: Agreed | null): string {
   const aim = String(body.aim ?? "").trim();
   if (!body.card) return aim;
   const name = (id: string) => seats.find((s) => s.id === id)?.name ?? id;
   const goal = (id: string) => body.card?.serves.find((s) => s.goalId === id)?.goal || id;
-  const text = [aim, cardSummary(body.card, name, goal)].filter(Boolean).join("\n\n");
+  // The terms line and the commitment from the FINAL answers (audit B2): a "let's talk" settled since reads as agreed.
+  const card = agreed && body.card.terms
+    ? {
+        ...body.card,
+        ...(agreed.commitmentPct != null ? { commitmentPct: agreed.commitmentPct } : {}),
+        terms: { ...body.card.terms, choice: overallChoice(agreed.answers), note: notesAsText(agreed.answers), answers: agreed.answers },
+      }
+    : body.card;
+  const text = [aim, cardSummary(card, name, goal)].filter(Boolean).join("\n\n");
   return text.length > 2000 ? `${text.slice(0, 1997)}...` : text;
+}
+
+type Agreed = ReturnType<typeof agreedTerms>;
+
+/**
+ * WHAT WAS AGREED, FOR ONE PROPOSAL (audit B2): the roles' suggested words, every
+ * counter-offer revision, and the applicant's last answer to each. Read from the
+ * proposal's own body and the roles' offers.
+ */
+export async function agreedOf(db: Db, proposal: store.StoredOpenProposal): Promise<Agreed> {
+  const base = await baseOf(db, proposal.body.roles.map((r) => r.roleId));
+  return agreedTerms({ base: base.words, answers: proposal.body.card?.terms?.answers ?? {}, theirs: proposal.body.card?.commitmentPct ?? null, co: proposal.body.counterOffer ?? null });
+}
+
+/**
+ * The application's settings: the moon's end when it is a moon proposal, the agreed
+ * words for each setting, and the agreed commitment under Clocks. These are what the
+ * holder aligns with (shared/alignments.ts renders the words).
+ */
+export function settingsOfAgreed(agreed: Agreed, term: { endsOn: string } | null | undefined): Record<string, unknown> {
+  const words = Object.fromEntries(Object.entries(agreed.words).filter(([, w]) => typeof w === "string" && w.trim()));
+  return {
+    v: 1,
+    ...(term ? { term: { endsOn: term.endsOn } } : {}),
+    ...(isCommitment(agreed.commitmentPct) ? { clocks: { commitmentPct: agreed.commitmentPct } } : {}),
+    ...(Object.keys(words).length ? { words } : {}),
+  };
+}
+
+/** The card's goals for the first moon as the application's list holds them. */
+function goalsOfCard(body: store.StoredOpenProposal["body"]): ProposalGoal[] {
+  const card = body.card;
+  if (!card) return [];
+  return card.roles.flatMap((r) =>
+    r.firstMoon.map((q) => ({
+      title: q.quest,
+      doneWhen: q.doneWhen,
+      moves: q.moves ?? "",
+      serves: (q.serves && card.serves.find((s) => s.goalId === q.serves)?.goal) || "",
+      date: q.date ?? "",
+      roleId: r.roleId,
+    })),
+  );
+}
+
+/** The village's season goals the card picked, in their words, with how the work serves each. A goal whose words were not kept is left out. */
+function servesOfCard(body: store.StoredOpenProposal["body"]): Array<{ goal: string; howItHelps: string | null }> {
+  const out: Array<{ goal: string; howItHelps: string | null }> = [];
+  for (const s of body.card?.serves ?? []) {
+    const goal = String(s.goal ?? "").trim();
+    if (!goal || out.some((g) => g.goal === goal)) continue;
+    out.push({ goal, howItHelps: String(s.how ?? "").trim() || null });
+  }
+  return out;
+}
+
+/**
+ * THE CONVERSATIONS STILL TO BE WRITTEN UP, by role (audit M10), the same rule
+ * `interviewsAreIn` holds Adopt to: a proposal with no review has none. Each
+ * says whether anybody holds its role right now: a conversation whose role
+ * nobody holds can never be written up until somebody is seated in it.
+ */
+export async function conversationsLeft(db: Db, ref: string): Promise<Array<{ roleId: string; role: string; unheld: boolean }>> {
+  if (!(await review.stepsOf(db, ref)).some((s) => s.kind === "confirmed")) return [];
+  const left = (await review.interviewsOf(db, ref)).filter((i) => i.state !== "scored" && i.state !== "skipped");
+  if (!left.length) return [];
+  const names = await review.roleNamesById(db, left.map((i) => i.roleId));
+  const out: Array<{ roleId: string; role: string; unheld: boolean }> = [];
+  for (const i of left) out.push({ roleId: i.roleId, role: names.get(i.roleId) ?? i.roleId, unheld: (await review.liveHoldersOfRole(db, i.roleId)).length === 0 });
+  return out;
+}
+
+/** When a proposal's roles would start if adopted now: a moon proposal at adoption (never before its first day), a season one on the season's first day. */
+export function startOf(deps: Pick<DecideDeps, "calendar" | "now">, proposal: store.StoredOpenProposal): Date | null {
+  const calendar = deps.calendar();
+  const tz = calendar.timezone || "UTC";
+  const now = deps.now();
+  const term = proposal.body.term;
+  if (term) {
+    const moonStart = civilDateInstant(term.startsOn, tz);
+    return moonStart && moonStart.getTime() > now.getTime() ? moonStart : wholeSecond(now);
+  }
+  const season = calendar.seasons.find((s) => s.id === proposal.targetSeasonId);
+  return season ? civilDateInstant(season.startsOn, tz) : null;
+}
+
+/**
+ * WHETHER EVERY SEAT OF A PROPOSED ROLE IS TAKEN when it would start (audit B3).
+ * Counted by `seatsWithoutRoom`, plus the places promised to other adopted
+ * proposals whose invitation is still out: those people have been told yes and
+ * have no application yet. The proposer's own account and address never count
+ * against them.
+ */
+export async function roomFor(deps: Pick<DecideDeps, "getPool" | "calendar" | "lapse" | "now">, proposal: store.StoredOpenProposal, own: string | null): Promise<FullSeat[]> {
+  const pool = deps.getPool();
+  const at = startOf(deps, proposal);
+  if (!at) return [];
+  const seatIds = proposal.body.roles.map((r) => r.roleId);
+  const promised = new Map<string, number>();
+  const mine = proposal.email ? emailKeyOf(proposal.email) : null;
+  for (const other of await store.listOpenProposals(pool, ["adopted"], 5000)) {
+    if (other.id === proposal.id || (mine && other.email && emailKeyOf(other.email) === mine)) continue;
+    const roles = other.body.roles.map((r) => r.roleId).filter((id) => seatIds.includes(id));
+    if (!roles.length) continue;
+    const inv = await inviteById(pool, openInviteId(other.id));
+    if (!inv || inv.usedByUserId || inv.revokedAt || inv.expired) continue;
+    for (const id of roles) promised.set(id, (promised.get(id) ?? 0) + 1);
+  }
+  return seatsWithoutRoom(pool, { seatIds, candidateUserId: own, at, calendar: deps.calendar(), lapse: { ...deps.lapse(), now: deps.now() }, seasonId: proposal.body.term ? null : proposal.targetSeasonId, promised });
 }
 
 export async function placeOnRoles(
@@ -285,11 +421,35 @@ export async function placeOnRoles(
   }
   const seatIds = p.proposal.body.roles.map((r) => r.roleId);
   const seats = await seatsForUpdate(pool, seatIds);
+  // What was agreed is what is signed (audit B2): the offer, the latest revision, their answers and the commitment.
+  const agreed = await agreedOf(pool, p.proposal);
+  const goals = goalsOfCard(p.proposal.body);
+  const cardTerms = p.proposal.body.card?.terms ?? null;
+  const aim = String(p.proposal.body.aim ?? "").trim();
+  const serves = servesOfCard(p.proposal.body);
+  const answers = {
+    // The aim and the season goals she picked, so the adopted card reads them (verify item 7).
+    ...(aim ? { aim } : {}),
+    ...(serves.length ? { serves } : {}),
+    ...(goals.length ? { goals } : {}),
+    ...(cardTerms || agreed.commitmentPct != null
+      ? {
+          terms: {
+            choice: overallChoice(agreed.answers),
+            note: notesAsText(agreed.answers),
+            // The per-setting answers ride with a commitment only: the parser asks for both together.
+            ...(isCommitment(agreed.commitmentPct) ? { answers: agreed.answers, commitmentPct: agreed.commitmentPct } : {}),
+          },
+        }
+      : {}),
+  };
   const parsed = parseApplicationInput({
     seatIds,
     note: p.proposal.body.why || null,
-    deliverables: deliverablesOf(p.proposal.body, seats) || null,
-    ...(term ? { settings: { v: 1, term: { endsOn: term.endsOn } } } : {}),
+    deliverables: deliverablesOf(p.proposal.body, seats, agreed) || null,
+    // The goals as a list, so the proposal's page draws them as one (joining lane PR 1), and the terms as agreed.
+    ...(Object.keys(answers).length ? { answers } : {}),
+    settings: settingsOfAgreed(agreed, term),
   });
   if (!parsed.ok) return { ok: false, code: "cannot", error: parsed.error };
   for (const id of seatIds) {
@@ -394,6 +554,8 @@ export function arrivalFor(deps: DecideDeps): InvitedArrival {
           authority: place.proposal.decision.authority ?? `${ADOPTING_POWER}@badge`,
         });
         failed = !out.ok && out.code === "cannot";
+        // The updates already sent about it are there to read on the new profile.
+        if (deps.projectName) await carryUpdatesToAccount({ getPool: deps.getPool, notify: deps.notify, projectName: deps.projectName }, place.proposal, userId);
       } catch (err) {
         failed = true;
         console.warn(`[open-proposals] the place for ${userId} was not made: ${String((err as Error)?.message ?? err)}`);
@@ -440,7 +602,7 @@ export async function openProposalsWaitingOn(
   for (const p of waiting) {
     const ask = (asks.get(p.id) ?? []).find((a) => a.userId === viewerId) ?? null;
     const asking = !!ask && !ask.answer && ask.closesAt.getTime() > deps.now.getTime();
-    const own = !!mine && !!p.email && emailKeyOf(p.email) === mine;
+    const own = (!!mine && !!p.email && emailKeyOf(p.email) === mine) || p.body.agent?.keeperUserId === viewerId;
     if (!asking && (!mayDecide || own)) continue;
     const roles = p.body.roles.map((r) => named.get(r.roleId));
     const circles: string[] = [];

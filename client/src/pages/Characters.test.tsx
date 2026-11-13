@@ -145,7 +145,7 @@ describe("Characters: a failure is not an emptiness", () => {
     });
     const { container } = render(<Characters />);
 
-    await waitFor(() => expect(container.textContent).toContain("Your party did not load"));
+    await waitFor(() => expect(container.textContent).toContain("Your roots did not load"));
   });
 });
 
@@ -190,9 +190,9 @@ describe("Characters: the two toggles say what is selected", () => {
     // for it to land before pressing anything: otherwise the assertion races
     // an effect that is doing its job.
     await screen.findByRole("button", { name: "Leave The Steward" });
-    const pronouns = await screen.findByRole("radiogroup", { name: "Presentation" });
-    const she = within(pronouns).getByRole("radio", { name: "She" });
-    const he = within(pronouns).getByRole("radio", { name: "He" });
+    const pronouns = await screen.findByRole("radiogroup", { name: "Portrait style" });
+    const she = within(pronouns).getByRole("radio", { name: "Style one" });
+    const he = within(pronouns).getByRole("radio", { name: "Style two" });
     expect(she.getAttribute("aria-checked")).toBe("true");
     expect(he.getAttribute("aria-checked")).toBe("false");
 
@@ -206,9 +206,9 @@ describe("Characters: the two toggles say what is selected", () => {
     render(<Characters />);
     await screen.findByRole("button", { name: "Leave The Steward" });
 
-    const pronouns = await screen.findByRole("radiogroup", { name: "Presentation" });
-    const she = within(pronouns).getByRole("radio", { name: "She" });
-    const he = within(pronouns).getByRole("radio", { name: "He" });
+    const pronouns = await screen.findByRole("radiogroup", { name: "Portrait style" });
+    const she = within(pronouns).getByRole("radio", { name: "Style one" });
+    const he = within(pronouns).getByRole("radio", { name: "Style two" });
 
     // Only the selected radio is in the tab order, which is what makes a
     // radiogroup one stop rather than N.
@@ -294,12 +294,12 @@ describe("Characters: the class rail keeps its names", () => {
     // technology does, through aria-describedby, so this is the fact rather
     // than the markup that carries it.
     expect(
-      await screen.findByRole("button", { name: "The Steward", description: "In your party" }),
+      await screen.findByRole("button", { name: "The Steward", description: "One of your roots" }),
     ).toBeTruthy();
     // The star was the only signal, and an icon carries no text.
     const weaver = screen.getByRole("button", { name: "The Weaver" });
     expect(weaver.getAttribute("aria-describedby")).toBeNull();
-    expect(weaver.textContent).not.toContain("In your party");
+    expect(weaver.textContent).not.toContain("One of your roots");
   });
 });
 
@@ -314,7 +314,7 @@ describe("Characters: leaving a character asks first", () => {
     expect(spy.mock.calls.some((c) => (c[1] as RequestInit | undefined)?.method === "DELETE")).toBe(
       false,
     );
-    expect(container.textContent).toContain("Leaving removes The Steward from your party for good");
+    expect(container.textContent).toContain("Leaving removes The Steward from your roots for good");
   });
 
   it("DELETEs on the confirm, and announces it", async () => {
@@ -335,7 +335,7 @@ describe("Characters: leaving a character asks first", () => {
         true,
       ),
     );
-    await waitFor(() => expect(live(container)).toContain("The Steward left your party"));
+    await waitFor(() => expect(live(container)).toContain("The Steward left your roots"));
     expect(heard).toHaveBeenCalled();
     window.removeEventListener(PROFILE_REFRESH_EVENT, heard);
   });
@@ -402,9 +402,9 @@ describe("Characters: the page speaks", () => {
     const { container } = render(<Characters />);
 
     fireEvent.click(await screen.findByRole("button", { name: /^The Weaver/ }));
-    fireEvent.click(await screen.findByRole("button", { name: "Play this character" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Grow from this root" }));
 
-    await waitFor(() => expect(live(container)).toContain("The Weaver joined your party"));
+    await waitFor(() => expect(live(container)).toContain("The Weaver joined your roots"));
     expect(heard).toHaveBeenCalled();
     window.removeEventListener(PROFILE_REFRESH_EVENT, heard);
   });
@@ -419,7 +419,7 @@ describe("Characters: the page speaks", () => {
     const { container } = render(<Characters />);
 
     fireEvent.click(await screen.findByRole("button", { name: /^The Weaver/ }));
-    fireEvent.click(await screen.findByRole("button", { name: "Play this character" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Grow from this root" }));
 
     await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("did not save"));
     expect(live(container)).toContain("did not save");
@@ -462,7 +462,7 @@ describe("Characters: the stage opens on the member's own character", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: /^The Steward/ }));
     release();
-    await waitFor(() => expect(screen.queryByText("Your party did not load")).toBeNull());
+    await waitFor(() => expect(screen.queryByText("Your roots did not load")).toBeNull());
     await new Promise((r) => setTimeout(r, 0));
     expect(onStage()).toBe("The Steward");
   });

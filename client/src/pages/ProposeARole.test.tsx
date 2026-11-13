@@ -1,35 +1,48 @@
 // @vitest-environment jsdom
 /**
- * PROPOSE A ROLE, WITHOUT AN ACCOUNT: the page (sheet 19i). The server's
- * answers are canned here; server/routes/openProposals.test.ts proves them.
+ * APPLY FOR A ROLE, WITHOUT AN ACCOUNT: the founding-team application (Phase A,
+ * lane A1, 11 Nov 2026). The server's answers are canned here;
+ * server/routes/openProposals.test.ts proves them.
  *
- *   - next season's roles, grouped by circle, up to three picked, each with
- *     what the person brings, then why, name and address; sending says to
- *     check their email, because nothing reaches the village until they confirm
- *   - a refusal names its field; the page closed says so
- *   - the confirmation link confirms, or says it did not work and how to start again
+ *   - one role per application: named by the card's Apply link, or chosen from
+ *     the open roles, never more than one
+ *   - six steps with "Step N of 6", one primary act each worded as what comes
+ *     next, Back keeps every word, and a draft survives leaving (never the
+ *     references or files)
+ *   - every check the Firefly Path made still runs: per step on Continue, all
+ *     at once on Send, each gap named with the cursor taken to its field
+ *   - the compensation shape is the village's data, "N%" where it set nothing,
+ *     with the plain word on risk beside the footer
+ *   - the sent and confirmed thresholds follow, as before
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { OPEN_AI_DRAFTS, OPEN_WORDS } from "@shared/openProposals";
 import { ATTACHMENT_WORDS } from "@shared/proposalAttachments";
+import { draftKey } from "@/components/fireflyPath/applyDraft";
+
+import { SETUP, fillValue, paneNow, pressNext, pressOnce, sendNow, stoneNow, walk } from "@/test/proposeStones";
 
 vi.mock("@/components/Layout", () => ({ default: ({ children }: { children: React.ReactNode }) => <div>{children}</div> }));
 const auth = vi.hoisted(() => ({ user: null as null | { name: string; email: string } }));
 vi.mock("@/contexts/AuthContext", () => ({ useOptionalAuth: () => ({ user: auth.user }) }));
 
-import ProposeARole, { ConfirmProposal } from "./ProposeARole";
+import ProposeARole, { ConfirmProposal, firstUnanswered } from "./ProposeARole";
 
+const GOALS = [
+  { id: "g-team", text: "Build the team that can build the village" },
+  { id: "g-water", text: "Water" },
+];
 const FORM = {
   open: true,
   village: "Test Village",
   season: { id: "s-next", name: "Season of Roots", startsOn: "2099-01-01" },
+  goals: GOALS,
   roles: [
-    { id: "r-gate", name: "Gate Keeper", circle: "Land Circle", aim: "Open the gate at dawn." },
-    { id: "r-well", name: "Well Keeper", circle: "Land Circle", aim: null },
-    { id: "r-host", name: "Welcome Host", circle: "People Circle", aim: "Meet every newcomer." },
-    { id: "r-cook", name: "Cook", circle: "People Circle", aim: null },
+    { id: "r-gate", name: "Gate Keeper", circle: "Anchor Circle", aim: "Open the gate at dawn." },
+    { id: "r-host", name: "Welcome Host", circle: "Anchor Circle", aim: "Meet every newcomer." },
   ],
+  founding: SETUP,
 };
 
 /** The membership letter the form shows and aligns with (Rye's answer 8). */
@@ -39,14 +52,13 @@ let posted: any[] = [];
 /** How each post went: its files, and the headers set by hand. */
 let sentAs: Array<{ files: File[]; headers: RequestInit["headers"] }> = [];
 
-function serve(form: unknown, answer: { status: number; body: unknown } = { status: 200, body: { sent: true, message: OPEN_WORDS.sent("rowan@example.test") } }) {
+function serve(form: unknown, answer: { status: number; body: unknown } = { status: 200, body: { sent: true, message: "The server's own English words, never shown." } }) {
   posted = [];
   sentAs = [];
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string, init?: RequestInit) => {
       if (init?.method === "POST") {
-        // With files the proposal is one field of a multipart post (Rye, 10 Nov 2026).
         const multipart = init.body instanceof FormData ? init.body : null;
         posted.push({ url, body: JSON.parse(String(multipart ? multipart.get("proposal") : init.body)) });
         sentAs.push({ files: multipart ? (multipart.getAll("files") as File[]) : [], headers: init.headers });
@@ -59,85 +71,422 @@ function serve(form: unknown, answer: { status: number; body: unknown } = { stat
   );
 }
 
+/** Open the application as a role card's Apply link does. */
+const applyFor = async (id = "r-gate", form: unknown = FORM, answer?: { status: number; body: unknown }) => {
+  window.history.pushState({}, "", `/propose-a-role?role=${id}`);
+  serve(form, answer);
+  render(<ProposeARole />);
+  await screen.findByRole("heading", { level: 1, name: /^Apply: / });
+};
+
+/** About you, as the step asks it. */
+const fillAbout = () => {
+  fireEvent.change(screen.getByLabelText(OPEN_WORDS.nameLabel), { target: { value: "Rowan" } });
+  fireEvent.change(screen.getByLabelText(OPEN_WORDS.emailLabel), { target: { value: "rowan@example.test" } });
+  fireEvent.change(screen.getByLabelText(OPEN_WORDS.whyLabel), { target: { value: "The gate is always shut." } });
+  fireEvent.click(screen.getByLabelText(/agree to the background check/i));
+};
+/** Everything the application asks before it will send. */
+const completeAll = async () => {
+  fillAbout();
+  fireEvent.change(screen.getByLabelText(OPEN_WORDS.aimLabel), { target: { value: "The gate opens at dawn." } });
+  fillValue();
+  fireEvent.change(screen.getByLabelText("Your commitment"), { target: { value: "50" } });
+  fireEvent.click(await screen.findByLabelText(LETTER.intent));
+  fireEvent.click(screen.getByLabelText(/confidentiality agreement before I see/));
+};
+const shown = () => Array.from(document.querySelectorAll<HTMLElement>("[data-stone]")).filter((s) => !s.hidden).map((s) => s.getAttribute("data-stone"));
+
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
   auth.user = null;
+  window.localStorage.clear();
   window.history.pushState({}, "", "/");
 });
 
-describe("the form", () => {
-  it("offers next season's roles by circle, up to three, and sending says to check the email", async () => {
-    serve(FORM);
-    render(<ProposeARole />);
-    expect(await screen.findByRole("heading", { name: OPEN_WORDS.heading("Test Village") })).toBeTruthy();
-    expect(screen.getByText(OPEN_WORDS.lede("Season of Roots"))).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "Land Circle" })).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "People Circle" })).toBeTruthy();
-
-    const box = (name: string) => within(document.querySelector(`[data-role="${name}"]`) as HTMLElement).getByRole("checkbox");
-    fireEvent.click(box("r-gate"));
-    fireEvent.click(box("r-well"));
-    fireEvent.click(box("r-host"));
-    // A fourth cannot be ticked.
-    expect((box("r-cook") as HTMLInputElement).disabled).toBe(true);
-    fireEvent.click(box("r-well"));
-    expect((box("r-cook") as HTMLInputElement).disabled).toBe(false);
-
-    const gate = document.querySelector('[data-role="r-gate"]') as HTMLElement;
-    fireEvent.change(within(gate).getByLabelText(/What you bring to this role/), { target: { value: "I open gates for a living." } });
-    fireEvent.change(screen.getByLabelText(OPEN_WORDS.whyLabel), { target: { value: "The gate is always shut." } });
-    fireEvent.change(screen.getByLabelText(OPEN_WORDS.aimLabel), { target: { value: "The gate opens at dawn." } });
-    fireEvent.click(screen.getByLabelText("I accept the terms on offer."));
-    fireEvent.change(screen.getByLabelText(OPEN_WORDS.nameLabel), { target: { value: "Rowan Field" } });
-    fireEvent.change(screen.getByLabelText(OPEN_WORDS.emailLabel), { target: { value: "rowan@example.test" } });
-    // The two agreements are required (Rye, 9 Nov). The membership letter is aligned with HERE, by
-    // the version the form drew (Rye's answer 8); the confidentiality agreement once approved.
-    fireEvent.click(await screen.findByLabelText(LETTER.intent));
-    fireEvent.click(screen.getByLabelText(/confidentiality agreement before I see/));
-    fireEvent.click(screen.getByRole("button", { name: OPEN_WORDS.send }));
-
-    expect(await screen.findByRole("heading", { name: "Check your email" })).toBeTruthy();
-    expect(screen.getByText(OPEN_WORDS.sent("rowan@example.test"))).toBeTruthy();
-    expect(posted).toHaveLength(1);
-    expect(posted[0].url).toBe("/api/open-proposals");
-    expect(posted[0].body.card.terms).toEqual({ choice: "accept", note: "" });
-    expect(posted[0].body).toMatchObject({
-      name: "Rowan Field",
-      email: "rowan@example.test",
-      why: "The gate is always shut.",
-      hp: "",
-      roles: [
-        { roleId: "r-gate", note: "I open gates for a living." },
-        { roleId: "r-host", note: "" },
-      ],
-      card: { roles: [{ roleId: "r-gate", moves: [], firstMoon: [] }, { roleId: "r-host", moves: [], firstMoon: [] }], serves: [], hours: "", agreed: { nda: true } },
-      membership: { letterVersion: LETTER.version },
-    });
-    // No payment anywhere on the path: nothing posted names money.
-    expect(JSON.stringify(posted[0].body)).not.toMatch(/contribution|amount|payment|dues/i);
+describe("one role per application", () => {
+  it("the card's Apply link opens \"Apply: [role]\" with that role chosen, and nothing to tick for a second one", async () => {
+    await applyFor("r-host");
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(OPEN_WORDS.heading("Welcome Host"));
+    expect(document.querySelector("[data-role-beside]")?.textContent).toContain("Welcome Host");
+    expect(document.querySelectorAll('[data-role] input[type="checkbox"]')).toHaveLength(0);
+    expect(document.querySelector("[data-role-choice]")).toBeNull();
   });
 
-  it("membership at application: the letter is there to read, aligning sends its version, and a signed-in member already aligned is asked nothing", async () => {
+  it("with no role named, shows the open roles as one door each, and choosing one opens its application and names it in the address", async () => {
+    window.history.pushState({}, "", "/propose-a-role");
     serve(FORM);
     render(<ProposeARole />);
+    expect(await screen.findByRole("heading", { level: 1, name: OPEN_WORDS.chooseHeading })).toBeTruthy();
+    const doors = within(document.querySelector("[data-role-choice]") as HTMLElement).getAllByRole("button");
+    expect(doors.map((d) => d.getAttribute("data-role"))).toEqual(["r-gate", "r-host"]);
+    expect(document.querySelector("[data-open-proposal]")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /Apply: Gate Keeper/ }));
+    expect(await screen.findByRole("heading", { level: 1, name: OPEN_WORDS.heading("Gate Keeper") })).toBeTruthy();
+    expect(window.location.search).toBe("?role=r-gate");
+    // A way back to choose a different one, which never adds a second.
+    fireEvent.click(screen.getByRole("button", { name: "Apply for a different role" }));
+    expect(await screen.findByRole("heading", { level: 1, name: OPEN_WORDS.chooseHeading })).toBeTruthy();
+    expect(window.location.search).toBe("");
+  });
+
+  it("a link naming several roles applies for the first one still offered; one no longer offered says so and offers the rest", async () => {
+    window.history.pushState({}, "", "/propose-a-role?role=r-gone&role=r-host&role=r-gate");
+    serve(FORM);
+    render(<ProposeARole />);
+    expect(await screen.findByRole("heading", { level: 1, name: OPEN_WORDS.heading("Welcome Host") })).toBeTruthy();
+    cleanup();
+    window.history.pushState({}, "", "/propose-a-role?role=r-gone");
+    serve(FORM);
+    render(<ProposeARole />);
+    expect(await screen.findByRole("heading", { level: 1, name: OPEN_WORDS.chooseHeading })).toBeTruthy();
+    expect(document.querySelector("[data-role-gone]")?.textContent).toMatch(/not open any more/);
+  });
+
+  it("sends exactly one role, the value items as the card's goals, their season goals, the ticks, the ramp-up and the commitment", async () => {
+    await applyFor();
+    fireEvent.click(screen.getByLabelText("Visit the land"));
+    await completeAll();
+    fireEvent.click(document.querySelector("[data-add-value]") as HTMLElement);
+    fireEvent.change(document.getElementById("value-r-gate-1-title") as HTMLInputElement, { target: { value: "Find water" } });
+    fireEvent.change(document.getElementById("value-r-gate-1-done") as HTMLInputElement, { target: { value: "the well test is back" } });
+    fireEvent.change(document.getElementById("value-r-gate-1-serves") as HTMLSelectElement, { target: { value: "g-water" } });
+    fireEvent.click(screen.getByLabelText(/I would like a ramp-up/));
+    sendNow();
+    expect(await screen.findByRole("heading", { name: "Check your email" })).toBeTruthy();
+    expect(screen.getByText("Check rowan@example.test. We sent a link to confirm it's you. Your application reaches us once you open it.")).toBeTruthy();
+    expect(screen.queryByText(/server's own English/)).toBeNull();
+    expect(posted).toHaveLength(1);
+    const body = posted[0].body;
+    expect(body.roles).toEqual([{ roleId: "r-gate", note: "" }]);
+    expect(body.knowUs).toEqual(["Visit the land"]);
+    expect(body.rampUp).toBe(true);
+    expect(body.card).toMatchObject({
+      roles: [
+        {
+          roleId: "r-gate",
+          moves: [],
+          firstMoon: [
+            { quest: "Open the gate each dawn", doneWhen: "the gate is open by sunrise", serves: "g-team" },
+            { quest: "Find water", doneWhen: "the well test is back", serves: "g-water" },
+          ],
+        },
+      ],
+      serves: [
+        { goalId: "g-team", how: "Open the gate each dawn", roleId: "r-gate" },
+        { goalId: "g-water", how: "Find water", roleId: "r-gate" },
+      ],
+      commitmentPct: 50,
+      agreed: { nda: true },
+      terms: { answers: {} },
+    });
+    expect(body.membership).toEqual({ letterVersion: LETTER.version });
+    // No payment anywhere on the application: nothing posted names money.
+    expect(JSON.stringify(body)).not.toMatch(/contribution|amount|payment|dues/i);
+  });
+});
+
+describe("the six steps", () => {
+  it("shows one step at a time under \"Step N of 6\", with one primary act worded as what comes next", async () => {
+    await applyFor();
+    expect(shown()).toEqual(["know"]);
+    expect(screen.getByRole("heading", { level: 2 }).textContent).toBe("Step 1 of 6 · Get to know us");
+    const bar = document.querySelector("[data-stone-bar]") as HTMLElement;
+    expect(within(bar).getByRole("button", { name: "Continue to About you" })).toBeTruthy();
+    // One firefly cluster on the page, on that one act.
+    expect(document.querySelectorAll("[data-open-proposal] .jw-btn.bg-notice")).toHaveLength(1);
+    // The six steps in the brief's order, on the gold rule.
+    const mark = document.querySelector("[data-step-mark]") as HTMLElement;
+    expect(Array.from(mark.querySelectorAll("li")).map((li) => li.querySelector("[aria-label]")?.getAttribute("aria-label"))).toEqual([
+      "Step 1: Get to know us",
+      "Step 2: About you",
+      "Step 3: Your value",
+      "Step 4: The terms",
+      "Step 5: Your first day",
+      "Step 6: Review & submit",
+    ]);
+    // Nothing of the game register on this page.
+    expect(document.body.textContent).not.toMatch(/\bquest|stone|moss|\bmoon\b/i);
+  });
+
+  it("Get to know us never locks: the note shows while a way is open, and Continue moves on with nothing ticked", async () => {
+    await applyFor();
+    expect(document.querySelector("[data-know-note]")?.textContent).toBe(SETUP.knowUsNote);
+    for (const w of SETUP.knowUs) fireEvent.click(screen.getByLabelText(w));
+    expect(document.querySelector("[data-know-note]")).toBeNull();
+    fireEvent.click(screen.getByLabelText("Visit the land"));
+    expect(document.querySelector("[data-know-note]")).toBeTruthy();
+    pressNext();
+    expect(stoneNow()).toBe("about");
+    expect(screen.queryByRole("alert")).toBeNull();
+    await waitFor(() => expect(document.activeElement?.id).toBe("stone-1-h"));
+  });
+
+  it("per step (M1): Continue with gaps posts nothing, lists only this step's gaps at once, shows each beside its field, and moves the cursor to the first", async () => {
+    await applyFor();
+    pressNext();
+    pressNext();
+    expect(stoneNow()).toBe("about");
+    const list = (await screen.findByText(/things to look at before you continue/)).closest("[data-problems]") as HTMLElement;
+    for (const words of [OPEN_WORDS.needName, OPEN_WORDS.needEmail, OPEN_WORDS.needWhy]) expect(list.textContent).toContain(words);
+    for (const words of [OPEN_WORDS.needAim, "Tick that you will align"]) expect(list.textContent).not.toContain(words);
+    expect(posted).toHaveLength(0);
+    expect(document.querySelector("#propose-problem-name")?.textContent).toBe(OPEN_WORDS.needName);
+    await waitFor(() => expect(document.activeElement?.id).toBe("propose-name"));
+    expect(screen.getByLabelText(OPEN_WORDS.nameLabel).getAttribute("aria-invalid")).toBe("true");
+  });
+
+  it("Your value: items can be added and removed, each must say how we will know it is done, and each is tagged to a season goal shown right there", async () => {
+    await applyFor();
+    pressNext();
+    fillAbout();
+    pressNext();
+    expect(stoneNow()).toBe("value");
+    const goalsShown = document.querySelector("[data-season-goals]") as HTMLElement;
+    for (const g of GOALS) expect(within(goalsShown).getByText(g.text)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText(OPEN_WORDS.aimLabel), { target: { value: "The gate opens at dawn." } });
+    fireEvent.change(document.getElementById("value-r-gate-0-title") as HTMLInputElement, { target: { value: "Open the gate" } });
+    pressNext();
+    const list = (await screen.findByText(/things to look at before you continue/)).closest("[data-problems]") as HTMLElement;
+    expect(list.textContent).toContain("Say how we will know value 1 is done.");
+    expect(list.textContent).toContain("Choose the season goal value 1 serves.");
+    await waitFor(() => expect(document.activeElement?.id).toBe("value-r-gate-0-done"));
+    fireEvent.change(document.getElementById("value-r-gate-0-done") as HTMLInputElement, { target: { value: "at sunrise" } });
+    pressNext();
+    await waitFor(() => expect(document.activeElement?.id).toBe("value-r-gate-0-serves"));
+    fireEvent.change(document.getElementById("value-r-gate-0-serves") as HTMLSelectElement, { target: { value: "g-team" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add another value item" }));
+    expect(document.querySelectorAll("[data-value-item]")).toHaveLength(2);
+    fireEvent.click(screen.getByRole("button", { name: "Remove value 2" }));
+    expect(document.querySelectorAll("[data-value-item]")).toHaveLength(1);
+    pressNext();
+    expect(stoneNow()).toBe("terms");
+  });
+
+  it("the final review: Send lists every gap at once in walking order, each naming its step, and each takes you to its step and field", async () => {
+    await applyFor();
+    await completeAll();
+    walk();
+    expect(stoneNow()).toBe("review");
+    fireEvent.change(screen.getByLabelText(OPEN_WORDS.whyLabel), { target: { value: "" } });
+    fireEvent.change(screen.getByLabelText(OPEN_WORDS.aimLabel), { target: { value: "" } });
+    fireEvent.click(screen.getByLabelText(/confidentiality agreement before I see/));
+    fireEvent.click(screen.getByRole("button", { name: OPEN_WORDS.send }));
+    const list = (await screen.findByText(/things to fix before we can send this/)).closest("[data-problems]") as HTMLElement;
+    const items = Array.from(list.querySelectorAll("li")).map((li) => li.textContent ?? "");
+    expect(items[0]).toBe(`About you: ${OPEN_WORDS.needWhy}`);
+    expect(items[1]).toBe(`Your value: ${OPEN_WORDS.needAim}`);
+    expect(items[2]).toMatch(/^Tick that you will align/);
+    expect(posted).toHaveLength(0);
+    await waitFor(() => expect(document.activeElement?.id).toBe("propose-problems"));
+    fireEvent.click(within(list).getByRole("button", { name: `About you: ${OPEN_WORDS.needWhy}` }));
+    expect(stoneNow()).toBe("about");
+    await waitFor(() => expect(document.activeElement?.id).toBe("propose-why"));
+    expect(screen.getByLabelText(OPEN_WORDS.whyLabel).getAttribute("aria-invalid")).toBe("true");
+  });
+
+  it("Back keeps every word, and the step circles return to any step already reached", async () => {
+    await applyFor();
+    pressNext();
+    fillAbout();
+    pressNext();
+    fireEvent.change(screen.getByLabelText(OPEN_WORDS.aimLabel), { target: { value: "The gate opens at dawn." } });
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    expect(stoneNow()).toBe("about");
+    expect((screen.getByLabelText(OPEN_WORDS.whyLabel) as HTMLTextAreaElement).value).toBe("The gate is always shut.");
+    fireEvent.click(within(document.querySelector("[data-step-mark]") as HTMLElement).getByRole("button", { name: "Step 3: Your value" }));
+    expect(stoneNow()).toBe("value");
+    expect((screen.getByLabelText(OPEN_WORDS.aimLabel) as HTMLInputElement).value).toBe("The gate opens at dawn.");
+    // A step not reached yet is no button.
+    expect(screen.queryByRole("button", { name: "Step 5: Your first day" })).toBeNull();
+  });
+
+  it("a desk: Enter in a one-line field moves on, the arrows walk when the caret is not in a field, and a field keeps its own keys", async () => {
+    await applyFor();
+    const form = document.querySelector("[data-open-proposal]") as HTMLFormElement;
+    fireEvent.keyDown(form, { key: "ArrowRight" });
+    expect(stoneNow()).toBe("about");
+    const nameBox = screen.getByLabelText(OPEN_WORDS.nameLabel);
+    fireEvent.keyDown(nameBox, { key: "ArrowLeft" });
+    expect(stoneNow()).toBe("about");
+    fillAbout();
+    fireEvent.keyDown(screen.getByLabelText(OPEN_WORDS.whyLabel), { key: "Enter" });
+    expect(stoneNow()).toBe("about");
+    // About you walks its three panes first (M7), then moves on.
+    fireEvent.keyDown(nameBox, { key: "Enter" });
+    expect(stoneNow()).toBe("about");
+    expect(paneNow()).toBe(1);
+    fireEvent.submit(form);
+    fireEvent.submit(form);
+    expect(stoneNow()).toBe("value");
+    fireEvent.keyDown(form, { key: "ArrowLeft" });
+    expect(stoneNow()).toBe("about");
+    expect(paneNow()).toBe(2);
+    fireEvent.submit(form);
+    expect(stoneNow()).toBe("value");
+    fireEvent.keyDown(form, { key: "ArrowLeft" });
+    fireEvent.keyDown(screen.getByLabelText(OPEN_WORDS.whyLabel), { key: "Enter", ctrlKey: true });
+    expect(stoneNow()).toBe("value");
+    expect(posted).toHaveLength(0);
+  });
+
+  it("a phone: a swipe left walks on, right walks back, and a swipe that starts in a field is the field's", async () => {
+    await applyFor();
+    const form = document.querySelector("[data-open-proposal]") as HTMLFormElement;
+    const swipe = (on: Element, dx: number, dy = 0) => {
+      fireEvent.touchStart(on, { touches: [{ clientX: 200, clientY: 300 }] });
+      fireEvent.touchEnd(on, { changedTouches: [{ clientX: 200 + dx, clientY: 300 + dy }] });
+    };
+    swipe(form, -120);
+    expect(stoneNow()).toBe("about");
+    swipe(screen.getByLabelText(OPEN_WORDS.nameLabel), 120);
+    expect(stoneNow()).toBe("about");
+    swipe(form, 80, 200);
+    expect(stoneNow()).toBe("about");
+    swipe(form, 120);
+    expect(stoneNow()).toBe("know");
+  });
+
+  it("About you offers starter phrases that begin the answer, and no example text in the field", async () => {
+    await applyFor();
+    pressNext();
+    const why = screen.getByLabelText(OPEN_WORDS.whyLabel) as HTMLTextAreaElement;
+    expect(why.placeholder).toBe("");
+    fireEvent.click(screen.getByRole("button", { name: "What I have built before:" }));
+    fireEvent.click(screen.getByRole("button", { name: "Why now:" }));
+    expect(why.value).toBe("What I have built before:\n\nWhy now: ");
+  });
+
+  it("Review & submit reads every step back with a way to change it", async () => {
+    await applyFor();
+    fireEvent.click(screen.getByLabelText("Visit the land"));
+    await completeAll();
+    walk();
+    const review = document.querySelector("[data-review]") as HTMLElement;
+    expect(review.textContent).toContain("1 of 3 done");
+    expect(review.textContent).toContain("Rowan · The gate is always shut.");
+    expect(review.textContent).toContain("1 value item. Aim: The gate opens at dawn.");
+    expect(review.textContent).toContain("Commitment: 50%");
+    fireEvent.click(within(review).getAllByRole("button", { name: "Change" })[2]);
+    expect(stoneNow()).toBe("value");
+  });
+});
+
+describe("the terms", () => {
+  it("shows the village's pay shape as the role cards do: shares only, the onboarding line, the plain word on risk beside the footer, and the ramp-up option", async () => {
+    await applyFor();
+    const shape = document.querySelector("[data-comp-shape]") as HTMLElement;
+    expect(Array.from(shape.querySelectorAll("[data-share-pct]")).map((d) => d.textContent)).toEqual(["40%", "55%", "5%"]);
+    expect(shape.querySelector("[data-comp-onboarding]")?.textContent).toBe("To be decided in the onboarding process.");
+    expect(shape.querySelector("[data-at-risk]")?.textContent).toBe(SETUP.atRisk);
+    expect(shape.querySelector("[data-comp-footer]")?.textContent).toBe(SETUP.footer);
+    // The risk sits right beside the footer.
+    expect(shape.querySelector("[data-at-risk]")?.nextElementSibling).toBe(shape.querySelector("[data-comp-footer]"));
+    // Never a range, a minimum or a budget figure on this step.
+    expect((document.querySelector('[data-stone="terms"]') as HTMLElement).textContent).not.toMatch(/\$|USD|per month|a month|minimum|budget/i);
+    expect(screen.getByLabelText(/I would like a ramp-up/)).toBeTruthy();
+  });
+
+  it("with no shape written the village sees the placeholder at N%, and no line it has not written", async () => {
+    await applyFor("r-gate", { ...FORM, founding: { ...SETUP, shares: [], atRisk: "", footer: "" } });
+    const shape = document.querySelector("[data-comp-shape]") as HTMLElement;
+    expect(Array.from(shape.querySelectorAll("dt")).map((d) => d.textContent)).toEqual(["Cash", "Equity", "Credits"]);
+    expect(Array.from(shape.querySelectorAll("[data-share-pct]")).map((d) => d.textContent)).toEqual(["N%", "N%", "N%"]);
+    expect(shape.querySelector("[data-at-risk]")).toBeNull();
+    expect(shape.querySelector("[data-comp-footer]")).toBeNull();
+  });
+
+  it("each setting the role has written is answered, and the answers travel with the card", async () => {
+    await applyFor("r-lfs", { ...FORM, roles: [{ id: "r-lfs", name: "Lead Finance Steward", circle: "Anchor Circle", aim: "Money kept true.", terms: { words: { term: "We renew together each cycle." }, commitmentPct: 100 } }] });
+    expect(screen.getByText("We renew together each cycle.")).toBeTruthy();
+    expect(document.querySelector("[data-role-beside]")?.textContent).toContain("The role asks 100% of your commitment");
+    await completeAll();
+    for (const box of screen.getAllByLabelText("I accept")) fireEvent.click(box);
+    sendNow();
+    await screen.findByRole("heading", { name: "Check your email" });
+    expect(posted[0].body.card.terms).toEqual({ answers: { term: { choice: "accept", note: "" }, clocks: { choice: "accept", note: "" } } });
+  });
+});
+
+describe("your first day", () => {
+  it("says what the first cycle looks like, the first conversations, and asks the time zone from the browser and the earliest start", async () => {
+    await applyFor();
+    const step = document.querySelector('[data-stone="first"]') as HTMLElement;
+    expect(step.querySelector("[data-first-cycle]")?.textContent).toContain(SETUP.firstCycle);
+    expect(step.querySelector("[data-first-conversations]")?.textContent).toContain("Technical Operations: your accounts and tools");
+    expect((within(step).getByLabelText("Your time zone") as HTMLInputElement).value).toBe(Intl.DateTimeFormat().resolvedOptions().timeZone);
+    expect(within(step).getByLabelText(/earliest you could start/)).toBeTruthy();
+    expect(step.querySelector("[data-first-booking]"), "control: a role with no conversations names no first one").toBeNull();
+  });
+
+  it("names the first interviewer from the role's own list, and says its booking link comes with the invitation", async () => {
+    const conversations = [{ role: "Operations Role", minutes: 60 }, { role: "Hiring Role", minutes: 20 }];
+    await applyFor("r-gate", { ...FORM, roles: [{ ...(FORM as any).roles[0], conversations }] });
+    const step = document.querySelector('[data-stone="first"]') as HTMLElement;
+    const said = step.querySelector("[data-first-booking]")?.textContent ?? "";
+    expect(said).toContain("With Operations Role.");
+    expect(said).toContain("through the booking link in your invitation, or we'll write to you with times");
+    expect(said).not.toContain("Hiring Role");
+  });
+});
+
+describe("the saved draft", () => {
+  it("keeps the words and the step across leaving and coming back, never the references, and is cleared once sent", async () => {
+    await applyFor();
+    pressNext();
+    fillAbout();
+    fireEvent.change(screen.getByLabelText("Reference 1: name"), { target: { value: "Ines Vargas" } });
+    fireEvent.change(screen.getByLabelText("Reference 1: how you know them"), { target: { value: "We built a fence" } });
+    fireEvent.change(screen.getByLabelText("Reference 1: email or phone"), { target: { value: "ines@example.org" } });
+    pressNext();
+    expect(stoneNow()).toBe("value");
+    fireEvent.change(screen.getByLabelText(OPEN_WORDS.aimLabel), { target: { value: "The gate opens at dawn." } });
+    const stored = window.localStorage.getItem(draftKey("r-gate", "")) ?? "";
+    expect(stored).toContain("The gate is always shut.");
+    expect(stored).not.toContain("Ines Vargas");
+    expect(stored).not.toContain("ines@example.org");
+    expect(stored).not.toMatch(/consent|references|files/);
+    cleanup();
+
+    await applyFor();
+    expect(await screen.findByText(/We kept your answers from last time/)).toBeTruthy();
+    expect(stoneNow()).toBe("value");
+    expect((screen.getByLabelText(OPEN_WORDS.aimLabel) as HTMLInputElement).value).toBe("The gate opens at dawn.");
+    expect((screen.getByLabelText(OPEN_WORDS.whyLabel) as HTMLTextAreaElement).value).toBe("The gate is always shut.");
+    expect((screen.getByLabelText("Reference 1: name") as HTMLInputElement).value).toBe("");
+
+    await completeAll();
+    sendNow();
+    await screen.findByRole("heading", { name: "Check your email" });
+    expect(window.localStorage.getItem(draftKey("r-gate", ""))).toBeNull();
+  });
+
+  it("a draft for one role never fills another role's application", async () => {
+    await applyFor("r-gate");
+    pressNext();
+    fillAbout();
+    cleanup();
+    await applyFor("r-host");
+    expect((screen.getByLabelText(OPEN_WORDS.whyLabel) as HTMLTextAreaElement).value).toBe("");
+    expect(stoneNow()).toBe("know");
+  });
+});
+
+describe("what the form kept from the Firefly Path", () => {
+  it("membership at application: the letter is there to read, aligning sends its version, and a signed-in member already aligned is asked nothing", async () => {
+    await applyFor();
     const ask = await waitFor(() => {
       const el = document.querySelector('[data-membership="ask"]');
       if (!el) throw new Error("no membership block yet");
       return el as HTMLElement;
     });
     expect(within(ask).getByText(/Read the Membership agreement/)).toBeTruthy();
-    expect(within(ask).getByText(/Aligning is the village's way of signing\./)).toBeTruthy();
     expect(within(ask).getByText(/No payment is asked/)).toBeTruthy();
-    // Control: there is no Love Letter tick on the form at all; the alignment is the agreement.
     expect(screen.queryByLabelText(/Love Letter/)).toBeNull();
-    // The one checkbox about the letter is the alignment itself, bound to the letter's own sentence.
-    const aboutLetter = screen.getAllByRole("checkbox").filter((c) => /Love Letter|membership/i.test(c.closest("label")?.textContent ?? ""));
-    expect(aboutLetter.map((c) => c.closest("label")?.textContent)).toEqual([LETTER.intent]);
     cleanup();
 
     auth.user = { name: "Gil Moss", email: "gil@example.test" };
-    posted = [];
     vi.stubGlobal(
       "fetch",
       vi.fn(async (url: string) => {
@@ -152,91 +501,97 @@ describe("the form", () => {
     expect(screen.queryByLabelText(LETTER.intent)).toBeNull();
   });
 
-  it("links and files: a link is sent with its label, a file goes as multipart, and the data promise is on the form (Rye, 10 Nov 2026)", async () => {
-    serve(FORM);
-    render(<ProposeARole />);
-    fireEvent.click(within((await screen.findByText("Gate Keeper")).closest("[data-role]") as HTMLElement).getByRole("checkbox"));
+  it("links and files: a link is sent with its label, a file goes as multipart, and the data promise is on the form", async () => {
+    await applyFor();
     expect(document.querySelector("[data-attachments-promise]")?.textContent).toBe(ATTACHMENT_WORDS.promise);
     fireEvent.change(screen.getByLabelText("Link 1: what it is"), { target: { value: "Gates I built" } });
-    fireEvent.change(screen.getByLabelText("Link 1: web address"), { target: { value: "http://gates.example.org" } });
-    // Said at once: an address that is not https.
-    expect(screen.getByRole("alert").textContent).toBe(ATTACHMENT_WORDS.linkNotHttps);
     fireEvent.change(screen.getByLabelText("Link 1: web address"), { target: { value: "https://gates.example.org/rowan" } });
-    expect(screen.queryByRole("alert")).toBeNull();
     const pdf = new File(["%PDF-1.7"], "portfolio.pdf", { type: "application/pdf" });
     fireEvent.change(document.querySelector('[data-attachments] input[type="file"]') as HTMLInputElement, { target: { files: [pdf] } });
-    expect(document.querySelector('[data-file-row="0"]')?.textContent).toContain("portfolio.pdf");
-    fireEvent.submit(document.querySelector("[data-open-proposal]") as HTMLFormElement);
+    await completeAll();
+    sendNow();
     await waitFor(() => expect(posted).toHaveLength(1));
     expect(posted[0].body.links).toEqual([{ label: "Gates I built", url: "https://gates.example.org/rowan" }]);
     expect(sentAs[0].files.map((f) => f.name)).toEqual(["portfolio.pdf"]);
-    // The browser writes the multipart boundary itself: no content type is set by hand.
     expect(sentAs[0].headers).toBeUndefined();
   });
 
-  it("without files the proposal goes as JSON, and blank link rows are not sent", async () => {
-    serve(FORM);
-    render(<ProposeARole />);
-    fireEvent.click(within((await screen.findByText("Gate Keeper")).closest("[data-role]") as HTMLElement).getByRole("checkbox"));
-    fireEvent.submit(document.querySelector("[data-open-proposal]") as HTMLFormElement);
+  it("without files the application goes as JSON, and blank link rows are not sent", async () => {
+    await applyFor();
+    await completeAll();
+    sendNow();
     await waitFor(() => expect(posted).toHaveLength(1));
     expect(sentAs[0]).toEqual({ files: [], headers: { "Content-Type": "application/json" } });
     expect(posted[0].body).not.toHaveProperty("links");
   });
 
-  it("a refusal says why and marks its field, and nothing is lost", async () => {
-    serve(FORM, { status: 400, body: { error: OPEN_WORDS.needWhy, field: "why" } });
-    render(<ProposeARole />);
-    fireEvent.click(within((await screen.findByText("Gate Keeper")).closest("[data-role]") as HTMLElement).getByRole("checkbox"));
-    fireEvent.change(screen.getByLabelText(OPEN_WORDS.nameLabel), { target: { value: "Rowan" } });
-    fireEvent.submit(document.querySelector("[data-open-proposal]") as HTMLFormElement);
-    expect((await screen.findByRole("alert")).textContent).toBe(OPEN_WORDS.needWhy);
+  it("a server refusal on a field lands on that field's step, marks it, and nothing is lost", async () => {
+    await applyFor("r-gate", FORM, { status: 400, body: { error: OPEN_WORDS.needWhy, field: "why" } });
+    await completeAll();
+    sendNow();
+    expect((await screen.findByRole("alert")).textContent).toContain(OPEN_WORDS.needWhy);
+    expect(stoneNow()).toBe("about");
     expect(screen.getByLabelText(OPEN_WORDS.whyLabel).getAttribute("aria-invalid")).toBe("true");
     expect((screen.getByLabelText(OPEN_WORDS.nameLabel) as HTMLInputElement).value).toBe("Rowan");
   });
 
-  it("the privacy note says an AI may draft replies, in the same words as the confirmation email", async () => {
-    serve(FORM);
-    render(<ProposeARole />);
-    await screen.findByText("Gate Keeper");
-    expect(document.querySelector("[data-ai-drafts]")?.textContent).toBe(OPEN_AI_DRAFTS);
+  it("a refusal for too many tries stays on Review & submit in the server's own words, and nothing is lost", async () => {
+    await applyFor("r-gate", FORM, { status: 429, body: { error: OPEN_WORDS.tooMany } });
+    await completeAll();
+    sendNow();
+    expect((await screen.findByRole("alert")).textContent).toContain(OPEN_WORDS.tooMany);
+    expect(stoneNow()).toBe("review");
+    expect((screen.getByLabelText(OPEN_WORDS.nameLabel) as HTMLInputElement).value).toBe("Rowan");
   });
 
-  it("the honeypot is there, hidden from people and from screen readers", async () => {
-    serve(FORM);
-    render(<ProposeARole />);
-    await screen.findByText("Gate Keeper");
+  it("the first unanswered field: an unpicked choice, an empty line or list, and an optional note passed over", () => {
+    const box = document.createElement("div");
+    box.innerHTML = `
+      <input type="radio" name="a" checked><input type="radio" name="a">
+      <textarea id="note"></textarea>
+      <input type="checkbox" id="tick">
+      <input id="filled" value="here">
+      <select id="pick"><option value="">Choose</option><option value="10">10%</option></select>
+      <input id="later">`;
+    expect(firstUnanswered(box)?.id).toBe("pick");
+    (box.querySelector("#pick") as HTMLSelectElement).value = "10";
+    expect(firstUnanswered(box)?.id).toBe("later");
+  });
+
+  it("holds the floating compass back, says an AI may draft replies in the confirmation email's words, and hides the honeypot", async () => {
+    await applyFor();
+    expect(document.querySelector("form[data-hides-fab]")).toBeTruthy();
+    expect(document.querySelector("[data-ai-drafts]")?.textContent).toBe(OPEN_AI_DRAFTS);
     const hp = document.querySelector('input[name="hp"]') as HTMLInputElement;
     expect(hp.tabIndex).toBe(-1);
     expect(hp.closest('[aria-hidden="true"]')).toBeTruthy();
   });
 
-  it("a circle card's Apply link lands with its role ticked, and a role no longer offered ticks nothing", async () => {
-    window.history.pushState({}, "", "/propose-a-role?role=r-host");
-    serve(FORM);
-    render(<ProposeARole />);
-    await screen.findByText("Welcome Host");
-    const ticked = (id: string) => (within(document.querySelector(`[data-role="${id}"]`) as HTMLElement).getByRole("checkbox") as HTMLInputElement).checked;
-    expect(ticked("r-host")).toBe(true);
-    expect(ticked("r-gate")).toBe(false);
-    cleanup();
-    window.history.pushState({}, "", "/propose-a-role?role=r-gone");
-    serve(FORM);
-    render(<ProposeARole />);
-    await screen.findByText("Welcome Host");
-    expect(["r-gate", "r-well", "r-host", "r-cook"].some(ticked)).toBe(false);
+  it("a guest who is signed in finds their name and address filled in, and is not told they need no account", async () => {
+    auth.user = { name: "Gil Moss", email: "gil@example.test" };
+    await applyFor();
+    const name = screen.getByLabelText(OPEN_WORDS.nameLabel) as HTMLInputElement;
+    await waitFor(() => expect(name.value).toBe("Gil Moss"));
+    expect((screen.getByLabelText(OPEN_WORDS.emailLabel) as HTMLInputElement).value).toBe("gil@example.test");
+    expect(document.body.textContent).not.toContain("no account needed");
+    expect(document.body.textContent).toContain("Your name and email come from your account");
   });
 
-  it("a guest who is signed in finds their name and address filled in, and can change them", async () => {
-    auth.user = { name: "Gil Moss", email: "gil@example.test" };
-    serve(FORM);
-    render(<ProposeARole />);
-    await screen.findByText("Gate Keeper");
-    const name = screen.getByLabelText(OPEN_WORDS.nameLabel) as HTMLInputElement;
-    expect(name.value).toBe("Gil Moss");
-    expect((screen.getByLabelText(OPEN_WORDS.emailLabel) as HTMLInputElement).value).toBe("gil@example.test");
-    fireEvent.change(name, { target: { value: "Gil" } });
-    expect(name.value).toBe("Gil");
+  it("QA2-05: names no internal cycle under the title, even when the village's applications run by the moon", async () => {
+    await applyFor("r-gate", { ...FORM, season: { id: "s-now", name: "Season of Seeds", startsOn: "2000-01-01" }, term: { kind: "moon", startsOn: "2026-11-09", endsOn: "2026-12-08" } });
+    expect(document.querySelector("[data-term-days]")).toBeNull();
+    expect(document.querySelector("header")?.textContent).not.toMatch(/9 November 2026|8 December 2026|This application is for the cycle/);
+  });
+
+  it("QA2-14: the village's note shows under the title while it is set, and nothing shows while it is empty", async () => {
+    await applyFor("r-gate", { ...FORM, founding: { ...SETUP, updatedNote: "We updated this application on 14 November. Your saved answers are still here." } });
+    const note = document.querySelector("[data-updated-note]");
+    expect(note?.textContent).toBe("We updated this application on 14 November. Your saved answers are still here.");
+    // Under the title: the note sits in the page header with the heading.
+    expect(note?.closest("header")?.querySelector("h1")).toBeTruthy();
+    cleanup();
+    await applyFor("r-gate");
+    expect(document.querySelector("[data-updated-note]")).toBeNull();
   });
 
   it("closed: says so, and shows no form", async () => {
@@ -247,166 +602,235 @@ describe("the form", () => {
   });
 
   it("no next season: says so, and shows no form", async () => {
-    serve({ ...FORM, season: null, roles: [] });
-    render(<ProposeARole />);
-    expect(await screen.findByText(OPEN_WORDS.noSeason)).toBeTruthy();
+    await applyFor("r-gate", { ...FORM, season: null });
+    expect(screen.getByText(OPEN_WORDS.noSeason)).toBeTruthy();
     expect(document.querySelector("[data-open-proposal]")).toBeNull();
   });
 });
 
+describe("the sent threshold", () => {
+  const sendAs = async (address: string, replyDays?: number, form: unknown = FORM) => {
+    await applyFor("r-gate", form, { status: 200, body: { sent: true, message: OPEN_WORDS.sent(address), ...(replyDays ? { replyDays } : {}) } });
+    await completeAll();
+    fireEvent.change(screen.getByLabelText(OPEN_WORDS.emailLabel), { target: { value: address } });
+    sendNow();
+    await screen.findByRole("heading", { name: "Check your email" });
+  };
+
+  it("offers the inbox for a provider we know, dated next steps, and quiet doors while you wait (no game words)", async () => {
+    await sendAs("rowan@gmail.com", 7);
+    expect(screen.getByRole("link", { name: "Open Gmail" }).getAttribute("href")).toBe("https://mail.google.com/");
+    const steps = document.querySelector("[data-dated-steps]") as HTMLElement;
+    expect(steps.querySelectorAll("li")).toHaveLength(2);
+    expect(steps.textContent).toMatch(/Open the link in that email by /);
+    expect(steps.textContent).toMatch(/Our review: we read every application, and write to you by /);
+    const doors = within(document.querySelector("[data-wait-doors]") as HTMLElement).getAllByRole("link").map((a) => a.getAttribute("href"));
+    expect(doors).toEqual(["/roles", "/love-letter"]);
+    expect(document.querySelector('[data-threshold="sent"] [data-met="false"]')).toBeTruthy();
+  });
+
+  it("names the role's conversations in order after sending", async () => {
+    const conversations = [
+      { role: "Operations Steward", minutes: 60 },
+      { role: "CRM & Hiring Coordination Steward", minutes: 30 },
+      { role: "Visionary Channel", minutes: 30, finalApproval: true },
+    ];
+    await sendAs("rowan@example.test", undefined, { ...FORM, roles: [{ ...FORM.roles[0], conversations }] });
+    const items = Array.from((document.querySelector("[data-next-for-roles]") as HTMLElement).querySelectorAll("li")).map((li) => li.textContent);
+    expect(items).toEqual(["60 minutes with Operations Steward", "30 minutes with CRM & Hiring Coordination Steward", "30 minutes with Visionary Channel, the final approval"]);
+  });
+
+  it("no inbox button for a domain we do not know, and Fix the address goes back to the address with every answer kept", async () => {
+    await sendAs("rowan@example.test");
+    expect(document.querySelector("[data-inbox-link]")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Not rowan@example.test? Fix the address" }));
+    expect(stoneNow()).toBe("about");
+    await waitFor(() => expect(document.activeElement?.id).toBe("propose-email"));
+    expect((screen.getByLabelText(OPEN_WORDS.whyLabel) as HTMLTextAreaElement).value).toBe("The gate is always shut.");
+  });
+});
+
 describe("the confirmation link", () => {
-  it("confirms, and says it is with the village", async () => {
+  it("confirms, and says it is with us", async () => {
     window.history.pushState({}, "", "/propose-a-role/confirm?token=abc");
     serve({}, { status: 200, body: { confirmed: true, message: OPEN_WORDS.confirmed } });
     render(<ConfirmProposal />);
-    expect(await screen.findByText(OPEN_WORDS.confirmed)).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "Confirmed" })).toBeTruthy();
+    expect(screen.getByText(/Your application is with us now/)).toBeTruthy();
+    expect(document.body.textContent?.match(/Confirmed/g)).toHaveLength(1);
+    await waitFor(() => expect(document.querySelector('[data-met="true"]')).toBeTruthy());
     await waitFor(() => expect(posted[0]).toEqual({ url: "/api/open-proposals/confirm", body: { token: "abc" } }));
   });
 
-  it("shows the private status link the confirmation hands back, and only a status address (role journey L5)", async () => {
+  it("shows the private status link the confirmation hands back, and only a status address", async () => {
     window.history.pushState({}, "", "/propose-a-role/confirm?token=abc");
     serve({}, { status: 200, body: { confirmed: true, message: OPEN_WORDS.confirmed, statusPath: "/application-status/op-1?token=s3cret" } });
     render(<ConfirmProposal />);
-    const link = await screen.findByRole("link", { name: "Follow where your proposal is" });
+    const link = await screen.findByRole("link", { name: "Follow your application" });
     expect(link.getAttribute("href")).toBe("/application-status/op-1?token=s3cret");
     cleanup();
-    // Anything else the server might hand back is not drawn as a link.
     serve({}, { status: 200, body: { confirmed: true, message: OPEN_WORDS.confirmed, statusPath: "https://elsewhere.example/x" } });
     render(<ConfirmProposal />);
-    await screen.findByText(OPEN_WORDS.confirmed);
-    expect(screen.queryByRole("link", { name: "Follow where your proposal is" })).toBeNull();
+    await screen.findByRole("heading", { name: "Confirmed" });
+    expect(screen.queryByRole("link", { name: "Follow your application" })).toBeNull();
   });
 
-  it("a link that ran out says so, and offers to start again", async () => {
+  it("draws the steps after submit when the confirm route carries them (lane A2's one list), in order", async () => {
+    window.history.pushState({}, "", "/propose-a-role/confirm?token=abc");
+    const steps = [
+      { key: "received", name: "Received", when: "Today" },
+      { key: "review", name: "Our review", when: "Within 7 days" },
+    ];
+    serve({}, { status: 200, body: { confirmed: true, message: OPEN_WORDS.confirmed, steps } });
+    render(<ConfirmProposal />);
+    await screen.findByRole("heading", { name: "Confirmed" });
+    const items = Array.from(document.querySelectorAll("[data-step-after]")).map((li) => li.getAttribute("data-step-after"));
+    expect(items).toEqual(["received", "review"]);
+    expect(document.querySelector('[data-step-after="review"]')?.textContent).toBe("Our review Within 7 days");
+  });
+
+  it("a link that ran out says so, and offers to apply again", async () => {
     window.history.pushState({}, "", "/propose-a-role/confirm?token=old");
     serve({}, { status: 410, body: { error: OPEN_WORDS.confirmGone } });
     render(<ConfirmProposal />);
     expect(await screen.findByText(OPEN_WORDS.confirmGone)).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Propose again" }).getAttribute("href")).toBe("/propose-a-role");
+    expect(screen.getByRole("link", { name: "Apply again" }).getAttribute("href")).toBe("/propose-a-role");
+  });
+});
+
+describe("on a phone with the keyboard up (M2, batch 158)", () => {
+  it("keeps one bar at the bottom: the tab bar steps out while the application is open", async () => {
+    await applyFor();
+    expect(document.querySelector("form[data-open-proposal]")?.hasAttribute("data-hides-tabbar-phone")).toBe(true);
+  });
+
+  it("lifts the step bar above the keyboard, and lets it down when the keyboard closes", async () => {
+    class FakeViewport extends EventTarget {
+      height = 800;
+      offsetTop = 0;
+    }
+    const vv = new FakeViewport();
+    vi.stubGlobal("visualViewport", vv);
+    Object.defineProperty(window, "innerHeight", { configurable: true, value: 800 });
+    await applyFor();
+    const bar = document.querySelector("[data-stone-bar]") as HTMLElement;
+    expect(bar.getAttribute("data-keyboard")).toBeNull();
+    expect(bar.className).toContain("bottom-[calc(var(--stone-kb,0px)");
+    vv.height = 460;
+    vv.dispatchEvent(new Event("resize"));
+    await waitFor(() => expect(bar.getAttribute("data-keyboard")).toBe("open"));
+    expect(bar.style.getPropertyValue("--stone-kb")).toBe("340px");
+    vv.height = 800;
+    vv.dispatchEvent(new Event("resize"));
+    await waitFor(() => expect(bar.getAttribute("data-keyboard")).toBeNull());
+  });
+});
+
+describe("the review step's words (batch 158)", () => {
+  it("no longer says the line the lead deleted: \"Aligning is the village's way of signing\"", async () => {
+    await applyFor();
+    await completeAll();
+    walk();
+    expect(stoneNow()).toBe("review");
+    await screen.findByLabelText(LETTER.intent);
+    expect(document.body.textContent).toContain("It takes effect once you confirm your address");
+    expect(document.body.textContent).not.toMatch(/way of signing/);
   });
 });
 
 /*
- * A DRAFT OF SEVERAL ROLES (role draft board, 9 Nov). The board sends every
- * drafted role as its own `role` parameter. Each one the village still offers
- * arrives ticked, up to the three a proposal may name; one it no longer
- * offers is said out loud rather than dropped in silence.
+ * DESIGN G2 (the go-live design pass, 12 Nov 2026): the desk's three columns (D-06) and About you in
+ * three short panes (M7). jsdom draws every class, so the desk-only and phone-only parts are found by
+ * their markers and their `lg:` classes; the rendered page is checked in the rehearsal at 390 and 1280.
  */
-describe("arriving with several roles", () => {
-  const ticked = (id: string) => (within(document.querySelector(`[data-role="${id}"]`) as HTMLElement).getByRole("checkbox") as HTMLInputElement).checked;
+describe("design G2: the desk and the panes", () => {
+  const LFS = { ...FORM, roles: [{ id: "r-lfs", name: "Lead Finance Steward", circle: "Anchor Circle", aim: "Money kept true.", terms: { words: { term: "We renew together each cycle.", allowance: "A small allowance for tools." }, commitmentPct: 100 } }] };
 
-  it("ticks every drafted role the village offers", async () => {
-    window.history.pushState({}, "", "/propose-a-role?role=r-gate&role=r-host");
-    serve(FORM);
-    render(<ProposeARole />);
-    await screen.findByRole("heading", { name: OPEN_WORDS.heading("Test Village") });
-    await waitFor(() => expect(ticked("r-gate")).toBe(true));
-    expect(ticked("r-host")).toBe(true);
-    expect(ticked("r-well")).toBe(false);
+  it("D-06: the path stands in its own column on a desk, a passed step marked with a check and a way back", async () => {
+    await applyFor();
+    pressNext();
+    fillAbout();
+    pressNext();
+    expect(stoneNow()).toBe("value");
+    const trail = document.querySelector("[data-step-trail]") as HTMLElement;
+    expect(trail.closest("aside")?.className).toContain("lg:block");
+    const states = Array.from(trail.querySelectorAll("li")).map((li) => li.getAttribute("data-trail-state"));
+    expect(states).toEqual(["passed", "passed", "here", "ahead", "ahead", "ahead"]);
+    expect(trail.querySelector('[data-trail-state="passed"] svg')).not.toBeNull();
+    fireEvent.click(within(trail).getByRole("button", { name: "Step 1: Get to know us" }));
+    expect(stoneNow()).toBe("know");
+    // The phone's stepper is the one inside the card, and it steps aside on a desk.
+    expect((document.querySelector("[data-step-mark]") as HTMLElement).parentElement?.className).toContain("lg:hidden");
   });
 
-  it("says when a drafted role is no longer offered, and ticks the rest", async () => {
-    window.history.pushState({}, "", "/propose-a-role?role=r-gone&role=r-cook");
-    serve(FORM);
-    render(<ProposeARole />);
-    await screen.findByRole("heading", { name: OPEN_WORDS.heading("Test Village") });
-    await waitFor(() => expect(ticked("r-cook")).toBe(true));
-    expect(screen.getByText(/1 role you picked is not open any more/)).toBeTruthy();
+  it("D-06: the bar rests at the card's foot on a desk, names Enter, and the arrow-keys sentence is gone", async () => {
+    await applyFor();
+    const bar = document.querySelector("[data-stone-bar]") as HTMLElement;
+    expect(bar.className).toContain("lg:static");
+    expect(bar.querySelector("[data-enter-hint]")?.textContent).toBe("Enterto continue");
+    expect(document.body.textContent).not.toMatch(/arrow keys/i);
   });
 
-  it("ticks no more than three", async () => {
-    window.history.pushState({}, "", "/propose-a-role?role=r-gate&role=r-well&role=r-host&role=r-cook");
-    serve(FORM);
-    render(<ProposeARole />);
-    await screen.findByRole("heading", { name: OPEN_WORDS.heading("Test Village") });
-    await waitFor(() => expect(ticked("r-gate")).toBe(true));
-    expect([ticked("r-well"), ticked("r-host"), ticked("r-cook")]).toEqual([true, true, false]);
+  it("D-06: the rail holds the role and how rewards work, beside every step", async () => {
+    await applyFor();
+    const rail = document.querySelector("[data-rewards-beside]") as HTMLElement;
+    expect(rail.closest("aside")).toBe(document.querySelector("[data-role-beside]")?.closest("aside"));
+    expect(rail.textContent).toContain("How rewards work");
+    expect(Array.from(rail.querySelectorAll("dd")).map((d) => d.textContent)).toEqual(["40%", "55%", "5%"]);
+    // On the terms step the shape the phone reads steps aside on a desk.
+    expect((document.querySelector("[data-comp-shape]") as HTMLElement).parentElement?.className).toContain("lg:hidden");
   });
-});
 
-describe("a village whose proposals are for this moon (Rye, 9 Nov 2026)", () => {
-  it("names the moon's days instead of next season", async () => {
-    serve({ ...FORM, season: { id: "s-now", name: "Season of Seeds", startsOn: "2000-01-01" }, term: { kind: "moon", startsOn: "2026-11-09", endsOn: "2026-12-08" } });
-    render(<ProposeARole />);
-    expect(await screen.findByText(OPEN_WORDS.ledeMoon("9 November 2026", "8 December 2026"))).toBeTruthy();
+  it("D-06: each written term is one row with a two-part I accept / Let's talk control", async () => {
+    await applyFor("r-lfs", LFS);
+    const term = document.querySelector('[data-term="term"]') as HTMLElement;
+    expect(term.className).toContain("sm:grid-cols-[6rem_minmax(0,1fr)_auto]");
+    expect(term.className).not.toContain("bg-muted");
+    // The terms step is not stood on yet, so its parts are found with hidden ones included.
+    const group = within(term).getByRole("radiogroup", { name: "Term", hidden: true });
+    const halves = within(group).getAllByRole("radio", { hidden: true });
+    expect(halves).toHaveLength(2);
+    expect(halves.map((r) => r.closest("label")?.textContent)).toEqual(["I accept", "Let's talk"]);
+    fireEvent.click(within(group).getByLabelText("Let's talk"));
+    expect(screen.getByLabelText("What you would like to talk about: Term")).toBeTruthy();
   });
-});
 
-describe("the applicant's own card beside the open one (Rye, 9 Nov 2026)", () => {
-  it("asks for the role's outcomes with targets, first-moon quests, the season's goals and the agreements, and sends them as the card", async () => {
-    window.history.pushState({}, "", "/propose-a-role?role=r-lfs");
-    serve({
-      ...FORM,
-      goals: [{ id: "g-investor", text: "Investor ready" }],
-      roles: [{ id: "r-lfs", name: "Lead Financial Steward", circle: "Anchor Circle", aim: "Money kept true.", timeCommitment: "30 hours a week", accountabilities: ["One living model", "A cash view every Monday"] }],
-    });
-    render(<ProposeARole />);
-    await screen.findByText("What this role asks");
-    expect(screen.getByText("Time: roughly 30 hours a week")).toBeTruthy();
-    expect(document.querySelector("[data-no-season-goals]")).toBeNull();
-    fireEvent.click(screen.getByLabelText("A cash view every Monday"));
-    fireEvent.change(screen.getByLabelText("Your target for: A cash view every Monday"), { target: { value: "13 of 13 Mondays" } });
-    fireEvent.change(screen.getByLabelText("Task 1 for Lead Financial Steward"), { target: { value: "Publish the first cash view" } });
-    fireEvent.change(screen.getByLabelText("Done when, for task 1 for Lead Financial Steward"), { target: { value: "every circle lead has it" } });
-    fireEvent.click(screen.getByLabelText("Investor ready"));
-    fireEvent.change(screen.getByLabelText("How your work in Lead Financial Steward serves: Investor ready"), { target: { value: "One set of numbers" } });
-    fireEvent.change(screen.getByLabelText(OPEN_WORDS.whyLabel), { target: { value: "I keep books." } });
-    fireEvent.change(screen.getByLabelText(OPEN_WORDS.aimLabel), { target: { value: "The gate opens at dawn." } });
-    fireEvent.click(screen.getByLabelText("I accept the terms on offer."));
-    fireEvent.change(screen.getByLabelText(OPEN_WORDS.nameLabel), { target: { value: "Juno Reed" } });
-    fireEvent.change(screen.getByLabelText(OPEN_WORDS.emailLabel), { target: { value: "juno@example.test" } });
-    fireEvent.click(await screen.findByLabelText(LETTER.intent));
-    fireEvent.click(screen.getByLabelText(/confidentiality agreement before I see/));
-    fireEvent.click(screen.getByRole("button", { name: OPEN_WORDS.send }));
-    await screen.findByRole("heading", { name: "Check your email" });
-    expect(posted[0].body.card).toMatchObject({
-      roles: [{ roleId: "r-lfs", moves: [{ text: "A cash view every Monday", target: "13 of 13 Mondays" }], firstMoon: [{ quest: "Publish the first cash view", doneWhen: "every circle lead has it" }] }],
-      serves: [{ goalId: "g-investor", how: "One set of numbers", roleId: "r-lfs" }],
-      hours: "",
-      agreed: { nda: true },
-      terms: { choice: "accept", note: "" },
-    });
+  it("M7: About you is three short panes, one at a time, and Continue walks them before the next step", async () => {
+    await applyFor();
+    pressOnce();
+    expect(stoneNow()).toBe("about");
+    const panes = () => Array.from(document.querySelectorAll<HTMLElement>("[data-about-pane]")).map((p) => !p.hidden);
+    expect(panes()).toEqual([true, false, false]);
+    expect(within(document.querySelector("[data-stone-bar]") as HTMLElement).getByRole("button", { name: "Continue to Your story" })).toBeTruthy();
+    // The first pane holds you until its own fields are answered, and asks nothing of the later panes yet.
+    pressOnce();
+    expect(paneNow()).toBe(0);
+    expect(document.querySelector("[data-problems]")?.textContent).not.toMatch(/background check/);
+    fillAbout();
+    pressOnce();
+    expect(panes()).toEqual([false, true, false]);
+    expect(screen.getByLabelText("Your Human Design or Gene Keys (optional)").closest("[data-about-pane]")?.getAttribute("data-about-pane")).toBe("1");
+    pressOnce();
+    expect(panes()).toEqual([false, false, true]);
+    expect(document.querySelector("[data-references]")?.closest("[data-about-pane]")?.getAttribute("data-about-pane")).toBe("2");
+    expect(document.querySelector('[data-about-panes] [aria-current="step"]')?.textContent).toBe("3 Who can speak for you");
+    // Back walks the panes too, then Continue leaves the step from the last one.
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    expect(paneNow()).toBe(1);
+    pressOnce();
+    pressOnce();
+    expect(stoneNow()).toBe("value");
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    expect(stoneNow()).toBe("about");
+    expect(paneNow()).toBe(2);
   });
-});
 
-describe("form v2 (role journey brief v2, 5.4)", () => {
-  it("takes the time zone from the browser, and shows each picked role's conversations in order after sending", async () => {
-    window.history.pushState({}, "", "/propose-a-role?role=r-lfs");
-    serve({
-      ...FORM,
-      roles: [
-        {
-          id: "r-lfs",
-          name: "Lead Financial Steward",
-          circle: "Anchor Circle",
-          aim: null,
-          conversations: [
-            { role: "Visionary Channel", minutes: 60 },
-            { role: "Technical Operations Steward", minutes: 20 },
-            { role: "Anchor Circle Steward", minutes: 20, finalApproval: true },
-          ],
-        },
-      ],
-    });
-    render(<ProposeARole />);
-    const tz = (await screen.findByLabelText("Your time zone")) as HTMLInputElement;
-    expect(tz.value).toBe(Intl.DateTimeFormat().resolvedOptions().timeZone);
-    // Brief v3: a season with no goals yet says so, and the application still goes (below).
-    expect(document.querySelector("[data-no-season-goals]")?.textContent).toMatch(/not set its goals for this season yet/);
-    fireEvent.click(screen.getByLabelText("I'd like to talk about the terms."));
-    fireEvent.change(screen.getByLabelText("What you would like to talk about in the terms"), { target: { value: "The hours" } });
-    fireEvent.change(screen.getByLabelText(OPEN_WORDS.whyLabel), { target: { value: "I keep books." } });
-    fireEvent.change(screen.getByLabelText(OPEN_WORDS.aimLabel), { target: { value: "Money kept true." } });
-    fireEvent.change(screen.getByLabelText(OPEN_WORDS.nameLabel), { target: { value: "Juno Reed" } });
-    fireEvent.change(screen.getByLabelText(OPEN_WORDS.emailLabel), { target: { value: "juno@example.test" } });
-    fireEvent.click(await screen.findByLabelText(LETTER.intent));
-    fireEvent.click(screen.getByLabelText(/confidentiality agreement before I see/));
-    fireEvent.click(screen.getByRole("button", { name: OPEN_WORDS.send }));
-    await screen.findByRole("heading", { name: "Check your email" });
-    expect(posted[0].body.card.terms).toEqual({ choice: "talk", note: "The hours" });
-    const steps = document.querySelector("[data-next-for-roles]") as HTMLElement;
-    const items = Array.from(steps.querySelectorAll("li")).map((li) => li.textContent);
-    expect(items).toEqual(["60 minutes with Visionary Channel", "20 minutes with Technical Operations Steward", "20 minutes with Anchor Circle Steward, the final approval"]);
-    expect(steps.textContent).toContain("We'll write to you to find a time.");
+  it("M7: walking on, a gap in a later pane holds you on that pane", async () => {
+    await applyFor();
+    await completeAll();
+    fireEvent.click(screen.getByLabelText(/agree to the background check/i));
+    walk();
+    expect(stoneNow()).toBe("about");
+    expect(paneNow()).toBe(2);
   });
 });

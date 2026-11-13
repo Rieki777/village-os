@@ -77,6 +77,8 @@ export const SOURCES = [
   "shared/changeSetCap.ts",
   // The change-request gathering limit dial reads its key and default here.
   "shared/changeRequestLimits.ts",
+  // The conflict intro's key and default, said on /roles and /governance (lead, 2026-11-12).
+  "shared/conflictIntro.ts",
   "shared/gameConfig.ts",
   "shared/capabilities.ts",
   "shared/villageMoon.ts",

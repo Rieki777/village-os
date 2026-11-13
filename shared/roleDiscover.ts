@@ -1,7 +1,7 @@
 /**
  * DISCOVER, THE FIRST STEP OF THE ROLE DRAFT BOARD (role journey, lane L3).
  *
- * Two doors side by side: "Your R-Ikigai" and "Pick your characters", then an
+ * Two doors side by side: "Your Ikigai" and "Pick your characters", then an
  * optional "Add your Human Design or Gene Keys". This file is the pure half of
  * the first and the third. The characters door is shared/roleDraft.ts.
  *
@@ -50,7 +50,7 @@ export const EMPTY_IKIGAI: IkigaiState = { answers: { love: "", good: "", needs:
  * village data and never platform code.
  */
 export const IKIGAI_ASK_DEFAULTS: Record<IkigaiId, string> = {
-  love: "What would you do even if nobody paid you?",
+  love: "What do you do even when nobody pays you?",
   good: "What do people come to you for?",
   needs: "Where do you see a need you could fill?",
   pays: "Which open work calls you?",
@@ -65,7 +65,7 @@ export const IKIGAI_LABELS: Record<IkigaiId, string> = {
 };
 
 export const DISCOVER_WORDS = {
-  ikigaiDoor: "Your R-Ikigai",
+  ikigaiDoor: "Your Ikigai",
   charactersDoor: "Pick your characters",
   optionalDoor: "Add your Human Design or Gene Keys",
   kept: "Your answers stay in this browser. Nothing is sent unless you tick the box below or press Ask the guide.",

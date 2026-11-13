@@ -20,6 +20,7 @@
  *   - The desk: the gate on `intake.moderate`; the switch; a link shown once
  *     and switched off.
  */
+import { applicantSteps } from "../../shared/applicantWords";
 import http from "node:http";
 import express from "express";
 import type mysql from "mysql2/promise";
@@ -30,6 +31,7 @@ import { provisionTestDb, testDbConfigured, type TestDb, testPool } from "../db/
 import { escapeHtml } from "../lib/comms/mailer";
 import { createOrgRole } from "../lib/orgChart";
 import { readOpenProposal } from "../repos/openProposals";
+import { rewriteTermsOffer } from "../repos/seatApplications";
 import { usersRepo } from "../repos/users";
 import { register, tidyOpenProposals } from "./openProposals";
 
@@ -211,7 +213,7 @@ describe.skipIf(!configured)("open role proposals, the intake, on a real schema"
       const r = await call("GET", "/api/open-proposals/form");
       expect(r.body).toMatchObject({ open: true, village: "Test Village", season: { id: "s-next", name: "Season of Roots", startsOn: "2099-01-01" } });
       expect(r.body.roles.map((x: any) => x.id).sort()).toEqual([gate, well].sort());
-      expect(r.body.roles.find((x: any) => x.id === gate)).toEqual({ id: gate, name: "Gate Keeper", circle: "Land Circle", aim: "Open the gate at dawn.", accountabilities: [], whyItMatters: null, timeCommitment: null, conversations: [] });
+      expect(r.body.roles.find((x: any) => x.id === gate)).toEqual({ id: gate, name: "Gate Keeper", circle: "Land Circle", aim: "Open the gate at dawn.", accountabilities: [], whyItMatters: null, timeCommitment: null, terms: { words: {}, commitmentPct: null }, conversations: [], alwaysChecked: false });
       expect(JSON.stringify(r.body)).not.toContain(example);
       expect(JSON.stringify(r.body)).not.toContain(dormant);
     });
@@ -257,16 +259,51 @@ describe.skipIf(!configured)("open role proposals, the intake, on a real schema"
     });
   });
 
+  describe("the founding-team application (Phase A, 11 Nov 2026)", () => {
+    it("the form carries the village's words from its settings, and no pay shape the village has not written (the page shows N%)", async () => {
+      const r = await call("GET", "/api/open-proposals/form");
+      expect(r.body.founding).toMatchObject({
+        knowUs: ["Join a community call", "Visit the land", "Share a meal with us"],
+        shares: [],
+        atRisk: "",
+        footer: "",
+        firstConversations: [],
+      });
+      expect(r.body.founding.firstCycle).toMatch(/either side may/);
+      // Shares only: never a range, a minimum or an amount.
+      expect(JSON.stringify(r.body.founding)).not.toMatch(/\$|USD|minimum|budget/i);
+    });
+
+    it("keeps the ticks for ways the village lists, drops any other, and keeps the ramp-up and Human Design or Gene Keys", async () => {
+      const { id } = await send({ knowUs: ["Visit the land", "A way nobody lists", "Visit the land"], rampUp: true, selfKnowledge: "Projector, 4/6" });
+      const row = await readOpenProposal(pool, id);
+      expect(row?.body).toMatchObject({ knowUs: ["Visit the land"], rampUp: true, selfKnowledge: "Projector, 4/6" });
+      // An application without them stores none of the three.
+      const plain = await send({ email: "plain@example.test" });
+      const body = (await readOpenProposal(pool, plain.id))?.body ?? {};
+      for (const key of ["knowUs", "rampUp", "selfKnowledge"]) expect(body).not.toHaveProperty(key);
+    });
+
+    it("refuses Human Design or Gene Keys longer than its limit, naming the field", async () => {
+      const r = await call("POST", "/api/open-proposals", proposal({ selfKnowledge: "x".repeat(301) }));
+      expect(r.status).toBe(400);
+      expect(r.body.field).toBe("selfKnowledge");
+      expect(state.sent).toHaveLength(0);
+    });
+  });
+
   describe("nothing unconfirmed reaches a person", () => {
     it("a proposal is kept unconfirmed and its address gets one essential email with a link, and nothing else", async () => {
       const { id, mail } = await send();
-      expect(mail).toMatchObject({ kind: "essential", origin: "open_proposal.confirm", to: { email: "rowan@example.test", name: "Rowan" }, subject: "Confirm your proposal to Test Village" });
-      expect(mail.text).toContain("You proposed to hold Gate Keeper in Test Village next season.");
+      expect(mail).toMatchObject({ kind: "essential", origin: "open_proposal.confirm", to: { email: "rowan@example.test", name: "Rowan" }, subject: "Confirm your application to Test Village" });
+      // A listed role is applied for (Phase A vocabulary): the email says application.
+      expect(mail.text).toContain("You applied for Gate Keeper in Test Village.");
+      expect(mail.text).toContain("Confirm it's you, and your application reaches us:");
       expect(mail.text).toContain(`${ORIGIN}/propose-a-role/confirm?token=`);
       expect(state.sent).toHaveLength(1);
       const row = await readOpenProposal(pool, id);
       expect(row).toMatchObject({ status: "unconfirmed", name: "Rowan Field", email: "rowan@example.test", targetSeasonId: "s-next", linkId: null });
-      expect(row?.body).toEqual({ roles: [{ roleId: gate, note: "I open gates for a living." }], why: "I live up the road and the gate is always shut.", aim: "The gate opens at dawn every day." });
+      expect(row?.body).toEqual({ roles: [{ roleId: gate, note: "I open gates for a living." }], why: "I live up the road and the gate is always shut.", aim: "The gate opens at dawn every day.", locale: "en" });
       // The desk does not see it.
       state.viewer = ADMIN;
       expect((await call("GET", "/api/admin/open-proposals")).body.proposals.map((p: any) => p.id)).not.toContain(id);
@@ -276,7 +313,10 @@ describe.skipIf(!configured)("open role proposals, the intake, on a real schema"
       const { id, token } = await send();
       const ok = await call("POST", "/api/open-proposals/confirm", { token });
       // The applicant also gets the link to their own status page (role journey L5); only its hash is kept.
-      expect(ok.body).toEqual({ confirmed: true, message: OPEN_WORDS.confirmed, statusPath: expect.stringContaining(`/application-status/${id}?token=`) });
+      // The firefly path's confirmed page: it speaks the language proposed in, and dates the first reply.
+      expect(ok.body).toEqual({ confirmed: true, message: OPEN_WORDS.confirmed, statusPath: expect.stringContaining(`/application-status/${id}?token=`), locale: "en", replyDays: expect.any(Number), steps: applicantSteps("en", ok.body.replyDays) });
+      // The confirmed page draws the one step list the status page uses (shared/applicantWords.ts), in order.
+      expect(ok.body.steps.map((s: { key: string }) => s.key)).toEqual(["received", "review", "invitation", "conversations", "decision", "first_cycle"]);
       expect((await readOpenProposal(pool, id))?.status).toBe("confirmed");
       const again = await call("POST", "/api/open-proposals/confirm", { token });
       expect(again.status).toBe(410);
@@ -315,12 +355,44 @@ describe.skipIf(!configured)("open role proposals, the intake, on a real schema"
 
     it("a cap per connection and a cap per address", async () => {
       state.limited = ["open-proposal:ip:"];
-      expect((await call("POST", "/api/open-proposals", proposal())).status).toBe(429);
+      const ip = await call("POST", "/api/open-proposals", proposal());
+      expect(ip.status).toBe(429);
+      expect(ip.body.error).toBe(OPEN_WORDS.tooMany);
       state.limited = ["open-proposal:email:"];
       const r = await call("POST", "/api/open-proposals", proposal());
       expect(r.status).toBe(429);
-      expect(r.body.error).toBe(OPEN_WORDS.tooMany);
+      expect(r.body.error).toBe(OPEN_WORDS.tooManyForAddress);
       expect(state.sent).toHaveLength(0);
+    });
+
+    it("B1: five refused bodies, then a valid one from the same connection, is accepted", async () => {
+      state.counting = true;
+      const ip = "198.51.100.77";
+      for (const bad of [{ name: " " }, { email: "" }, { roles: [] }, { why: "" }, { roles: [{ roleId: "nope" }] }]) {
+        const r = await call("POST", "/api/open-proposals", proposal(bad), ip);
+        expect(r.status).toBe(400);
+      }
+      const ok = await call("POST", "/api/open-proposals", proposal({ email: "after-refusals@example.test" }), ip);
+      expect(ok.status).toBe(200);
+      expect(ok.body.sent).toBe(true);
+      expect(state.sent).toHaveLength(1);
+    });
+
+    it("the 429 for a connection that really sent five says what happened and when to try again", async () => {
+      state.counting = true;
+      for (let i = 0; i < 5; i += 1) expect((await call("POST", "/api/open-proposals", proposal({ email: `five${i}@example.test` }), "198.51.100.78")).status).toBe(200);
+      const r = await call("POST", "/api/open-proposals", proposal({ email: "six@example.test" }), "198.51.100.78");
+      expect(r.status).toBe(429);
+      expect(r.body.error).toBe(OPEN_WORDS.tooMany);
+      expect(OPEN_WORDS.tooMany).toMatch(/five proposals/);
+      expect(OPEN_WORDS.tooMany).toMatch(/in about an hour/);
+    });
+
+    it("a flood of refused tries is still stopped, by the generous bucket", async () => {
+      state.counting = true;
+      let refused429 = 0;
+      for (let i = 0; i < 70; i += 1) if ((await call("POST", "/api/open-proposals", proposal({ why: "" }), "198.51.100.79")).status === 429) refused429 += 1;
+      expect(refused429).toBe(10);
     });
 
     it("ATTACK: 100 proposals from one connection: 5 go, 95 are refused, and only 5 emails are sent", async () => {
@@ -391,10 +463,12 @@ describe.skipIf(!configured)("open role proposals, the intake, on a real schema"
       ["no address", { email: "" }, "email", OPEN_WORDS.needEmail],
       ["two addresses", { email: "a@example.test, b@example.test" }, "email", OPEN_WORDS.needEmail],
       ["no role", { roles: [] }, "roles", OPEN_WORDS.needRole],
+      // One role per application (the lead, 11 Nov 2026): two listed roles, each open, are still refused.
+      ["two roles", { roles: [{ roleId: "op-role-gate" }, { roleId: "op-role-well" }] }, "roles", OPEN_WORDS.tooManyRoles],
       ["four roles", { roles: [1, 2, 3, 4].map(() => ({ roleId: "x" })) }, "roles", OPEN_WORDS.tooManyRoles],
       ["an example role", { roles: [{ roleId: "op-role-example" }] }, "roles", OPEN_WORDS.unknownRole],
       ["a role in a dormant circle", { roles: [{ roleId: "op-role-dormant" }] }, "roles", OPEN_WORDS.unknownRole],
-      ["the same role twice", { roles: [{ roleId: "op-role-gate" }, { roleId: "op-role-gate" }] }, "roles", OPEN_WORDS.sameRoleTwice],
+      ["the same role twice", { roles: [{ roleId: "op-role-gate" }, { roleId: "op-role-gate" }] }, "roles", OPEN_WORDS.tooManyRoles],
       ["no why", { why: "" }, "why", OPEN_WORDS.needWhy],
       ["a why too long", { why: "x".repeat(1201) }, "why", OPEN_WORDS.tooLong("Why you", 1200)],
     ])("refuses %s, naming the field", async (_label, over, field, error) => {
@@ -448,13 +522,13 @@ describe.skipIf(!configured)("open role proposals, the intake, on a real schema"
       const card = {
         roles: [{ roleId: gate, moves: [], firstMoon: [{ quest: "Oil the hinges", doneWhen: "the gate opens without a sound" }] }],
         serves: [{ goalId: "g-roots", how: "A gate that opens lets people in." }],
-        hours: "About 10 a week",
+        commitmentPct: 50,
         agreed: { loveLetter: true, nda: true },
-        terms: { choice: "accept", note: "" },
+        terms: { answers: {} },
       };
       const { id } = await send({ card, email: "carded@example.test" });
       const row = await readOpenProposal(pool, id);
-      expect(row?.body.card).toEqual({ ...card, serves: [{ goalId: "g-roots", how: "A gate that opens lets people in.", goal: "Roots in the ground" }] });
+      expect(row?.body.card).toEqual({ ...card, hours: "", terms: { choice: "accept", note: "" }, serves: [{ goalId: "g-roots", how: "A gate that opens lets people in.", goal: "Roots in the ground" }] });
 
       const badGoal = await call("POST", "/api/open-proposals", proposal({ email: "badgoal@example.test", card: { ...card, serves: [{ goalId: "g-done", how: "x" }] } }));
       expect(badGoal.status).toBe(400);
@@ -462,13 +536,64 @@ describe.skipIf(!configured)("open role proposals, the intake, on a real schema"
       expect(noAgree).toMatchObject({ status: 400, body: { field: "agreed" } });
     });
 
+    it("goals: each role card needs one to eight, and each is checked against the role's goals, the season's goals and the moon", async () => {
+      const base = (firstMoon: unknown) => ({
+        roles: [{ roleId: gate, moves: [], firstMoon }],
+        serves: [{ goalId: "g-roots", how: "" }],
+        commitmentPct: 50,
+        agreed: { loveLetter: true, nda: true },
+        terms: { answers: {} },
+      });
+      const post = (firstMoon: unknown, email: string) => call("POST", "/api/open-proposals", proposal({ email, card: base(firstMoon) }));
+      const g = { quest: "Oil the hinges", doneWhen: "the gate opens" };
+      expect(await post([], "none@example.test")).toMatchObject({ status: 400, body: { field: "card" } });
+      expect((await post([{ quest: "No test", doneWhen: "" }], "nodone@example.test")).status).toBe(400);
+      expect((await post(Array.from({ length: 9 }, () => g), "nine@example.test")).status).toBe(400);
+      expect((await post([{ ...g, moves: "A goal the role never had" }], "moves@example.test")).status).toBe(400);
+      expect((await post([{ ...g, serves: "g-unknown" }], "serves@example.test")).status).toBe(400);
+      expect((await post([{ ...g, date: "2031-01-01" }], "far@example.test")).status).toBe(400);
+      // CONTROL: eight goals, one naming a season goal and a day this moon, are taken and kept.
+      const day = new Date().toISOString().slice(0, 10);
+      const ok = await post([...Array.from({ length: 7 }, () => g), { ...g, serves: "g-roots", date: day }], "eight@example.test");
+      expect(ok.status).toBe(200);
+    });
+
+    it("the eight settings: a role's written settings reach the form, each needs an answer, and the commitment is required", async () => {
+      const offer = ({ v: 1, clocks: { commitmentPct: 100 }, words: { term: "We renew together each moon.", ending: "One moon's notice." } });
+      await rewriteTermsOffer(pool, gate, offer);
+      try {
+        const form = await call("GET", "/api/open-proposals/form");
+        expect(form.body.roles.find((x: any) => x.id === gate).terms).toEqual({ words: { term: "We renew together each moon.", ending: "One moon's notice." }, commitmentPct: 100 });
+        const card = (terms: unknown, commitmentPct?: number) => ({
+          roles: [{ roleId: gate, moves: [], firstMoon: [{ quest: "Oil the hinges", doneWhen: "the gate opens" }] }],
+          serves: [{ goalId: "g-roots", how: "" }],
+          ...(commitmentPct === undefined ? {} : { commitmentPct }),
+          agreed: { loveLetter: true, nda: true },
+          terms,
+        });
+        const a = (c: unknown, email: string) => call("POST", "/api/open-proposals", proposal({ email, card: c }));
+        // Written settings left unanswered, and no commitment, are each refused.
+        expect(await a(card({ answers: { term: { choice: "accept" } } }, 50), "one@example.test")).toMatchObject({ status: 400, body: { field: "terms" } });
+        const all = { term: { choice: "accept" }, clocks: { choice: "talk", note: "Four days overlap" }, ending: { choice: "accept" } };
+        expect(await a(card({ answers: all }), "two@example.test")).toMatchObject({ status: 400, body: { field: "terms" } });
+        expect(await a(card({ answers: all }, 55), "three@example.test")).toMatchObject({ status: 400, body: { field: "terms" } });
+        // Answered, with a commitment of 0 (a choice, not an absence): taken and kept with each answer.
+        const { id } = await send({ card: card({ answers: all }, 0), email: "four@example.test" });
+        const stored = (await readOpenProposal(pool, id))?.body.card;
+        expect(stored).toMatchObject({ commitmentPct: 0, hours: "", terms: { choice: "talk", note: "Clocks: Four days overlap" } });
+        expect(stored?.terms?.answers).toMatchObject({ clocks: { choice: "talk", note: "Four days overlap" } });
+      } finally {
+        await rewriteTermsOffer(pool, gate, null);
+      }
+    });
+
     it("form v2: a card needs an aim; the 90-day tidy clears the time zone, usual times and earliest start", async () => {
       const card = {
-        roles: [{ roleId: gate, moves: [], firstMoon: [] }],
+        roles: [{ roleId: gate, moves: [], firstMoon: [{ quest: "Oil the hinges", doneWhen: "the gate opens" }] }],
         serves: [{ goalId: "g-roots", how: "" }],
-        hours: "",
+        commitmentPct: 50,
         agreed: { loveLetter: true, nda: true },
-        terms: { choice: "accept", note: "" },
+        terms: { answers: {} },
         timeZone: "America/Costa_Rica",
         windows: ["weekday-mornings"],
         earliestStart: "2026-11-16",

@@ -53,7 +53,7 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 const titles = () => screen.getAllByLabelText(/^Name/).map((el) => (el as HTMLInputElement).value);
-const save = () => fireEvent.click(screen.getByRole("button", { name: /Save the visit program/ }));
+const save = () => fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
 describe("the visit program editor", () => {
   it("lists the ways to visit in the order the page shows them", async () => {
@@ -92,8 +92,11 @@ describe("the visit program editor", () => {
     await screen.findByText("Ways to visit");
     fireEvent.click(screen.getByRole("button", { name: /Add a way to visit \(2 of/ }));
     expect(titles()).toHaveLength(3);
-    expect(screen.getByRole("button", { name: /Save the visit program/ })).toBeDisabled();
-    expect(screen.getByText("Way to visit 3: Name cannot be blank.")).toBeInTheDocument();
+    // The bar offers Save, and answers with the parser's sentence instead of sending a refused document.
+    save();
+    expect((await screen.findAllByText(/Name cannot be blank/)).length).toBeGreaterThan(0);
+    expect(puts).toHaveLength(0);
+    expect(screen.getAllByText("Way to visit 3: Name cannot be blank.").length).toBeGreaterThan(0);
 
     fireEvent.change(screen.getAllByLabelText(/^Name/)[2], { target: { value: "Work Weekend" } });
     save();
@@ -131,7 +134,7 @@ describe("the visit program editor", () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ error: "boom" }), { status: 500 })));
     render(<VisitProgramEditor password="pw" />);
     expect(await screen.findByRole("alert")).toHaveTextContent(/Saving is off until it reads/);
-    expect(screen.queryByRole("button", { name: /Save the visit program/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
   });
 });
 

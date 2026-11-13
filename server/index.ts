@@ -4,7 +4,8 @@ import { markNameFreeJournalLinesPublic } from "./repos/orgSeatErasure";
 import { leftTheVillage, withoutFormerMembers } from "./lib/formerMember";
 import { proposalsAboutMember } from "./lib/externalProposals";
 import { ideasProposedBy, landPublicSubmission } from "./lib/publicForms";
-import { founderStepFor, joiningOf, pickNextAction } from "./lib/nextAction";
+import { joiningOf, nextActionOf } from "./lib/nextAction";
+import { pathFor, type ServedPath } from "./lib/pathFacts";
 import { ideaReceipt } from "./lib/questIdeaReceipt";
 // Local dev reads .env (PORT=3001 so the API doesn't collide with Vite's 3000);
 // on Railway the real environment always wins over the file.
@@ -36,6 +37,7 @@ import {
   ALL_CAPABILITIES,
   BREAK_GLASS_WAY_THROUGH,
   capabilityDecision,
+  capabilityLabel,
   hasCapability,
   isDeniable,
   STAGE_UNLOCKS,
@@ -43,6 +45,7 @@ import {
   type Capability,
   type CapabilityCtx,
 } from "../shared/capabilities";
+import { doorNotice } from "../shared/doorsOpened";
 import {
   assertCapabilityHoldingInvariants,
   capabilityHoldings,
@@ -230,6 +233,7 @@ import { register as registerAgentMcpRoutes } from "./routes/agentMcp";
 import { register as registerAgentProposalsRoutes } from "./routes/agentProposals";
 import { register as registerLetterDraftsRoutes } from "./routes/letterDrafts";
 import { register as registerApprovalInboxRoutes } from "./routes/approvalInbox";
+import { register as registerProposedChangesRoutes } from "./routes/proposedChanges";
 import { post as postToOffice } from "./lib/comms/postOffice";
 import { register as registerAgentAccountRoutes } from "./routes/agentAccounts";
 import { register as registerAgentOAuthRoutes } from "./routes/agentOAuth";
@@ -257,6 +261,7 @@ import { exportMemberSessions, register as registerLiveSessionsRoutes } from "./
 import { register as registerSessionTasksRoutes } from "./routes/sessionTasks";
 import { register as registerSessionLibraryRoutes } from "./routes/sessionLibrary";
 import { register as registerSessionRhythmRoutes } from "./routes/sessionRhythm";
+import { register as registerMapLightRoutes } from "./routes/mapLight";
 import { register as registerSessionTemplateRoutes } from "./routes/sessionTemplates";
 import { register as registerSessionCalendarRoutes } from "./routes/sessionCalendar";
 import { register as registerSessionDecisionRoutes } from "./routes/sessionDecisions";
@@ -289,7 +294,7 @@ import { register as registerFeedbackRoutes } from "./routes/feedback";
 import { register as registerSubmissionHandlingRoutes } from "./routes/submissionHandling";
 import { register as registerCharacterPortraitRoutes } from "./routes/characterPortraits";
 import { register as registerCompanionRoutes } from "./routes/companions";
-import { onboardingOpenFor, register as registerOnboardingRoutes } from "./routes/onboarding";
+import { register as registerOnboardingRoutes } from "./routes/onboarding";
 import { exportMemberTasks, register as registerMemberTaskRoutes } from "./routes/memberTasks";
 import { register as registerMemberTaskBridgeRoutes } from "./routes/memberTaskBridge";
 import { register as registerMemberAskRoutes } from "./routes/memberAsks";
@@ -1513,6 +1518,8 @@ const circlesRepo = dbCollection(getPool(), {
     { js: "status", db: "status" },
     { js: "order", db: "sort_order", kind: "int" },
     { js: "isExample", db: "is_example", kind: "bool" },
+    // 0372: the anchor mark. In the spec so replaceAll does not reset it.
+    { js: "isAnchor", db: "is_anchor", kind: "bool" },
     // 0083: how this circle decides. In the spec for the same reason
     // grownFromOrgRoleId is: replaceAll re-INSERTs exactly these columns, so
     // leaving them out would reset every circle's declared method on the next
@@ -2873,7 +2880,7 @@ function mergedConfig() {
 function addActivity(
   kind: string,
   text: string,
-  extra?: { actorUserId?: string | null; entityType?: string | null; entityRef?: string | null },
+  extra?: { actorUserId?: string | null; entityType?: string | null; entityRef?: string | null; audience?: "public" | "admin" },
 ): Promise<void> {
   return recordEvent(getPool(), { kind, text, ...extra });
 }
@@ -3016,12 +3023,14 @@ async function recordStageEvent(user: any, from: string, to: string, reason: str
     at: new Date().toISOString(),
   });
   commsSink.fire({ type: "stage_advanced", userId: user.id, stage: to });
-  await addActivity("stage", `${firstName(user.name)} advanced to ${stageName(to)}`, { actorUserId: user.id, entityType: "stage", entityRef: to });
+  // The prune (C7): no Pulse line for a crossing, so rank is never published, and
+  // the private notice names the door it opened, never the rung (shared/doorsOpened.ts).
+  const notice = doorNotice(unlocked.map((c) => capabilityLabel(c)));
   await notify({
     userId: user.id,
     type: "stage_advanced",
-    title: `You advanced to ${stageName(to)}`,
-    body: unlocked.length ? `Newly unlocked: ${unlocked.join(", ")}` : null,
+    title: notice.title,
+    body: notice.body,
     link: "/profile",
     // One per stage, ever: re-computation can never re-celebrate.
     dedupeKey: `stage:${user.id}:${to}`,
@@ -4673,25 +4682,18 @@ async function runRetentionSweep(): Promise<string> {
  * TOLD: an unconfirmed store is named, never counted as done.
  */
 
-async function nextActionFor(user: any): Promise<{ id: string; label: string; href: string }> {
+/**
+ * A member's path: the ONE next step and what comes after, from the conductor
+ * (shared/yourPath.ts) over the facts server/lib/pathFacts.ts gathers. The
+ * rules, their order and their words live there; this only hands over what
+ * this file alone holds. `me.nextAction` is the same answer in the old shape,
+ * kept for one release (server/lib/pathFacts.ts `nextActionOf`).
+ */
+async function servedPath(user: any): Promise<ServedPath> {
   // The letter is a member's door (shared/brochure.ts, MEMBER_DOORS), served to anybody signed in; a signing it has not answered is its own step (lib/nextAction.ts).
   const joining = !hasMembership(user) ? joiningOf(submissionsRepo.all(), user.id) : null;
-  return pickNextAction(GAME_CONFIG.nextActions, {
-    trained: trainingDoneHere(await completionsFor(getPool(), user.id)), joining, claims: await claimsRepo.forUser(user.id), budget: await gratitudeBudget(user), geneKeysMissing: await geneKeysMissing(getPool(), String(user.id)), onboardingOpen: await onboardingOpenFor(getPool(), String(user.id)),
-  });
-}
-
-/**
- * The next action a member is shown, with this village's own words in it.
- *
- * `nextActionFor` returns a rule straight out of the static GAME_CONFIG, and
- * one of those labels carries `{commitment}`. Every caller goes through here
- * so the substitution cannot be forgotten at one call site and done at
- * another, which is how the two ladder serializers already diverged once.
- */
-async function servedNextAction(user: any): Promise<{ id: string; label: string; href: string }> {
-  const rule = founderStepFor(user?.role, await founderPowerStands(getPool())) ?? (await nextActionFor(user));
-  return { ...rule, label: withCommitmentName(rule.label, mergedConfig().project.commitmentName) };
+  const member = { trained: trainingDoneHere(await completionsFor(getPool(), user.id)), joining, claims: await claimsRepo.forUser(user.id), budget: await gratitudeBudget(user), geneKeysMissing: await geneKeysMissing(getPool(), String(user.id)) };
+  return pathFor({ pool: getPool(), now: new Date(), timeZone: getSeasonConfig().timezone || "UTC", clock: activeClock(), role: String(user?.role ?? ""), founderPowerStands: await founderPowerStands(getPool()), member, commitment: mergedConfig().project.commitmentName }, String(user.id));
 }
 
 function getWorkWithUs() {
@@ -6884,7 +6886,7 @@ async function startServer() {
     });
 
     registerAgentMapRoutes(app, { resolveAgent, capabilityCtx, getPool, confirmSecret: AUTH_TOKEN_SECRET });
-    registerAgentMcpRoutes(app, { resolveAgent, getPool, confirmSecret: AUTH_TOKEN_SECRET, villageName: () => mergedConfig().project.name, port: () => parseInt(String(process.env.PORT || 3000), 10), listDefault: () => boolVar("memberTasks.listDefault"), today: () => villageDayKey(new Date(), getSeasonConfig().timezone), clientIp, isAdmin });
+    registerAgentMcpRoutes(app, { resolveAgent, getPool, confirmSecret: AUTH_TOKEN_SECRET, villageName: () => mergedConfig().project.name, port: () => parseInt(String(process.env.PORT || 3000), 10), listDefault: () => boolVar("memberTasks.listDefault"), today: () => villageDayKey(new Date(), getSeasonConfig().timezone), clientIp, isAdmin, notifyAdmins, powerGroups: () => rolesRepo.all() });
     registerAgentProposalsRoutes(app, { authedUser, getPool, isAdmin, overLimit, members, liveHoldersOf }); // role journey L13: what the connector proposes waits for a person (server/routes/agentProposals.ts)
     registerAgentAccountRoutes(app, { authedUser, getPool, isAdmin });
     registerAgentOAuthRoutes(app, {
@@ -9655,8 +9657,14 @@ async function startServer() {
     return null;
   }
 
-  app.get("/api/circles", async (_req, res) => {
-    res.json(circlesRepo.all());
+  // The same listed-circle rule as `/api/org` and the map (`circlesToShow`, shared/roleListing.ts): a reader
+  // who cannot see unlisted roles never finds a circle that only holds them here either (Phase A).
+  app.get("/api/circles", async (req, res) => {
+    const viewer = await authedUser(req);
+    const admin = await isAdmin(req);
+    const capCtx = viewer ? await capabilityCtx(viewer) : null;
+    const [roles, assignments] = await Promise.all([listOrgRoles(getPool()), listOrgAssignments(getPool(), lapseContext())]);
+    res.json(circlesToShow(circlesRepo.all() as Array<{ id: string; parentCircleId?: string | null }>, roles, listingViewerFor({ admin, capCtx, userId: viewer?.id, assignments })));
   });
 
   /**
@@ -10774,6 +10782,7 @@ async function startServer() {
   app.use("/api/events", requireModule("events"));
   app.use("/api/admin/events", requireModule("events"));
   registerApprovalInboxRoutes(app, { authedUser, getPool, isAdmin, overLimit, members, liveHoldersOf, clientIp, port: () => parseInt(String(process.env.PORT || 3000), 10), today: () => villageDayKey(new Date(), getSeasonConfig().timezone), filing: () => ({ variable: (key) => { const v = allVariables().find((x) => x.key === key); return v ? { key: v.key, label: v.label, value: String(v.value) } : null; }, module: (id) => { const d = MODULES_BY_ID[id]; return d ? { id: d.id, name: d.name, core: !!d.core, lifecycle: d.core ? "public" : storedLifecycle(d.id), sellsToken: !!d.sellsToken } : null; }, openTerm: async () => { const d = dbDocument(getPool(), "open-proposals", {} as any); await d.load(); const t = (d.get() as any)?.term; return t === "moon" ? "moon" : "season"; }, content: (section) => contentRepo.get()[section], contentVersion, pageProblem: pageContentProblem }) }); // role journey L13: the one-tap approval inbox and the filing routes behind the connector's propose tools (server/routes/approvalInbox.ts)
+  registerProposedChangesRoutes(app, { authedUser, getPool, isAdmin, overLimit, members, contentRepo, faqsRepo, seasonState, liveHoldersOf, clientIp, port: () => parseInt(String(process.env.PORT || 3000), 10) }); // proposed changes, reviewed on /admin/proposals (server/routes/proposedChanges.ts)
   registerLetterDraftsRoutes(app, { authedUser, getPool, isAdmin, overLimit, members, escapeHtml, postEmail: (email) => postToOffice(commsPostOffice, email) }); // role journey L13: a person reads, edits and sends a drafted letter (server/routes/letterDrafts.ts)
   registerCommsEventRoutes(app, { authedUser, overLimit, clientIp, isAdmin, guardCapability, mayStillSee, capabilityCtx, getPool, commsPostOffice, members, deploymentOrigin, isPresent: (m: any) => isPresentMember(m, AUTH_TOKEN_SECRET), notify });
 
@@ -13347,6 +13356,8 @@ Send an empty drafts array when you are still listening. A role payload is {name
       // listed, so an omitted field is NULL rather than a default. `isExample`
       // and `grownFromOrgRoleId` matter beyond this insert, because a later
       // replaceAll would otherwise launder them away.
+      // 0372: an anchor mark a person approved here moves the mark; there is at most one.
+      if (payload.isAnchor === true) await circlesRepo.replaceAll((circlesRepo.all() as any[]).map((c) => ({ ...c, isAnchor: false })));
       await circlesRepo.insert({
         id,
         name: String(payload.name).trim().slice(0, 120),
@@ -13358,6 +13369,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
         icon: null,
         color: null,
         status: payload.status ?? "forming",
+        isAnchor: payload.isAnchor === true,
         isExample: false,
         order: circlesRepo.all().length + 1,
       } as any);
@@ -17678,6 +17690,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
   registerSessionTasksRoutes(app, { authedUser, isAdmin, getPool, overLimit, members, circlesRepo, notify, notifyAdmins, notifyDeps, commsPostOffice, lapseContext, deploymentOrigin, projectName: notifyDeps.projectName, liveHoldersOf });
   registerSessionLibraryRoutes(app, { authedUser, isAdmin, getPool, overLimit, members, circlesRepo, notify, lapseContext });
   registerSessionRhythmRoutes(app, { authedUser, isAdmin, getPool, overLimit, circlesRepo, notify, lapseContext });
+  registerMapLightRoutes(app, { authedUser, getPool, members, circles: () => circlesRepo.all() as any[], isPresent: (m: any) => isPresentMember(m, AUTH_TOKEN_SECRET) }); // D2: the map's lights, opt-in, members only, never names
   registerSessionTemplateRoutes(app, { authedUser, isAdmin, getPool, overLimit, members, circlesRepo, guardCapability, mayAct, lapseContext, seasonState });
   registerSessionCalendarRoutes(app, { authedUser, getPool, overLimit, members, circlesRepo, clientIp, deploymentOrigin, projectName: notifyDeps.projectName });
   registerSessionDecisionRoutes(app, { authedUser, isAdmin, getPool, overLimit, circlesRepo, lapseContext, members, notify });
@@ -18386,7 +18399,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
   // /api/quests/field only wins over /api/quests/:id because it comes first.
   registerQuestRoutes(app, {
     isAdmin, authedUser, adminActor, getPool, uploadsDir: UPLOADS_DIR, members,
-    questsRepo, claimsRepo, crewsRepo, firstName, notify, stageOf, loadRoles,
+    questsRepo, claimsRepo, crewsRepo, firstName, notify, stageOf, loadRoles, seasonState,
     roleIdsFor, currentPatternId, questConsentRecipients, overLimit, clientIp, projectCurrency: () => mergedConfig().project.fiatCurrency,
     // The share-card raster reads the guard's third answer for itself: it is
     // the one route here that rasters for an anonymous caller, so it refuses
@@ -18515,6 +18528,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
           at: advances[0].at,
         }
       : null;
+    const path = await servedPath(user);
     res.json({
       stage: servedStage(stageId),
       stageIndex: stageIndex(stageId),
@@ -18534,7 +18548,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
       // "granted", which is a decision the team makes and not a thing anyone
       // can be shown progress toward.
       consentedQuests,
-      nextAction: await servedNextAction(user),
+      nextAction: nextActionOf(path), path, // the path is the one conductor; nextAction is its old shape, for one release
       lastAdvance,
       // Revision 2: progression is no longer decoration. The client renders
       // what you can DO, so the gates are legible instead of mysterious.
@@ -24016,7 +24030,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
   // requireModule("governance") mount, which is what keeps that gate in front of the door.
   seatVote.fill(registerSeatVote(app, { authedUser, capabilityCtx, members, firstName, stageOf, getPool, rolesRepo, loadRoleHolders, refuseUnlessMemberMayOpen, roleBallotSetup, roleConsequences, seatCalendar, landingDeps, addActivity, notifyRoll, serveBallot }));
   registerBadgeGrantRoutes(app, { authedUser, capabilityCtx, getPool, notify, notifyAdmins, members, firstName, badgesOn: () => effectiveLifecycle("badges") !== "off", refuseUnlessMemberMayOpen, roleBallotSetup, notifyRoll, serveBallot, closers: SUBJECT_CLOSERS }); // a badge by the village's vote (gap 6)
-  registerSeatApplicationRoutes(app, { authedUser, capabilityCtx, guardCapability, getPool, notify, notifyAdmins, overLimit, members, firstName, liveHoldersOf, rolesCarrying, loadRoleHolders, roleBallotSetup, seatCalendar, lapse: lapseContext, landingDeps, closers: SUBJECT_CLOSERS });
+  registerSeatApplicationRoutes(app, { authedUser, capabilityCtx, guardCapability, getPool, notify, notifyAdmins, overLimit, members, firstName, postEmail: (email) => postToOffice(commsPostOffice, email), projectName: notifyDeps.projectName, liveHoldersOf, rolesCarrying, loadRoleHolders, roleBallotSetup, seatCalendar, lapse: lapseContext, landingDeps, closers: SUBJECT_CLOSERS });
   registerApplicationCardRoutes(app, { authedUser, isAdmin, capabilityCtx, guardCapability, getPool, firstName, seasonState, lapse: lapseContext, mapLifecycle: () => effectiveLifecycle("map"), boolVar, villageName: () => mergedConfig().project.name || null });
   registerRoleProposalRoutes(app, { authedUser, isAdmin, capabilityCtx, guardCapability, getPool, firstName, overLimit, notify, members, isPresent: notifyDeps.isPresent, seasonState, lapse: lapseContext, mapLifecycle: () => effectiveLifecycle("map"), boolVar, villageName: () => mergedConfig().project.name || null });
   registerOpenProposalRoutes(app, { proposalFileDir: path.join(DATA_DIR, "private-proposal-files"), getPool, overLimit, clientIp, guardCapability, authedUser, commsPostOffice, deploymentOrigin, projectName: notifyDeps.projectName, escapeHtml, seasonState, notify, notifyAdmins, members, stageOf, recordStageEvent, liveHoldersOf, rolesCarrying, loadRoleHolders, seatCalendar, lapse: lapseContext, boolVar, stringVar, letterSource: () => letterSourceFrom(mergedConfig(), contentRepo.get()), signings: submissionsRepo }); // a role proposal from somebody with no account (0305), and its decision
@@ -24024,7 +24038,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
   registerRoleGuideRoutes(app, { authedUser, mayAct, getPool, clientIp, overLimit, members, seasonState, lapse: lapseContext, villageGuideName: () => String(getWorkWithUs().assistantName ?? ""), villageName: () => mergedConfig().project.name || "the village" });
   registerAlignmentRoutes(app, { authedUser, guardCapability, getPool, notify, notifyAdmins, overLimit, members, confirmIdentity, googleAvailable: () => googleSignInAvailability().available, authSecret: AUTH_TOKEN_SECRET, seatCalendar, capabilityCtx, liveHoldersOf });
   registerMembershipLetterRoutes(app, { letterSource: () => letterSourceFrom(mergedConfig(), contentRepo.get()) });
-  registerConfidentialityRoutes(app, { authedUser, getPool, overLimit, members, content: () => contentRepo.get(), boolVar, guardCapability, documentDir: path.join(DATA_DIR, "private-documents"), googleAvailable: () => googleSignInAvailability().available, authSecret: AUTH_TOKEN_SECRET }); // the confidentiality agreement, and the agreements before a role starts (L7)
+  registerConfidentialityRoutes(app, { authedUser, getPool, overLimit, members, content: () => contentRepo.get(), boolVar, guardCapability, documentDir: path.join(DATA_DIR, "private-documents"), googleAvailable: () => googleSignInAvailability().available, authSecret: AUTH_TOKEN_SECRET, calendar: seatCalendar }); // the confidentiality agreement, and the agreements before a role starts (L7)
 
   /**
    * ── TAKE A SEAT BACK ───────────────────────────────────────────────────────
@@ -24866,7 +24880,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
   });
   registerHoldersRoutes(app, { guardCapability, getPool });
   registerSaberraRoutes(app, { guardCapability, getPool, authedUser, mayStillSee, overLimit, members, lapseContext, isAdmin, liveHoldersOf, deciders: { roles: loadRoles, roleHolders: loadPowerHoldings, orgRoles: () => listOrgRoles(getPool()), villageHolder: async (cap: string) => { const h = (await capabilityHoldings(getPool())).find((x) => x.capability === cap); return h ? { roleId: String(h.holderRoleId), roleName: String(h.holderRoleName ?? h.holderRoleId) } : null; } } });
-  registerRoleMeasuresRoutes(app, { getPool, authedUser, overLimit });
+  registerRoleMeasuresRoutes(app, { getPool, authedUser, isAdmin, overLimit });
   registerErasureQueueRoutes(app, { guardCapability, getPool, erasureDeps, authedUser });
   registerFailedActionsRoutes(app, { isAdmin, getPool, notifyAdmins, erasureDeps });
 

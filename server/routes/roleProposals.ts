@@ -131,6 +131,8 @@ type Deps = CardDeps &
     sessionsOn?: () => boolean;
   };
 
+import { providePathFacts } from "../lib/pathFacts";
+
 const BASE = "/api/governance/role-proposals";
 const WINDOW_MS = 10 * 60 * 1000;
 /**
@@ -489,6 +491,12 @@ export function register(app: Express, deps: Deps): void {
    * pressing first, or nothing. Worked out live from the same facts the sweep
    * reads, so the banner and the bell never disagree about why.
    */
+  // The path's "propose for next season" step reads the banner's own answer (server/lib/pathFacts.ts).
+  providePathFacts("proposeWindow", async (userId) => {
+    const due = await nudgesFor({ pool: getPool(), now: now(), timeZone: tz(), clock: clock(), seasons: seasons(), lapse: deps.lapse() }, userId);
+    return { proposeWindow: due.length ? { href: PROPOSE_ENTRY_HREF, closesOn: null } : null };
+  });
+
   app.get(`${BASE}/nudge`, async (req, res) => {
     const user = await member(req, res);
     if (!user) return;

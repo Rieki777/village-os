@@ -101,7 +101,7 @@ export const asksReconfirm = (a: Answer<unknown>): boolean => !a.ok && a.status 
 export const fetchConfidentiality = () =>
   call<{
     agreement: { title: string; body: string; intent: string; version: string; document: { title: string; size: number; href: string } | null } | null;
-    you: { holds: boolean } | null;
+    you: { holds: boolean; confirmFresh?: boolean } | null;
     message: string | null;
   }>("/api/confidentiality");
 

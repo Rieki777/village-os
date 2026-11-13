@@ -100,6 +100,8 @@ describe("the Season tab's timezone", () => {
     // answer would mean renaming a season silently confirmed the clock.
     answering(seasonDoc());
     render(<SeasonTab password="secret" />);
+    // The save bar shows once something changed.
+    fireEvent.change(await screen.findByPlaceholderText("Season name"), { target: { value: "Renamed" } });
     fireEvent.click(await screen.findByRole("button", { name: "Save" }));
     await waitFor(() => expect(puts().length).toBe(1));
     expect(JSON.parse(puts()[0][1].body).confirmTimezone).toBeUndefined();

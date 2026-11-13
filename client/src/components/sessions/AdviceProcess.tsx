@@ -19,6 +19,7 @@
  * in one polite line, and the focus goes into the form when it opens and back
  * to the button that opened it.
  */
+import CirclePicker from "@/components/circles/CirclePicker";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ADVICE_API,
@@ -31,7 +32,7 @@ import {
 import { addDaysTo } from "@shared/sessionDecisions";
 import AdviceCard from "./AdviceCard";
 import { adviceCall } from "./adviceCall";
-import { BTN_PRIMARY, BTN_QUIET, HINT, INPUT, LABEL, PANEL } from "./roomUi";
+import { BTN_PRIMARY, BTN_QUIET, BTN_SECONDARY, HINT, INPUT, LABEL, PANEL } from "./roomUi";
 import { useHash } from "./useHash";
 
 /** How often the lists are read again while the page is in view. */
@@ -82,13 +83,7 @@ function AskForm({
         <label htmlFor="advice-circle" className={LABEL}>
           {ADVICE_COPY.circleLabel}
         </label>
-        <select id="advice-circle" className={`mt-1 ${INPUT}`} value={circleId} onChange={(e) => setCircleId(e.target.value)}>
-          {payload.circles.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </select>
+        <CirclePicker id="advice-circle" className={`mt-1 ${INPUT}`} circles={payload.circles} value={circleId} onChange={setCircleId} />
       </div>
       <div>
         <label htmlFor="advice-intent" className={LABEL}>
@@ -285,7 +280,7 @@ export default function AdviceProcess() {
               />
             ) : (
               payload.circles.length > 0 && (
-                <button ref={opener} type="button" className={BTN_PRIMARY} onClick={() => setAsking(true)}>
+                <button ref={opener} type="button" className={BTN_SECONDARY} onClick={() => setAsking(true)}>
                   {ADVICE_COPY.askButton}
                 </button>
               )

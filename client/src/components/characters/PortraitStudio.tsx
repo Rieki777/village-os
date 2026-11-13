@@ -29,6 +29,7 @@
  * work and neither costs anything.
  */
 import { useEffect, useRef, useState } from "react";
+import FramelessImg from "@/components/FramelessImg";
 import { Image as ImageIcon, Sparkles, Trash2, Upload } from "lucide-react";
 import { prepareImageForUpload } from "@/lib/imagePrep";
 import {
@@ -225,7 +226,7 @@ export default function PortraitStudio({
             applies to the bytes, so this box shows the real result. */}
         <div className="w-32 shrink-0 overflow-hidden rounded-xl border-2 border-sage/30 bg-sage-light">
           <div className="aspect-[3/4] w-full">
-            <img src={shown} alt="" className="h-full w-full object-cover object-top" />
+            <FramelessImg src={shown} alt="" className="h-full w-full object-cover object-top" />
           </div>
         </div>
 
@@ -361,7 +362,7 @@ function ForgePanel(p: ForgeProps) {
           <p className="text-sm text-teal-deep">Here is what the forge made. Keep it, or let it go.</p>
           <div className="mt-2 w-28 overflow-hidden rounded-xl border-2 border-teal-deep">
             <div className="aspect-[3/4] w-full">
-              <img src={p.candidateUrl} alt="" className="h-full w-full object-cover object-top" />
+              <FramelessImg src={p.candidateUrl} alt="" className="h-full w-full object-cover object-top" />
             </div>
           </div>
           <div className="mt-2 flex flex-wrap gap-2">

@@ -38,9 +38,9 @@ describe("a door start", () => {
   });
 
   it("asks the open form's questions, and a renewal keeps its terms editor", () => {
-    expect(fieldsFor("role_application", "details", DOOR.answers).map((f) => f.key)).toEqual(["fitStatement", "aim", "deliverables", "servesGoal"]);
+    expect(fieldsFor("role_application", "details", DOOR.answers).map((f) => f.key)).toEqual(["fitStatement", "aim", "goals", "servesGoal"]);
     expect(fieldsFor("role_application", "terms", DOOR.answers).map((f) => f.key)).toEqual(["termsChoice", "startsNoEarlierThan"]);
-    expect(fieldsFor("role_application", "details", RENEWAL.answers).map((f) => f.key)).toEqual(["fitStatement", "deliverables"]);
+    expect(fieldsFor("role_application", "details", RENEWAL.answers).map((f) => f.key)).toEqual(["fitStatement", "goals"]);
     expect(fieldsFor("role_application", "terms", RENEWAL.answers).map((f) => f.key)).toEqual(["seatSettings", "startsNoEarlierThan"]);
   });
 
@@ -48,7 +48,11 @@ describe("a door start", () => {
     const fields = problemsFor("role_application", DOOR.answers).map((p) => p.field);
     expect(fields).toEqual(expect.arrayContaining(["aim", "servesGoal", "termsChoice"]));
     expect(fields).not.toContain("seatSettings");
-    expect(termsChoiceProblem({ choice: "talk", note: " ", settings: VOLUNTEER }, DOOR.answers)).toMatch(/talk about in the terms/);
+    const base = { settings: VOLUNTEER, written: ["term"], commitmentPct: 50 };
+    // Each written setting is answered, and the commitment chosen (joining lane PR 3).
+    expect(termsChoiceProblem({ ...base, answers: {} }, DOOR.answers)).toMatch(/accept or would like to talk about Term/);
+    expect(termsChoiceProblem({ ...base, commitmentPct: null, answers: { term: { choice: "accept", note: "" } } }, DOOR.answers)).toMatch(/Choose your commitment/);
+    expect(termsChoiceProblem({ ...base, answers: { term: { choice: "accept", note: "" } } }, DOOR.answers)).toBeNull();
     expect(termsChoiceProblem(undefined, RENEWAL.answers)).toBeNull();
   });
 
@@ -57,20 +61,25 @@ describe("a door start", () => {
       ...DOOR.answers,
       aim: "Food grows here.",
       servesGoal: "Food grown on the land",
-      termsChoice: { choice: "talk", note: "The hours", settings: VOLUNTEER },
-      deliverables: "Three beds planted.",
+      termsChoice: { answers: { term: { choice: "talk", note: "The hours" } }, commitmentPct: 50, written: ["term"], settings: VOLUNTEER },
+      goals: [{ title: "Plant three beds", doneWhen: "they are planted", moves: "", serves: "", date: "", roleId: "" }],
       fitStatement: "I grow food.",
     };
-    expect(doorDeliverables(a)).toBe("Aim: Food grows here.\nServes the village goal: Food grown on the land\nWants to talk about the terms: The hours\n\nThree beds planted.");
+    expect(doorDeliverables(a)).toBe("Aim: Food grows here.\nServes the village goal: Food grown on the land\nWants to talk about the terms: Term: The hours\nCommitment: 50%\n\n- Plant three beds, done when they are planted");
     const body = ROLE_APPLICATION_TYPE.publish.body(a) as Record<string, unknown>;
     expect(body.seatSettings).toEqual(VOLUNTEER);
     // B1 (0369): the answers go structured, for the proposal's card.
-    expect(body.answers).toEqual({ aim: "Food grows here.", servesGoal: "Food grown on the land", terms: { choice: "talk", note: "The hours" } });
+    expect(body.answers).toEqual({ aim: "Food grows here.", servesGoal: "Food grown on the land", terms: { choice: "talk", note: "Term: The hours", answers: { term: { choice: "talk", note: "The hours" } }, commitmentPct: 50 },
+      // The goals ride in the answers, each tied to the first picked role when the list left it open.
+      goals: [{ title: "Plant three beds", doneWhen: "they are planted", moves: "", serves: "", date: "", roleId: "garden" }],
+      // About you (PR 2): nothing filled yet, so the route asks for the background-check consent.
+      references: [], about: {},
+    });
     expect((ROLE_APPLICATION_TYPE.publish.body({ ...RENEWAL.answers, deliverables: "x" }) as Record<string, unknown>).answers).toBeUndefined();
     expect(body.seatIds).toEqual(["garden", "host"]);
     // A season with no goals yet answers for the member, and says nothing about a goal.
     expect(doorDeliverables({ ...a, servesGoal: NO_SEASON_GOALS, termsChoice: { choice: "accept", note: "", settings: VOLUNTEER } })).toBe(
-      "Aim: Food grows here.\nAccepts the terms on offer.\n\nThree beds planted.",
+      "Aim: Food grows here.\nAccepts the terms on offer.\n\n- Plant three beds, done when they are planted",
     );
     // A renewal publishes its list and its terms as written.
     expect(doorDeliverables({ ...RENEWAL.answers, deliverables: "Same as before." })).toBe("Same as before.");

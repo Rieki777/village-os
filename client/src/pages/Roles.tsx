@@ -1,9 +1,11 @@
-import CastStrip from "@/components/roleDraft/CastStrip";
+import ArchetypeStep from "@/components/roleDraft/ArchetypeStep";
+import CircleName from "@/components/circles/CircleName";
+import { anchorCircleId } from "@shared/circlePicker";
+import SeasonGoals from "@/components/roleDraft/SeasonGoals";
+import { BTN_NOTICE, BTN_PRIMARY, BTN_SECONDARY, CARD, H1, H2, LINK, RING, TILE, WORLD } from "@/components/journey/look";
 import NotListedChip from "@/components/NotListedChip";
 import Layout from "@/components/Layout";
 import { Link } from "wouter";
-/** The link from a circle's group to its own card (`/circles/:id`). */
-const OPEN_CIRCLE_CARD = "Open this circle's card";
 import { m, AnimatePresence } from "framer-motion";
 import { ArrowRight, Briefcase, ChevronDown, Link2 } from "lucide-react";
 import { iconFor } from "@/lib/circleIcons";
@@ -24,15 +26,22 @@ import EditRoleButton, { NewRoleFromCardButton } from "@/components/roleEdit/Edi
 import SeatVendorFacts from "@/components/power/SeatVendorFacts";
 import RoleHolderCards from "@/components/playerCard/RoleHolderCards";
 import RaiseTension from "@/components/roleTension/RaiseTension";
-import { proposeRoleHref } from "@/components/roleProposal/QuickPath";
-import { RP_WORDS } from "@/components/roleProposal/proposalWords";
+import { agentProposalHref, proposeRoleHref } from "@/components/roleProposal/QuickPath";
 import { useClassNames } from "@/components/power/useClassNames";
 import { useModule } from "@/modules/ModuleProvider";
 import { useAuth } from "@/contexts/AuthContext";
-import { useLingui } from "@lingui/react/macro";
-import { STATE_WORDS, isSeatState, type SeatStateWord, type SheetContext } from "@shared/roleSheet";
+import { useMyCommitment } from "@/lib/useMyCommitment";
+import { rolesWithinReach } from "@shared/commitment";
+import { Trans, useLingui } from "@lingui/react/macro";
+import { isSeatState, type SeatStateWord, type SheetContext } from "@shared/roleSheet";
 import { fromOrgSeat, orgHolderName, seasonForSheet, seatHistoryShown } from "@shared/roleSheetInputs";
 import { coordinatingCircle } from "@shared/coordinatingCircle";
+import FoundingTeam, { type FoundingRole } from "@/components/roleCard/FoundingTeam";
+import FullRoleCard from "@/components/roleCard/FullRoleCard";
+import { readFoundingTeam, type FoundingTeamAnswer } from "@/components/roleCard/roleCardApi";
+import { DEFAULT_OTHER_WAYS, OTHER_WAYS_DEFAULTS } from "@shared/otherWays";
+import RootsFilterToggle from "@/components/roots/RootsFilterToggle";
+import { useRootsFilter } from "@/components/roots/useRootsFilter";
 
 interface RoleEntry {
   id: string;
@@ -72,11 +81,13 @@ interface SheetSource {
 // never disagree and a sixth state cannot draw an empty badge. A seat whose
 // term reached its date used to fall through to "Open Role" here.
 const statusBadge: Record<SeatStateWord, string> = {
-  filled: "bg-sage/15 text-sage border border-sage/30",
-  open: "bg-amber/15 text-amber-ink border border-amber/40",
-  forming: "bg-teal/15 text-teal-deep border border-teal/30",
-  partial: "bg-gold/20 text-foreground border border-gold/40",
-  expired: "bg-gold/20 text-foreground border border-gold/40",
+  // The sheet's state colours (docs/DESIGN_RULE.md): held is living green, open is the gold of
+  // what can be taken up, the rest are quiet. Semantic tokens, so they read on the night ground.
+  filled: "bg-open/10 text-open border border-open/40",
+  open: "bg-notice/10 text-notice border border-notice/50",
+  forming: "bg-muted text-foreground border border-border",
+  partial: "bg-muted text-foreground border border-border",
+  expired: "bg-muted text-muted-foreground border border-border",
 };
 
 function normalizeStatus(s: unknown): SeatStateWord {
@@ -134,6 +145,7 @@ function seatLink(id: string): string {
  * accessible name, so a reader who says what they see still reaches it.
  */
 function SeatLinkCopy({ seatId, seatName }: { seatId: string; seatName: string }) {
+  const { t } = useLingui();
   const link = seatLink(seatId);
   const [said, setSaid] = useState<"" | "copied" | "refused">("");
   // A count so a second refusal selects the field again.
@@ -146,8 +158,8 @@ function SeatLinkCopy({ seatId, seatName }: { seatId: string; seatName: string }
   }, [refused]);
   useEffect(() => {
     if (said !== "copied") return;
-    const t = window.setTimeout(() => setSaid(""), 4000);
-    return () => window.clearTimeout(t);
+    const timer = window.setTimeout(() => setSaid(""), 4000);
+    return () => window.clearTimeout(timer);
   }, [said]);
   const fallBack = () => {
     setRefused((n) => n + 1);
@@ -161,20 +173,20 @@ function SeatLinkCopy({ seatId, seatName }: { seatId: string; seatName: string }
   };
   const line =
     said === "copied"
-      ? `Link to ${seatName} copied.`
+      ? t({ message: `Link to ${seatName} copied.`, context: "roles page, role link" })
       : said === "refused"
-        ? "Copying did not work here. The link is selected in the field below."
+        ? t`Copying did not work here. The link is selected in the field below.`
         : "";
   return (
     <div className="pt-4 border-t border-border space-y-2">
       <button
         type="button"
         onClick={copy}
-        aria-label={`Copy link to ${seatName}`}
+        aria-label={t({ message: `Copy link to ${seatName}`, context: "roles page, role link" })}
         className="inline-flex items-center gap-2 min-h-[44px] text-sm font-medium text-foreground underline underline-offset-2"
       >
         <Link2 className="w-4 h-4 text-muted-foreground" aria-hidden="true" />
-        Copy link
+        {t({ message: `Copy link`, context: "roles page, role link" })}
       </button>
       {refused > 0 && (
         <input
@@ -182,7 +194,7 @@ function SeatLinkCopy({ seatId, seatName }: { seatId: string; seatName: string }
           type="text"
           readOnly
           value={link}
-          aria-label={`Link to ${seatName}`}
+          aria-label={t({ message: `Link to ${seatName}`, context: "roles page, role link" })}
           onFocus={(e) => e.currentTarget.select()}
           className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground"
         />
@@ -208,13 +220,22 @@ function RoleCard({ role, expanded, onToggle, index, canTagNeeds, sheet, arrive 
   // Whose words the vendor panel shows. Taken from the listing rather than
   // written here, because another fork's connector is a different service
   // and a literal would be this platform naming one of them.
-  const vendorName = useModule("saberra")?.name ?? "the connected service";
+  const { t } = useLingui();
+  const vendorName = useModule("saberra")?.name ?? t({ message: `the connected service`, context: "roles page, a connected service's fallback name" });
+  const stateWords: Record<SeatStateWord, string> = {
+    open: t({ message: `Open`, context: "roles page, role state" }),
+    partial: t({ message: `Partly held`, context: "roles page, role state" }),
+    filled: t({ message: `Held`, context: "roles page, role state" }),
+    forming: t({ message: `Forming`, context: "roles page, role state" }),
+    expired: t`Ready to be re-chosen`,
+  };
   const headerId = `${useId().replace(/[^a-zA-Z0-9]/g, "")}-seat`;
   const Icon = iconFor(role.icon);
   // Admin-editable colour, resolved together with the ink that stays legible
   // on it. See client/src/lib/swatch.ts.
   const swatch = swatchFor(role.color);
   const holders = (role.holders ?? []).filter(Boolean);
+  const [fullOpen, setFullOpen] = useState(false);
   // Arriving by a link to this seat: its header is scrolled to and takes
   // focus, so a keyboard or screen-reader reader starts at the seat they were
   // sent to. `instant` under reduced motion, because `html` scrolls smoothly
@@ -241,7 +262,7 @@ function RoleCard({ role, expanded, onToggle, index, canTagNeeds, sheet, arrive 
         id={headerId}
         onClick={onToggle}
         aria-expanded={expanded}
-        className="w-full text-left bg-card hover:bg-card/80 transition-colors p-5 rounded-xl border border-border scroll-mt-28"
+        className="w-full text-left bg-card hover:bg-muted transition-colors p-5 rounded-xl border border-border shadow-sm scroll-mt-28 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
       >
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-start gap-3 flex-1 min-w-0">
@@ -252,14 +273,20 @@ function RoleCard({ role, expanded, onToggle, index, canTagNeeds, sheet, arrive 
               <div className="flex flex-wrap items-center gap-2 mb-0.5">
                 <h3 className="font-display text-lg font-bold text-foreground leading-tight">{role.name}</h3>
                 <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusBadge[role.status]}`}>
-                  {STATE_WORDS[role.status]}
+                  {stateWords[role.status]}
                 </span>
                 <NotListedChip role={role.raw} />
+                {/* 0374: the card says an agent may hold it (a card that has not said shows nothing). */}
+                {(role.raw?.card?.heldBy === "agent" || role.raw?.card?.heldBy === "either") && (
+                  <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-muted text-foreground border border-border" data-testid="agent-may-hold">
+                    <Trans context="roles directory chip">Can be held by an agent</Trans>
+                  </span>
+                )}
               </div>
               <p className="text-xs text-muted-foreground">
                 {role.group}
                 {holders.length > 0 && (
-                  <span className="text-sage font-medium"> · {holders.join(", ")}</span>
+                  <span className="text-open font-medium"> · {holders.join(", ")}</span>
                 )}
               </p>
             </div>
@@ -282,7 +309,7 @@ function RoleCard({ role, expanded, onToggle, index, canTagNeeds, sheet, arrive 
             exit={{ opacity: 0, height: 0 }}
             className="overflow-hidden"
           >
-            <div className="bg-muted/30 p-6 rounded-b-xl border border-t-0 border-border space-y-5">
+            <div className="bg-muted p-6 rounded-b-xl border border-t-0 border-border space-y-5">
               {/* The role card, the same one the map draws, from this page's
                   own `/api/org` row at whatever tier it was served. The row
                   header above already says the circle and the state, so the
@@ -297,6 +324,19 @@ function RoleCard({ role, expanded, onToggle, index, canTagNeeds, sheet, arrive 
                 action={guardedAction(role.raw, <SeatAction circleId={role.circleId ?? null} applyHref={applyHrefFor(role.raw)} />)}
                 settings={termsSlotFor(role.raw)}
               />
+              {/* The full card: everything the role editor holds, read-only (build list 4.4). */}
+              {!role.isExample && (
+                <details className="group rounded-xl border border-border bg-card" data-full-card-details={role.id} onToggle={(e) => setFullOpen((e.currentTarget as HTMLDetailsElement).open)}>
+                  <summary className="flex min-h-11 cursor-pointer items-center gap-2 px-4 py-2 text-sm font-semibold text-foreground focus-visible:outline-2 focus-visible:outline-ring">
+                    <ChevronDown className="size-4 transition-transform group-open:rotate-180" aria-hidden="true" />
+                    {t({ message: "Read the full card", context: "roles page, opens a role's full card" })}
+                  </summary>
+                  <div className="p-2 sm:p-3">
+                    {/* Mounted once opened, so a closed row reads nothing more. */}
+                    {fullOpen && <FullRoleCard seat={role.raw} circleName={role.group} showTitle={false} labelledBy={headerId} />}
+                  </div>
+                </details>
+              )}
               {/* The seat as a link, for sending to whoever might hold it.
                   Outside the night card, in this page's own light inks. Not
                   on a demonstration seat: nobody is recruited for one, so a
@@ -306,8 +346,13 @@ function RoleCard({ role, expanded, onToggle, index, canTagNeeds, sheet, arrive 
               {/* For a holder of the power to decide the structure, and nobody else: the editor is its own chunk. */}
               {!role.isExample && <EditRoleButton roleId={role.id} onSaved={() => window.location.reload()} />}
               {!role.isExample && (
-                <Link href={proposeRoleHref(role.id)} className="inline-flex min-h-11 items-center text-sm font-medium text-notice underline underline-offset-2">
-                  {RP_WORDS.proposeThisRole}
+                <Link href={proposeRoleHref(role.id)} className={`w-fit ${BTN_NOTICE}`}>
+                  {t`Propose this role for next season`}
+                </Link>
+              )}
+              {!role.isExample && role.raw?.card?.agentMayHold === true && (
+                <Link href={agentProposalHref(role.id)} className={`w-fit ${BTN_SECONDARY}`}>
+                  <Trans context="roles directory: a member proposes an agent they keep">Propose an agent for this role</Trans>
                 </Link>
               )}
               {!role.isExample && <RaiseTension roleId={role.id} roleName={role.name} />}
@@ -354,6 +399,15 @@ export default function Roles() {
   const [linked] = useState<string | null>(seatFromUrl);
   const [expandedRole, setExpandedRole] = useState<string | null>(linked);
   const [linkMissed, setLinkMissed] = useState(false);
+  // The roles stay behind step one until the visitor picks an archetype (which leaves the
+  // page) or presses "See all roles". A link to one seat is a question about that seat, so it shows them.
+  const [showAll, setShowAll] = useState(linked !== null);
+  const allHeading = useRef<HTMLHeadingElement>(null);
+  const revealed = useRef(linked !== null);
+  useEffect(() => {
+    if (showAll && !revealed.current) allHeading.current?.focus();
+    revealed.current = showAll;
+  }, [showAll]);
   const [roles, setRoles] = useState<RoleEntry[] | null>(null);
   const [circles, setCircles] = useState<any[]>([]);
   const [failed, setFailed] = useState(false);
@@ -361,11 +415,30 @@ export default function Roles() {
   const [village, setVillage] = useState<unknown>(undefined);
   const [historyShown, setHistoryShown] = useState(false);
   const [seatCounts, setSeatCounts] = useState({ seats: 0, held: 0 });
+  // The founding team section (org.founding_team). Null until read; a failed read is the section off.
+  const [founding, setFounding] = useState<FoundingTeamAnswer | null>(null);
+  // VERIFY 2.2: the server sends an unlisted role to a steward or an admin, with its chip. The
+  // page used to list them all by default, so a founder checking "List only these" still saw
+  // every role and read the update as not taken. Now the page shows what a visitor sees, and
+  // the admin view is one switch away.
+  const [showUnlisted, setShowUnlisted] = useState(false);
+  useEffect(() => {
+    let live = true;
+    void readFoundingTeam().then((a) => live && setFounding(a));
+    return () => {
+      live = false;
+    };
+  }, []);
   // Who may say what a seat is held for. The server refuses everybody else by
   // itself; this only decides whether the control is drawn.
   const { user } = useAuth();
+  // What this member says they can give now (0383): a role that needs more than that, and says it is required, waits behind one press.
+  const memberPct = useMyCommitment(!!user).pct;
+  const [showBeyond, setShowBeyond] = useState(false);
   const { t } = useLingui();
   const canTagNeeds = !!user && (user.role === "admin" || user.role === "founder");
+  // "Show only what matches my roots": the same filter and rule the quests board runs.
+  const roots = useRootsFilter(user?.id ?? null);
   // The card's clock and the village's class names: one cached read each for
   // the whole page, however many rows are opened.
   const season = useSeason();
@@ -452,20 +525,64 @@ export default function Roles() {
   // Held invisible until /api/org answers, so the sentence never grows a
   // clause in front of the reader.
   const coordinator = coordinatingCircle(circles);
+  const anchorId = anchorCircleId(circles);
   const orgPending = roles === null && !failed;
   // A link to one role (?seat=) names that role in the page heading, not the whole page.
-  const seasonEntry = ((season as unknown as { current?: { name?: string } | null } | null)?.current ?? (season as unknown as { name?: string } | null)) as { name?: string } | null;
-  const seasonLine = typeof seasonEntry?.name === "string" && seasonEntry.name.trim() ? t({ message: `This season: ${seasonEntry.name.trim()}.`, context: "roles page season" }) : "";
   const linkedName = linked ? ((roles ?? []) as Array<{ id: string; name: string }>).find((r) => r.id === linked)?.name ?? null : null;
-  const circlesHow = `Working groups with real authority. Each circle has an aim (what it works toward) and a domain (what it decides on)${
-    coordinator ? `, and links back to the ${String(coordinator.name)}.` : "."
-  }`;
+  const circlesHow = coordinator
+    ? t`Working groups with real authority. Each circle has an aim (what it works toward) and a domain (what it decides on), and links back to the ${String(coordinator.name)}.`
+    : t`Working groups with real authority. Each circle has an aim (what it works toward) and a domain (what it decides on).`;
 
   // Grouped by circle, in the order the village sorted its circles, with a
   // dormant circle's seats still listed under it.
   const circleOrder = new Map(circles.map((c, i) => [c.name, i]));
+  const featured: FoundingRole[] = founding?.on
+    ? founding.roleIds
+        .map((id) => (roles ?? []).find((r) => r.id === id))
+        .filter((r): r is RoleEntry => !!r && r.raw?.listed !== false)
+        .map((r) => ({ seat: r.raw, circleName: r.group, sections: founding.sections[r.id] ?? null }))
+    : [];
+  const otherWays = founding?.otherWays ?? DEFAULT_OTHER_WAYS;
+  const leads = featured.length > 0;
+  // One h1 per page: the founding team's heading while it leads, the page's own otherwise.
+  const HeroHeading = leads ? "h2" : "h1";
+  // The header waits for both reads, so it never draws on top and then jumps below the founding team.
+  const heroShown = founding !== null && (!founding.on || roles !== null || failed);
+  const featuredShown = new Set(featured.map((f) => String(f.seat.id)));
+  const unlistedCount = (roles ?? []).filter((r) => r.raw?.listed === false).length;
+  // Each role appears once: a featured role lives in the founding section. A linked seat is a
+  // question about that seat, so it shows wherever it is.
+  const listedDirectory = (roles ?? []).filter((r) => r.id === linked || ((showUnlisted || r.raw?.listed !== false) && !featuredShown.has(r.id)));
+  // The roots filter hides only roles tagged with none of the reader's roots; a linked seat always shows.
+  const byRoots = roots.apply(listedDirectory, (r) => (Array.isArray(r.raw?.archetypes) ? r.raw.archetypes : []));
+  const rootKept = new Set(byRoots.shown.map((r) => r.id));
+  const rooted = listedDirectory.filter((r) => r.id === linked || rootKept.has(r.id));
+  // Filters work for the reader alone, never ranks anyone. A linked seat always shows.
+  const reach = rolesWithinReach(rooted, (r) => ({ commitmentPct: r.raw?.card?.commitmentPct ?? null, commitmentRequired: r.raw?.card?.commitmentRequired === true }), memberPct);
+  // The founding team is held to the same reach: a founding role that needs more than the reader has waits too.
+  const featuredReach = rolesWithinReach(featured, (f) => ({ commitmentPct: f.seat?.card?.commitmentPct ?? null, commitmentRequired: f.seat?.card?.commitmentRequired === true }), memberPct);
+  const featuredHidden = featuredReach.beyond.filter((f) => String(f.seat?.id) !== linked);
+  const featuredVisible = showBeyond ? featured : featured.filter((f) => !featuredHidden.includes(f));
+  const beyondCount = reach.beyond.filter((r) => r.id !== linked).length + featuredHidden.length;
+  const directory = showBeyond ? rooted : rooted.filter((r) => r.id === linked || !reach.beyond.includes(r));
+  const rootsOffered = roots.available && byRoots.tagged;
+  // 0383: required roles that ask more than the reader can give now, held back with one door to show them.
+  // Drawn once: above the founding team when it holds one of them, else above the directory.
+  const beyondLine =
+    beyondCount > 0 ? (
+      <div className="mb-8 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-border bg-card px-4 py-2 text-sm text-foreground" data-roles-beyond={beyondCount}>
+                <span>
+                  {beyondCount === 1
+                    ? t({ message: "1 role needs more time than you have right now.", context: "roles page: required roles beyond the reader's percent, one" })
+                    : t({ message: `${beyondCount} roles need more time than you have right now.`, context: "roles page: required roles beyond the reader's percent, several" })}
+                </span>
+                <button type="button" className="min-h-11 font-medium text-notice underline underline-offset-2 hover:text-foreground" onClick={() => setShowBeyond((v) => !v)} aria-pressed={showBeyond}>
+                  {showBeyond ? t({ message: "Hide them again", context: "roles page: hide the roles beyond the reader's percent" }) : t({ message: "Show them anyway", context: "roles page: show the roles beyond the reader's percent" })}
+                </button>
+              </div>
+    ) : null;
   const groups: { title: string; subtitle: string; circleId: string | null; roles: RoleEntry[] }[] = [];
-  for (const role of roles ?? []) {
+  for (const role of directory) {
     const g = groups.find((x) => x.title === role.group);
     if (g) g.roles.push(role);
     else {
@@ -477,60 +594,124 @@ export default function Roles() {
     (a, b) => (circleOrder.get(a.title) ?? 999) - (circleOrder.get(b.title) ?? 999),
   );
 
+
+  const otherWaysSection = (
+    <>
+          {/* OTHER WAYS TO JOIN: clearly secondary to the founding team, and open from the start. */}
+          <section aria-labelledby="other-ways" className="mx-auto mb-14 max-w-4xl" data-other-ways="">
+            <h2 id="other-ways" className={`${H2} mb-2`}>{t({ message: "Other ways to join", context: "roles page, other ways to join" })}</h2>
+            <p className="mb-4 text-sm text-muted-foreground">{t({ message: "Not every way in is a founding role. Each of these is open now.", context: "roles page, other ways to join" })}</p>
+            <ul className="grid gap-3 sm:grid-cols-2">
+              <li className={TILE}>
+                <Link href="/role-proposals/new" className={`inline-flex min-h-11 items-center gap-2 ${LINK}`} data-propose-new-role="">
+                  {t({ message: "Propose a new role", context: "roles page, other ways to join" })}
+                  <ArrowRight className="size-4" aria-hidden="true" />
+                </Link>
+                <p className="mt-1 text-xs text-muted-foreground">{t({ message: "Propose is for a role we do not list. Tell us the role you see, and the village decides.", context: "roles page, other ways to join" })}</p>
+              </li>
+              <li className={TILE}>
+                <Link href="/quests" className={`inline-flex min-h-11 items-center gap-2 ${LINK}`}>
+                  {t({ message: "Take a quest, alone or with others", context: "roles page, other ways to join" })}
+                  <ArrowRight className="size-4" aria-hidden="true" />
+                </Link>
+              </li>
+              {/* QA2-07: the resident path and the gifts tile, the village's own words (shared/otherWays.ts). */}
+              <li className={TILE} data-other-way="seeder">
+                <Link href={otherWays.seeder.href} className={`inline-flex min-h-11 items-center gap-2 ${LINK}`}>
+                  {otherWays.seeder.title === OTHER_WAYS_DEFAULTS.seederTitle ? t({ message: "Become a Founding Seeder", context: "roles page, other ways to join" }) : otherWays.seeder.title}
+                  <ArrowRight className="size-4" aria-hidden="true" />
+                </Link>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {otherWays.seeder.line === OTHER_WAYS_DEFAULTS.seederLine ? t({ message: "Live here one day? Start on the resident path.", context: "roles page, other ways to join" }) : otherWays.seeder.line}
+                </p>
+              </li>
+              <li className={TILE} data-other-way="gifts">
+                <Link href={otherWays.gifts.href} className={`inline-flex min-h-11 items-center gap-2 ${LINK}`}>
+                  {otherWays.gifts.title === OTHER_WAYS_DEFAULTS.giftsTitle ? t({ message: "Offer your gifts", context: "roles page, other ways to join" }) : otherWays.gifts.title}
+                  <ArrowRight className="size-4" aria-hidden="true" />
+                </Link>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {otherWays.gifts.line === OTHER_WAYS_DEFAULTS.giftsLine ? t({ message: "Volunteer or work-trade: tell us what you would like to give.", context: "roles page, other ways to join" }) : otherWays.gifts.line}
+                </p>
+              </li>
+            </ul>
+            {/* QA2-02: while the founding team is featured, the game's way in sits here, quiet and
+                secondary, with no "Step one": the founding application keeps the only steps on the page. */}
+            {featured.length > 0 && (
+              <div className="mt-8" data-game-way="">
+                <h3 className="font-display text-2xl leading-tight text-foreground">{t({ message: "Find your place in the game", context: "roles page, other ways to join" })}</h3>
+                <ArchetypeStep nested allShown={showAll} onSeeAll={() => setShowAll(true)} />
+              </div>
+            )}
+          </section>
+    </>
+  );
+
   return (
     <Layout>
-      <section className="py-24 bg-background">
+      {/* The sheet's world (docs/DESIGN_RULE.md): the same night ground and display face as the profile. */}
+      <section className={`${WORLD} ${leads ? "pb-16 pt-4 sm:py-16" : "py-16"} sm:py-24`}>
         <div className="container">
-          {/* Header */}
+          {leads && (
+            <>
+              {featuredHidden.length > 0 && beyondLine}
+              {featuredVisible.length > 0 && <FoundingTeam lead roles={featuredVisible} villagePay={founding?.villagePay ?? null} />}
+              {otherWaysSection}
+            </>
+          )}
+
+          {/* Header: below "Other ways to join" while the founding team leads (design pass M1 and D-04). */}
+          {heroShown && (
+          <>
           <m.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             className="text-center mb-16"
           >
-            <div className="w-16 h-16 rounded-full bg-sage/10 flex items-center justify-center mx-auto mb-6">
-              <Briefcase className="w-8 h-8 text-sage" />
+            <div className={`${RING} mx-auto mb-6 size-16`}>
+              <Briefcase className="w-7 h-7" aria-hidden="true" />
             </div>
-            <h1 className="font-display text-4xl md:text-5xl font-bold text-foreground mb-4">
-              {linkedName ?? "Roles and Circles"}
-            </h1>
+            <HeroHeading className={`${H1} mb-4`}>
+              {linkedName ?? t({ message: `Roles and Circles`, context: "roles page" })}
+            </HeroHeading>
             {/* R46 enchant-first: the forest image carries the surface; the
                 sociocracy mechanics live in the three tooltips. */}
-            <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-              The village organizes itself the way a forest does:{" "}
-              <InfoTip tip="Circles are sociocratic working groups with real authority over their own domain. Decisions inside a circle pass by consent.">circles</InfoTip>{" "}
-              of care, each holding its own ground, and every{" "}
-              <InfoTip tip="A role is a named responsibility inside a circle, with an aim, a domain, and accountabilities. The role belongs to the circle, and a person steps into it.">role</InfoTip>{" "}
-              is a way to hold some of it with your own hands, by{" "}
-              <InfoTip tip="A decision moves forward when nobody holds a reasoned objection. Consent is quieter than consensus and faster than voting.">consent</InfoTip>.
+            <p className="text-lg leading-relaxed text-muted-foreground max-w-2xl mx-auto sm:text-xl">
+              {t`The village organizes itself the way a forest does:`}{" "}
+              <InfoTip tip={t`Circles are sociocratic working groups with real authority over their own domain. Decisions inside a circle pass by consent or other circle-chosen processes.`}>{t({ message: `circles`, context: "roles page, intro word with a tooltip" })}</InfoTip>{" "}
+              {t`of care, each holding its own ground, and every`}{" "}
+              <InfoTip tip={t`A role is a named responsibility inside a circle, with an aim, a domain, and accountabilities. The role belongs to the circle, and a person plays it for a season.`}>{t({ message: `role`, context: "roles page, intro word with a tooltip" })}</InfoTip>{" "}
+              {t`is a way to hold some of it with your own hands, by`}{" "}
+              <InfoTip tip={t`A decision moves forward when nobody holds a reasoned objection. Consent is quieter than consensus and faster than voting.`}>{t({ message: `consent`, context: "roles page, intro word with a tooltip" })}</InfoTip>.
             </p>
             <div className="mt-4 flex justify-center">
               <NewRoleFromCardButton onMade={() => window.location.reload()} />
             </div>
-            {user && (
+            {canTagNeeds && (
               <p className="mt-3 text-sm">
-                <Link href="/role-measures" className="font-semibold text-foreground underline underline-offset-2">
+                <Link href="/role-measures" className={LINK}>
                   {t({ message: "How roles are going", context: "roles page measures door" })}
                 </Link>
               </p>
             )}
-            {/* The draft board: pick characters, scout, shortlist, apply (pages/RoleDraft.tsx). */}
-            {seasonLine && (
-              <p className="mt-4 text-sm text-muted-foreground">
-                {seasonLine}{" "}
-                <a href="/roles/select#sel-season" className="font-semibold text-foreground underline underline-offset-2">
-                  {t({ message: "See its goals", context: "roles page season" })}
-                </a>
-              </p>
+            {/* The draft board: pick characters, scout, shortlist, apply (pages/RoleDraft.tsx). While the
+                founding team is featured, its one act per card is the page's primary act, so this stays off. */}
+            {featured.length === 0 && (
+              <Link
+                href="/roles/select"
+                className={`mt-6 ${BTN_PRIMARY}`}
+              >
+                {t({ message: "Browse the open roles", context: "roles page button" })}
+                <ArrowRight className="h-4 w-4" aria-hidden="true" />
+              </Link>
             )}
-            <Link
-              href="/roles/select"
-              className="mt-6 inline-flex min-h-11 items-center gap-2 rounded-full bg-notice px-5 text-sm font-bold text-background focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-            >
-              {t({ message: "Select your roles", context: "roles page button" })}
-              <ArrowRight className="h-4 w-4" aria-hidden="true" />
-            </Link>
-            <CastStrip />
           </m.div>
+          </>
+          )}
+          {!leads && otherWaysSection}
+
+          <SeasonGoals />
+          {featured.length === 0 && <ArchetypeStep allShown={showAll} onSeeAll={() => setShowAll(true)} />}
 
           <div className="max-w-4xl mx-auto">
             {/* Offered here because this is the page that names you: the
@@ -546,17 +727,22 @@ export default function Roles() {
               className="mb-14 grid sm:grid-cols-3 gap-4"
             >
               {[
-                { label: "Circles", description: circlesHow, pending: orgPending },
-                { label: "Roles", description: "Specific responsibilities inside a circle. One person can hold many roles. If a person leaves, the role stays and gets reassigned." },
-                { label: "Consent", description: "Decisions move forward when no one has a reasoned objection that the proposal would cause harm or block the aim. Everyone loving them is not the bar." },
+                { label: t({ message: `Circles`, context: "roles page, how it works" }), description: circlesHow, pending: orgPending },
+                { label: t({ message: `Roles`, context: "roles page, how it works" }), description: t`Specific responsibilities inside a circle. One person can hold many roles. If a person leaves, the role stays and gets reassigned.` },
+                { label: t({ message: `Consent`, context: "roles page, how it works" }), description: t`Decisions move forward when no one has a reasoned objection that the proposal would cause harm or block the aim. Everyone loving them is not the bar.` },
               ].map((item) => (
-                <div key={item.label} className="rounded-xl bg-muted/30 border border-border p-5">
+                <div key={item.label} className={TILE}>
                   <div className="text-sm font-bold text-foreground mb-1">{item.label}</div>
                   <p className={`text-xs text-muted-foreground leading-relaxed${"pending" in item && item.pending ? " invisible" : ""}`}>{item.description}</p>
                 </div>
               ))}
             </m.div>
 
+            {showAll && (
+              <div>
+                <h2 ref={allHeading} tabIndex={-1} className="mb-8 font-display text-3xl text-foreground focus:outline-none">
+                  {t({ message: "All roles and circles", context: "roles page archetypes" })}
+                </h2>
             {/* Members-only people: every seat card below still carries its
                 aim, its domain and whether it is held. This says whose names
                 are missing and how to reach them. */}
@@ -565,21 +751,40 @@ export default function Roles() {
                 <PeopleLockNote people={people} seats={seatCounts.seats} held={seatCounts.held} />
               </div>
             )}
+            {/* "Show only what matches my roots", offered only when some role carries roots. */}
+            {rootsOffered && (
+              <div className="mb-8">
+                <RootsFilterToggle filter={roots} total={listedDirectory.length} shown={rooted.length} noun="roles" />
+              </div>
+            )}
+            {featuredHidden.length === 0 && beyondLine}
+            {/* The admin view: only a reader the server sent unlisted roles to has anything to switch on. */}
+            {unlistedCount > 0 && (
+              <label className="mb-8 flex min-h-11 items-center gap-3 rounded-xl border border-border bg-card px-4 py-2 text-sm text-foreground" data-show-unlisted="">
+                <input type="checkbox" className="size-5 accent-notice" checked={showUnlisted} onChange={(e) => setShowUnlisted(e.target.checked)} />
+                <span>
+                  {t({ message: `Show the ${unlistedCount} roles visitors do not see (admin view)`, context: "roles page, steward switch for unlisted roles" })}
+                </span>
+              </label>
+            )}
+            {roles !== null && featured.length > 0 && groups.length === 0 && (
+              <p className="mb-8 text-sm text-muted-foreground">{t({ message: "The roles open now are the founding roles above.", context: "roles page, empty directory" })}</p>
+            )}
             {/* Same always-present polite region as Circles.tsx: the node is
                 in the DOM from first paint, so the change from the loading
                 line to the failure line is the thing announced. */}
             <div role="status">
               {roles === null && !failed && (
-                <div className="text-center text-muted-foreground py-16">Loading roles…</div>
+                <div className="text-center text-muted-foreground py-16">{t({ message: `Loading roles…`, context: "roles page" })}</div>
               )}
               {failed && (
                 <div className="text-center text-muted-foreground py-16">
-                  The roles list is catching its breath. Please refresh in a moment.
+                  {t`The roles list is catching its breath. Please refresh in a moment.`}
                 </div>
               )}
               {linkMissed && (
                 <p className="text-center text-sm text-muted-foreground mb-8">
-                  That role is not on this page anymore.
+                  {t`That role is not on this page anymore.`}
                 </p>
               )}
             </div>
@@ -587,7 +792,7 @@ export default function Roles() {
             {groups.map(({ title, subtitle, circleId, roles: groupRoles }) => (
               <div className="mb-14" key={title}>
                 <div className="mb-6">
-                  <h2 className="font-display text-2xl font-bold text-foreground mb-1">{title}</h2>
+                  <h2 className={`${H2} mb-1`}>{circleId ? <CircleName name={title} anchor={circleId === anchorId} /> : title}</h2>
                   {subtitle && (
                     <p className="text-muted-foreground text-sm">{subtitle}</p>
                   )}
@@ -595,9 +800,9 @@ export default function Roles() {
                   {circleId ? (
                     <Link
                       href={`/circles/${encodeURIComponent(circleId)}`}
-                      className="inline-flex min-h-11 items-center text-sm font-medium text-foreground underline underline-offset-2"
+                      className={`inline-flex min-h-11 items-center text-sm ${LINK}`}
                     >
-                      {OPEN_CIRCLE_CARD}
+                      {t`Open this circle's card`}
                     </Link>
                   ) : null}
                 </div>
@@ -618,6 +823,9 @@ export default function Roles() {
               </div>
             ))}
 
+              </div>
+            )}
+
             {/* When a tension is between people: the village's own restorative
                 steps, the same ones /governance prints. This block used to be
                 a compiled process every fork published as its own, sending
@@ -628,10 +836,10 @@ export default function Roles() {
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
-              className="mt-4 bg-sage/5 p-8 rounded-2xl border border-sage/20"
+              className={`mt-4 ${CARD}`}
             >
-              <h2 className="font-display text-2xl font-bold text-foreground mb-4">
-                When a Tension Is Between People
+              <h2 className={`${H2} mb-4`}>
+                {t({ message: "How we evolve through conflict", context: "roles page, conflict steps heading" })}
               </h2>
               <VillageConflictSteps />
             </m.div>
@@ -643,8 +851,8 @@ export default function Roles() {
             viewport={{ once: true }}
             className="mt-12 text-center"
           >
-            <Link href="/circles" className="inline-flex items-center gap-2 px-6 py-3 bg-sage text-white rounded-lg hover:bg-sage/90 transition-colors font-medium">
-              Explore Our Circles
+            <Link href="/circles" className={BTN_SECONDARY}>
+              {t({ message: `Explore Our Circles`, context: "roles page" })}
               <ArrowRight className="w-4 h-4" />
             </Link>
           </m.div>

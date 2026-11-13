@@ -163,7 +163,7 @@ export default function CircleCard({
       {open > 0 && (
         <p className="text-xs text-amber-700 mb-3 flex items-center gap-1.5">
           <Hand className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
-          {open} opening{open === 1 ? "" : "s"}. Tap a dashed one to raise your hand.
+          {open} opening{open === 1 ? "" : "s"}. Tap a dashed one to apply for it.
         </p>
       )}
 

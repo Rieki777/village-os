@@ -43,6 +43,7 @@ import { readRoleCard, writeRoleCard } from "@shared/roleCardText";
 import { MAX_PROPOSAL_ROLES } from "@shared/roleProposals";
 import { guideStateFor } from "./guideChoice";
 import { register as registerRoleDiscover } from "./roleDiscover";
+import { register as registerProposalDrafts } from "./proposalDrafts";
 import { guidePromptName } from "@shared/guideName";
 import type { GuideAnswer, RoleGuideStep } from "@shared/roleGuide";
 
@@ -97,6 +98,9 @@ export function register(app: Express, deps: Deps): void {
 
   // The draft board's discover step (mapping and "Ask the guide") rides on this mount, so server/index.ts gains no line.
   registerRoleDiscover(app, { authedUser, getPool, clientIp, overLimit, mayAct: deps.mayAct, villageGuideName, villageName });
+
+  // "Ask Sera for a first draft" rides the same mount and the same usage ledger (joining lane PR 5).
+  registerProposalDrafts(app, { authedUser, getPool, clientIp, overLimit, seasonState, villageGuideName, villageName, noteUsage });
 
   const goalsOf = (seasonId: string | null): string[] => {
     const s = (seasonState().seasons ?? []).find((x: any) => x && String(x.id) === seasonId);

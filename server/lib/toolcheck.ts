@@ -29,7 +29,31 @@ import net from "net";
 import https from "https";
 import type { LookupAddress } from "dns";
 
-function ipIsPrivate(ip: string): boolean {
+/** Strip URL brackets and any zone id, so net.isIP sees the bare literal. */
+function bareHost(host: string): string {
+  return host.replace(/^\[|\]$/g, "").split("%")[0];
+}
+
+/** Expand an IPv6 literal to eight 16-bit groups, or null if it is malformed. */
+function v6Groups(ip: string): number[] | null {
+  let s = ip.toLowerCase();
+  const m = s.match(/^(.*:)(\d+\.\d+\.\d+\.\d+)$/);
+  if (m) {
+    const o = m[2].split(".").map(Number);
+    s = `${m[1]}${((o[0] << 8) | o[1]).toString(16)}:${((o[2] << 8) | o[3]).toString(16)}`;
+  }
+  const halves = s.split("::");
+  if (halves.length > 2) return null;
+  const head = halves[0] ? halves[0].split(":") : [];
+  const tail = halves.length === 2 && halves[1] ? halves[1].split(":") : [];
+  const fill = halves.length === 2 ? 8 - head.length - tail.length : 0;
+  if (fill < 0 || (halves.length === 1 && head.length !== 8)) return null;
+  const g = [...head, ...Array(fill).fill("0"), ...tail].map((x) => parseInt(x, 16));
+  return g.length === 8 && g.every((x) => Number.isInteger(x) && x >= 0 && x <= 0xffff) ? g : null;
+}
+
+export function ipIsPrivate(raw: string): boolean {
+  const ip = bareHost(raw);
   if (net.isIPv4(ip)) {
     const [a, b] = ip.split(".").map(Number);
     if (a === 10 || a === 127 || a === 0) return true;
@@ -39,11 +63,16 @@ function ipIsPrivate(ip: string): boolean {
     if (a === 100 && b >= 64 && b <= 127) return true; // CGNAT
     return false;
   }
-  const lower = ip.toLowerCase();
-  if (lower === "::1" || lower === "::") return true;
-  if (lower.startsWith("fc") || lower.startsWith("fd")) return true; // fc00::/7
-  if (lower.startsWith("fe8") || lower.startsWith("fe9") || lower.startsWith("fea") || lower.startsWith("feb")) return true; // fe80::/10
-  if (lower.startsWith("::ffff:")) return ipIsPrivate(lower.slice(7)); // v4-mapped
+  if (!net.isIPv6(ip)) return false;
+  const g = v6Groups(ip);
+  if (!g) return true; // unparseable literal: fail closed
+  if (g.slice(0, 5).every((x) => x === 0) && (g[5] === 0xffff || g[5] === 0)) {
+    // v4-mapped (::ffff:a.b.c.d) and v4-compatible (::a.b.c.d), plus :: and ::1
+    if (g[5] === 0 && g[6] === 0 && g[7] <= 1) return true;
+    return ipIsPrivate(`${g[6] >> 8}.${g[6] & 255}.${g[7] >> 8}.${g[7] & 255}`);
+  }
+  if ((g[0] & 0xfe00) === 0xfc00) return true; // fc00::/7
+  if ((g[0] & 0xffc0) === 0xfe80) return true; // fe80::/10
   return false;
 }
 
@@ -64,7 +93,7 @@ export async function checkToolLink(rawUrl: string): Promise<LinkCheckResult> {
     return { ok: false, status: null, refused: "https only" };
   }
   // Literal-IP hosts get the same range check without a lookup.
-  const host = url.hostname;
+  const host = bareHost(url.hostname);
   try {
     const addrs = net.isIP(host) ? [{ address: host }] : await dns.lookup(host, { all: true });
     for (const a of addrs) {
@@ -145,7 +174,7 @@ async function dialPinnedJson(
   if (hops > 5) throw new Error("too many redirects");
   const url = new URL(rawUrl);
   if (url.protocol !== "https:") throw new Error("https only");
-  const host = url.hostname;
+  const host = bareHost(url.hostname);
   const addrs = net.isIP(host)
     ? [{ address: host, family: net.isIPv6(host) ? 6 : 4 }]
     : await dns.lookup(host, { all: true });
@@ -209,7 +238,7 @@ async function dialPinned(rawUrl: string, method: "HEAD" | "GET", hops = 0): Pro
   const url = new URL(rawUrl);
   if (url.protocol !== "https:") throw new Error("https only");
 
-  const host = url.hostname;
+  const host = bareHost(url.hostname);
   const addrs = net.isIP(host)
     ? [{ address: host, family: net.isIPv6(host) ? 6 : 4 }]
     : await dns.lookup(host, { all: true });
@@ -272,7 +301,7 @@ export async function guardOutboundUrl(rawUrl: string): Promise<{ ok: boolean; r
     return { ok: false, refused: "not a valid URL" };
   }
   if (url.protocol !== "https:") return { ok: false, refused: "https only" };
-  const host = url.hostname;
+  const host = bareHost(url.hostname);
   try {
     const addrs = net.isIP(host) ? [{ address: host }] : await dns.lookup(host, { all: true });
     for (const a of addrs) {
@@ -305,7 +334,7 @@ async function dialPinnedText(rawUrl: string, timeoutMs: number, maxBytes: numbe
   if (hops > 5) throw new Error("too many redirects");
   const url = new URL(rawUrl);
   if (url.protocol !== "https:") throw new Error("https only");
-  const host = url.hostname;
+  const host = bareHost(url.hostname);
   const addrs = net.isIP(host)
     ? [{ address: host, family: net.isIPv6(host) ? 6 : 4 }]
     : await dns.lookup(host, { all: true });

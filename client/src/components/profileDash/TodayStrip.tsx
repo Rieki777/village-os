@@ -109,10 +109,17 @@ export function todayCards(d: Pick<DashData, "consents" | "tasks" | "messages" |
   return out;
 }
 
-export default function TodayStrip({ data }: { data: DashData }) {
+/**
+ * `pathSpeaks`: the "Your path" card above already names the one next step
+ * (the Root), so an empty Today draws no line of its own. Two voices saying
+ * "nothing waits" and "align with this" on one screen is the defect the path
+ * exists to end.
+ */
+export default function TodayStrip({ data, stepsWaiting = false, pathSpeaks = false }: { data: DashData; stepsWaiting?: boolean; pathSpeaks?: boolean }) {
   const cards = todayCards(data);
   const anyRead = data.consents !== null || data.tasks !== null || data.messages !== null || data.session !== null || data.asks !== null;
   if (!anyRead) return null;
+  if (pathSpeaks && cards.length === 0) return null;
   const waiting =
     (data.asks?.waiting ?? 0) + (data.consents?.length ?? 0) + (data.tasks?.waiting ?? 0) + (data.messages && data.messages.unreadTotal > 0 ? 1 : 0);
 
@@ -128,7 +135,7 @@ export default function TodayStrip({ data }: { data: DashData }) {
       </div>
       {cards.length === 0 ? (
         <p className="m-0 rounded-[18px] border border-dash-edge bg-card p-[18px] text-[15px] text-muted-foreground">
-          Nothing waits on you today. Your tasks and roles are below.
+          {stepsWaiting ? "Your steps before your role starts are in the card above." : "Nothing waits on you today. Your tasks and roles are below."}
         </p>
       ) : (
         <ul className="m-0 grid list-none gap-2.5 p-0 sm:grid-cols-[repeat(auto-fit,minmax(250px,1fr))] sm:gap-4">

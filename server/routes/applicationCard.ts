@@ -12,7 +12,9 @@
  *
  *   roles   the application's `seat_ids`
  *   terms   its `settings_json`, never the offer on the role
- *   live    tasks, signs and tensions read "Starts once adopted"
+ *   live    tasks, signs and tensions read "Starts once adopted", until
+ *           the application is adopted: then the card is drawn in "adopted"
+ *           mode and those sections read the roles she now holds
  *
  * ── TIERED EXACTLY LIKE THE APPLICATION PAGE ───────────────────────────────
  *
@@ -83,7 +85,10 @@ export function register(app: Express, deps: Deps): void {
             termEndsAt: a.termEndsAt ? a.termEndsAt.toISOString() : null,
             season,
             // B1: what the member door asked, on the card that answers for it.
-            answers: a.answers ? { aim: a.answers.aim, servesGoal: a.answers.servesGoal } : null,
+            // Verify item 7: the season goals an adopted open proposal picked, and the aim it carried.
+            answers: a.answers ? { aim: a.answers.aim, servesGoal: a.answers.servesGoal, ...(a.answers.serves ? { serves: a.answers.serves } : {}) } : null,
+            // Adopted, the card reads as hers: the live sections show the roles she now holds.
+            adopted: a.status === "adopted",
           },
         },
       ],

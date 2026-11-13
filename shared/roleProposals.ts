@@ -107,6 +107,10 @@ export const NOT_ROLE_WORDS: ReadonlySet<string> = new Set([
   "circleId",
   // Role journey: whether a steward has confirmed the role for discovery. A steward decision, never a word a member proposes.
   "listed",
+  // Joining lane PR 2: a steward decision, never a word a member proposes.
+  "alwaysChecked",
+  // 0374: who may hold a role is a steward decision, set where roles are edited.
+  "heldBy",
   // Role journey PR-C: the full card's parameters are steward and editor decisions, set where roles are edited, not words a member proposes.
   "villageGoals",
   "track",
@@ -120,6 +124,10 @@ export const NOT_ROLE_WORDS: ReadonlySet<string> = new Set([
   "reviewAfterDays",
   "accessBundle",
   "bookingUrl",
+  // 0383 (E1): the share of a week a role asks and whether it is required. Set where roles are edited, alongside
+  // the card's other parameters; a number and a switch, never words a member proposes (batch 158).
+  "commitmentPct",
+  "commitmentRequired",
   // 0060: the building on the land the seat lives in. Structure, set where seats are placed (map lane R1).
   "structureKey",
   "circleName",

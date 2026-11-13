@@ -49,6 +49,14 @@ afterEach(() => {
 });
 
 describe("the Go live panel", () => {
+  it("brings the person to the connector after the download, and not before", async () => {
+    render(<GoLivePackagePanel />);
+    expect(screen.queryByTestId("connector-setup")).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: /Download the go-live package/ }));
+    expect(screen.getByTestId("connector-setup")).toBeTruthy();
+    expect(screen.getByTestId("connector-url").textContent).toMatch(/\/api\/agent\/v1\/mcp$/);
+  });
+
   it("draws every step the plan holds, in order", () => {
     render(<GoLivePackagePanel />);
     for (const s of GO_LIVE_STEPS) {

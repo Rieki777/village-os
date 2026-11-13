@@ -1,6 +1,6 @@
 import { Link, useLocation } from "wouter";
 import { m, AnimatePresence } from "framer-motion";
-import { TreePine, Menu, X, User, LogOut, ChevronDown } from "lucide-react";
+import { TreePine, Menu, X, User, LogOut, ChevronDown, ExternalLink } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { LanguagePicker } from "@/i18n/LanguagePicker";
@@ -361,13 +361,16 @@ export default function Layout({ children }: LayoutProps) {
             )}
 
             {siteUrl && (
+              /* Edged, never gold (D-01): it leaves the app, so it is not the
+                 page's main act, and the arrow says it opens elsewhere. */
               <a
                 href={siteUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="px-3 xl:px-4 py-2 bg-amber text-foreground rounded-lg font-medium hover:bg-amber/90 transition-colors text-sm whitespace-nowrap"
+                className="inline-flex min-h-11 items-center gap-1.5 px-3 py-2 border border-white/50 text-white rounded-lg font-medium hover:bg-white/10 transition-colors text-sm whitespace-nowrap"
               >
                 <Trans context="site header">Main Site</Trans>
+                <ExternalLink aria-hidden="true" className="w-3.5 h-3.5" />
               </a>
             )}
           </div>
@@ -384,7 +387,7 @@ export default function Layout({ children }: LayoutProps) {
               aria-label={mobileMenuOpen ? t({ message: "Close menu", context: "site header" }) : t({ message: "Open menu", context: "site header" })}
               aria-expanded={mobileMenuOpen}
               aria-controls="mobile-menu"
-              className="text-white inline-flex items-center justify-center pointer-coarse:min-h-11 pointer-coarse:min-w-11 pointer-coarse:-m-2"
+              className="text-white inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg -m-2 focus-visible:outline-2 focus-visible:outline-white"
             >
               {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
             </button>
@@ -503,9 +506,10 @@ export default function Layout({ children }: LayoutProps) {
                     href={siteUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="block px-4 py-2 bg-amber text-foreground rounded-lg font-medium hover:bg-amber/90 transition-colors text-center mt-3"
+                    className="mt-3 flex min-h-11 items-center justify-center gap-1.5 px-4 py-2 border border-white/50 text-white rounded-lg font-medium hover:bg-white/10 transition-colors"
                   >
                     <Trans context="site header">Main Site</Trans>
+                    <ExternalLink aria-hidden="true" className="w-4 h-4" />
                   </a>
                 )}
               </div>
@@ -518,7 +522,10 @@ export default function Layout({ children }: LayoutProps) {
       {/* Main Content */}
       {/* R47: the Trail, a member's one next step, on every page. */}
       <NextStepTrail />
-      <main id="main" tabIndex={-1} className="flex-1 min-h-svh">
+      {/* The shortcuts button floats over the page's bottom-right corner on a
+          phone. The page ends with room for it, so it never sits on the last
+          words (go-live pass, M4). Founding pages draw no button (MobileFab). */}
+      <main id="main" tabIndex={-1} className="flex-1 min-h-svh max-md:pb-[var(--fab-clear)]">
         {children}
       </main>
 
@@ -556,57 +563,57 @@ export default function Layout({ children }: LayoutProps) {
             {/* Your Journey */}
             <div>
               <h2 className="font-display text-lg font-semibold mb-4">Your Journey</h2>
-              <ul className="space-y-2">
+              <ul className="space-y-0">
                 {storyShown("/investor") && (
                   <li>
-                    <Link href="/investor" className="text-white hover:underline transition-colors text-sm block py-1.5">
+                    <Link href="/investor" className="text-white hover:underline transition-colors text-sm flex min-h-11 items-center">
                       {footerName("/investor", "Investor")}
                     </Link>
                   </li>
                 )}
                 {storyShown("/steward") && (
                   <li>
-                    <Link href="/steward" className="text-white hover:underline transition-colors text-sm block py-1.5">
+                    <Link href="/steward" className="text-white hover:underline transition-colors text-sm flex min-h-11 items-center">
                       {footerName("/steward", "Village Steward")}
                     </Link>
                   </li>
                 )}
                 {storyShown("/resident") && (
                   <li>
-                    <Link href="/resident" className="text-white hover:underline transition-colors text-sm block py-1.5">
+                    <Link href="/resident" className="text-white hover:underline transition-colors text-sm flex min-h-11 items-center">
                       {footerName("/resident", "Resident")}
                     </Link>
                   </li>
                 )}
                 {storyShown("/prosperity") && (
                   <li>
-                    <Link href="/prosperity" className="text-white hover:underline transition-colors text-sm block py-1.5">
+                    <Link href="/prosperity" className="text-white hover:underline transition-colors text-sm flex min-h-11 items-center">
                       {footerName("/prosperity", "Prosperity Creator")}
                     </Link>
                   </li>
                 )}
                 {storyShown("/love-letter") && (
                   <li>
-                    <Link href="/love-letter" className="text-white hover:underline transition-colors text-sm block py-1.5">
+                    <Link href="/love-letter" className="text-white hover:underline transition-colors text-sm flex min-h-11 items-center">
                       {storyName("/love-letter")}
                     </Link>
                   </li>
                 )}
                 {storyShown("/visit") && (
                   <li>
-                    <Link href="/visit" className="text-white hover:underline transition-colors text-sm block py-1.5">
+                    <Link href="/visit" className="text-white hover:underline transition-colors text-sm flex min-h-11 items-center">
                       {footerName("/visit", "Plan a Visit")}
                     </Link>
                   </li>
                 )}
                 <li>
-                  <Link href="/gratitude" className="text-white hover:underline transition-colors text-sm block py-1.5">
+                  <Link href="/gratitude" className="text-white hover:underline transition-colors text-sm flex min-h-11 items-center">
                     {tokenName} Wall
                   </Link>
                 </li>
                 {storyShown("/work-with-us") && (
                   <li>
-                    <Link href="/work-with-us" className="text-white hover:underline transition-colors text-sm block py-1.5">
+                    <Link href="/work-with-us" className="text-white hover:underline transition-colors text-sm flex min-h-11 items-center">
                       {footerName("/work-with-us", "Work With Us")}
                     </Link>
                   </li>
@@ -617,39 +624,39 @@ export default function Layout({ children }: LayoutProps) {
             {/* Governance & Structure */}
             <div>
               <h2 className="font-display text-lg font-semibold mb-4">Governance</h2>
-              <ul className="space-y-2">
+              <ul className="space-y-0">
                 <li>
-                  <Link href="/governance" className="text-white hover:underline transition-colors text-sm block py-1.5">
+                  <Link href="/governance" className="text-white hover:underline transition-colors text-sm flex min-h-11 items-center">
                     How we work together
                   </Link>
                 </li>
                 <li>
-                  <Link href="/circles" className="text-white hover:underline transition-colors text-sm block py-1.5">
+                  <Link href="/circles" className="text-white hover:underline transition-colors text-sm flex min-h-11 items-center">
                     Circles
                   </Link>
                 </li>
                 <li>
-                  <Link href="/roles" className="text-white hover:underline transition-colors text-sm block py-1.5">
+                  <Link href="/roles" className="text-white hover:underline transition-colors text-sm flex min-h-11 items-center">
                     Roles & Leadership
                   </Link>
                 </li>
                 {storyShown("/how-we-create") && (
                   <li>
-                    <Link href="/how-we-create" className="text-white hover:underline transition-colors text-sm block py-1.5">
+                    <Link href="/how-we-create" className="text-white hover:underline transition-colors text-sm flex min-h-11 items-center">
                       {footerName("/how-we-create", "How We Create")}
                     </Link>
                   </li>
                 )}
                 {storyShown("/good-neighbor") && (
                   <li>
-                    <Link href="/good-neighbor" className="text-white hover:underline transition-colors text-sm block py-1.5">
+                    <Link href="/good-neighbor" className="text-white hover:underline transition-colors text-sm flex min-h-11 items-center">
                       {footerName("/good-neighbor", "Good Neighbor Criteria")}
                     </Link>
                   </li>
                 )}
                 {storyShown("/team") && (
                   <li>
-                    <Link href="/team" className="text-white hover:underline transition-colors text-sm block py-1.5">
+                    <Link href="/team" className="text-white hover:underline transition-colors text-sm flex min-h-11 items-center">
                       {footerName("/team", "Our Team")}
                     </Link>
                   </li>
@@ -660,18 +667,18 @@ export default function Layout({ children }: LayoutProps) {
                     optional module, so an ungated link would be a dead end on
                     a fresh fork. /exit-policy is core and always reachable. */}
                 <li>
-                  <Link href="/game-mechanics" className="text-white hover:underline transition-colors text-sm block py-1.5">
+                  <Link href="/game-mechanics" className="text-white hover:underline transition-colors text-sm flex min-h-11 items-center">
                     Game Mechanics
                   </Link>
                 </li>
                 <li>
-                  <Link href="/exit-policy" className="text-white hover:underline transition-colors text-sm block py-1.5">
+                  <Link href="/exit-policy" className="text-white hover:underline transition-colors text-sm flex min-h-11 items-center">
                     Leaving Well
                   </Link>
                 </li>
                 {networkModule && (
                   <li>
-                    <Link href="/network" className="text-white hover:underline transition-colors text-sm block py-1.5">
+                    <Link href="/network" className="text-white hover:underline transition-colors text-sm flex min-h-11 items-center">
                       Village Network
                     </Link>
                   </li>
@@ -680,7 +687,7 @@ export default function Layout({ children }: LayoutProps) {
                     Village menu, and a menu reshuffle would have taken it. */}
                 {healthModule && (
                   <li>
-                    <Link href="/village-health" className="text-white hover:underline transition-colors text-sm block py-1.5">
+                    <Link href="/village-health" className="text-white hover:underline transition-colors text-sm flex min-h-11 items-center">
                       Village Health
                     </Link>
                   </li>
@@ -695,7 +702,7 @@ export default function Layout({ children }: LayoutProps) {
                     screen. */}
                 {user && (
                   <li>
-                    <Link href="/review" className="text-white hover:underline transition-colors text-sm block py-1.5">
+                    <Link href="/review" className="text-white hover:underline transition-colors text-sm flex min-h-11 items-center">
                       Review Queue
                     </Link>
                   </li>
@@ -706,27 +713,27 @@ export default function Layout({ children }: LayoutProps) {
             {/* Resources */}
             <div>
               <h2 className="font-display text-lg font-semibold mb-4">Resources</h2>
-              <ul className="space-y-2">
+              <ul className="space-y-0">
                 {storyShown("/co-creators-guide") && (
                   <li>
-                    <Link href="/co-creators-guide" className="text-white hover:underline transition-colors text-sm block py-1.5">
+                    <Link href="/co-creators-guide" className="text-white hover:underline transition-colors text-sm flex min-h-11 items-center">
                       {footerName("/co-creators-guide", "Co-Creators Guide")}
                     </Link>
                   </li>
                 )}
                 <li>
-                  <Link href="/feedback" className="text-white hover:underline transition-colors text-sm block py-1.5">
+                  <Link href="/feedback" className="text-white hover:underline transition-colors text-sm flex min-h-11 items-center">
                     Report a Bug / Share an Idea
                   </Link>
                 </li>
                 <li>
-                  <Link href="/quests" className="text-white hover:underline transition-colors text-sm block py-1.5">
+                  <Link href="/quests" className="text-white hover:underline transition-colors text-sm flex min-h-11 items-center">
                     Quest Board
                   </Link>
                 </li>
                 {commerceModule && (
                   <li>
-                    <Link href="/contribute" className="text-white hover:underline transition-colors text-sm block py-1.5">
+                    <Link href="/contribute" className="text-white hover:underline transition-colors text-sm flex min-h-11 items-center">
                       Contribute
                     </Link>
                   </li>
@@ -737,49 +744,49 @@ export default function Layout({ children }: LayoutProps) {
                     the module is off. */}
                 {crowdpoolModule && (
                   <li>
-                    <Link href="/campaigns" className="text-white hover:underline transition-colors text-sm block py-1.5">
-                      Our Raisings
+                    <Link href="/campaigns" className="text-white hover:underline transition-colors text-sm flex min-h-11 items-center">
+                      Pooling Resources
                     </Link>
                   </li>
                 )}
                 {staysModule && (
                   <li>
-                    <Link href="/stay" className="text-white hover:underline transition-colors text-sm block py-1.5">
+                    <Link href="/stay" className="text-white hover:underline transition-colors text-sm flex min-h-11 items-center">
                       Stay With Us
                     </Link>
                   </li>
                 )}
                 {toolsModule && (
                   <li>
-                    <Link href="/tools" className="text-white hover:underline transition-colors text-sm block py-1.5">
+                    <Link href="/tools" className="text-white hover:underline transition-colors text-sm flex min-h-11 items-center">
                       Village Tools
                     </Link>
                   </li>
                 )}
                 {mapModule && (
                   <li>
-                    <Link href="/places" className="text-white hover:underline transition-colors text-sm block py-1.5">
+                    <Link href="/places" className="text-white hover:underline transition-colors text-sm flex min-h-11 items-center">
                       Places, Photographed
                     </Link>
                   </li>
                 )}
                 {storyShown("/housing") && (
                   <li>
-                    <Link href="/housing" className="text-white hover:underline transition-colors text-sm block py-1.5">
+                    <Link href="/housing" className="text-white hover:underline transition-colors text-sm flex min-h-11 items-center">
                       {footerName("/housing", "Housing")}
                     </Link>
                   </li>
                 )}
                 {storyShown("/opportunities") && (
                   <li>
-                    <Link href="/opportunities" className="text-white hover:underline transition-colors text-sm block py-1.5">
+                    <Link href="/opportunities" className="text-white hover:underline transition-colors text-sm flex min-h-11 items-center">
                       {footerName("/opportunities", "Business Opportunities")}
                     </Link>
                   </li>
                 )}
                 {storyShown("/master-plan") && (
                   <li>
-                    <Link href="/master-plan" className="text-white hover:underline transition-colors text-sm block py-1.5">
+                    <Link href="/master-plan" className="text-white hover:underline transition-colors text-sm flex min-h-11 items-center">
                       {footerName("/master-plan", "Master Plan")}
                     </Link>
                   </li>
@@ -790,14 +797,14 @@ export default function Layout({ children }: LayoutProps) {
             {/* Connect */}
             <div>
               <h2 className="font-display text-lg font-semibold mb-4">Connect</h2>
-              <ul className="space-y-2">
+              <ul className="space-y-0">
                 {siteUrl && (
                   <li>
                     <a
                       href={siteUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-white hover:underline transition-colors text-sm block py-1.5"
+                      className="text-white hover:underline transition-colors text-sm flex min-h-11 items-center"
                     >
                       Main Website
                     </a>
@@ -809,7 +816,7 @@ export default function Layout({ children }: LayoutProps) {
                       href={eventsUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-white hover:underline transition-colors text-sm block py-1.5"
+                      className="text-white hover:underline transition-colors text-sm flex min-h-11 items-center"
                     >
                       Events
                     </a>
@@ -824,7 +831,7 @@ export default function Layout({ children }: LayoutProps) {
                       href={UPSTREAM_SOURCE_URL}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-white hover:underline transition-colors text-sm block py-1.5"
+                      className="text-white hover:underline transition-colors text-sm flex min-h-11 items-center"
                     >
                       <Trans context="site footer">Village OS source</Trans>
                     </a>
@@ -836,14 +843,14 @@ export default function Layout({ children }: LayoutProps) {
                       href={villageSource}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-white hover:underline transition-colors text-sm block py-1.5"
+                      className="text-white hover:underline transition-colors text-sm flex min-h-11 items-center"
                     >
                       {villageName ? <Trans context="site footer">{villageName}'s source</Trans> : <Trans context="site footer">Our source</Trans>}
                     </a>
                   </li>
                 )}
                 <li>
-                  <Link href="/profile" className="text-white hover:underline transition-colors text-sm block py-1.5">
+                  <Link href="/profile" className="text-white hover:underline transition-colors text-sm flex min-h-11 items-center">
                     My Village Profile
                   </Link>
                 </li>

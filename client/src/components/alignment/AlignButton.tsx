@@ -17,17 +17,39 @@
  * The words never say "sign".
  */
 import { useEffect, useState } from "react";
-import { Check, Loader2, ShieldCheck } from "lucide-react";
+import { Check, ShieldCheck } from "lucide-react";
 import { ALIGN_WORDS, alignedOnWords } from "@shared/alignments";
 import { useSeason } from "@/lib/gameApi";
 import { IdentityConfirmField, identityBody, identityReady, useIdentityConfirm } from "@/components/auth/ConfirmWithGoogle";
 import { asksReconfirm, confirmIdentity, type Answer } from "./alignmentsApi";
 
 /**
+ * The sheet's look (components/journey/look.ts), copied here rather than
+ * imported. This button is pulled in by the boot chunk's neighbours, and
+ * importing look.ts from it reshapes rollup's chunk graph: on main plus #1159
+ * it moved two shared modules out of a lazy chunk, the remainder fell under
+ * `experimentalMinChunkSize`, and first-page JS went from 695 KB to 1113 KB
+ * (budget 750). AlignButton.look.test.ts holds these four equal to look.ts,
+ * so the copy cannot drift. The build now fails by name when a lazy-only
+ * module joins the first page (client/src/lib/bootSet.ts, guardBootSet in
+ * vite.config.ts), which is the guard this copy was working around by hand.
+ */
+export const ALIGN_LOOK = {
+  BTN_PRIMARY:
+    "jw-btn inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-notice px-5 py-2 font-semibold text-background hover:bg-notice/90 disabled:opacity-50",
+  BTN_SECONDARY:
+    "jw-btn inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-muted disabled:opacity-50",
+  FIELD:
+    "w-full rounded-lg border border-border bg-background px-3 py-2 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring",
+  TILE: "rounded-xl border border-border bg-muted p-4",
+} as const;
+const { BTN_PRIMARY, BTN_SECONDARY, FIELD, TILE } = ALIGN_LOOK;
+
+/**
  * The confirmation, in place. Shown when the server asks for it, or ahead of
  * time by a Review step whose terms carry money.
  */
-export function ReconfirmPanel({ onConfirmed }: { onConfirmed: () => void }) {
+export function ReconfirmPanel({ onConfirmed, reason = ALIGN_WORDS.reconfirmLine }: { onConfirmed: () => void; reason?: string }) {
   const state = useIdentityConfirm("align");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -53,10 +75,10 @@ export function ReconfirmPanel({ onConfirmed }: { onConfirmed: () => void }) {
   }, [state.confirmWith, state.confirmed]);
 
   return (
-    <div data-reconfirm="" className="mt-3 rounded-xl border border-border bg-card p-4 text-card-foreground">
+    <div data-reconfirm="" className={`${TILE} mt-3`}>
       <p className="flex items-start gap-2 text-sm text-foreground">
         <ShieldCheck className="mt-0.5 size-4 shrink-0 text-notice" aria-hidden="true" />
-        {ALIGN_WORDS.reconfirmLine}
+        {reason}
       </p>
       {/* A form, so Enter confirms (red team U8). */}
       <form
@@ -73,16 +95,15 @@ export function ReconfirmPanel({ onConfirmed }: { onConfirmed: () => void }) {
           onPassword={setPassword}
           label="Your password"
           placeholder="Your password"
-          inputClassName="min-h-11 w-full max-w-xs rounded-lg border border-border bg-background px-3 text-sm text-foreground"
+          inputClassName={`${FIELD} min-h-11 max-w-xs`}
         />
         {/* Unknown yet draws the password box, as exit and delete do. */}
         {state.confirmWith !== "google" && state.confirmWith !== "none" && (
           <button
             type="submit"
             disabled={busy || !identityReady(state, password)}
-            className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border px-4 text-sm font-semibold text-foreground hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring disabled:opacity-50"
+            className={BTN_SECONDARY}
           >
-            {busy && <Loader2 className="size-4 animate-spin" aria-hidden="true" />}
             {ALIGN_WORDS.reconfirm}
           </button>
         )}
@@ -113,13 +134,22 @@ export interface AlignButtonProps {
   /** After a landed alignment, to reload what the page shows. */
   onDone?: (data: any) => void;
   disabled?: boolean;
+  /** Why we ask for the password. Defaults to the line for terms that carry money; an agreement with no money passes its own. */
+  reconfirmReason?: string;
+  /**
+   * The caller already knows the last identity confirmation is stale: ask for
+   * it BEFORE the act is sent, so the server is never asked for something it
+   * must refuse. After the confirm the act runs as usual.
+   */
+  askFirst?: boolean;
 }
 
-export default function AlignButton({ label = ALIGN_WORDS.align, sentence, alignedAt = null, onAlign, onDone, disabled = false }: AlignButtonProps) {
+export default function AlignButton({ label = ALIGN_WORDS.align, sentence, alignedAt = null, onAlign, onDone, disabled = false, reconfirmReason, askFirst = false }: AlignButtonProps) {
   const season = useSeason();
   const [busy, setBusy] = useState(false);
   const [asking, setAsking] = useState(false);
   const [error, setError] = useState("");
+  const [confirmedHere, setConfirmedHere] = useState(false);
 
   if (alignedAt) {
     return (
@@ -151,13 +181,19 @@ export default function AlignButton({ label = ALIGN_WORDS.align, sentence, align
       <button
         type="button"
         disabled={busy || disabled}
-        onClick={() => void run()}
-        className="mt-2 inline-flex min-h-11 items-center gap-2 rounded-lg bg-teal-deep px-5 text-sm font-semibold text-white hover:bg-teal-deep-dark focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-50"
+        onClick={() => (askFirst && !confirmedHere ? setAsking(true) : void run())}
+        className={`${BTN_PRIMARY} mt-2`}
       >
-        {busy ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Check className="size-4" aria-hidden="true" />}
+        <Check className="size-4" aria-hidden="true" />
         {label}
       </button>
-      {asking && <ReconfirmPanel onConfirmed={() => void run()} />}
+      {asking && <ReconfirmPanel
+          reason={reconfirmReason}
+          onConfirmed={() => {
+            setConfirmedHere(true);
+            void run();
+          }}
+        />}
       {error && (
         <p role="alert" className="mt-2 text-sm text-destructive">
           {error}

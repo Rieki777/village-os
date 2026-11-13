@@ -1,44 +1,39 @@
 import Layout from "@/components/Layout";
+import { BTN_PRIMARY, BTN_SECONDARY, CARD, DOOR, EYEBROW, HINT, LEDE, LINK, QUIET, RING, TILE, WORLD } from "@/components/journey/look";
 import { useVillageLinks } from "@/lib/gameApi";
-import { altOr, useBrandImages } from "@/lib/gameApi";
+import { altOr, useBrandImages, useGameConfig } from "@/lib/gameApi";
 import FaqSection from "@/components/FaqSection";
-import PathConsentBox, { FORM_CONSENT_FIELD } from "@/components/comms/PathConsentBox";
 import { Emphasized, Highlighted } from "@/components/PageText";
 import { JourneyLink, leavesSite } from "@/components/journey/JourneyLink";
-import { useJourneyContent, useJourneyProgress } from "@/hooks/useJourneyContent";
+import { Fireflies, SeedOfLife } from "@/components/journey/nature";
+import FirstSteps from "@/components/tracks/FirstSteps";
+import TwoTracks from "@/components/tracks/TwoTracks";
+import { useJourneyContent } from "@/hooks/useJourneyContent";
 import { buttonAction, stepPoints, type TargetContext } from "@/lib/journeyPage";
-import { JOURNEY_LEGACY_STEP_IDS, STEWARD_JOURNEY } from "@shared/pageContent/journeys";
+import { STEWARD_JOURNEY, STEWARD_STAGE_CIRCLE, STEWARD_STAGE_YOURS } from "@shared/pageContent/journeys";
+import { FOUNDING_ROLES_WORD, withFoundingRoles } from "@shared/foundingTeam";
+import { readFoundingTeam, type FoundingTeamAnswer } from "@/components/roleCard/roleCardApi";
+import { useIsAdmin } from "@/contexts/AuthContext";
+import { Link } from "wouter";
+import { Trans } from "@lingui/react/macro";
 import type { ResolvedSection } from "@shared/pageContent/types";
-import { useState, useEffect, useRef } from "react";
-import { m, AnimatePresence } from "framer-motion";
-import {
-  Users,
-  ArrowRight,
-  CheckCircle2,
-  Circle,
-  Calendar,
-  Heart,
-  BookOpen,
-  Award,
-  Star,
-  Compass,
-  Crown,
-  Sparkles,
-  ChevronDown,
-  ExternalLink
-} from "lucide-react";
+import { m } from "framer-motion";
+import { Users, ArrowRight, ExternalLink, ShieldCheck, Home } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 
 /*
  * EVERY WORD ON THIS PAGE IS THE VILLAGE'S OWN, from Admin, Pages, Steward
  * journey (shared/pageContent/journeys.ts). What stays here is the look: the
- * icons, handed out by position, and the form's machinery.
+ * layout and the doors, which go to fixed places in the app.
+ *
+ * ONE FLOW (build list section 8, 11 Nov 2026): the first steps everyone
+ * takes, the fork into two paths, the role path, and the founding team's
+ * invitation as the page's one main act. The page speaks in the founding
+ * team's register: quieter, larger display type, gold rules, geometry only as
+ * structure, one cluster of fireflies on the one main act, and no game words.
+ * The playful register lives on the resident page, and the two never share a
+ * screen.
  */
-
-/** Icons for the steps, in order; a longer list starts again from the top. */
-const STEP_ICONS = [Calendar, Users, Users, BookOpen, Heart, Users, Compass, Award, Star];
-/** Icons for the path of growth and the long-term cards, in order. */
-const LADDER_ICONS = [Star, Compass, Crown];
-const ARC_ICONS = [Compass, Crown];
 
 export default function StewardJourney() {
   // This village's own destinations. Blank hides the control.
@@ -49,653 +44,393 @@ export default function StewardJourney() {
   const targets: TargetContext = { eventsUrl, mailTo, subject: "" };
   const heroPrimary = buttonAction(hero?.primaryLabel, hero?.primaryTarget, targets);
   const heroSecondary = buttonAction(hero?.secondaryLabel, hero?.secondaryTarget, targets);
+  const founding = page && !page.foundingTeam.hidden ? page.foundingTeam : null;
+  const foundingAct = founding ? buttonAction(founding.fields.ctaLabel, founding.fields.ctaTarget, targets) : null;
   const brand = useBrandImages();
-  const progress = useJourneyProgress("amora-steward-progress", steps, JOURNEY_LEGACY_STEP_IDS.steward);
-  const [expandedStep, setExpandedStep] = useState<number | null>(0);
+  const admin = useIsAdmin();
+  const adminPath = useGameConfig()?.project?.adminPath || "/admin";
   // Until the saved words arrive the hero keeps its space and stays
   // invisible, so a visitor never reads the defaults and watches them change.
   const waiting = hero ? "" : " invisible";
 
+  const bandRef = useRef<HTMLElement | null>(null);
+  const thumbAct = useThumbAct(bandRef, !!foundingAct);
+  // The open founding roles, live, from the read behind the Roles page's founding section.
+  const openRoles = useOpenFoundingRoles();
+  const foundingBody = founding ? founding.fields.body : "";
+  // Until the roles arrive, a paragraph that names them keeps its space and stays invisible.
+  const bodyWaits = openRoles === null && foundingBody.includes(FOUNDING_ROLES_WORD);
+
   return (
     <Layout>
+      {/* The sheet's world (docs/DESIGN_RULE.md): the steward's door is the start of the joining journey. */}
+      <div className={WORLD}>
       {/* Hero Section */}
-      <section className="relative py-24 overflow-hidden">
+      <section className="relative overflow-hidden py-24 lg:py-32">
         <div className="absolute inset-0 z-0">
-          {/* THE HERO RENDERS ONLY WHEN THERE IS ONE.
-              This was a bare <img> whose src came from the brand overlay with a
-              hardcoded fallback behind it, so it always had a URL. The fallback
-              pointed at one village's WordPress site and every one of those URLs
-              now 404s, which is why the live page renders a torn image. With the
-              fallback gone the src would simply be empty, and an <img src=""> is
-              a broken image too. No picture is the honest state, and the gradient
-              below carries the section on its own. */}
+          {/* THE HERO RENDERS ONLY WHEN THERE IS ONE. No picture is the honest
+              state, and the gradient below carries the section on its own. */}
           {brand.stewardHero ? (
             <m.img
               src={brand.stewardHero}
               alt={altOr(brand.stewardHeroAlt, "Stewards meeting in a circle")}
               className="w-full h-full object-cover"
-              initial={{ scale: 1.1 }}
+              initial={{ scale: 1.05 }}
               animate={{ scale: 1 }}
-              transition={{ duration: 1.5 }}
+              transition={{ duration: 0.6 }}
             />
           ) : null}
-          <div className="absolute inset-0 bg-gradient-to-r from-background via-background/90 to-background/60" />
+          {/* The scrim holds the left 60% dark, where the words are, so the lede
+              reads on a busy photograph (D-11); the land stays open on the right,
+              and a phone, where the words run full width, gets it dark throughout. */}
+          <div className="absolute inset-0 bg-gradient-to-r from-background from-0% via-background/95 via-60% to-background/50 max-sm:to-background/90" />
         </div>
 
         <div className="container relative z-10">
           <div className="max-w-2xl">
-            <m.div
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              className="flex items-center gap-3 mb-6"
-            >
-              <m.div
-                className="w-12 h-12 shrink-0 rounded-xl bg-sage flex items-center justify-center"
-                animate={{ rotate: [0, 5, -5, 0] }}
-                transition={{ duration: 2, repeat: Infinity }}
-              >
-                <Users className="w-6 h-6 text-white" />
-              </m.div>
-              <span className={`text-sage font-medium tracking-wide uppercase text-sm min-w-0 break-words${waiting}`}>{hero?.eyebrow || " "}</span>
-            </m.div>
-
-            <m.h1
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.1 }}
-              className={`font-display text-5xl md:text-6xl font-semibold text-foreground mb-6 break-words${waiting}`}
-            >
+            <div className="mb-6 flex items-center gap-3">
+              <span className={`${RING} size-12`} aria-hidden="true">
+                <Users className="h-6 w-6" />
+              </span>
+              <span className={`${EYEBROW} text-sm min-w-0 break-words${waiting}`}>{hero?.eyebrow || " "}</span>
+            </div>
+            <h1 className={`font-display text-5xl md:text-7xl font-semibold leading-tight text-foreground mb-6 break-words${waiting}`}>
               <Highlighted
-                text={hero?.headline || " "}
+                text={hero?.headline || " "}
                 phrase={hero?.highlight ?? ""}
-                render={(phrase) => <span className="text-sage italic">{phrase}</span>}
+                render={(phrase) => <span className="text-notice italic">{phrase}</span>}
               />
-            </m.h1>
-
-            <m.p
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.2 }}
-              className={`text-xl text-muted-foreground leading-relaxed mb-8 break-words${waiting}`}
-            >
+            </h1>
+            <div className="mb-6 h-px w-24 bg-notice/60" aria-hidden="true" />
+            <p className={`max-w-[38em] text-xl text-foreground/90 leading-relaxed mb-8 break-words${waiting}`}>
               <Emphasized text={hero?.intro ?? ""} />
-            </m.p>
-
-            <m.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3 }}
-              className="flex flex-wrap gap-4"
-            >
+            </p>
+            <div className="flex flex-wrap gap-4">
+              {/* THE ONE GOLD ACT IS IN THE HERO (D-11). The founding team's
+                  invitation sat about 3,000px down on a desktop while the hero
+                  held two edged buttons. It takes the reader to the band below,
+                  which keeps the full invitation and its fireflies. A phone
+                  already pins that act under the thumb, so it is not drawn twice. */}
+              {foundingAct && (
+                <a href="#founding-team" className={`${BTN_PRIMARY} hidden text-base sm:inline-flex`} data-hero-act="founding">
+                  <Trans context="steward hero, the main act">See the founding roles</Trans>
+                  <ArrowRight className="h-5 w-5" aria-hidden="true" />
+                </a>
+              )}
               {heroPrimary && (
-                <JourneyLink action={heroPrimary.action} className="btn-village flex items-center gap-2">
-                  <Calendar className="w-5 h-5" />
+                <JourneyLink action={heroPrimary.action} className={BTN_SECONDARY}>
                   {heroPrimary.label}
+                  <ArrowRight className="h-5 w-5" />
                 </JourneyLink>
               )}
               {heroSecondary && (
-                <JourneyLink
-                  action={heroSecondary.action}
-                  className="px-6 py-3 bg-white/90 text-foreground rounded-full font-medium uppercase tracking-wider text-sm hover:bg-white transition-all"
-                >
+                <JourneyLink action={heroSecondary.action} className={`${BTN_SECONDARY} bg-card`}>
                   {heroSecondary.label}
                 </JourneyLink>
               )}
-            </m.div>
+            </div>
           </div>
         </div>
       </section>
 
-      {/* Interactive Journey Steps */}
+      {/* A phone keeps the one main act within thumb reach, pinned to the bottom
+          from arrival until the invitation itself comes into view. It rides just
+          above the app's tab bar (--tabbar-h), and data-bottom-bar lifts the
+          shortcuts button over it. A desktop never draws it. */}
+      {foundingAct && thumbAct && (
+        <div className="fixed inset-x-0 bottom-[var(--tabbar-h)] z-40 border-t border-notice/40 bg-background/95 px-4 py-3 shadow-sm sm:hidden" data-testid="thumb-act" data-bottom-bar="">
+          <JourneyLink action={foundingAct.action} className={`${BTN_PRIMARY} w-full`}>
+            {foundingAct.label}
+            <ArrowRight className="h-5 w-5" />
+          </JourneyLink>
+        </div>
+      )}
+
+      {/* 1. The first steps, shared with the resident page. */}
+      {page && !page.getToKnow.hidden && (
+        <div className="border-y border-border/60 bg-card/40">
+          <FirstSteps
+            section={page.getToKnow}
+            heading={page.getToKnow.fields.heading}
+            body={page.getToKnow.fields.body}
+            targets={targets}
+            showExceptions
+            register="founding"
+          />
+        </div>
+      )}
+
+      {/* 2. The fork: two paths off the same first steps. */}
+      {page && <TwoTracks section={page.tracks} here="steward" />}
+
+      {/* 3. The role path, ending with the invitation onto the resident path. */}
       {page && steps && (
-      <section className="py-20 bg-background">
-        <div className="container">
-          <m.div
-            className="text-center mb-8"
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-          >
-            <h2 className="font-display text-3xl md:text-4xl font-semibold text-foreground mb-4 break-words">
-              {page.steps.fields.heading}
-            </h2>
-            <p className="text-muted-foreground max-w-2xl mx-auto mb-6">
-              <Emphasized text={page.steps.fields.intro} />
-            </p>
-
-            {/* Progress Bar */}
-            <div className="max-w-md mx-auto">
-              <div className="relative h-3 bg-muted rounded-full overflow-hidden mb-2">
-                <m.div
-                  className="absolute inset-y-0 left-0 bg-gradient-to-r from-sage to-coral rounded-full"
-                  initial={{ width: 0 }}
-                  animate={{ width: `${progress.progress}%` }}
-                  transition={{ duration: 0.5, ease: "easeOut" }}
-                />
+        <section id="role-path" className="scroll-mt-20 border-y border-border/60 bg-card/40 py-16 sm:py-20" aria-labelledby="role-path-heading">
+          <div className="container">
+            <div className="mx-auto max-w-6xl lg:grid lg:grid-cols-[18rem_minmax(0,1fr)] lg:gap-12">
+              {/* A desktop keeps the heading beside the path as it scrolls. */}
+              <div className="mb-8 lg:mb-0">
+                <div className="lg:sticky lg:top-24">
+                  <div className="mb-4 h-px w-16 bg-notice/60" aria-hidden="true" />
+                  <h2 id="role-path-heading" className="font-display text-3xl md:text-4xl font-semibold text-foreground break-words">
+                    {page.steps.fields.heading}
+                  </h2>
+                  <p className={`${LEDE} mt-3`}>
+                    <Emphasized text={page.steps.fields.intro} />
+                  </p>
+                </div>
               </div>
-              <p className="text-sm text-muted-foreground">
-                {progress.doneCount} of {progress.total} steps completed
+              <div className="min-w-0">
+                <ol className="space-y-3">
+                  {steps.map((step, index) => {
+                    const action = buttonAction(step.actionLabel, step.actionTarget, targets);
+                    const circle = step.stage === STEWARD_STAGE_CIRCLE;
+                    return (
+                      <li key={`${index}-${step.title}`} className="flex min-w-0 items-start gap-4 rounded-xl border border-border bg-card p-5 shadow-sm">
+                        <span className={`${RING} font-display text-lg`} aria-hidden="true">
+                          {index + 1}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                            <h3 className="font-display text-lg font-semibold text-foreground basis-24 grow max-w-full break-words">{step.title}</h3>
+                            <span
+                              className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                                circle ? "border border-notice/60 text-notice" : step.stage === STEWARD_STAGE_YOURS ? "border border-open/60 text-open" : "border border-border text-muted-foreground"
+                              }`}
+                            >
+                              {step.stage}
+                            </span>
+                          </div>
+                          <p className="mt-1 max-w-[62ch] break-words text-base leading-relaxed text-muted-foreground">{step.description}</p>
+                          {stepPoints(step).length > 0 && (
+                            <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-muted-foreground">
+                              {stepPoints(step).map((point, i) => (
+                                <li key={i} className="break-words">{point}</li>
+                              ))}
+                            </ul>
+                          )}
+                          {action && (
+                            <JourneyLink action={action.action} className={`mt-1 inline-flex min-h-11 items-center gap-2 text-sm ${LINK}`}>
+                              {action.label}
+                              {leavesSite(action.action) ? <ExternalLink className="h-4 w-4" /> : <ArrowRight className="h-4 w-4" />}
+                            </JourneyLink>
+                          )}
+                        </div>
+                      </li>
+                    );
+                  })}
+                  {!page.crossover.hidden && <TrackTile section={page.crossover} targets={targets} />}
+                </ol>
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* 4. The founding team: the page's one main act, in the quieter register. */}
+      {founding && (
+        <section ref={bandRef} id="founding-team" className="py-20 sm:py-28" aria-labelledby="founding-team-heading">
+          <div className="container">
+            <div className="mx-auto max-w-5xl border-y border-notice/40 py-12 sm:py-16 md:grid md:grid-cols-[minmax(0,1fr)_auto] md:items-center md:gap-12">
+              <div className="min-w-0">
+                <p className={EYEBROW}>{founding.fields.eyebrow}</p>
+                <h2 id="founding-team-heading" className="mt-4 font-display text-4xl md:text-6xl font-semibold leading-tight text-foreground break-words">
+                  {founding.fields.heading}
+                </h2>
+                <p className={`mt-6 max-w-2xl text-lg leading-relaxed text-muted-foreground${bodyWaits ? " invisible" : ""}`}>
+                  <Emphasized text={bodyWaits ? foundingBody.split(FOUNDING_ROLES_WORD).join("") : withFoundingRoles(foundingBody, (openRoles ?? []).map((r) => r.name))} />
+                </p>
+                {openRoles && openRoles.length > 0 && (
+                  <ul className="mt-6 flex flex-col gap-1 sm:flex-row sm:flex-wrap sm:gap-x-6" aria-label={founding.fields.eyebrow} data-testid="founding-roles">
+                    {openRoles.map((r) => (
+                      <li key={r.id} className="min-w-0">
+                        <Link href={`/roles?seat=${encodeURIComponent(r.id)}`} className={`inline-flex min-h-11 items-center gap-2 break-words ${LINK}`}>
+                          {r.name}
+                          <ArrowRight className="h-4 w-4 shrink-0" aria-hidden="true" />
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {foundingAct && (
+                  <div className="mt-10">
+                    <Fireflies count={6}>
+                      <JourneyLink action={foundingAct.action} className={`${BTN_PRIMARY} w-full text-lg sm:w-auto`}>
+                        {foundingAct.label}
+                        <ArrowRight className="h-5 w-5" />
+                      </JourneyLink>
+                    </Fireflies>
+                  </div>
+                )}
+              </div>
+              {/* Geometry as structure: the seed whole, still, a desktop's larger field. */}
+              <SeedOfLife total={7} walked={7} label="" size="lg" className="mx-auto mt-12 hidden opacity-60 md:mt-0 md:block" />
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* 5. Optional extras: quiet rows, none needed to apply. */}
+      {page && !page.extras.hidden && page.extras.lists.items.length > 0 && (
+        <section className="pb-16" aria-labelledby="extras-heading">
+          <div className="container">
+            <div className="mx-auto max-w-3xl">
+              <h2 id="extras-heading" className="font-display text-2xl md:text-3xl font-semibold text-foreground break-words">
+                {page.extras.fields.heading}
+              </h2>
+              <p className={`${HINT} mt-2`}>
+                <Emphasized text={page.extras.fields.body} />
               </p>
-            </div>
-          </m.div>
-
-          <div className="max-w-3xl mx-auto">
-            <div className="space-y-3">
-              {steps.map((step, index) => {
-                const isCompleted = progress.isDone(step);
-                const isExpanded = expandedStep === index;
-                const StepIcon = STEP_ICONS[index % STEP_ICONS.length];
-                const action = buttonAction(step.actionLabel, step.actionTarget, targets);
-
-                return (
-                  <m.div
-                    key={`${index}-${step.title}`}
-                    initial={{ opacity: 0, x: -20 }}
-                    whileInView={{ opacity: 1, x: 0 }}
-                    viewport={{ once: true }}
-                    transition={{ delay: index * 0.05 }}
-                    className={`bg-card rounded-xl shadow-sm overflow-hidden transition-all ${
-                      isCompleted ? "border-l-4 border-sage" : "border-l-4 border-transparent hover:border-coral/50"
-                    }`}
-                  >
-                    <div
-                      className="p-5 cursor-pointer"
-                      onClick={() => setExpandedStep(isExpanded ? null : index)}
-                    >
-                      <div className="flex items-start gap-4">
-                        {/* A checkbox — the comment was right, the markup was not.
-                            Named and stateful now; see ProsperityJourney. */}
-                        <button
-                          type="button"
-                          role="checkbox"
-                          aria-checked={isCompleted}
-                          aria-label={`${step.title}: mark as ${isCompleted ? "not done" : "done"}`}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            progress.toggle(step);
-                          }}
-                          className="flex-shrink-0 mt-0.5 rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-sage"
-                        >
-                          <m.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}>
-                            {isCompleted ? (
-                              <CheckCircle2 className="w-6 h-6 text-sage" />
-                            ) : (
-                              <Circle className="w-6 h-6 text-muted-foreground hover:text-teal-deep transition-colors" />
-                            )}
-                          </m.div>
-                        </button>
-
-                        {/* Icon */}
-                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                          isCompleted ? "bg-sage/10" : "bg-teal-deep/10"
-                        }`}>
-                          <StepIcon className={`w-5 h-5 ${isCompleted ? "text-sage" : "text-teal-deep"}`} />
+              <ul className="mt-6 space-y-3">
+                {page.extras.lists.items.map((extra, i) => {
+                  const action = buttonAction(extra.actionLabel, extra.actionTarget, targets);
+                  return (
+                    <li key={`${i}-${extra.title}`} className={`${QUIET} flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between`}>
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="font-semibold text-foreground break-words">{extra.title}</h3>
+                          {extra.when && <span className="rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground">{extra.when}</span>}
                         </div>
-
-                        {/* Content */}
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between gap-2">
-                            {/* The title keeps to the chip's line while it has 6rem there, and
-                                takes its own line below the chip when it does not: a long
-                                stage name at 320px left it a sliver one letter wide. */}
-                            <div className="flex items-center gap-x-2 gap-y-1 flex-wrap min-w-0">
-                              <span className={`px-2 py-0.5 text-xs font-medium rounded ${
-                                isCompleted ? "bg-sage/10 text-sage" : "bg-muted text-muted-foreground"
-                              }`}>
-                                {step.stage}
-                              </span>
-                              <h3 className={`font-display text-lg font-semibold basis-24 grow max-w-full break-words ${
-                                isCompleted ? "text-muted-foreground" : "text-foreground"
-                              }`}>
-                                {step.title}
-                              </h3>
-                            </div>
-                            <m.div className="shrink-0" animate={{ rotate: isExpanded ? 180 : 0 }} transition={{ duration: 0.2 }}>
-                              <ChevronDown className="w-5 h-5 text-muted-foreground" />
-                            </m.div>
-                          </div>
-                          <p className="text-sm text-muted-foreground mt-1 break-words">
-                            {step.description}
-                          </p>
-                        </div>
+                        <p className="mt-1 break-words text-sm text-muted-foreground">{extra.description}</p>
                       </div>
-                    </div>
-
-                    {/* Expanded Details */}
-                    <AnimatePresence>
-                      {isExpanded && (
-                        <m.div
-                          initial={{ height: 0, opacity: 0 }}
-                          animate={{ height: "auto", opacity: 1 }}
-                          exit={{ height: 0, opacity: 0 }}
-                          transition={{ duration: 0.3 }}
-                          className="overflow-hidden"
-                        >
-                          <div className="px-5 pb-5 pt-0 ml-14">
-                            <div className="bg-muted/50 rounded-lg p-4 mb-4">
-                              <ul className="grid grid-cols-2 gap-2">
-                                {stepPoints(step).map((detail, i) => (
-                                  <m.li
-                                    key={i}
-                                    initial={{ opacity: 0, x: -10 }}
-                                    animate={{ opacity: 1, x: 0 }}
-                                    transition={{ delay: i * 0.05 }}
-                                    className="flex items-center gap-2 text-sm text-muted-foreground min-w-0 break-words"
-                                  >
-                                    <div className="w-1.5 h-1.5 shrink-0 rounded-full bg-sage" />
-                                    <span className="min-w-0 break-words">{detail}</span>
-                                  </m.li>
-                                ))}
-                              </ul>
-                            </div>
-                            {action && (
-                              <JourneyLink
-                                action={action.action}
-                                className="inline-flex items-center gap-2 px-4 py-2 bg-sage text-white rounded-full text-sm font-medium hover:opacity-90 transition-opacity"
-                              >
-                                {action.label}
-                                {leavesSite(action.action) ? <ExternalLink className="w-4 h-4" /> : <ArrowRight className="w-4 h-4" />}
-                              </JourneyLink>
-                            )}
-                          </div>
-                        </m.div>
+                      {action && (
+                        <JourneyLink action={action.action} className={`inline-flex min-h-11 shrink-0 items-center gap-2 text-sm ${LINK}`}>
+                          {action.label}
+                          {leavesSite(action.action) ? <ExternalLink className="h-4 w-4" /> : <ArrowRight className="h-4 w-4" />}
+                        </JourneyLink>
                       )}
-                    </AnimatePresence>
-                  </m.div>
-                );
-              })}
+                    </li>
+                  );
+                })}
+              </ul>
             </div>
           </div>
-        </div>
-      </section>
-      )}
-
-      {/* Advancement Path */}
-      {page && !page.ladder.hidden && (
-      <section className="py-20 bg-sage text-white">
-        <div className="container">
-          <m.div
-            className="text-center mb-12"
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-          >
-            <h2 className="font-display text-3xl md:text-4xl font-semibold mb-4 break-words">
-              {page.ladder.fields.heading}
-            </h2>
-            {/* /70 measured 3.83:1 against this section's own green on the
-                deployed build, under AA's 4.5:1 at 16px. Full white is 5.95:1
-                on the same ground. */}
-            <p className="text-white max-w-2xl mx-auto">
-              <Emphasized text={page.ladder.fields.intro} />
-            </p>
-          </m.div>
-
-          <div className="grid md:grid-cols-3 gap-6 max-w-4xl mx-auto">
-            {page.ladder.lists.items.map((level, index) => {
-              const LevelIcon = LADDER_ICONS[index % LADDER_ICONS.length];
-              return (
-              <m.div
-                key={`${index}-${level.level}`}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: index * 0.1 }}
-                whileHover={{ y: -8, scale: 1.02 }}
-                className="bg-white/10 p-6 rounded-xl text-center backdrop-blur-sm min-w-0"
-              >
-                <m.div
-                  className="w-16 h-16 rounded-full bg-white/20 flex items-center justify-center mx-auto mb-4"
-                  whileHover={{ rotate: 360 }}
-                  transition={{ duration: 0.5 }}
-                >
-                  <LevelIcon className="w-8 h-8" />
-                </m.div>
-                <h3 className="font-display text-xl font-semibold mb-2 break-words">
-                  {level.level}
-                </h3>
-                {/* Full white, not /70 and /90. These sit on `bg-white/10`
-                    over the section's green, and that tint composites LIGHTER
-                    than the section itself, so the fade that reads fine
-                    elsewhere loses here. Measured on the deployed build,
-                    all six viewports: /70 gave 3.21:1 and /90 gave 4.19:1,
-                    both under AA's 4.5:1 for text this size. Full white is
-                    4.73:1 on that composite. The hierarchy between the two
-                    lines is carried by `font-medium`, which already
-                    distinguished them. */}
-                <p className="text-white text-sm mb-3 break-words">
-                  {level.requirement}
-                </p>
-                <p className="text-white text-sm font-medium break-words">
-                  {level.benefits}
-                </p>
-              </m.div>
-              );
-            })}
-          </div>
-        </div>
-      </section>
-      )}
-
-      {/* Long-Term Arc */}
-      {page && !page.arc.hidden && (
-      <section className="py-20 bg-sage/5">
-        <div className="container">
-          <m.div
-            className="text-center mb-12"
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-          >
-            <h2 className="font-display text-3xl md:text-4xl font-semibold text-foreground mb-4 break-words">
-              {page.arc.fields.heading}
-            </h2>
-            <p className="text-muted-foreground max-w-2xl mx-auto">
-              <Emphasized text={page.arc.fields.intro} />
-            </p>
-          </m.div>
-
-          <div className="grid md:grid-cols-2 gap-6 max-w-2xl mx-auto">
-            {page.arc.lists.items.map((level, index) => {
-              const LevelIcon = ARC_ICONS[index % ARC_ICONS.length];
-              return (
-              <m.div
-                key={`${index}-${level.level}`}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: index * 0.1 }}
-                whileHover={{ y: -8, scale: 1.02 }}
-                className="bg-card p-6 rounded-xl shadow-sm border border-sage/20 min-w-0"
-              >
-                <m.div
-                  className="w-14 h-14 rounded-full bg-sage/10 flex items-center justify-center mx-auto mb-4"
-                  whileHover={{ rotate: 360 }}
-                  transition={{ duration: 0.5 }}
-                >
-                  <LevelIcon className="w-7 h-7 text-sage" />
-                </m.div>
-                <h3 className="font-display text-xl font-semibold text-foreground text-center mb-2 break-words">
-                  {level.level}
-                </h3>
-                <p className="text-center text-muted-foreground text-sm break-words">
-                  {level.description}
-                </p>
-              </m.div>
-              );
-            })}
-          </div>
-        </div>
-      </section>
-      )}
-
-      {/* Seasonal Rhythm */}
-      {page && !page.seasons.hidden && (
-      <section className="py-20 bg-cream">
-        <div className="container">
-          <m.div
-            className="max-w-3xl mx-auto text-center"
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-          >
-            <m.div
-              animate={{ y: [0, -10, 0] }}
-              transition={{ duration: 2, repeat: Infinity }}
-            >
-              <Sparkles className="w-12 h-12 text-sage mx-auto mb-6" />
-            </m.div>
-            <h2 className="font-display text-3xl md:text-4xl font-semibold text-foreground mb-4 break-words">
-              {page.seasons.fields.heading}
-            </h2>
-            <p className="text-muted-foreground mb-8">
-              <Emphasized text={page.seasons.fields.body} />
-            </p>
-            <BandButton section={page.seasons} targets={targets} />
-          </m.div>
-        </div>
-      </section>
+        </section>
       )}
 
       {/* Rights & Responsibilities */}
       {page && !page.rights.hidden && (
-      <section className="py-16 bg-background">
-        <div className="container">
-          <m.div
-            className="max-w-3xl mx-auto text-center"
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-          >
-            <h2 className="font-display text-2xl md:text-3xl font-semibold text-foreground mb-3 break-words">
-              {page.rights.fields.heading}
-            </h2>
-            <p className="text-muted-foreground mb-6">
-              <Emphasized text={page.rights.fields.body} />
-            </p>
-            <BandButton section={page.rights} targets={targets} />
-          </m.div>
-        </div>
-      </section>
+        <section className="border-t border-border/60 py-16">
+          <div className="container">
+            <div className="mx-auto max-w-3xl text-center">
+              <h2 className="font-display text-2xl md:text-3xl font-semibold text-foreground mb-3 break-words">
+                {page.rights.fields.heading}
+              </h2>
+              <p className="text-muted-foreground mb-6">
+                <Emphasized text={page.rights.fields.body} />
+              </p>
+              <div className="flex flex-wrap items-center justify-center gap-4">
+                <BandButton section={page.rights} targets={targets} />
+                <Link href="/exit-policy" className={`inline-flex min-h-11 items-center text-sm ${LINK}`}>
+                  <Trans>How leaving a role works</Trans>
+                </Link>
+              </div>
+            </div>
+          </div>
+        </section>
       )}
 
-      {/* Your Next Step */}
-      {page && !page.nextStep.hidden && (
-      <section className="py-20 bg-sage/10">
-        <div className="container">
-          <m.div
-            className="max-w-2xl mx-auto"
-            initial={{ opacity: 0, scale: 0.95 }}
-            whileInView={{ opacity: 1, scale: 1 }}
-            viewport={{ once: true }}
-          >
-            <div className="text-center mb-8">
-              <h2 className="font-display text-3xl md:text-4xl font-semibold text-foreground mb-4 break-words">
-                {page.nextStep.fields.heading}
-              </h2>
-              <p className="text-muted-foreground">
-                <Emphasized text={page.nextStep.fields.body} />
-              </p>
+      {/* For stewards and admins only: a quiet door to the tools behind the roles. */}
+      {admin && (
+        <section className="pb-16">
+          <div className="container">
+            <div className={`${CARD} mx-auto max-w-3xl`}>
+              <div className="mb-3 flex items-center gap-3">
+                <span className={RING} aria-hidden="true"><ShieldCheck className="h-5 w-5" /></span>
+                <h2 className="font-display text-xl font-semibold text-foreground break-words"><Trans context="steward front door">Stewarding the roles</Trans></h2>
+              </div>
+              <p className={`${HINT} mb-4`}><Trans>For stewards and admins: proposals waiting on you, and the tools behind the roles.</Trans></p>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <Link href="/approvals" className={DOOR}><Trans>Open the approval inbox</Trans><ArrowRight className="h-4 w-4" /></Link>
+                <Link href={adminPath} className={DOOR}><Trans context="steward front door">Open admin</Trans><ArrowRight className="h-4 w-4" /></Link>
+              </div>
             </div>
-
-            <StewardNextStepForm words={page.nextStep.fields} />
-          </m.div>
-        </div>
-      </section>
+          </div>
+        </section>
       )}
 
       {page && <FaqSection pathway="steward" heading={page.faq.fields.heading} />}
+
+      </div>
     </Layout>
   );
 }
 
-/** A band's one button, in the page's own style. */
+/** The last step of the role path: the optional invitation onto the resident path, which links across to it. */
+function TrackTile({ section, targets }: { section: ResolvedSection; targets: TargetContext }) {
+  const cta = buttonAction(section.fields.ctaLabel, section.fields.ctaTarget, targets);
+  const mark = section.fields.mark?.trim();
+  return (
+    <li className={`${TILE} flex min-w-0 items-start gap-4 border-dashed`} data-track-tile="crossover">
+      <span className={RING} aria-hidden="true"><Home className="h-5 w-5" /></span>
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <h3 className="font-display text-lg font-semibold text-foreground break-words">{section.fields.title}</h3>
+          {mark && <span className="rounded-full border border-notice/60 px-2 py-0.5 text-xs font-medium text-notice">{mark}</span>}
+        </div>
+        <p className="mt-1 break-words text-sm text-muted-foreground">
+          <Emphasized text={section.fields.body} />
+        </p>
+        {cta && (
+          <JourneyLink action={cta.action} className={`mt-1 inline-flex min-h-11 items-center gap-2 text-sm ${LINK}`}>
+            {cta.label}
+            {leavesSite(cta.action) ? <ExternalLink className="h-4 w-4" /> : <ArrowRight className="h-4 w-4" />}
+          </JourneyLink>
+        )}
+      </div>
+    </li>
+  );
+}
+
+/**
+ * The founding roles open today, in the village's order, from the same read
+ * as the Roles page's founding section (`/api/org/founding-team`). Null until
+ * it answers; empty when the section is off, every named role is closed, or
+ * the read fails, so the band then names nobody.
+ */
+function useOpenFoundingRoles(): Array<{ id: string; name: string }> | null {
+  const [answer, setAnswer] = useState<FoundingTeamAnswer | null>(null);
+  useEffect(() => {
+    let live = true;
+    void readFoundingTeam().then((a) => live && setAnswer(a));
+    return () => {
+      live = false;
+    };
+  }, []);
+  if (!answer) return null;
+  if (!answer.on) return [];
+  return answer.roleIds.filter((id) => !!answer.names[id]).map((id) => ({ id, name: answer.names[id] }));
+}
+
+/**
+ * Whether a phone should show the pinned act: while the founding team band is
+ * still ahead, below the screen. Once it is in view, or scrolled past, the bar
+ * steps out, so it never sits over the band or the page's end. Without
+ * IntersectionObserver it stays hidden, and the band's own button is still there.
+ */
+function useThumbAct(band: React.RefObject<HTMLElement | null>, enabled: boolean): boolean {
+  const [ahead, setAhead] = useState(false);
+  useEffect(() => {
+    if (!enabled || typeof IntersectionObserver === "undefined" || !band.current) return;
+    const io = new IntersectionObserver((entries) =>
+      entries.forEach((e) => setAhead(!e.isIntersecting && e.boundingClientRect.top > 0)),
+    );
+    io.observe(band.current);
+    // Until the first report, a band below the first screen is ahead.
+    setAhead(band.current.getBoundingClientRect().top > (typeof window === "undefined" ? 0 : window.innerHeight));
+    return () => io.disconnect();
+  }, [enabled, band]);
+  return enabled && ahead;
+}
+
+/** A band's one button, edged: the founding team's invitation is the page's one gold act. */
 function BandButton({ section, targets }: { section: ResolvedSection; targets: TargetContext }) {
   const cta = buttonAction(section.fields.ctaLabel, section.fields.ctaTarget, targets);
   if (!cta) return null;
   return (
-    <JourneyLink action={cta.action} className="btn-village inline-flex items-center gap-2">
+    <JourneyLink action={cta.action} className={BTN_SECONDARY}>
       {cta.label}
-      <ArrowRight className="w-5 h-5" />
+      <ArrowRight className="h-5 w-5" />
     </JourneyLink>
-  );
-}
-
-function StewardNextStepForm({ words }: { words: Readonly<Record<string, string>> }) {
-  // Blank hides the two invitations below rather than sending a
-  // would-be steward to a different village's calendar.
-  const { eventsUrl } = useVillageLinks();
-  const [form, setForm] = useState({ name: "", email: "", gifts: "", question: "" });
-  const [consent, setConsent] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
-  // The welcome replaces the form and its button, so focus would fall to
-  // <body> and a screen reader would hear nothing. Focus goes to the welcome.
-  const welcome = useRef<HTMLHeadingElement>(null);
-  useEffect(() => {
-    if (submitted) welcome.current?.focus();
-  }, [submitted]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError("");
-    try {
-      const res = await fetch("/api/forms/submit", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "steward-interest", data: { ...form, [FORM_CONSENT_FIELD]: consent } }),
-      });
-      if (!res.ok) throw new Error("Submission failed");
-      setSubmitted(true);
-    } catch {
-      setError("Something went wrong. Please try again.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  if (submitted) {
-    return (
-      <m.div
-        initial={{ opacity: 0, scale: 0.9 }}
-        animate={{ opacity: 1, scale: 1 }}
-        className="bg-card rounded-2xl p-10 shadow-sm text-center"
-      >
-        <div className="w-16 h-16 rounded-full bg-sage/20 flex items-center justify-center mx-auto mb-6">
-          <CheckCircle2 className="w-8 h-8 text-sage" />
-        </div>
-        <h3 ref={welcome} tabIndex={-1} className="font-display text-2xl font-bold text-foreground mb-3 outline-none break-words">
-          {words.thanksHeading}
-        </h3>
-        <p className="text-muted-foreground mb-6">
-          <Emphasized text={words.thanksBody} />
-        </p>
-        {eventsUrl && words.thanksCta && (
-          <a
-            href={eventsUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 px-6 py-3 bg-sage text-white rounded-lg font-semibold hover:opacity-90 transition-opacity"
-          >
-            <Calendar className="w-5 h-5" />
-            {words.thanksCta}
-          </a>
-        )}
-      </m.div>
-    );
-  }
-
-  return (
-    <form onSubmit={handleSubmit} className="bg-card rounded-2xl p-8 shadow-sm space-y-5">
-      <div className="grid sm:grid-cols-2 gap-4">
-        <div>
-          {/* Each label is tied to its field by htmlFor. They were plain text
-              above unlinked inputs, so a screen reader announced four
-              controls here with no names at all. */}
-          <label htmlFor="steward-name" className="block text-sm font-medium text-foreground mb-1.5">
-            Your name <span className="text-destructive">*</span>
-          </label>
-          <input
-            id="steward-name"
-            type="text"
-            autoComplete="name"
-            required
-            value={form.name}
-            onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-            className="w-full px-4 py-2.5 bg-background border border-input rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-            placeholder="Full name"
-          />
-        </div>
-        <div>
-          <label htmlFor="steward-email" className="block text-sm font-medium text-foreground mb-1.5">
-            Email <span className="text-destructive">*</span>
-          </label>
-          <input
-            id="steward-email"
-            type="email"
-            autoComplete="email"
-            required
-            value={form.email}
-            onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-            className="w-full px-4 py-2.5 bg-background border border-input rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-            placeholder="you@example.com"
-          />
-        </div>
-      </div>
-
-      <div>
-        <label htmlFor="steward-gifts" className="block text-sm font-medium text-foreground mb-1.5 break-words">
-          {words.giftsLabel}
-        </label>
-        <input
-          id="steward-gifts"
-          type="text"
-          value={form.gifts}
-          onChange={(e) => setForm((f) => ({ ...f, gifts: e.target.value }))}
-          className="w-full px-4 py-2.5 bg-background border border-input rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-          placeholder={words.giftsHint || undefined}
-        />
-      </div>
-
-      <div>
-        <label htmlFor="steward-question" className="block text-sm font-medium text-foreground mb-1.5 break-words">
-          {words.questionLabel}
-        </label>
-        <textarea
-          id="steward-question"
-          rows={3}
-          value={form.question}
-          onChange={(e) => setForm((f) => ({ ...f, question: e.target.value }))}
-          className="w-full px-4 py-2.5 bg-background border border-input rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-primary resize-none"
-          placeholder={words.questionHint || undefined}
-        />
-      </div>
-
-      <PathConsentBox checked={consent} onChange={setConsent} />
-
-      <AnimatePresence>
-        {error && (
-          <m.p
-            role="alert"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="text-sm text-destructive"
-          >
-            {error}
-          </m.p>
-        )}
-      </AnimatePresence>
-
-      <button
-        type="submit"
-        disabled={loading}
-        className="w-full px-4 py-3 bg-sage text-white rounded-lg font-semibold hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center justify-center gap-2"
-      >
-        {loading ? (
-          <span>Sending...</span>
-        ) : (
-          <>
-            <Heart className="w-5 h-5 shrink-0" />
-            <span className="min-w-0 break-words text-center">{words.submitLabel}</span>
-          </>
-        )}
-      </button>
-      {eventsUrl && words.footnote && (
-        <p className="text-xs text-muted-foreground text-center">
-          <Highlighted
-            text={words.footnote}
-            phrase={words.footnoteLink}
-            render={(phrase) => (
-              <a href={eventsUrl} target="_blank" rel="noopener noreferrer" className="text-primary underline">
-                {phrase}
-              </a>
-            )}
-          />
-        </p>
-      )}
-    </form>
   );
 }

@@ -39,7 +39,11 @@
  *
  * Money in an application is a RECORD. Nothing here pays, posts or settles.
  */
+import { aboutOf, backgroundCheckOf, referencesOf, type BackgroundCheck, type ProposalAbout, type ProposalReference } from "./proposalAbout";
+import { goalsAsText, goalsOf, legacyGoals, parseGoals, type ProposalGoal } from "./proposalGoals";
 import { looksLikePaymentDetails, PAYMENT_DETAIL_MESSAGE, parseSeatSettings, type SeatSettings } from "./seatSettings";
+import { judgeTermsStep, type TermAnswers } from "./termsWords";
+import { counterOfferOf, type CounterOffer } from "./counterOffer";
 import type { HandOpenerRule } from "./powerHands";
 import { roleWithHolders } from "./roleHolderLabel";
 
@@ -121,10 +125,62 @@ export interface ApplicationAnswers {
   timeZone: string | null;
   windows: string[];
   earliestStart: string | null;
-  terms: { choice: "accept" | "talk"; note: string } | null;
+  /**
+   * `answers` and `commitmentPct` are the eight settings' answers and the candidate's commitment
+   * (joining lane PR 3, `shared/termsWords.ts`). Absent on an application made before them.
+   */
+  terms: { choice: "accept" | "talk"; note: string; answers?: TermAnswers; commitmentPct?: number } | null;
+  /**
+   * The goals for the first moon, as the member door's list wrote them (joining
+   * lane PR 1; shared/proposalGoals.ts). Empty on an application made before
+   * it, whose `deliverables` words are then read as one goal (`goalsOfApplication`).
+   */
+  goals: ProposalGoal[];
+  /**
+   * The village's season goals an open proposal picked, in their words, with how
+   * the work serves each (shared/openProposalCard.ts `serves`). Written when the
+   * proposal is adopted (server/lib/openProposalDecide.ts), so the adopted card
+   * reads the goals she picked. Absent elsewhere.
+   */
+  serves?: Array<{ goal: string; howItHelps: string | null }>;
+  /**
+   * About you (joining lane PR 2): third-party data, for the deciders only, never read by an AI,
+   * and cleared with the rest of `answers` when the member is erased (shared/proposalAbout.ts).
+   */
+  references?: ProposalReference[];
+  about?: ProposalAbout;
+  backgroundCheck?: BackgroundCheck;
+  /** The deciders' counter-offer on the terms (shared/counterOffer.ts). Written by the decider door only: the member's own submission never carries it. */
+  counterOffer?: CounterOffer;
 }
 
 const ANSWER_LIMITS = { aim: 300, goal: 300, timeZone: 64, window: 40, windows: 6, termsNote: 600 } as const;
+
+/** The per-setting answers and the commitment, when well formed; whatever is not is left out, never thrown on. */
+function termsExtras(t: Record<string, unknown> | null | undefined): { answers?: TermAnswers; commitmentPct?: number } {
+  if (!t) return {};
+  const step = judgeTermsStep({ answers: t.answers, commitmentPct: t.commitmentPct }, []);
+  if (step.ok) return { ...(Object.keys(step.value.answers).length ? { answers: step.value.answers } : {}), commitmentPct: step.value.commitmentPct };
+  // Commitment missing or odd: keep what reads (an older application).
+  const only = judgeTermsStep({ answers: t.answers, commitmentPct: 0 }, []);
+  return only.ok && Object.keys(only.value.answers).length ? { answers: only.value.answers } : {};
+}
+
+/** Picked season goals as stored: words required, at most nine (three roles of three), each trimmed to the answer limits. */
+function servesOf(v: unknown): Array<{ goal: string; howItHelps: string | null }> {
+  if (!Array.isArray(v)) return [];
+  const out: Array<{ goal: string; howItHelps: string | null }> = [];
+  for (const x of v) {
+    if (!x || typeof x !== "object") continue;
+    const o = x as Record<string, unknown>;
+    const goal = typeof o.goal === "string" ? o.goal.trim().slice(0, ANSWER_LIMITS.goal) : "";
+    if (!goal || out.some((g) => g.goal === goal)) continue;
+    const how = typeof o.howItHelps === "string" && o.howItHelps.trim() ? o.howItHelps.trim().slice(0, ANSWER_LIMITS.goal) : null;
+    out.push({ goal, howItHelps: how });
+    if (out.length >= 9) break;
+  }
+  return out;
+}
 
 /** The answers as stored, from anything. Null when there are none; never throws. */
 export function parseApplicationAnswers(raw: unknown): ApplicationAnswers | null {
@@ -147,15 +203,23 @@ export function parseApplicationAnswers(raw: unknown): ApplicationAnswers | null
     timeZone: text(r.timeZone, ANSWER_LIMITS.timeZone),
     windows: Array.isArray(r.windows) ? r.windows.map((w) => text(w, ANSWER_LIMITS.window)).filter((w): w is string => !!w).slice(0, ANSWER_LIMITS.windows) : [],
     earliestStart: typeof r.earliestStart === "string" && /^\d{4}-\d{2}-\d{2}$/.test(r.earliestStart) ? r.earliestStart : null,
-    terms: choice ? { choice, note: text(t?.note, ANSWER_LIMITS.termsNote) ?? "" } : null,
+    terms: choice ? { choice, note: text(t?.note, ANSWER_LIMITS.termsNote) ?? "", ...termsExtras(t) } : null,
+    goals: goalsOf(r.goals),
+    ...(servesOf(r.serves).length ? { serves: servesOf(r.serves) } : {}),
+    ...(referencesOf(r.references).length ? { references: referencesOf(r.references) } : {}),
+    ...(Object.keys(aboutOf(r.about)).length ? { about: aboutOf(r.about) } : {}),
+    ...(backgroundCheckOf(r.backgroundCheck) ? { backgroundCheck: backgroundCheckOf(r.backgroundCheck) as BackgroundCheck } : {}),
+    ...(counterOfferOf(r.counterOffer) ? { counterOffer: counterOfferOf(r.counterOffer) as CounterOffer } : {}),
   };
-  const empty = !answers.aim && !answers.servesGoal && !answers.timeZone && !answers.windows.length && !answers.earliestStart && !answers.terms;
+  const empty = !answers.references && !answers.about && !answers.backgroundCheck && !answers.goals.length && !answers.serves && !answers.aim && !answers.servesGoal && !answers.timeZone && !answers.windows.length && !answers.earliestStart && !answers.terms;
   return empty ? null : answers;
 }
 
 export interface ApplicationInput {
   /** The member door's answers (0369), or null. */
   answers?: ApplicationAnswers | null;
+  /** The About-you section as the door sent it, judged by the route once the roles are known (it needs to know which are always checked). */
+  aboutYouRaw?: { references?: unknown; about?: unknown; consent?: unknown } | null;
   seatIds: string[];
   /** Why this member. Stored, read by members on the page, never on a ballot. */
   note: string | null;
@@ -179,6 +243,8 @@ export interface ApplicationInput {
 }
 
 export type ParsedApplication = { ok: true; input: ApplicationInput } | { ok: false; error: string; field: string };
+
+const isPlainTerms = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
 
 const words = (v: unknown): string | null => {
   const s = String(v ?? "").trim();
@@ -225,7 +291,36 @@ export function parseApplicationInput(body: unknown): ParsedApplication {
   if (seasonId && seasonId.length > 64) return { ok: false, field: "seasonId", error: "That season id is longer than any season this village has." };
   const supersedesId = words(b.supersedesId);
   if (supersedesId && !APPLICATION_ID.test(supersedesId)) return { ok: false, field: "supersedesId", error: "That is not the id of an application." };
-  return { ok: true, input: { seatIds, note, deliverables, settings: parsed.settings, startsOn: startsRaw, seasonId, supersedesId, answers: parseApplicationAnswers(b.answers) } };
+  // The goals list, when the door sent one: judged whole, so a malformed goal is refused and never quietly dropped.
+  let answers = parseApplicationAnswers(b.answers);
+  // About you is judged by the route, with the roles in hand; whatever the door sent for it is never stored as it came.
+  if (answers) {
+    const { references: _r, about: _a, backgroundCheck: _b, counterOffer: _c, ...rest } = answers;
+    answers = rest;
+  }
+  let deliverablesOut = deliverables;
+  const sentAnswers = b.answers && typeof b.answers === "object" && !Array.isArray(b.answers) ? (b.answers as Record<string, unknown>) : null;
+  // The terms step (PR 3): when the door sends the eight answers, the commitment is required and each answer is a choice.
+  const sentTerms = sentAnswers && isPlainTerms(sentAnswers.terms) ? sentAnswers.terms : null;
+  if (sentTerms && sentTerms.answers !== undefined) {
+    const step = judgeTermsStep({ answers: sentTerms.answers, commitmentPct: sentTerms.commitmentPct }, []);
+    if (!step.ok) return { ok: false, field: "terms", error: step.error };
+    if (answers?.terms) answers = { ...answers, terms: { ...answers.terms, answers: step.value.answers, commitmentPct: step.value.commitmentPct } };
+  }
+  if (sentAnswers && sentAnswers.goals !== undefined && sentAnswers.goals !== null) {
+    // One role: every goal is for it, whether or not the door said so.
+    const only = seatIds.length === 1 ? seatIds[0]! : "";
+    const asked = Array.isArray(sentAnswers.goals)
+      ? sentAnswers.goals.map((g) => (g && typeof g === "object" && !Array.isArray(g) && !String((g as any).roleId ?? "").trim() ? { ...(g as object), roleId: only } : g))
+      : sentAnswers.goals;
+    const listed = parseGoals(asked, { roleIds: new Set(seatIds) });
+    if (!listed.ok) return { ok: false, field: "goals", error: listed.error };
+    answers = { ...(answers ?? { aim: null, servesGoal: null, timeZone: null, windows: [], earliestStart: null, terms: null, goals: [] }), goals: listed.goals };
+    // Older readers still show `deliverables`: the goals as lines, unless the door wrote its own.
+    deliverablesOut = deliverables ?? goalsAsText(listed.goals, WORDS_MAX);
+  }
+  const aboutYouRaw = sentAnswers && (sentAnswers.references !== undefined || sentAnswers.about !== undefined || sentAnswers.checkConsent !== undefined) ? { references: sentAnswers.references, about: sentAnswers.about, consent: sentAnswers.checkConsent } : null;
+  return { ok: true, input: { seatIds, note, deliverables: deliverablesOut, settings: parsed.settings, startsOn: startsRaw, seasonId, supersedesId, answers, aboutYouRaw } };
 }
 
 // ── Who adopts ───────────────────────────────────────────────────────────────
@@ -465,4 +560,29 @@ export function ballotNamesItsCloser(subjectType: string): boolean {
  */
 export function closeNoteFor(subjectType: string, typed: string): string {
   return subjectType === ROLE_APPLICATION ? APPLICATION_CLOSED_NOTE : typed;
+}
+
+/**
+ * The goals an application shows its deciders: the list the member door wrote,
+ * or, for an application made before it, the `deliverables` words as one goal.
+ */
+export function goalsOfApplication(a: { answers?: ApplicationAnswers | null; deliverables?: string | null }): ProposalGoal[] {
+  const listed = a.answers?.goals ?? [];
+  if (listed.length) return listed;
+  return legacyGoals(a.deliverables);
+}
+
+/**
+ * `deliverables` without the goals block the door wrote into it, for a page that
+ * draws the goals as a list beside it. What is left is the door's other lines
+ * (the aim, the terms choice), or null when nothing is. An application made
+ * before the list has its whole text shown as one goal, so nothing is left.
+ */
+export function deliverablesBesideGoals(a: { answers?: ApplicationAnswers | null; deliverables?: string | null }): string | null {
+  const text = (a.deliverables ?? "").trim();
+  const listed = a.answers?.goals ?? [];
+  // An application made before the list: its whole text is read as one goal (`goalsOfApplication`), so nothing is left beside it.
+  if (!listed.length) return null;
+  const rest = text.replace(goalsAsText(listed), "").trim();
+  return rest || null;
 }

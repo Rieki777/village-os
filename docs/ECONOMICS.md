@@ -418,6 +418,8 @@ The mint rules a fresh village is seeded with:
 Seeded by `seedEconomy` in `server/lib/economySeed.ts` with `INSERT IGNORE` on (village, trigger, token), so an amount a village has edited is never restored by a redeploy.
 <!-- generated:mint-rules end -->
 
+The same boot seed also moves an archetype class still holding a name the platform retired to its new name (`moveRetiredArchetypeNames`, the five archetypes as roots, 2026-11-11). It touches names only, on a class nobody made their own, and no token, rule, balance or amount.
+
 The disabled `role.cycle` gratitude rule is off by Rye's ruling of 2026-08-30. It
 is shipped off rather than deleted because **there is no route that CREATES a mint
 rule**: `PATCH /api/admin/economy/rules/:id` edits amount, ceiling and enabled on
@@ -563,6 +565,13 @@ carries `voice: true`, so the card can say what Voice is. The quest board and de
 consent queue, role cards at the `terms.read` tier, the circle card page and the Stay page's
 "Earn your nights" list (`server/routes/stays.ts`, which now sends each quest's whole `pay`
 beside its stay credits) all carry it. None of this posts anything.
+
+**A badge that grows is told in words, never as a number (the prune, 2026-11-11).** When the
+post-close evaluation in `server/lib/cycleSettlement.ts` (and the admin evaluate button) finds a
+new tier, the notice reads "Your Seed keeper badge grew fuller" (`badgeNoticeTitle`,
+`shared/doorsOpened.ts`) where it read "Badge upgraded: Seed keeper ×3". Only the words changed:
+the tier, the award, its dedupe key and every multiplier above are exactly as they were, and
+nothing new is posted.
 
 ### The cash work pays, and the record of it (0285)
 
@@ -3422,6 +3431,11 @@ village's conflict process only when `restorativeSteps` is absent from that list
 and say the village has not written its steps otherwise. Nothing about value,
 settlement or any balance reads it: it decides which words a public page may call
 the village's own.
+
+The same answer carries `conflictIntro` (lead, 12 Nov 2026): the village setting
+`org.conflict_intro`, the paragraph on how the village sees conflict that those pages
+print above the steps, and an empty string when the village emptied it. It is words
+only. Nothing about value, settlement or any balance reads it.
 
 The restorative block also carries the conflict door (2026-09-27): a cover role,
 a promised reply time in hours with no platform default, and a named contact

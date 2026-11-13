@@ -38,7 +38,7 @@ const role = (over: Partial<OrgRole> = {}): OrgRole =>
     ...over,
   }) as OrgRole;
 
-const ctx: SeatProjectionCtx = { route: "org", now: NOW, nameOf: () => "Mara", firstName: (s) => s, roleNames: new Map([["visionary", "Visionary Channel"]]), cardWords: { firstConversationRole: "Human Operations & Onboarding Lead Steward", paidConsentCircle: "Anchor Circle" } };
+const ctx: SeatProjectionCtx = { route: "org", now: NOW, nameOf: () => "Mara", firstName: (s) => s, roleNames: new Map([["visionary", "Visionary Channel"]]), cardWords: { firstConversationRole: "Human Operations & Onboarding Lead Steward", paidConsentCircle: "Anchor Circle", showPayRanges: true } };
 const base = { editing: false, viewPeople: false, peopleArePublic: true, mapStructure: false } as const;
 const VISITOR = orgSeatTier({ ...base });
 const GUEST = orgSeatTier({ ...base, mapStructure: true });
@@ -51,7 +51,11 @@ const sorted = (o: object) => Object.keys(o).sort();
 
 const PUBLIC_CARD_KEYS = [
   "complete", "missing", "written", "of", "gated", "track", "villageGoals", "selectionCriteria", "conversations", "conversationMode", "firstConversation",
-  "whereWorked", "languages", "reviewAfterDays", "publicPay",
+  "whereWorked", "languages", "reviewAfterDays", "publicPay", "alwaysChecked", "commitmentPct",
+  // 0374: who may hold it, public at every tier like the rest of the card.
+  "heldBy", "agentMayHold",
+  // 0383: whether the role needs its whole commitment, public like the percent beside it.
+  "commitmentRequired",
 ].sort();
 
 describe("the public pay range", () => {
@@ -105,6 +109,19 @@ describe("the public pay range", () => {
     expect(card(role({ listed: false }), VISITOR)).not.toHaveProperty("publicPay");
   });
 
+  // Phase A (lead, 11 Nov): ranges stay hidden whatever the role data holds. The village setting
+  // `org.show_pay_ranges` ships off, and a card built without saying reads that setting.
+  it("is never sent while the village keeps ranges hidden, its default (control: the same role with ranges shown carries it)", () => {
+    const hidden = { ...ctx, cardWords: { ...ctx.cardWords, showPayRanges: undefined } };
+    for (const tier of [VISITOR, GUEST, MEMBER]) {
+      const c = projectSeat(role(), held, tier, hidden).card as Record<string, any>;
+      expect(c).not.toHaveProperty("publicPay");
+      expect(JSON.stringify(c)).not.toContain("300000");
+    }
+    expect(projectSeat(role(), held, VISITOR, { ...ctx, cardWords: { ...ctx.cardWords, showPayRanges: false } }).card).not.toHaveProperty("publicPay");
+    expect(card(role(), VISITOR)).toHaveProperty("publicPay");
+  });
+
   it("is absent when the offer writes no pay", () => {
     expect(card(role({ termsOffer: { v: 1, term: { endsOn: null } } as unknown as string }), VISITOR)).not.toHaveProperty("publicPay");
   });
@@ -117,7 +134,7 @@ describe("the card's parameters", () => {
       { roleId: "human-ops", minutes: 60, roleName: null },
       { roleId: "visionary", minutes: 20, final: true, roleName: "Visionary Channel" },
     ]);
-    expect(card(role(), VISITOR)).toMatchObject({ conversationMode: "block", firstConversation: "Human Operations & Onboarding Lead Steward" });
+    expect(card(role(), VISITOR)).toMatchObject({ conversationMode: "separate", firstConversation: "Human Operations & Onboarding Lead Steward" });
   });
 
   it("names the consenting circle for a paid role only (control: the paid role above names it)", () => {

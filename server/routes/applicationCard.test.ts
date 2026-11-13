@@ -217,7 +217,7 @@ describe.skipIf(!configured)("the proposal card and the grouped list, on a real 
   });
 
   it("draws the member door's aim and goal on the proposal's card, in place of an unfiled plan (0369, guide v2 B1)", async () => {
-    await file("sa-00000000000000c9", { answers: { aim: "Money kept true.", servesGoal: "One set of numbers everyone trusts", timeZone: null, windows: [], earliestStart: null, terms: null } });
+    await file("sa-00000000000000c9", { answers: { aim: "Money kept true.", servesGoal: "One set of numbers everyone trusts", timeZone: null, windows: [], earliestStart: null, terms: null, goals: [] } });
     try {
       const r = await h.call("/api/governance/role-applications/sa-00000000000000c9/card");
       expect(r.status).toBe(200);
@@ -227,6 +227,35 @@ describe.skipIf(!configured)("the proposal card and the grouped list, on a real 
     } finally {
       // The other tests count this village's applications: leave none behind.
       await pool.query("DELETE FROM seat_applications WHERE id = 'sa-00000000000000c9'"); // module-review-ok: fixture SQL against this suite's scratch schema
+    }
+  });
+
+  it("verify item 7: an adopted open proposal's card reads her aim and picked goals, and no line says it waits for adoption", async () => {
+    await file("sa-00000000000000c8", {
+      status: "adopted",
+      answers: {
+        aim: "A clean close every moon.",
+        servesGoal: null,
+        serves: [{ goal: "Money we can read", howItHelps: "a monthly cash view" }],
+        timeZone: null,
+        windows: [],
+        earliestStart: null,
+        terms: null,
+        goals: [],
+      },
+    });
+    try {
+      const r = await h.call("/api/governance/role-applications/sa-00000000000000c8/card");
+      expect(r.status, JSON.stringify(r.body)).toBe(200);
+      const card = r.body.card;
+      expect(card.across.aim).toEqual({ kind: "shown", value: "A clean close every moon." });
+      expect(card.across.goals.value).toEqual([{ goal: "Money we can read", howItHelps: "a monthly cash view" }]);
+      const text = JSON.stringify(r.body);
+      expect(text).not.toContain("once the role is adopted");
+      expect(text).not.toContain("No season plan filed yet");
+      expect(card.header.rolesLine.startsWith("Proposes to hold ")).toBe(false);
+    } finally {
+      await pool.query("DELETE FROM seat_applications WHERE id = 'sa-00000000000000c8'"); // module-review-ok: fixture SQL against this suite's scratch schema
     }
   });
 
@@ -262,12 +291,13 @@ describe.skipIf(!configured)("the proposal card and the grouped list, on a real 
     // Filed for the next season: its name and its dates, and no day counted of a season not begun.
     const next = (await h.call("/api/governance/role-applications/sa-00000000000000a3/card")).body.card.header;
     expect(next.eyebrow).toBe("Riverbend · Next");
-    expect(next.span).toBe("1 January to 31 May 2027");
+    // The season's endsOn is shown as the civil day written (audit M12, #1169).
+    expect(next.span).toBe("1 January to 1 June 2027");
     expect(next.moon.day).toBeNull();
     // Control: an application for the running season reads the running season, day counted.
     const now = (await h.call("/api/governance/role-applications/sa-00000000000000a1/card")).body.card.header;
     expect(now.eyebrow).toBe("Riverbend · Now");
-    expect(now.span).toBe("1 June to 31 December 2026");
+    expect(now.span).toBe("1 June 2026 to 1 January 2027");
     expect(now.moon.day).not.toBeNull();
   });
 

@@ -187,6 +187,35 @@ post), `stage_events` (`recordStageEvent`), `conversations` and `conversation_me
 threads), and `rate_hits` (one row per share-card cache miss). That second list is what tells a fork
 operator which other subsystems a quest write can fail against.
 
+### Commitment percent (0383)
+
+Three numbers from 1 to 100, added by migration 0383 at the lead's word (12 Nov 2026): people may
+move how much of themselves they give from season to season, moon to moon, week to week, and the
+village wants to see it as data. The pure half is `shared/commitment.ts`.
+
+- `quests.commitment_pct`, nullable: how much of a person the quest asks, beside the free
+  `duration` words. Admin's quest editor sets it (`PUT /api/admin/quests/:id`, refused with a
+  sentence outside 1 to 100). The Open work board shows it on each card, filters by size (light up
+  to 25, medium 26 to 60, heavy over 60) and orders each circle's quests by how near each sits to
+  what the reader can give, with easier and harder labels.
+- `org_roles.commitment_pct` and `org_roles.commitment_required`: the commitment a role asks as a
+  stored value, and whether it needs all of it (required) or less can work (flexible). Both are role
+  parameters (`shared/roleParams.ts`, `shared/roleParameters.ts`), so the role editor, the card text
+  and a proposed `role_card` change all carry them. The card's `commitmentPct` reads the stored
+  value first and falls back to the terms on offer. The roles list hides a required role that asks
+  more than the reader can give, says how many, and shows them on one press.
+- `member_commitments`: what a member says they can give, as a dated history (who, percent,
+  from-date, period of season, moon or week, optional note). **Append only**: a change is a new row
+  and no statement updates one, so the record of what someone could give last season stays. The
+  word that holds today is the latest from-date on or before the member's own calendar day. Said on
+  the profile's Today ("How much can you give right now?") through `GET` and `POST
+  /api/me/commitment`, private to the member. Erasure deletes the whole history.
+
+**It filters work for the person themselves and never ranks people.** **Nothing that pays reads it**:
+payout and reward use waits for the lead, and money stays a person's decision until then.
+`server/lib/commitmentBoundary.test.ts` fails the day a module that moves value reaches the history
+or names a commitment column.
+
 ## Endpoints
 
 The board, the crews, the admin CRUD and the two member steps are registered by `register` in
@@ -207,6 +236,8 @@ that file alphabetically would make `field` a quest id that does not exist.
 | `POST /api/crews/:id/leave` | signed-in member | Leaving the crew also leaves its conversation, where messaging is on. |
 | `POST /api/admin/quests` | `isAdmin` | Off-site image URLs refused: a poster comes through the village's own upload. |
 | `PUT /api/admin/quests/:id` | `isAdmin` | Refuses an example row, so an example cannot be edited into real work. |
+| `GET /api/me/commitment` | signed-in member | The member's own word that holds today and their history, newest first (0383). Registered from `register` beside the board, in `server/routes/memberCommitment.ts`. |
+| `POST /api/me/commitment` | signed-in member | Says a new word: `pct` 1 to 100, `period` season, moon or week, an optional `fromDate` of today or later and a `note`. Always a new row. 30 per hour. |
 | `DELETE /api/admin/quests/:id` | `isAdmin` | Refuses an example row, and refuses with 409 while any claim on it is `claimed` or `submitted`, counted under the quest's row lock. |
 | `POST /api/game/quests/:id/claim` | signed-in member | Enforces `min_stage` and `requires_role`, refuses an example, refuses a closed quest, refuses a second non-declined claim (under the quest's row lock, via `claimsRepo.openClaim`). |
 | `POST /api/game/quests/:id/submit` | signed-in member | Needs a link or a note. Accepts a second submit on an already-submitted claim, and refuses with 409 a claim a steward resolved first (`claimsRepo.submitOnce`, under the claim's row lock). Notifies everyone who may consent, and nobody on a refusal. |

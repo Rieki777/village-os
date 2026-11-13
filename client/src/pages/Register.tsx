@@ -4,6 +4,7 @@ import { fetchSignInMethods } from "@/components/auth/signInMethods";
 import { useAuth } from "@/contexts/AuthContext";
 import { m } from "framer-motion";
 import { Heart, ArrowRight, Mail, Lock, User, CheckCircle2, Circle, CalendarDays } from "lucide-react";
+import { BTN_NOTICE, BTN_PRIMARY, CARD, FIELD, H1, H2, HINT, LABEL, LEDE, RING, TILE, WORLD } from "@/components/journey/look";
 import { useEffect, useState } from "react";
 import { ShowPasswordButton } from "@/components/auth/ShowPasswordButton";
 import { useLocation } from "wouter";
@@ -12,38 +13,6 @@ import { useVillagePaths } from "@/hooks/useVillagePaths";
 import { ACCOUNT_WORDS, NAME_MAX, PASSWORD_MAX, PASSWORD_MIN } from "@shared/accountRules";
 import { andList } from "@shared/openProposals";
 import { useLingui } from "@lingui/react/macro";
-
-/**
- * Each path's colours. The words are the village's own (Admin, Make it yours,
- * Paths & Stages) and arrive with `useVillagePaths`; the look stays here,
- * keyed by the path ids, which never change. An id with no look of its own
- * takes NEUTRAL_LOOK.
- */
-const PATH_LOOK: Record<string, string> = {
-  // text-amber-ink, not text-amber: --color-amber is derived only to carry
-  // ink AS a background chip, never checked as small foreground text on a
-  // light surface. This pill measured 1.43:1 with text-amber; amber-ink
-  // (index.css) measures 4.90:1 in the same spot. See index.css for the
-  // full measurement.
-  investor: "bg-amber/10 border-amber/30 text-amber-ink hover:bg-amber/20",
-  // text-sage is already a static, measured-safe foreground colour
-  // (5.21:1 on this pill's tint) - unchanged.
-  steward: "bg-sage/10 border-sage/30 text-sage hover:bg-sage/20",
-  // text-teal-deep, not text-teal (brand-soft): brand-soft is a decorative
-  // tint, never checked as foreground text. text-teal measured 2.33:1 here.
-  // teal-deep is safe by construction instead: shared/brandTokens.ts
-  // enforces contrastRatio(white, brand) >= 4.5 for every seed, and
-  // contrast is symmetric, so contrastRatio(brand, white) clears the same
-  // floor - proven down to 4.50:1 worst case across all 54 card x seed
-  // combinations in CHARACTER_CARDS, not just the neutral default (9.59:1
-  // here). See index.css for the neutral-default measurement.
-  resident: "bg-teal/10 border-teal/30 text-teal-deep hover:bg-teal/20",
-  // Same fix as "resident": text-teal-light (brand-mid) measured 4.20:1,
-  // below AA. text-teal-deep is safe by construction (see above), 9.18:1
-  // in this specific tint under the neutral default.
-  "prosperity-creator": "bg-teal-light/10 border-teal-light/30 text-teal-deep hover:bg-teal-light/20",
-};
-const NEUTRAL_LOOK = PATH_LOOK.resident;
 
 /** What the server said about the invitation link this page was opened with. */
 interface InviteCheck {
@@ -71,38 +40,37 @@ function inviteFromAddress(): string {
  *
  * Somebody with no working link is told how people arrive here, and given the
  * two ways forward the ruling names: ask to join, and come to a community call
- * or an event. It sits on the same fixed light card as the form it stands in
- * for, with the page's own measured inks, so it reads the same in either theme.
+ * or an event. It sits on the same panel as the form it stands in for.
  */
 function InvitationNeeded({ villageName, reason }: { villageName: string; reason?: string }) {
   return (
-    <section aria-labelledby="invitation-needed" className="bg-white rounded-2xl shadow-lg p-8 space-y-5">
+    <section aria-labelledby="invitation-needed" className={`${CARD} space-y-5`}>
       {reason && (
-        <p role="alert" className="p-4 bg-amber/10 border border-amber/30 rounded-lg text-amber-ink text-sm">
+        <p role="alert" className="rounded-xl border border-notice/60 bg-muted p-4 text-sm text-foreground">
           {reason}
         </p>
       )}
-      <h2 id="invitation-needed" className="text-2xl font-display font-bold text-teal-deep">
+      <h2 id="invitation-needed" className={H2}>
         You need an invitation to join {villageName}
       </h2>
-      <p className="text-stone-600">
+      <p className={LEDE}>
         Got an invitation link? Open it to create your account.
       </p>
-      <p className="text-stone-600">
+      <p className={LEDE}>
         No link yet? Ask to join, and someone from the village will reach out. A community call is a good
         first step.
       </p>
       <div className="flex flex-col gap-3 sm:flex-row">
         <a
           href="/request-membership"
-          className="inline-flex min-h-11 items-center justify-center gap-2 px-6 py-3 bg-teal-deep text-white font-semibold rounded-lg hover:bg-teal-deep-dark hover:shadow-lg transition-[background-color,box-shadow]"
+          className={BTN_PRIMARY}
         >
           Ask to join
           <ArrowRight className="w-5 h-5" aria-hidden="true" />
         </a>
         <a
           href="/events"
-          className="inline-flex min-h-11 items-center justify-center gap-2 px-6 py-3 border-2 border-amber-ink text-amber-ink font-semibold rounded-lg hover:bg-amber-ink/5 transition-colors"
+          className={BTN_NOTICE}
         >
           <CalendarDays className="w-5 h-5" aria-hidden="true" />
           See calls and events
@@ -187,6 +155,10 @@ export default function Register() {
   // An adopted application is joining to hold roles: the steward's path is already the answer, and
   // stays a choice the person can change (role audit, 10 Nov 2026).
   const adoptedForRoles = goodLink && (check?.forRoles?.length ?? 0) > 0;
+  /** The steward path is the answer, so the picker is not drawn (audit M7). Only when this village has that path to send. */
+  const skipPicker = adoptedForRoles && !!PATHS?.some((p) => p.id === "steward");
+  /** Where a new account lands: a holder is asked their steps on the profile, and everybody else picks a character first. */
+  const landing = adoptedForRoles ? "/profile" : "/profile/characters?first=1";
   useEffect(() => {
     if (!adoptedForRoles || !PATHS?.some((p) => p.id === "steward")) return;
     setSelectedPaths((prev) => (prev.length ? prev : ["steward"]));
@@ -211,20 +183,21 @@ export default function Register() {
       setError("Passwords don't match.");
       return;
     }
-    if (selectedPaths.length === 0) {
+    const chosenPaths = skipPicker ? ["steward"] : selectedPaths;
+    if (chosenPaths.length === 0) {
       setError("Choose a path to continue.");
       return;
     }
 
     setLoading(true);
     try {
-      if (goodLink) await register(name, email, password, selectedPaths, invite);
-      else await register(name, email, password, selectedPaths);
+      if (goodLink) await register(name, email, password, chosenPaths, invite);
+      else await register(name, email, password, chosenPaths);
       // Straight into the class select, skippable. Somebody who has just
       // signed up is the one moment they are most willing to say who they
       // want to be, and the one moment a form they cannot leave would be
       // worst. `first` only changes the copy and adds the way out.
-      navigate("/profile/characters?first=1");
+      navigate(landing);
     } catch (err) {
       setError(err instanceof Error ? err.message : "We couldn't create your account. Try again.");
     } finally {
@@ -234,35 +207,35 @@ export default function Register() {
 
   return (
     <Layout>
-      <div className="min-h-screen bg-gradient-to-br from-teal-deep/5 to-amber/5 py-16">
+      <div className={`${WORLD} py-8 sm:py-16`}>
         <div className="container max-w-2xl">
           <m.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-            <div className="text-center mb-12">
+            <div className="text-center mb-6 sm:mb-12">
               <div className="flex justify-center mb-4">
-                <div className="w-16 h-16 rounded-full bg-teal-deep/10 flex items-center justify-center">
-                  <Heart className="w-8 h-8 text-teal-deep" />
+                <div className={`${RING} size-16`}>
+                  <Heart className="size-7" aria-hidden="true" />
                 </div>
               </div>
-              <h1 className="text-4xl font-display font-bold text-teal-deep mb-2">
+              <h1 className={`${H1} mb-2`}>
                 Join {villageName}
               </h1>
               {/* R47: only the reader who can act on it sees it. Somebody held
                   at the door needs an invitation first, and the card says so. */}
               {!deciding && !heldAtTheDoor && (
-                <p className="text-gray-600">Create your account and choose your path.</p>
+                <p className={LEDE + " mx-auto"}>{skipPicker ? "Create your account. Your first steps are waiting on your profile." : "Create your account and choose your path."}</p>
               )}
             </div>
 
             {deciding ? (
-              <p aria-live="polite" className="text-center text-stone-600">
+              <p aria-live="polite" className={`${HINT} text-center`}>
                 Checking how to join...
               </p>
             ) : heldAtTheDoor ? (
               <InvitationNeeded villageName={villageName} reason={invite ? check?.error : undefined} />
             ) : (
-            <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-lg p-8 space-y-8">
+            <form onSubmit={handleSubmit} className={`${CARD} space-y-8`}>
               {goodLink && (
-                <p className="p-4 bg-teal-deep/5 border border-teal-deep/20 rounded-lg text-teal-deep text-sm">
+                <p className={TILE + " text-sm text-foreground"}>
                   {check?.invitedBy ? `${check.invitedBy} invited you. ` : "You were invited. "}
                   {check?.forRoles?.length ? (
                     <span data-invite-roles="">
@@ -277,7 +250,7 @@ export default function Register() {
                 </p>
               )}
               {invite !== "" && check?.valid === false && check.error && (
-                <p className="p-4 bg-amber/10 border border-amber/30 rounded-lg text-amber-ink text-sm">
+                <p className="rounded-xl border border-notice/60 bg-muted p-4 text-sm text-foreground">
                   {check.error} This village is open, so you can still make an account here.
                 </p>
               )}
@@ -299,7 +272,7 @@ export default function Register() {
                   role="alert"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
-                  className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm"
+                  className="rounded-xl border border-destructive bg-destructive/10 p-4 text-sm text-destructive"
                 >
                   {error}
                 </m.div>
@@ -312,9 +285,9 @@ export default function Register() {
                       announced four controls with no names, and iOS offered no
                       Keychain suggestion on the one form where a saved
                       password matters most. */}
-                  <label htmlFor="register-name" className="block text-sm font-semibold text-gray-700 mb-2">Name</label>
+                  <label htmlFor="register-name" className={`block ${LABEL} mb-2`}>Name</label>
                   <div className="relative">
-                    <User className="absolute left-4 top-3.5 w-5 h-5 text-gray-400" aria-hidden="true" />
+                    <User className="absolute left-4 top-3.5 size-5 text-muted-foreground" aria-hidden="true" />
                     <input
                       id="register-name"
                       name="name"
@@ -324,16 +297,16 @@ export default function Register() {
                       onChange={(e) => setName(e.target.value)}
                       placeholder="Your name"
                       maxLength={NAME_MAX}
-                      className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-deep"
+                      className={`${FIELD} min-h-11 pl-12 pr-4 py-3`}
                       required
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label htmlFor="register-email" className="block text-sm font-semibold text-gray-700 mb-2">Email</label>
+                  <label htmlFor="register-email" className={`block ${LABEL} mb-2`}>Email</label>
                   <div className="relative">
-                    <Mail className="absolute left-4 top-3.5 w-5 h-5 text-gray-400" aria-hidden="true" />
+                    <Mail className="absolute left-4 top-3.5 size-5 text-muted-foreground" aria-hidden="true" />
                     <input
                       id="register-email"
                       name="email"
@@ -342,16 +315,16 @@ export default function Register() {
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       placeholder="you@example.com"
-                      className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-deep"
+                      className={`${FIELD} min-h-11 pl-12 pr-4 py-3`}
                       required
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label htmlFor="register-password" className="block text-sm font-semibold text-gray-700 mb-2">Password</label>
+                  <label htmlFor="register-password" className={`block ${LABEL} mb-2`}>Password</label>
                   <div className="relative">
-                    <Lock className="absolute left-4 top-3.5 w-5 h-5 text-gray-400" aria-hidden="true" />
+                    <Lock className="absolute left-4 top-3.5 size-5 text-muted-foreground" aria-hidden="true" />
                     <input
                       id="register-password"
                       name="new-password"
@@ -363,22 +336,22 @@ export default function Register() {
                       minLength={PASSWORD_MIN}
                       maxLength={PASSWORD_MAX}
                       aria-describedby="register-password-rule"
-                      className="w-full pl-12 pr-12 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-deep"
+                      className={`${FIELD} min-h-11 pl-12 pr-12 py-3`}
                       required
                     />
                     <ShowPasswordButton shown={showPassword} onToggle={() => setShowPassword((v) => !v)} />
                   </div>
-                  <p id="register-password-rule" className="mt-1 text-xs text-muted-foreground">
+                  <p id="register-password-rule" className={`${HINT} mt-1`}>
                     At least {PASSWORD_MIN} characters.
                   </p>
                 </div>
 
                 <div>
-                  <label htmlFor="register-confirm" className="block text-sm font-semibold text-gray-700 mb-2">
+                  <label htmlFor="register-confirm" className={`block ${LABEL} mb-2`}>
                     Confirm Password
                   </label>
                   <div className="relative">
-                    <Lock className="absolute left-4 top-3.5 w-5 h-5 text-gray-400" aria-hidden="true" />
+                    <Lock className="absolute left-4 top-3.5 size-5 text-muted-foreground" aria-hidden="true" />
                     <input
                       id="register-confirm"
                       name="confirm-password"
@@ -387,7 +360,7 @@ export default function Register() {
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
                       placeholder="••••••••"
-                      className="w-full pl-12 pr-12 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-deep"
+                      className={`${FIELD} min-h-11 pl-12 pr-12 py-3`}
                       required
                     />
                     <ShowPasswordButton shown={showPassword} onToggle={() => setShowPassword((v) => !v)} />
@@ -395,49 +368,52 @@ export default function Register() {
                 </div>
               </div>
 
+              {!skipPicker && (
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-4">
+                <label className={`block ${LABEL} mb-4`}>
                   Choose your path. Pick more than one if you like.
                 </label>
                 <div className="grid gap-3" aria-busy={PATHS === null}>
                   {(PATHS ?? []).map((path) => (
-                    <m.button
+                    <button
                       key={path.id}
                       type="button"
-                      whileHover={{ scale: 1.02 }}
                       onClick={() => togglePath(path.id)}
-                      className={`p-4 border-2 rounded-lg text-left transition-all ${
-                        selectedPaths.includes(path.id)
-                          ? `${PATH_LOOK[path.id] ?? NEUTRAL_LOOK} border-current`
-                          : "bg-gray-50 border-gray-200 hover:border-gray-300"
+                      aria-pressed={selectedPaths.includes(path.id)}
+                      data-on={selectedPaths.includes(path.id)}
+                      className={`${TILE} jw-btn jw-pick min-h-11 border-2 text-left ${
+                        selectedPaths.includes(path.id) ? "border-notice" : "hover:border-notice/60"
                       }`}
                     >
                       <div className="flex items-start gap-3">
                         {selectedPaths.includes(path.id) ? (
-                          <CheckCircle2 className="w-5 h-5 mt-0.5 flex-shrink-0 text-teal-deep" />
+                          <CheckCircle2 className="size-5 mt-0.5 shrink-0 text-notice" aria-hidden="true" />
                         ) : (
-                          <Circle className="w-5 h-5 mt-0.5 flex-shrink-0 text-gray-400" />
+                          <Circle className="size-5 mt-0.5 shrink-0 text-muted-foreground" aria-hidden="true" />
                         )}
                         <div className="min-w-0">
-                          <p className="font-semibold text-gray-900 break-words">{path.label}</p>
-                          {path.description && <p className="text-sm text-gray-600 break-words">{path.description}</p>}
+                          <p className="font-semibold text-foreground break-words">{path.label}</p>
+                          {path.description && <p className="text-sm text-muted-foreground break-words">{path.description}</p>}
                         </div>
                       </div>
-                    </m.button>
+                    </button>
                   ))}
                 </div>
               </div>
+              )}
 
-              <m.button
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                disabled={loading}
-                type="submit"
-                className="w-full bg-teal-deep text-white font-semibold py-3 rounded-lg hover:bg-teal-deep-dark hover:shadow-lg transition-[background-color,box-shadow] disabled:opacity-50 flex items-center justify-center gap-2"
-              >
-                {loading ? "Creating your account…" : "Create account"}
-                {!loading && <ArrowRight className="w-5 h-5" />}
-              </m.button>
+              {/*
+                On a phone the act rides along at the bottom of the screen while
+                the form is in view, within a thumb's reach from the first
+                screen. From sm up it sits in the form's flow, where a desktop
+                reader finishes the fields and finds it.
+              */}
+              <div className="sticky bottom-3 z-10 sm:static">
+                <button disabled={loading} type="submit" className={`${BTN_PRIMARY} w-full shadow-sm sm:shadow-none`}>
+                  {loading ? "Creating your account…" : "Create account"}
+                  {!loading && <ArrowRight className="size-5" aria-hidden="true" />}
+                </button>
+              </div>
 
               {/*
                 Joining with Google, beside the form and never in place of it.
@@ -464,22 +440,18 @@ export default function Register() {
               */}
               <GoogleSignInButton
                 label="Continue with Google"
-                next="/profile/characters?first=1"
+                next={landing}
                 invite={goodLink ? invite : undefined}
               />
             </form>
             )}
 
             <div className="mt-8 text-center">
-              <p className="text-gray-600 mb-4">Already have an account?</p>
-              <m.a
-                whileHover={{ scale: 1.05 }}
-                href="/login"
-                className="inline-flex items-center gap-2 px-6 py-3 border-2 border-amber-ink text-amber-ink font-semibold rounded-lg hover:bg-amber-ink/5 transition-colors"
-              >
+              <p className={`${HINT} mb-4`}>Already have an account?</p>
+              <a href="/login" className={BTN_NOTICE}>
                 Sign in
-                <ArrowRight className="w-5 h-5" />
-              </m.a>
+                <ArrowRight className="size-5" aria-hidden="true" />
+              </a>
             </div>
           </m.div>
         </div>

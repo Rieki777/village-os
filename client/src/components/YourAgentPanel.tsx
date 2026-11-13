@@ -17,6 +17,8 @@ import VoiceArea from "@/components/voice/VoiceArea";
 import { useEffect, useState } from "react";
 import { Bot, Copy, KeyRound, ShieldCheck, Trash2, Webhook } from "lucide-react";
 import { gameFetch } from "@/lib/gameApi";
+import { useIsAdmin } from "@/contexts/AuthContext";
+import ConnectorSetupPanel from "@/components/agent/ConnectorSetupPanel";
 
 type Setup = {
   origin: string;
@@ -98,7 +100,8 @@ function CopyLine({ value }: { value: string }) {
   );
 }
 
-export default function YourAgentPanel() {
+export default function YourAgentPanel({ person }: { person?: string } = {}) {
+  const isAdmin = useIsAdmin();
   const [setup, setSetup] = useState<Setup | null>(null);
   const [error, setError] = useState("");
 
@@ -133,6 +136,8 @@ export default function YourAgentPanel() {
   const [model, setModel] = useState("");
   const [keyBusy, setKeyBusy] = useState(false);
   const [keyNote, setKeyNote] = useState("");
+  // The connector panel opens when an Anthropic key is saved (the lead, 2026-11-11).
+  const [keySaved, setKeySaved] = useState(false);
 
   // Profile
   const [profile, setProfile] = useState<Profile>({ aboutMe: "", aboutTier: "private", matchingConsent: false });
@@ -221,6 +226,7 @@ export default function YourAgentPanel() {
     setKeyBusy(false);
     if (!r.ok) { setKeyNote(r.data?.error ?? "Could not save the key"); return; }
     setKeyValue(""); setKeyNote("Saved. The assistant answers on your key from now on");
+    if (provider === "anthropic") setKeySaved(true);
     void load();
   };
   const removeKey = async () => {
@@ -522,6 +528,7 @@ export default function YourAgentPanel() {
                 {keyBusy ? "Saving…" : keyView ? "Replace key" : "Save key"}
               </button>
               {keyNote && <p className="text-xs text-card-foreground mt-2">{keyNote}</p>}
+              {keySaved && <div className="mt-4"><ConnectorSetupPanel moment="key" person={person} origin={setup?.origin} isAdmin={isAdmin} /></div>}
             </>
           )}
         </Card>

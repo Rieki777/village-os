@@ -40,15 +40,15 @@ export const SHEET_WORDS = {
   signInToSeeNames: "Sign in to see who holds it.",
   namesNotShared: "Names are not shared on this page.",
   unreachable: "Held, and not reachable through the map yet.",
-  raise: "Raise your hand",
-  raiseConsequence: "A raised hand reaches the founding team, who will be in touch.",
+  raise: "Apply for this role",
+  raiseConsequence: "Your application reaches the founding team, who will be in touch.",
   applyConsequence: "Opens your proposal for this role and its terms. A role holder or the village adopts it.",
   raisePlaceholder: "Why this role calls to you (optional)",
   raiseTermLabel: "End date for your role (optional)",
-  raiseSubmit: "Raise my hand",
+  raiseSubmit: "Send my application",
   cancel: "Cancel",
-  raised: "Hand raised. The founding team will be in touch.",
-  signInToRaise: "Sign in to raise your hand",
+  raised: "Application sent. The founding team will be in touch.",
+  signInToRaise: "Sign in to apply for this role",
   nobodyWroteThisSeat: "Nobody has written down what this role is for yet.",
   foundingTeamWrites: "The founding team writes these down.",
   setByHand: "This state was set by hand.",
@@ -110,3 +110,6 @@ export const COMMITMENT_PHRASES: Record<CommitmentKey, string> = {
   nextHolder: "how the next holder is chosen",
   decides: "how its decisions pass",
 };
+
+/** Under an agent on the roster: the member who keeps it (0374, shared/agentHolders.ts). */
+export const keptByLine = (keeper: string): string => `Kept by ${keeper}`;

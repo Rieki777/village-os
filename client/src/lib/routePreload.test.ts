@@ -37,15 +37,29 @@ describe("lazyRoutesFromApp, against the real App.tsx", () => {
     const declared = [...APP.matchAll(/<Route\s+path=/g)].length;
     // Everything except the eager three (/, /login, /404), the /seat-applications/:id redirect
     // to /role-applications/:id (members say role, 2026-10-21) and the /roles/draft redirect
-    // to /roles/select (the board is "select" now, 2026-11-10) is lazy today.
-    expect(routes.length).toBeGreaterThanOrEqual(declared - 5);
+    // to /roles/select (the board is "select" now, 2026-11-10) and the /join and /apply redirects to /roles
+    // is lazy today.
+    expect(routes.length).toBeGreaterThanOrEqual(declared - 7);
     expect(routes.length).toBeGreaterThan(60);
+  });
+
+  it("sends /join and /apply to /roles, the one front door", () => {
+    for (const from of ["/join", "/apply"]) {
+      expect(APP).toMatch(new RegExp(`<Route path="${from}">\\{\\(\\) => <Redirect to="/roles" replace />\\}</Route>`));
+    }
   });
 
   it("keeps App.tsx's order, because wouter's Switch takes the first match", () => {
     const i = (p: string) => routes.findIndex((r) => r.path === p);
     expect(i("/profile/characters")).toBeLessThan(i("/profile/:handle"));
     expect(i("/decisions")).toBeLessThan(i("/decisions/:id"));
+  });
+
+  it("reads a route that renders a lazy page with props, and leaves a redirect out", () => {
+    expect(of("/training/steward")).toBe("pages/Training");
+    expect(of("/training/resident")).toBe("pages/Training");
+    expect(of("/join")).toBeUndefined();
+    expect(of("/roles/draft")).toBeUndefined();
   });
 
   it("reads the email pages, which import one module three ways", () => {

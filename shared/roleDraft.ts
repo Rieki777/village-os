@@ -23,6 +23,7 @@
  * anyone's to have edited, so it is re-read through `draftFromStored`, which
  * keeps strings only, drops duplicates and caps both lists.
  */
+import { castArt } from "./archetypeRoots";
 import { OPEN_PROPOSAL_MAX_ROLES, openProposalHref } from "./openProposals";
 import { applySeatsHref } from "./seatApplyLinks";
 
@@ -80,6 +81,21 @@ export function draftFromStored(v: unknown): RoleDraft {
   return { chars: cleanIds(o.chars, DRAFT_MAX_CHARACTERS), picks: cleanIds(o.picks, OPEN_PROPOSAL_MAX_ROLES) };
 }
 
+/** The query that carries one archetype from /roles to the board (`/roles/select?archetype=building`). */
+export const ARCHETYPE_PARAM = "archetype";
+
+/** An archetype key as the address may carry it: the keys are lowercase identifiers. */
+export function archetypeFromSearch(search: string): string | null {
+  const v = new URLSearchParams(search).get(ARCHETYPE_PARAM);
+  return v && /^[a-z0-9_-]{1,40}$/.test(v) ? v : null;
+}
+
+/** The stored draft with one more character on it. Picks stay as they were, and a character already there is not doubled. */
+export function draftWithArchetype(draft: RoleDraft, key: string | null): RoleDraft {
+  if (!key || draft.chars.includes(key) || draft.chars.length >= DRAFT_MAX_CHARACTERS) return draft;
+  return { ...draft, chars: [...draft.chars, key] };
+}
+
 /**
  * An unlisted role as any layer may have carried it: the boolean the server sends,
  * but also the 0 the column holds and the strings a hand-built payload or a
@@ -119,9 +135,12 @@ export function fitCountFor(roles: readonly DraftRole[], key: string): number {
   return roles.filter((r) => r.archetypes.includes(key)).length;
 }
 
-/** A character's stock art. The files ship with the platform (server/assets/avatars); the page falls back to a drawn medallion when one is missing. */
+/**
+ * A character's stock art. The files ship with the platform (server/assets/avatars); the page falls back to a drawn medallion when one is missing.
+ * Each root wears its face in the cast (shared/archetypeRoots.ts, CAST_LOOK), so wherever the five are shown together they are three women and two men, one Black, two brown and two white (build list 10.6).
+ */
 export function characterArt(key: string): string {
-  return `/images/avatars/${encodeURIComponent(key)}-f-olive.webp`;
+  return castArt(key);
 }
 
 /** The four steps, in order. The words live on the page, where the catalog can reach them. */
@@ -178,6 +197,19 @@ export function openRolesFrom(org: unknown): DraftRole[] {
     });
   }
   return out;
+}
+
+/**
+ * The board without the founding team's roles (QA2-01, 12 Nov 2026). While the
+ * village features its founding team, those roles are applied for one at a
+ * time from their own card on /roles, in the founding register, so the game's
+ * board never offers them among its picks of three. `foundingIds` is the
+ * founding team's answer (`/api/org/founding-team`): empty while it is off.
+ */
+export function withoutFounding<R extends { id: string }>(roles: readonly R[], foundingIds: readonly string[]): R[] {
+  if (!foundingIds.length) return [...roles];
+  const founding = new Set(foundingIds);
+  return roles.filter((r) => !founding.has(r.id));
 }
 
 /**

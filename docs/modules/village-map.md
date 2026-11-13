@@ -611,3 +611,33 @@ notification both other seating paths send, under the same `org-seat:` dedupe
 key. Declining sends the words `server/lib/submissionNotices.ts` already owns
 for a declined submission, so a no reads the same whichever door it came
 through.
+
+## The living map: hearths, threads and opt-in lights (Phase D, D2, 2026-11-12)
+
+The circles map (`/map/circles`) draws a living layer through PowerMap's `lenses` seam
+(`client/src/components/map/HearthLens.tsx`): every circle glows softly as a hearth, mycelial
+threads join circles the village linked and neighbours inside one container, and fireflies
+gather at a circle's hearth where people meet today. Only in the Now view; Vision and Arrange
+draw without it.
+
+**Presence is personal data.** The rules live in `shared/mapLight.ts`:
+
+- **Off by default.** A member's light shows only when their own setting is on. The setting is
+  `prefs.mapLight`, read strictly (`true` and nothing else), on the member's own settings
+  ("Show my light on the map", `client/src/components/map/MapLightSetting.tsx`).
+- **Members only.** `GET /api/map/hearths` answers a signed-in present member; a visitor gets 401.
+- **Never a list of names.** The answer is `{ day, hearths: [{ circleId, meetsToday, lights }], myLight }`.
+  No ids, names or times of people. `lights` is held to a floor of 2 (one light never stands for
+  one known person) and a cap of 8.
+- **Cleared on erasure.** The erasure tombstone empties `prefs`; the read also refuses anyone who
+  is not a present member (`server/lib/memberPresence.ts`).
+
+A light is an opted-in present member who joined a circle's live session today, in the village's
+day. A circle meets today when its rhythm names today or a session of it opened today. No
+migration: the choice rides `prefs`, the rest is read from the live session tables.
+
+| Route | What it does |
+|---|---|
+| `GET /api/map/hearths` | today's hearths for a signed-in member (server/routes/mapLight.ts) |
+| `GET /api/map/my-light` | this member's own choice |
+| `PUT /api/map/my-light` | `{ on: boolean }`, this member's own choice; anything else is 400 |

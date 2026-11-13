@@ -2,6 +2,10 @@ import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { CHARACTER_CARDS, deriveTheme } from "@shared/brandTokens";
 import { announceThemeChange } from "@/lib/liveTheme";
+import SaveBar, { type SaveResult } from "@/components/SaveBar";
+import { changedKeys } from "@/lib/unsavedChanges";
+
+const LOOK_KEYS = ["seed", "character", "place", "accent"] as const;
 
 /**
  * Admin → Make This Yours → Look: the THREE decisions everything visual
@@ -20,30 +24,31 @@ import { announceThemeChange } from "@/lib/liveTheme";
  */
 export default function LookPanel({ password }: { password: string }) {
   const [theme, setTheme] = useState<any>(null);
-  const [saving, setSaving] = useState(false);
+  /** The four look fields as the server last had them. */
+  const [saved, setSaved] = useState<any>(null);
 
   const load = useCallback(async () => {
     try {
       const res = await fetch("/api/admin/brand", { headers: { Authorization: `Bearer ${password}` } });
       const data = await res.json();
       setTheme(data.brand?.theme ?? {});
+      setSaved(data.brand?.theme ?? {});
     } catch { toast.error("Could not load the look settings"); }
   }, [password]);
   useEffect(() => { load(); }, [load]);
 
-  const save = async () => {
-    setSaving(true);
+  const save = async (): Promise<SaveResult> => {
     try {
       const res = await fetch("/api/admin/brand", {
         method: "PUT",
         headers: { Authorization: `Bearer ${password}`, "Content-Type": "application/json" },
         body: JSON.stringify({ theme: { seed: theme.seed ?? "", character: theme.character ?? "", place: theme.place ?? "", accent: theme.accent ?? "" } }),
       });
-      if (!res.ok) throw new Error();
+      if (!res.ok) return { ok: false, reason: "The server did not accept the look." };
+      setSaved(theme);
       announceThemeChange();
-      toast.success("Look saved. Open pages re-theme now");
-    } catch { toast.error("Save failed"); }
-    setSaving(false);
+      return { ok: true };
+    } catch { return { ok: false, reason: "The save could not reach the server." }; }
   };
 
   if (!theme) return null;
@@ -173,10 +178,7 @@ export default function LookPanel({ password }: { password: string }) {
         </div>
       )}
 
-      <button onClick={save} disabled={saving}
-        className="px-4 py-2 bg-teal-deep text-white rounded-lg text-sm font-medium disabled:opacity-50">
-        {saving ? "Saving..." : "Save look"}
-      </button>
+      <SaveBar count={changedKeys(saved, theme, LOOK_KEYS).length} onSave={save} onDiscard={() => setTheme(saved)} what="the look" />
     </div>
   );
 }

@@ -97,3 +97,34 @@ function safeJson(s: string): unknown {
     return null;
   }
 }
+
+/** The account facts a holder's first name is decided from: a live, former or erased account. */
+export interface HolderAccountRow {
+  id: string;
+  name: string | null;
+  email: string | null;
+  membershipGranted: unknown;
+  stageGranted: unknown;
+}
+
+/** The accounts behind these member holders, by id, in one read. */
+export async function holderAccountsOf(pool: Pool, userIds: readonly string[]): Promise<Map<string, HolderAccountRow>> {
+  if (!userIds.length) return new Map();
+  const marks = userIds.map(() => "?").join(",");
+  const [rows] = await pool.query<RowDataPacket[]>(
+    `SELECT id, name, email, membership_granted, stage_granted FROM users WHERE id IN (${marks})`,
+    [...userIds],
+  );
+  return new Map(
+    rows.map((u) => [
+      String(u.id),
+      {
+        id: String(u.id),
+        name: u.name == null ? null : String(u.name),
+        email: u.email == null ? null : String(u.email),
+        membershipGranted: u.membership_granted,
+        stageGranted: u.stage_granted,
+      },
+    ]),
+  );
+}

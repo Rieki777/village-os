@@ -33,7 +33,7 @@
 import { ARCHETYPE_KEYS } from "./archetypes";
 import { cssColourForCircle } from "./circleView";
 import { decidesByById, howChosenById } from "./power";
-import { COMMITMENT_LABELS, COMMITMENT_PHRASES, SHEET_WORDS, moreOpenLine, type CommitmentKey } from "./roleSheetWords";
+import { COMMITMENT_LABELS, COMMITMENT_PHRASES, SHEET_WORDS, moreOpenLine, keptByLine, type CommitmentKey } from "./roleSheetWords";
 
 // The copy deck lives in its own file and is read from here, so a host imports
 // every word the card prints from one place.
@@ -72,6 +72,8 @@ export interface SeatHolderIn {
   userId?: string | null;
   kind?: "member" | "documented";
   isAgent?: boolean;
+  /** 0374: the member who keeps an agent, by name. Only on an agent's row. */
+  keeper?: string | null;
   focus?: string | null;
   lapsed?: boolean;
   avatar?: string | null;
@@ -95,7 +97,7 @@ export interface SeatInput {
   name: string;
   isExample: boolean;
   /** `decidesByGloss` is the circle's own line for a way called "Other". */
-  circle: { id: string; name: string; decidesBy: string | null; decidesByGloss?: string | null; color: string | null } | null;
+  circle: { id: string; name: string; anchor?: boolean; decidesBy: string | null; decidesByGloss?: string | null; color: string | null } | null;
   /** A proposal that names a circle not yet placed. */
   circleNameOnly: string | null;
   aim: string | null;
@@ -240,31 +242,8 @@ export function fnv1a(s: string): number {
 const PRESENTATIONS = ["f", "m"] as const;
 const TONES = ["olive", "deep", "light"] as const;
 
-/**
- * THE STOCK DRAWINGS PAINTED ON A PAPER MARGIN.
- *
- * Nine of the thirty files carry a near-white border, 19 to 65 pixels wide on
- * a 765 by 1024 drawing, along the top and usually both sides. On a night card
- * that border reads as a cream frame inside the art window. The card zooms
- * these nine inside the window so the margin falls outside it, and leaves the
- * others untouched. `roleSheet.test.ts` reads the edges of every file in
- * `server/assets/avatars` (served at /images/avatars) and holds this list to exactly the files
- * that have a margin, so a new bordered drawing cannot arrive unlisted.
- */
-export const FRAMED_PORTRAITS: ReadonlySet<string> = new Set([
-  "catalyzing-f-light",
-  "facilitating-f-olive",
-  "facilitating-m-deep",
-  "facilitating-m-olive",
-  "researching-f-olive",
-  "researching-m-deep",
-  "researching-m-light",
-  "researching-m-olive",
-  "storytelling-m-olive",
-]);
-
 export type Portrait =
-  | { kind: "class"; src: string; alt: string; key: string; framed: boolean }
+  | { kind: "class"; src: string; alt: string; key: string }
   | { kind: "sigil"; letter: string };
 
 /**
@@ -292,7 +271,6 @@ export function portraitFor(
       kind: "class",
       key,
       src: `/images/avatars/${file}.webp`,
-      framed: FRAMED_PORTRAITS.has(file),
       alt: className
         ? `Stock art for ${className}, a class suggested for this role`
         : "Stock art for a class suggested for this role",
@@ -419,7 +397,7 @@ const COMMITMENT_ORDER: CommitmentKey[] = ["aim", "domain", "accountabilities", 
 
 const SR_WRITTEN = ", written down";
 const SR_VILLAGES = ", the village's way";
-const SR_AT_SEATING = ", set when someone is seated";
+const SR_AT_SEATING = ", set when someone takes the role";
 const SR_UNWRITTEN = ", still to be written down";
 
 /** A commitment's look, or "unread" when the payload does not carry it. */
@@ -664,7 +642,8 @@ export function rosterFor(
     const ready = !!h.lapsed;
     const base = { key: `holder-${i}`, ready, avatar: null, pickKey: null, subIsDate: false };
     if (h.isAgent) {
-      spots.push({ ...base, kind: "agent", title: SHEET_WORDS.agent, sub: ready ? SHEET_WORDS.readyToBeRechosen : null });
+      const keeper = h.keeper && h.keeper.trim() ? h.keeper.trim() : null;
+      spots.push({ ...base, kind: "agent", title: SHEET_WORDS.agent, sub: ready ? SHEET_WORDS.readyToBeRechosen : keeper ? keptByLine(keeper) : null });
       return;
     }
     const name = h.name && h.name.trim() ? h.name.trim() : null;
@@ -724,7 +703,7 @@ function actionFor(input: SeatInput): SeatActionView {
           kind: "raise",
           seatName: input.name,
           label: SHEET_WORDS.raise,
-          ariaLabel: `Raise your hand for ${input.name}`,
+          ariaLabel: `Apply for this role: ${input.name}`,
           consequence: SHEET_WORDS.raiseConsequence,
         }
       : { kind: "signIn", seatName: input.name, label: SHEET_WORDS.signInToRaise, ariaLabel: null, consequence: null };

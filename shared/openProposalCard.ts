@@ -10,10 +10,10 @@
  * matching section of their own, in the shape of a member's season card:
  *
  *   the role's outcomes (accountabilities)  ->  what I'll move, with a target
- *   the first 90 days                       ->  my first moon's quests, each
+ *   the first 90 days                       ->  my first moon's goals, each
  *                                               with a "Done when" test
  *   the season's goals for the village      ->  which my work serves, and how
- *   the hours                               ->  what I can give
+ *   the commitment                          ->  what I can give (energy and attention, never hours)
  *   the agreements                          ->  the NDA once approved. The
  *                                               Love Letter is no tick here: the
  *                                               applicant ALIGNS with it on the form
@@ -26,13 +26,16 @@
  * application's own words (`cardSummary`, server/lib/openProposalDecide.ts).
  */
 
+import { GOAL_LIMITS, goalsOf, parseGoals } from "./proposalGoals";
+import { judgeTermsStep, notesAsText, overallChoice, commitmentWords, type TermAnswers, type TermKey } from "./termsWords";
+
 export const CARD_LIMITS = {
   movesPerRole: 3,
   moveText: 200,
   target: 120,
-  questsPerRole: 3,
-  quest: 160,
-  doneWhen: 200,
+  questsPerRole: GOAL_LIMITS.max,
+  quest: GOAL_LIMITS.title,
+  doneWhen: GOAL_LIMITS.doneWhen,
   serves: 3,
   how: 200,
   hours: 80,
@@ -52,6 +55,8 @@ export type CardWindow = (typeof CARD_WINDOWS)[number];
 export interface CardTerms {
   choice: "accept" | "talk";
   note: string;
+  /** Joining lane PR 3: the answer to each of the eight settings. Absent on a card sent before. `choice` is then the whole answer. */
+  answers?: TermAnswers;
 }
 
 const CIVIL_DAY = /^\d{4}-\d{2}-\d{2}$/;
@@ -67,14 +72,31 @@ export function isTimeZone(tz: string): boolean {
   }
 }
 
+/**
+ * One goal for the first moon (joining lane PR 1). Stored under `firstMoon`,
+ * with `quest` as its title, so a card sent before goals grew fields reads as it
+ * always did. `moves` is the role goal it moves, `serves` the season goal's id,
+ * `date` a day in this moon; each absent when the candidate left it.
+ */
+export interface FirstMoonGoal {
+  quest: string;
+  doneWhen: string;
+  moves?: string;
+  serves?: string;
+  date?: string;
+}
+
 export interface OpenProposalCard {
-  roles: Array<{ roleId: string; moves: Array<{ text: string; target: string }>; firstMoon: Array<{ quest: string; doneWhen: string }> }>;
+  roles: Array<{ roleId: string; moves: Array<{ text: string; target: string }>; firstMoon: FirstMoonGoal[] }>;
   /**
    * `goal` is the goal's words when the proposal was sent, written by the server, never the form.
    * `roleId`: the role card the pick was made on (guide v2). Absent on a card sent before that, which named goals once for all its roles.
    */
   serves: Array<{ goalId: string; how: string; goal?: string; roleId?: string }>;
+  /** Sent before commitment replaced hours: read, never shown (joining lane PR 3). New cards send none. */
   hours: string;
+  /** How much of their energy and attention the role gets in a week, 0 to 100 in tens. Absent on a card sent before it. A planning signal; no pay reads it. */
+  commitmentPct?: number;
   /**
    * `loveLetter` is kept as stored on a card sent before the alignment replaced
    * the tick, and read by nothing that decides: the proposal's `membership` is
@@ -95,6 +117,10 @@ export interface CardContext {
   accountabilitiesOf: (roleId: string) => readonly string[];
   /** The season's goals for the village, by id. */
   goalIds: ReadonlySet<string>;
+  /** Today's civil day, so a goal's date can be held to this moon. Absent: the date is only read as a day. */
+  today?: string;
+  /** The settings the picked roles have written: each needs an answer (`writtenKeys`). Absent: only the shape is judged. */
+  writtenTerms?: readonly TermKey[];
 }
 
 export const CARD_WORDS = {
@@ -138,16 +164,17 @@ export function parseCard(raw: unknown, ctx: CardContext): Parsed {
       if (!moves.some((x) => x.text === text)) moves.push({ text, target });
     }
     if (moves.length > L.movesPerRole) return { ok: false, field: "card", error: CARD_WORDS.tooMany("outcomes a role", L.movesPerRole) };
-    const firstMoon: OpenProposalCard["roles"][number]["firstMoon"] = [];
-    for (const q of list(r?.firstMoon) as any[]) {
-      const quest = str(q?.quest);
-      const doneWhen = str(q?.doneWhen);
-      if (!quest) continue;
-      if (quest.length > L.quest) return { ok: false, field: "card", error: CARD_WORDS.tooLong("A quest", L.quest) };
-      if (doneWhen.length > L.doneWhen) return { ok: false, field: "card", error: CARD_WORDS.tooLong("Done when", L.doneWhen) };
-      firstMoon.push({ quest, doneWhen });
-    }
-    if (firstMoon.length > L.questsPerRole) return { ok: false, field: "card", error: CARD_WORDS.tooMany("quests a role", L.questsPerRole) };
+    // Joining lane PR 1: the first moon's goals, one to eight, each judged by the shared goal rules.
+    const asked = list(r?.firstMoon).map((q: any) => ({ title: q?.quest, doneWhen: q?.doneWhen, moves: q?.moves, serves: q?.serves, date: q?.date, roleId }));
+    const parsedGoals = parseGoals(asked, { roleGoalsOf: () => own, seasonKeys: ctx.goalIds, today: ctx.today });
+    if (!parsedGoals.ok) return { ok: false, field: "card", error: parsedGoals.error };
+    const firstMoon: FirstMoonGoal[] = parsedGoals.goals.map((g) => ({
+      quest: g.title,
+      doneWhen: g.doneWhen,
+      ...(g.moves ? { moves: g.moves } : {}),
+      ...(g.serves ? { serves: g.serves } : {}),
+      ...(g.date ? { date: g.date } : {}),
+    }));
     if (!roles.some((x) => x.roleId === roleId)) roles.push({ roleId, moves, firstMoon });
   }
   const serves: OpenProposalCard["serves"] = [];
@@ -178,13 +205,16 @@ export function parseCard(raw: unknown, ctx: CardContext): Parsed {
   const earliestStart = str(o.earliestStart);
   if (earliestStart && !CIVIL_DAY.test(earliestStart)) return { ok: false, field: "earliestStart", error: CARD_WORDS.badDate };
   const t = o.terms && typeof o.terms === "object" ? (o.terms as Record<string, unknown>) : null;
-  const choice = t?.choice === "accept" || t?.choice === "talk" ? t.choice : null;
-  const note = str(t?.note);
-  if (!choice) return { ok: false, field: "terms", error: CARD_WORDS.needTerms };
-  if (choice === "talk" && !note) return { ok: false, field: "terms", error: CARD_WORDS.needTermsNote };
-  if (note.length > L.termsNote) return { ok: false, field: "terms", error: CARD_WORDS.tooLong("Your note on the terms", L.termsNote) };
-  const hours = str(o.hours);
-  if (hours.length > L.hours) return { ok: false, field: "card", error: CARD_WORDS.tooLong("Your hours", L.hours) };
+  // Joining lane PR 3: each of the eight settings is answered, and the commitment is chosen (no default).
+  const step = judgeTermsStep({ answers: t?.answers, commitmentPct: o.commitmentPct }, ctx.writtenTerms ?? []);
+  if (!step.ok) return { ok: false, field: "terms", error: step.error };
+  const answers = step.value.answers;
+  const hasAnswers = Object.keys(answers).length > 0;
+  // With answers the choice follows them. With none (no setting written yet) it is the one the form sent.
+  const sent = t?.choice === "accept" || t?.choice === "talk" ? t.choice : null;
+  const choice = hasAnswers ? overallChoice(answers) : sent ?? "accept";
+  const note = (hasAnswers ? notesAsText(answers) : str(t?.note)).slice(0, L.termsNote);
+  if (!hasAnswers && choice === "talk" && !note) return { ok: false, field: "terms", error: CARD_WORDS.needTermsNote };
   const agreed = o.agreed && typeof o.agreed === "object" ? (o.agreed as Record<string, unknown>) : {};
   // Only the NDA is ticked here. A Love Letter tick from a form sent before the alignment replaced it is kept, never asked.
   if (agreed.nda !== true) return { ok: false, field: "agreed", error: CARD_WORDS.agreed };
@@ -193,14 +223,21 @@ export function parseCard(raw: unknown, ctx: CardContext): Parsed {
     card: {
       roles,
       serves,
-      hours,
+      hours: "",
+      commitmentPct: step.value.commitmentPct,
       agreed: { loveLetter: agreed.loveLetter === true, nda: true },
       ...(timeZone ? { timeZone } : {}),
       ...(windows.length ? { windows } : {}),
       ...(earliestStart ? { earliestStart } : {}),
-      terms: { choice, note },
+      terms: { choice, note, ...(hasAnswers ? { answers } : {}) },
     },
   };
+}
+
+/** The per-setting answers as stored, or none. */
+function readAnswers(raw: unknown): TermAnswers | undefined {
+  const j = judgeTermsStep({ answers: raw, commitmentPct: 0 }, []);
+  return j.ok && Object.keys(j.value.answers).length ? j.value.answers : undefined;
 }
 
 /** A stored card, read back safely; anything that is not one is no card. Never throws. */
@@ -216,7 +253,13 @@ export function cardOf(raw: unknown): OpenProposalCard | undefined {
       .map((r) => ({
         roleId: String(r.roleId),
         moves: list(r.moves).slice(0, L.movesPerRole).map((m: any) => ({ text: cut(m?.text, L.moveText), target: cut(m?.target, L.target) })).filter((m) => m.text),
-        firstMoon: list(r.firstMoon).slice(0, L.questsPerRole).map((q: any) => ({ quest: cut(q?.quest, L.quest), doneWhen: cut(q?.doneWhen, L.doneWhen) })).filter((q) => q.quest),
+        firstMoon: goalsOf(list(r.firstMoon).map((q: any) => ({ title: q?.quest, doneWhen: q?.doneWhen, moves: q?.moves, serves: q?.serves, date: q?.date }))).map((g) => ({
+          quest: g.title,
+          doneWhen: g.doneWhen,
+          ...(g.moves ? { moves: g.moves } : {}),
+          ...(g.serves ? { serves: g.serves } : {}),
+          ...(g.date ? { date: g.date } : {}),
+        })),
       })),
     serves: list(o.serves)
       .slice(0, L.serves * 3) // three role cards at most (D3)
@@ -228,6 +271,7 @@ export function cardOf(raw: unknown): OpenProposalCard | undefined {
       }))
       .filter((s) => s.goalId),
     hours: cut(o.hours, L.hours),
+    ...(typeof o.commitmentPct === "number" && Number.isInteger(o.commitmentPct) && o.commitmentPct >= 0 && o.commitmentPct <= 100 ? { commitmentPct: o.commitmentPct } : {}),
     agreed: { loveLetter: (o.agreed as any)?.loveLetter === true, nda: (o.agreed as any)?.nda === true },
     ...(isTimeZone(str(o.timeZone)) ? { timeZone: str(o.timeZone) } : {}),
     ...(list(o.windows).some((w) => (CARD_WINDOWS as readonly unknown[]).includes(w))
@@ -235,7 +279,13 @@ export function cardOf(raw: unknown): OpenProposalCard | undefined {
       : {}),
     ...(CIVIL_DAY.test(str(o.earliestStart)) ? { earliestStart: str(o.earliestStart) } : {}),
     ...((o.terms as any)?.choice === "accept" || (o.terms as any)?.choice === "talk"
-      ? { terms: { choice: (o.terms as any).choice as CardTerms["choice"], note: cut((o.terms as any).note, L.termsNote) } }
+      ? {
+          terms: {
+            choice: (o.terms as any).choice as CardTerms["choice"],
+            note: cut((o.terms as any).note, L.termsNote),
+            ...(readAnswers((o.terms as any).answers) ? { answers: readAnswers((o.terms as any).answers) } : {}),
+          },
+        }
       : {}),
   };
 }
@@ -246,7 +296,7 @@ export function cardSummary(card: OpenProposalCard, roleName: (id: string) => st
   for (const r of card.roles) {
     lines.push(roleName(r.roleId));
     for (const m of r.moves) lines.push(`- I'll move: ${m.text}${m.target ? ` (${m.target})` : ""}`);
-    for (const q of r.firstMoon) lines.push(`- First task: ${q.quest}${q.doneWhen ? `: done when ${q.doneWhen}` : ""}`);
+    for (const q of r.firstMoon) lines.push(`- Goal: ${q.quest}${q.doneWhen ? `: done when ${q.doneWhen}` : ""}${q.moves ? `. Moves: ${q.moves}` : ""}${q.date ? `. By ${q.date}` : ""}`);
     // Guide v2: the season goals this role's work serves, under the role.
     for (const s of card.serves.filter((x) => x.roleId === r.roleId)) lines.push(`- Serves the season goal: ${goalText(s.goalId)}${s.how ? `: ${s.how}` : ""}`);
   }
@@ -255,7 +305,7 @@ export function cardSummary(card: OpenProposalCard, roleName: (id: string) => st
     lines.push("Serves the season's goals:");
     for (const s of once) lines.push(`- ${goalText(s.goalId)}${s.how ? `: ${s.how}` : ""}`);
   }
-  if (card.hours) lines.push(`Time I can give: ${card.hours}`);
+  if (card.commitmentPct !== undefined) lines.push(commitmentWords(card.commitmentPct));
   if (card.timeZone) lines.push(`Time zone: ${card.timeZone}`);
   if (card.windows?.length) lines.push(`Usual times: ${card.windows.join(", ")}`);
   if (card.earliestStart) lines.push(`Earliest start: ${card.earliestStart}`);

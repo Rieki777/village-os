@@ -201,7 +201,7 @@ describe("a seat chip on /circles", () => {
     await openCircle();
     fireEvent.click(screen.getByRole("button", { name: "Seed Keeper" }));
     const dialog = screen.getByRole("dialog", { name: "Seed Keeper" });
-    expect(within(dialog).getByRole("button", { name: "Raise your hand for Seed Keeper" })).toBeTruthy();
+    expect(within(dialog).getByRole("button", { name: "Apply for this role: Seed Keeper" })).toBeTruthy();
     expect(within(dialog).queryByRole("button", { name: /^Contact/ })).toBeNull();
   });
 
@@ -222,6 +222,6 @@ describe("a seat chip on /circles", () => {
     const dialog = screen.getByRole("dialog", { name: "Seed Keeper" });
     // Known positive: the card is there, with its roster.
     expect(within(dialog).getByText("Holding it now")).toBeTruthy();
-    expect(within(dialog).queryByRole("button", { name: /Raise your hand/ })).toBeNull();
+    expect(within(dialog).queryByRole("button", { name: /Apply for this role/ })).toBeNull();
   });
 });

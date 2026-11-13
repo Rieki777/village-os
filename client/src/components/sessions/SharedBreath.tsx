@@ -19,8 +19,17 @@
  *
  * The facilitator picks the pattern and the rounds from small tiles that show
  * their counts, and starts it for everyone.
+ *
+ * AROUND THE BREATH, THE GATHERING (Phase C). Given `here`, the orb sits in the
+ * centre circle of a Flower of Life (GatheringFlower.tsx), and each person
+ * here lights one circle around it. One line under it says how many of us
+ * are here, which is what a screen reader hears; the flower is its drawing.
+ * On a phone the flower takes the width of the screen; on a desktop it grows
+ * into the wider field beside the people (StageDropIn.tsx).
  */
 import { useState } from "react";
+import { useLingui } from "@lingui/react/macro";
+import { plural } from "@lingui/core/macro";
 import {
   BREATH_KEYS,
   BREATH_PATTERNS,
@@ -36,6 +45,7 @@ import { useReducedMotion } from "@/components/natural/useReducedMotion";
 import { radioArrows } from "@/lib/radioArrows";
 import { BTN_PRIMARY, BTN_SECONDARY, H3, HINT, LABEL, tile } from "./roomUi";
 import { useRoomNow, type RoomActions } from "./useSessionRoom";
+import GatheringFlower, { FLOWER_R } from "./GatheringFlower";
 
 /** How full the circle is at this moment of the breath, from 0.55 to 1. */
 export function breathScale(m: BreathMoment): number {
@@ -76,10 +86,13 @@ export interface SharedBreathProps {
   offset: number;
   facilitates: boolean;
   actions: RoomActions;
+  /** How many people are here: given, the breath sits inside the gathering's Flower of Life. */
+  here?: number;
 }
 
-export default function SharedBreath({ breath, offset, facilitates, actions }: SharedBreathProps) {
+export default function SharedBreath({ breath, offset, facilitates, actions, here }: SharedBreathProps) {
   const reduced = useReducedMotion();
+  const { t } = useLingui();
   // Five beats a second while the room breathes, so the seed moves softly;
   // once a second otherwise, which is all the words need.
   const ends = breathEndsAt(breath);
@@ -104,6 +117,16 @@ export default function SharedBreath({ breath, offset, facilitates, actions }: S
   // without ever filling the ring.
   const glow = reduced ? 1 : 0.8 + 0.25 * scale;
   const motion = reduced ? "none" : "transform 260ms linear";
+  const orb = (
+    <>
+      <div className="absolute inset-0 rounded-full bg-notice/10 ring-1 ring-notice/60" />
+      <div
+        className="absolute inset-3 rounded-full bg-radial from-notice/30 via-notice/10 via-45% to-transparent to-70%"
+        style={{ transform: `scale(${glow})`, transition: motion }}
+      />
+      <div className="h-2/5 w-2/5 rounded-full bg-notice shadow-sm" style={{ transform: `scale(${scale})`, transition: motion }} />
+    </>
+  );
   const word = moment.state === "breathing" ? BREATH_WORDS[moment.kind] : moment.state === "done" ? ROOM_COPY.breathDone : null;
 
   return (
@@ -115,17 +138,28 @@ export default function SharedBreath({ breath, offset, facilitates, actions }: S
         {breathAnnouncement(moment, breath.rounds)}
       </p>
       <div className="flex flex-col items-center gap-3 py-2">
-        <div className="relative flex h-56 w-56 items-center justify-center sm:h-64 sm:w-64" aria-hidden="true">
-          <div className="absolute inset-0 rounded-full bg-notice/10 ring-1 ring-notice/60" />
-          <div
-            className="absolute inset-3 rounded-full bg-radial from-notice/30 via-notice/10 via-45% to-transparent to-70%"
-            style={{ transform: `scale(${glow})`, transition: motion }}
-          />
-          <div
-            className="h-2/5 w-2/5 rounded-full bg-notice shadow-sm"
-            style={{ transform: `scale(${scale})`, transition: motion }}
-          />
-        </div>
+        {here == null ? (
+          <div className="relative flex h-56 w-56 items-center justify-center sm:h-64 sm:w-64" aria-hidden="true">
+            {orb}
+          </div>
+        ) : (
+          <>
+            <div className="relative aspect-square w-full max-w-[22rem] lg:max-w-[28rem]" data-testid="breath-in-flower">
+              <GatheringFlower here={here} className="absolute inset-0" />
+              {/* The orb fills the flower's centre circle exactly: its diameter is 2r of the 100-unit field. */}
+              <div
+                className="absolute flex items-center justify-center"
+                style={{ left: `${50 - FLOWER_R}%`, top: `${50 - FLOWER_R}%`, width: `${2 * FLOWER_R}%`, height: `${2 * FLOWER_R}%` }}
+                aria-hidden="true"
+              >
+                {orb}
+              </div>
+            </div>
+            <p className={`${HINT} text-center`} data-testid="here-line">
+              {t({ message: plural(here, { one: "# of us is here.", other: "# of us are here." }), context: "live room, the gathering flower" })}
+            </p>
+          </>
+        )}
         {word && <p className="text-center font-display text-3xl text-foreground">{word}</p>}
         {moment.state === "breathing" && (
           <p className={`${HINT} tabular-nums`}>

@@ -604,7 +604,8 @@ const POINTER_LISTS = (() => {
 const FIXED: Record<string, number> = {
   "client/src/components/GuideChat.tsx": 2,
   "client/src/components/QuestActions.tsx": 2,
-  "client/src/components/admin/ContentEditorTab.tsx": 1,
+  // ContentEditorTab.tsx's one left this list on 2026-11-11: its section Save button went to
+  // the floating save bar (components/SaveBar.tsx), so the tab draws no white-on-brand hover. 56.
   "client/src/components/profile/InvitePanel.tsx": 1,
   "client/src/components/ui/button.tsx": 1,
   "client/src/pages/Admin.tsx": 12,
@@ -616,11 +617,14 @@ const FIXED: Record<string, number> = {
   "client/src/pages/Forum.tsx": 1,
   "client/src/pages/GameMechanics.tsx": 5,
   "client/src/pages/GoodNeighbor.tsx": 1,
-  "client/src/pages/Home.tsx": 1,
+  // Home.tsx's one left this list on 2026-11-12: the landing stands in the sheet's world
+  // (go-live pass, D-01), its acts the sheet's gold and edge, no longer white on the brand. 51.
   "client/src/pages/Housing.tsx": 2,
   "client/src/pages/HowWeCreate.tsx": 1,
-  "client/src/pages/LoveLetter.tsx": 2,
-  "client/src/pages/NotFound.tsx": 1,
+  // LoveLetter.tsx's two left this list on 2026-11-10: the Love Letter stands in the sheet's world
+  // (docs/DESIGN_RULE.md) and its buttons are the sheet's gold, no longer white on the brand. 57.
+  // NotFound.tsx's one left this list on 2026-11-11: the 404 stands in the sheet's world
+  // (docs/DESIGN_RULE.md) and its door is the sheet's gold, no longer white on the brand. 52.
   "client/src/pages/Opportunities.tsx": 1,
   "client/src/pages/ProjectHistory.tsx": 5,
   // The journey pages draw each step's button from ONE class list since their
@@ -629,11 +633,13 @@ const FIXED: Record<string, number> = {
   "client/src/pages/ProsperityJourney.tsx": 1,
   "client/src/pages/ProposeQuest.tsx": 2,
   "client/src/pages/QuestDetail.tsx": 1,
-  "client/src/pages/Quests.tsx": 2,
+  // Quests.tsx kept one and SetPassword.tsx's left on 2026-11-11: both stand in the sheet's world
+  // (docs/DESIGN_RULE.md) and those buttons are the sheet's gold, no longer white on the brand. 54.
+  "client/src/pages/Quests.tsx": 1,
   "client/src/pages/RequestMembership.tsx": 2,
-  "client/src/pages/ResidentJourney.tsx": 1,
+  // ResidentJourney.tsx's one left this list on 2026-11-11 (batch 155, lane A5): the resident path
+  // stands in the sheet's world (docs/DESIGN_RULE.md), so its steps draw no white-on-brand hover. 53.
   "client/src/pages/ResidentRights.tsx": 1,
-  "client/src/pages/SetPassword.tsx": 1,
   "client/src/pages/StewardRights.tsx": 1,
   "client/src/pages/Visit.tsx": 2,
   "client/src/pages/WorkWithUs.tsx": 1,
@@ -643,11 +649,15 @@ describe("under the pointer, a brand button stays readable and visibly moves, li
   it(`reads every white-on-brand hover in client/src (${POINTER_LISTS.length}), and every one this change fixed`, () => {
     // 60 until 2026-10-30, when the unused shadcn ui/badge.tsx was deleted with 38
     // other primitives nothing imported. Its one fixed hover left with the file.
-    expect(Object.values(FIXED).reduce((n, v) => n + v, 0)).toBe(59);
+    // 56 since 2026-11-11, when ContentEditorTab's section Save moved to the floating save bar.
+    // 53 since batch 155, when the resident path's step button moved into the sheet's world.
+    // 52 since the 404 moved to the night world with a gold door (Phase B, lane B3).
+    // 51 since the landing moved to the night world (go-live pass, D-01).
+    expect(Object.values(FIXED).reduce((n, v) => n + v, 0)).toBe(51);
     for (const [file, n] of Object.entries(FIXED)) {
       expect(POINTER_LISTS.filter((l) => l.file === file).length, `${file} hovers read`).toBeGreaterThanOrEqual(n);
     }
-    expect(POINTER_LISTS.length).toBeGreaterThanOrEqual(59 + 25);
+    expect(POINTER_LISTS.length).toBeGreaterThanOrEqual(51 + 25);
   });
 
   for (const list of POINTER_LISTS) {
@@ -783,20 +793,18 @@ function whiteInksOnTheBand(): BandInk[] {
 const BAND_INKS = whiteInksOnTheBand();
 
 /*
- * HELD, and the same entry scripts/check-theme-literals.mjs holds: the Home
- * hero paragraph, white/80 on the band. Its /80 dims the paragraph so two
- * words set in full-white semibold stand out, so full white is a design call
- * on the landing page and waits for one. It is SKIPPED here, never asserted to
- * fail, and the count is exact so the skip goes stale the day it is fixed.
+ * HELD inks, each the same entry scripts/check-theme-literals.mjs holds,
+ * skipped here and never asserted to fail, with an exact count so a skip goes
+ * stale the day it is fixed. Empty since 2026-11-12: the Home hero paragraph
+ * (white/80 on the band) left the band when the landing moved to the night
+ * world (go-live pass, D-01).
  */
-const BAND_HELD: Record<string, number> = { "client/src/pages/Home.tsx": 1 };
+const BAND_HELD: Record<string, number> = {};
 
-/* The paragraphs this change made full white, one per file, plus the Housing hero. */
+/* The paragraphs this change made full white, one per file, plus the Housing hero. Training left the band on 11 Nov 2026 and Decisions on 12 Nov 2026 for the night world (docs/DESIGN_RULE.md, decider calm), so neither has a band ink to hold. */
 const BAND_FIXED = [
-  "client/src/pages/Decisions.tsx",
   "client/src/pages/Governance.tsx",
   "client/src/pages/Housing.tsx",
-  "client/src/pages/Training.tsx",
   "client/src/pages/Visit.tsx",
   "client/src/pages/WorkWithUs.tsx",
 ];

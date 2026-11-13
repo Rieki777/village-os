@@ -54,6 +54,18 @@ import { useStoryPageShown } from "@/lib/brochure";
 import { haptic } from "@/lib/haptics";
 import { isBareRoute, normalisePath } from "./MobileTabBar";
 
+/**
+ * The founding team's pages: the steward front door, the roles page that
+ * opens on the founding section, the application and its status. Quiet,
+ * professional, one act each, so the shortcuts button stays off them.
+ */
+const FOUNDING_ROUTES = ["/steward", "/roles", "/propose-a-role", "/application-status", "/role-applications"];
+
+export function isFoundingRoute(location: string): boolean {
+  const here = normalisePath(location);
+  return FOUNDING_ROUTES.some((r) => here === r || here.startsWith(`${r}/`));
+}
+
 /** Springy easing so rows feel like they pop up out of the lotus. */
 const SPRING = "cubic-bezier(0.34, 1.4, 0.64, 1)";
 
@@ -223,6 +235,9 @@ export default function MobileFab() {
   // 56px circle in the bottom-right, and on /login it sat over the right end
   // of the full-width sign-in button. Same list, same reason (mobileNav.ts).
   if (isBareRoute(location)) return null;
+  // The founding team's pages keep their own quiet register and their one act;
+  // the button sat over their hero words on a phone (go-live pass, M4).
+  if (isFoundingRoute(location)) return null;
 
   return (
     <>
@@ -282,7 +297,7 @@ export default function MobileFab() {
 
             const inner = (
               <>
-                <span className="select-none whitespace-nowrap rounded-xl border border-white/15 bg-teal-band/95 px-3 py-1.5 text-[13px] font-semibold text-cream shadow-lg backdrop-blur-sm transition-colors group-hover/row:bg-teal-deep group-hover/row:text-white">
+                <span className="select-none whitespace-nowrap rounded-xl border border-white/15 bg-teal-band/95 px-3 py-1.5 text-sm font-semibold text-cream shadow-lg backdrop-blur-sm transition-colors group-hover/row:bg-teal-deep group-hover/row:text-white">
                   {a.label}
                 </span>
                 <span className="w-12 h-12 flex-shrink-0 rounded-full border border-teal/60 bg-teal-deep text-cream flex items-center justify-center shadow-lg transition-transform duration-200 group-hover/row:scale-105 group-hover/row:border-teal group-active/row:scale-95">

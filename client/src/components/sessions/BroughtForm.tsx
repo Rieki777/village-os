@@ -25,8 +25,10 @@
  * shared/sessionLibrary.ts.
  */
 import { useState, type FormEvent } from "react";
+import type { PickerCircle } from "@shared/circlePicker";
 import { AIM_DEFS, cleanLine, type ItemAim } from "@shared/sessions";
 import { LIBRARY_AIMS, LIBRARY_COPY, LIBRARY_LIMITS } from "@shared/sessionLibrary";
+import CirclePicker from "@/components/circles/CirclePicker";
 import GrowingText from "./GrowingText";
 import { BTN_PRIMARY, BTN_QUIET, HINT, INPUT, LABEL, UNDER_BOX } from "./roomUi";
 
@@ -42,7 +44,7 @@ export interface BroughtValues {
 
 export interface BroughtFormProps {
   idBase: string;
-  circles: { id: string; name: string }[];
+  circles: PickerCircle[];
   /** The circles the member has standing in: one of them alone is chosen for them. */
   myCircleIds: readonly string[];
   /** Absent: a new item. */
@@ -146,30 +148,20 @@ export default function BroughtForm({ idBase, circles, myCircleIds, initial, ini
         <label htmlFor={`${idBase}-circle`} className={LABEL}>
           {LIBRARY_COPY.circleLabel}
         </label>
-        <select
+        <CirclePicker
           id={`${idBase}-circle`}
           className={`mt-1 ${INPUT}`}
+          circles={circles}
           value={circle}
+          onChange={setCircle}
           disabled={circleLocked}
           aria-invalid={asked && circleMissing ? true : undefined}
           aria-describedby={seen}
-          onChange={(e) => setCircle(e.target.value)}
-        >
-          <option value="" disabled>
-            {LIBRARY_COPY.circleChoose}
-          </option>
-          {dormant && (
-            <option value={dormant} disabled>
-              {initialCircleName ?? dormant}
-            </option>
-          )}
-          {circles.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-          <option value={NO_CIRCLE}>{LIBRARY_COPY.noCircle}</option>
-        </select>
+          placeholder={LIBRARY_COPY.circleChoose}
+          keepName={dormant ? (initialCircleName ?? dormant) : null}
+          autoDefault={!initial}
+          extra={<option value={NO_CIRCLE}>{LIBRARY_COPY.noCircle}</option>}
+        />
         <p id={seen} className={`${HINT} mt-1`}>
           {LIBRARY_COPY.seenHint}
         </p>

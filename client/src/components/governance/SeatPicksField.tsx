@@ -15,6 +15,7 @@
  */
 import WorkPayBlock from "@/components/WorkPayBlock";
 import { useEffect, useRef, useState } from "react";
+import { useLingui } from "@lingui/react/macro";
 import { useOptionalAuth } from "@/contexts/AuthContext";
 import InfoTip from "@/components/InfoTip";
 import type { FieldSpec } from "./wizardConfig";
@@ -43,6 +44,7 @@ export default function SeatPicksField({
   invalid: boolean;
   footerNode: React.ReactNode;
 }) {
+  const { t } = useLingui();
   const [options, setOptions] = useState<PickOption[] | null>(null);
   const me = String((useOptionalAuth()?.user as any)?.id ?? "");
   const [dropped, setDropped] = useState<string[]>([]);
@@ -91,24 +93,24 @@ export default function SeatPicksField({
 
   return (
     <fieldset aria-describedby={describedBy} aria-invalid={invalid} className="min-w-0">
-      <legend className="block text-sm font-semibold text-stone-900">
+      <legend className="block text-sm font-semibold text-foreground">
         {field.label}
-        {field.required && <span className="ml-1 text-coral" aria-hidden="true">*</span>}
+        {field.required && <span className="ml-1 text-destructive" aria-hidden="true">*</span>}
         {field.required && <span className="sr-only"> (required)</span>}
         {field.tip && <InfoTip tip={field.tip} label={`What ${field.label.toLowerCase()} means`} />}
       </legend>
-      <p className="mt-0.5 text-xs text-stone-600" aria-live="polite">
+      <p className="mt-0.5 text-xs text-muted-foreground" aria-live="polite">
         {picked.length} of at most {max} picked.
       </p>
       {dropped.length > 0 && (
-        <p role="status" className="mt-1 text-sm text-coral">
+        <p role="status" className="mt-1 text-sm text-destructive">
           {dropped.join(", ")} {dropped.length === 1 ? "is" : "are"} full: every place is held, so it came off your list.
         </p>
       )}
       {options === null ? (
-        <p className="mt-2 text-sm text-stone-600">Loading the roles</p>
+        <p className="mt-2 text-sm text-muted-foreground">Loading the roles</p>
       ) : listed.length === 0 && strays.length === 0 ? (
-        <p className="mt-2 text-sm text-stone-600">
+        <p className="mt-2 text-sm text-muted-foreground">
           This village has no roles in its org chart yet, so there is nothing to apply for.
         </p>
       ) : (
@@ -122,7 +124,7 @@ export default function SeatPicksField({
                 <label
                   htmlFor={id}
                   className={`flex min-h-[44px] cursor-pointer items-center gap-3 rounded-lg border px-3 py-2 text-sm ${
-                    on ? "border-teal-deep bg-teal-deep/5 font-semibold text-stone-900" : "border-stone-200 text-stone-700 hover:bg-stone-50"
+                    on ? "border-notice bg-notice/10 font-semibold text-foreground" : "border-border text-foreground hover:bg-muted"
                   }`}
                 >
                   <input
@@ -131,7 +133,7 @@ export default function SeatPicksField({
                     checked={on}
                     disabled={!on && (atMost || full)}
                     onChange={() => toggle(o.value)}
-                    className="size-4 accent-teal-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
+                    className="size-4 accent-notice focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   />
                   <span className="min-w-0 flex-1">
                     {o.label}
@@ -143,15 +145,23 @@ export default function SeatPicksField({
                     )}
                   </span>
                   {full ? (
-                    <span className="text-xs text-stone-500">Full: every place is held</span>
+                    <span className="text-xs text-muted-foreground">Full: every place is held</span>
                   ) : (
-                    o.hint && <span className="text-xs text-stone-500">{o.hint}</span>
+                    o.hint && <span className="text-xs text-muted-foreground">{o.hint}</span>
                   )}
                 </label>
               </li>
             );
           })}
         </ul>
+      )}
+      {picked.length < 3 && (
+        <a
+          href="/roles/select"
+          className="mt-3 inline-flex min-h-[44px] items-center rounded-lg border border-border px-4 py-2 text-sm font-semibold text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          {t({ message: "Pick more roles", context: "role application: link from the roles step to the role picker" })}
+        </a>
       )}
       {footerNode}
     </fieldset>

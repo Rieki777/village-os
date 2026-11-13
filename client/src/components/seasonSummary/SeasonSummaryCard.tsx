@@ -122,7 +122,7 @@ export default function SeasonSummaryCard({ summary, choices }: { summary: Seaso
           <ul className="flex flex-wrap gap-2">
             {s.badges.map((b) => (
               <li key={b.id} className="rounded-full border border-notice px-4 py-1.5 text-sm text-notice">
-                {b.name}{b.count > 1 ? ` ×${b.count}` : ""}
+                {b.name}
               </li>
             ))}
           </ul>

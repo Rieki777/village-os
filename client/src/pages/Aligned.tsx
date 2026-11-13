@@ -20,19 +20,31 @@
  */
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Search, ScrollText } from "lucide-react";
+import { Link } from "wouter";
+import { Trans } from "@lingui/react/macro";
 import Layout from "@/components/Layout";
-import { SignInDoors } from "@/components/modules/ModuleGate";
 import { useAuth } from "@/contexts/AuthContext";
 import { BreathingLoader } from "@/components/natural";
 import RegisterEntry from "@/components/alignment/RegisterEntry";
 import ConfidentialityCard from "@/components/alignment/ConfidentialityCard";
 import { fetchRegister } from "@/components/alignment/alignmentsApi";
 import { ALIGNED_WORDS, type RegisterRow } from "@shared/alignedRegister";
+import {
+  BTN_PRIMARY,
+  BTN_SECONDARY,
+  CARD,
+  EYEBROW,
+  FIELD,
+  H1,
+  H2,
+  HINT,
+  LEDE,
+  LABEL,
+  TILE,
+  WORLD,
+} from "@/components/journey/look";
 
 type Phase = "loading" | "ready" | "members" | "error";
-
-const buttonClass =
-  "inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
 
 export default function Aligned() {
   const { user } = useAuth();
@@ -51,20 +63,22 @@ export default function Aligned() {
     if (!user) return;
     let alive = true;
     setPhase("loading");
-    void fetchRegister({ q: query || undefined, kind: kind ?? undefined }).then((a) => {
-      if (!alive) return;
-      if (a.ok) {
-        setKinds(a.data.kinds ?? []);
-        setRows(a.data.rows ?? []);
-        setRead((a.data.rows ?? []).length);
-        setMore(!!a.data.more);
-        setPhase("ready");
-      } else if (a.status === 401) setPhase("members");
-      else {
-        setError(a.error);
-        setPhase("error");
+    void fetchRegister({ q: query || undefined, kind: kind ?? undefined }).then(
+      a => {
+        if (!alive) return;
+        if (a.ok) {
+          setKinds(a.data.kinds ?? []);
+          setRows(a.data.rows ?? []);
+          setRead((a.data.rows ?? []).length);
+          setMore(!!a.data.more);
+          setPhase("ready");
+        } else if (a.status === 401) setPhase("members");
+        else {
+          setError(a.error);
+          setPhase("error");
+        }
       }
-    });
+    );
     return () => {
       alive = false;
     };
@@ -76,12 +90,12 @@ export default function Aligned() {
     setReadingMore(true);
     const a = await fetchRegister({ offset: read, kind: kind ?? undefined });
     if (a.ok) {
-      setRows((prev) => {
-        const byId = new Map(prev.map((r) => [r.textId, r]));
+      setRows(prev => {
+        const byId = new Map(prev.map(r => [r.textId, r]));
         for (const r of a.data.rows ?? []) byId.set(r.textId, r);
         return Array.from(byId.values());
       });
-      setRead((n) => n + (a.data.rows ?? []).length);
+      setRead(n => n + (a.data.rows ?? []).length);
       setMore(!!a.data.more);
     } else setError(a.error);
     setReadingMore(false);
@@ -104,150 +118,188 @@ export default function Aligned() {
 
   return (
     <Layout>
-      <section className="bg-teal-band py-10 text-white">
+      <div className={`${WORLD} py-10 sm:py-14`}>
         <div className="container max-w-5xl px-4">
-          <span className="text-sm font-medium uppercase tracking-widest text-amber-on-band">{ALIGNED_WORDS.eyebrow}</span>
-          <h1 className="mt-1 flex items-center gap-3 font-display text-3xl font-bold sm:text-4xl">
-            <ScrollText className="size-8 shrink-0" aria-hidden="true" />
-            {ALIGNED_WORDS.title}
-          </h1>
-          <p className="mt-2 max-w-2xl leading-relaxed text-white">{ALIGNED_WORDS.lede}</p>
-        </div>
-      </section>
+          <header className="mb-8">
+            <span className={EYEBROW}>{ALIGNED_WORDS.eyebrow}</span>
+            <h1 className={`${H1} mt-1 flex items-center gap-3`}>
+              <ScrollText
+                className="size-8 shrink-0 text-notice"
+                aria-hidden="true"
+              />
+              {ALIGNED_WORDS.title}
+            </h1>
+            <p className={`${LEDE} mt-2`}>{ALIGNED_WORDS.lede}</p>
+          </header>
 
-      <div className="container max-w-5xl px-4 py-8">
-        {/* The confidentiality agreement, for anybody signed in: a newcomer aligns here before their role starts (L7). */}
-        {user && <ConfidentialityCard />}
-        {!user || phase === "members" ? (
-          <div className="rounded-xl border border-border bg-card p-8 text-center text-card-foreground">
-            <h2 className="font-display text-2xl font-bold text-foreground">{ALIGNED_WORDS.membersOnly}</h2>
-            <p className="mx-auto mt-2 max-w-md leading-relaxed text-muted-foreground">{ALIGNED_WORDS.membersOnlyLine}</p>
-            {!user && (
-              <div className="mt-5">
-                <SignInDoors next="/aligned" />
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="space-y-8">
-            <form role="search" onSubmit={submit} className="flex flex-col gap-2 sm:flex-row sm:items-end">
-              <div className="min-w-0 flex-1">
-                <label htmlFor="aligned-search" className="block text-sm font-semibold text-foreground">
-                  {ALIGNED_WORDS.searchLabel}
-                </label>
-                <input
-                  id="aligned-search"
-                  type="search"
-                  value={draft}
-                  onChange={(e) => setDraft(e.target.value)}
-                  placeholder={ALIGNED_WORDS.searchPlaceholder}
-                  maxLength={200}
-                  className="mt-1 min-h-11 w-full rounded-lg border border-input bg-background px-3 text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                />
-              </div>
-              <button type="submit" className={`${buttonClass} bg-teal-deep text-white hover:bg-teal-deep-dark`}>
-                <Search className="size-4" aria-hidden="true" />
-                {ALIGNED_WORDS.search}
-              </button>
-            </form>
-
-            {kinds.length > 1 && (
-              <div className="flex flex-wrap gap-2" role="group" aria-label={ALIGNED_WORDS.kinds}>
-                {[{ id: null as string | null, label: ALIGNED_WORDS.everyKind }, ...kinds].map((k) => (
-                  <button
-                    key={k.id ?? "all"}
-                    type="button"
-                    aria-pressed={kind === k.id}
-                    onClick={() => setKind(k.id)}
-                    className={`${buttonClass} rounded-full border ${kind === k.id ? "border-teal-deep bg-teal-deep text-white" : "border-border bg-card text-foreground hover:bg-muted"}`}
-                  >
-                    {k.label}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {phase === "loading" && (
-              <div className="flex justify-center py-16">
-                <BreathingLoader label={ALIGNED_WORDS.loading} />
-              </div>
-            )}
-            {phase === "error" && (
-              <p role="alert" className="text-destructive">
-                {error}
+          {/* The confidentiality agreement, for anybody signed in: a newcomer aligns here before their role starts (L7). */}
+          {user && <ConfidentialityCard />}
+          {!user || phase === "members" ? (
+            <div className={`${CARD} text-center`}>
+              <h2 className={H2}>{ALIGNED_WORDS.membersOnly}</h2>
+              <p className={`${HINT} mx-auto mt-2 max-w-md leading-relaxed`}>
+                {ALIGNED_WORDS.membersOnlyLine}
               </p>
-            )}
+              {!user && (
+                <div className="mt-5 flex flex-col justify-center gap-3 sm:flex-row">
+                  {/* The shared SignInDoors draws in the brand ink, which is unreadable on the night ground (audit M4). */}
+                  <Link href={`/login?next=${encodeURIComponent("/aligned")}`} className={BTN_PRIMARY}>
+                    <Trans context="aligned page, signed out">Sign in</Trans>
+                  </Link>
+                  <Link href="/register" className={BTN_SECONDARY}>
+                    <Trans context="aligned page, signed out">Create an account</Trans>
+                  </Link>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-8">
+              <form
+                role="search"
+                onSubmit={submit}
+                className="flex flex-col gap-2 sm:flex-row sm:items-end"
+              >
+                <div className="min-w-0 flex-1">
+                  <label htmlFor="aligned-search" className={`block ${LABEL}`}>
+                    {ALIGNED_WORDS.searchLabel}
+                  </label>
+                  <input
+                    id="aligned-search"
+                    type="search"
+                    value={draft}
+                    onChange={e => setDraft(e.target.value)}
+                    placeholder={ALIGNED_WORDS.searchPlaceholder}
+                    maxLength={200}
+                    className={`${FIELD} mt-1 min-h-11`}
+                  />
+                </div>
+                <button type="submit" className={BTN_PRIMARY}>
+                  <Search className="size-4" aria-hidden="true" />
+                  {ALIGNED_WORDS.search}
+                </button>
+              </form>
 
-            {phase === "ready" && query && (
-              <section aria-labelledby="aligned-results-h">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <h2 id="aligned-results-h" className="font-display text-xl font-bold text-foreground">
-                    {ALIGNED_WORDS.results(query)}
-                  </h2>
+              {kinds.length > 1 && (
+                <div
+                  className="flex flex-wrap gap-2"
+                  role="group"
+                  aria-label={ALIGNED_WORDS.kinds}
+                >
+                  {[
+                    {
+                      id: null as string | null,
+                      label: ALIGNED_WORDS.everyKind,
+                    },
+                    ...kinds,
+                  ].map(k => (
+                    <button
+                      key={k.id ?? "all"}
+                      type="button"
+                      aria-pressed={kind === k.id}
+                      onClick={() => setKind(k.id)}
+                      className={
+                        kind === k.id
+                          ? `${BTN_PRIMARY} rounded-full`
+                          : `${BTN_SECONDARY} rounded-full`
+                      }
+                    >
+                      {k.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {phase === "loading" && (
+                <div className="flex justify-center py-16">
+                  <BreathingLoader label={ALIGNED_WORDS.loading} />
+                </div>
+              )}
+              {phase === "error" && (
+                <p role="alert" className="text-destructive">
+                  {error}
+                </p>
+              )}
+
+              {phase === "ready" && query && (
+                <section aria-labelledby="aligned-results-h">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h2 id="aligned-results-h" className={H2}>
+                      {ALIGNED_WORDS.results(query)}
+                    </h2>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDraft("");
+                        setQuery("");
+                      }}
+                      className={BTN_SECONDARY}
+                    >
+                      {ALIGNED_WORDS.clear}
+                    </button>
+                  </div>
+                  {rows.length === 0 ? (
+                    <p className={`${HINT} mt-3`}>{ALIGNED_WORDS.noResults}</p>
+                  ) : (
+                    <ul className="mt-3 space-y-3">
+                      {rows.map(r => (
+                        <li key={r.textId}>
+                          <RegisterEntry row={r} headingLevel={3} />
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </section>
+              )}
+
+              {phase === "ready" && !query && rows.length === 0 && (
+                <div className={`${TILE} p-8 text-center`}>
+                  <p className={`${HINT} mx-auto max-w-md leading-relaxed`}>
+                    {ALIGNED_WORDS.empty}
+                  </p>
+                </div>
+              )}
+
+              {phase === "ready" &&
+                !query &&
+                years.map(([year, list]) => (
+                  <section key={year} aria-labelledby={`aligned-y-${year}`}>
+                    <h2
+                      id={`aligned-y-${year}`}
+                      className={`${H2} border-b border-border pb-1`}
+                    >
+                      {year}
+                    </h2>
+                    <ul className="mt-3 space-y-3">
+                      {list.map(r => (
+                        <li key={r.textId}>
+                          <RegisterEntry row={r} headingLevel={3} />
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                ))}
+
+              {/* The rest of the record when somebody wants it. No count and no sense of a page left unfinished (R55). */}
+              {phase === "ready" && !query && more && (
+                <div>
                   <button
                     type="button"
-                    onClick={() => {
-                      setDraft("");
-                      setQuery("");
-                    }}
-                    className={`${buttonClass} border border-border bg-card text-foreground hover:bg-muted`}
+                    onClick={() => void readMore()}
+                    disabled={readingMore}
+                    className={BTN_SECONDARY}
                   >
-                    {ALIGNED_WORDS.clear}
+                    {readingMore
+                      ? ALIGNED_WORDS.readingMore
+                      : ALIGNED_WORDS.more}
                   </button>
+                  <p className={`${HINT} mt-1.5 leading-relaxed`}>
+                    {ALIGNED_WORDS.moreLine}
+                  </p>
                 </div>
-                {rows.length === 0 ? (
-                  <p className="mt-3 text-muted-foreground">{ALIGNED_WORDS.noResults}</p>
-                ) : (
-                  <ul className="mt-3 space-y-3">
-                    {rows.map((r) => (
-                      <li key={r.textId}>
-                        <RegisterEntry row={r} headingLevel={3} />
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </section>
-            )}
-
-            {phase === "ready" && !query && rows.length === 0 && (
-              <div className="rounded-xl border-2 border-dashed border-border p-8 text-center">
-                <p className="mx-auto max-w-md leading-relaxed text-muted-foreground">{ALIGNED_WORDS.empty}</p>
-              </div>
-            )}
-
-            {phase === "ready" &&
-              !query &&
-              years.map(([year, list]) => (
-                <section key={year} aria-labelledby={`aligned-y-${year}`}>
-                  <h2 id={`aligned-y-${year}`} className="border-b border-border pb-1 font-display text-xl font-bold text-foreground">
-                    {year}
-                  </h2>
-                  <ul className="mt-3 space-y-3">
-                    {list.map((r) => (
-                      <li key={r.textId}>
-                        <RegisterEntry row={r} headingLevel={3} />
-                      </li>
-                    ))}
-                  </ul>
-                </section>
-              ))}
-
-            {/* The rest of the record when somebody wants it. No count and no sense of a page left unfinished (R55). */}
-            {phase === "ready" && !query && more && (
-              <div>
-                <button
-                  type="button"
-                  onClick={() => void readMore()}
-                  disabled={readingMore}
-                  className={`${buttonClass} border border-border bg-card text-foreground hover:bg-muted disabled:opacity-60`}
-                >
-                  {readingMore ? ALIGNED_WORDS.readingMore : ALIGNED_WORDS.more}
-                </button>
-                <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{ALIGNED_WORDS.moreLine}</p>
-              </div>
-            )}
-          </div>
-        )}
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </Layout>
   );

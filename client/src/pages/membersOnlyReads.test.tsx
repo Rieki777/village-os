@@ -59,6 +59,8 @@ vi.mock("@/modules/ModuleProvider", () => ({
   useModule: (id: string) => ({ id, lifecycle: "public" }),
   // /roles mounts the vendor drawer, which asks this; no vendor is on here.
   useModuleOn: () => false,
+  // The profile dashboard asks which optional modules are on before it reads them (#1171); none is on here.
+  moduleIsOn: () => false,
 }));
 // /circles draws a scene per circle and a mini map, each its own subject and
 // neither a read this file is about.
@@ -281,10 +283,10 @@ describe("/review", () => {
   });
 });
 
-describe("/training", () => {
+describe("/training/steward", () => {
   it("signed out, reads the public modules and never asks for a record", async () => {
     signOut();
-    inRouter(<Training />);
+    inRouter(<Training track="steward" />);
     await waitFor(() => expect(asked).toContain("/api/training-modules"));
     await waitFor(() => expect(screen.getAllByText(/Water/).length).toBeGreaterThan(0));
     expect(asked.filter((u) => u.startsWith("/api/game/training/completed"))).toEqual([]);
@@ -292,7 +294,7 @@ describe("/training", () => {
 
   it("signed in, still reads the member's own record", async () => {
     signIn();
-    inRouter(<Training />);
+    inRouter(<Training track="steward" />);
     await waitFor(() => expect(asked).toContain("/api/game/training/completed"));
   });
 });
@@ -360,8 +362,17 @@ class NoopIntersectionObserver {
   }
 }
 
+/** The roles sit behind step one (the archetype pick) until "See all roles"; a seat link, or a URL a test before left behind, opens them already. */
+async function openAllRoles() {
+  await waitFor(() => expect(screen.queryByRole("button", { name: "See all roles" }) ?? screen.queryAllByRole("heading", { level: 3 })[0]).toBeTruthy());
+  const seeAll = screen.queryByRole("button", { name: "See all roles" });
+  if (seeAll) fireEvent.click(seeAll);
+}
+
 async function openRolesRow() {
   inRouter(<Roles />);
+  // The roles sit behind step one (the archetype pick) until "See all roles".
+  await openAllRoles();
   const row = (await screen.findByRole("heading", { level: 3, name: "Seed Keeper" })).closest("button")!;
   fireEvent.click(row);
 }

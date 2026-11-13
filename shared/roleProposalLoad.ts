@@ -41,6 +41,8 @@ const upper = (a: string | undefined, b: string | undefined): number => Math.max
 export function hoursAWeek(words: string | null | undefined): number | null {
   const s = String(words ?? "").toLowerCase().replace(/\s+/g, " ").trim();
   if (!s) return null;
+  // A commitment ("Commitment: 60%") is energy and attention. It is never turned into hours (audit M2).
+  if (/^commitment\b/.test(s)) return null;
   let m = new RegExp(String.raw`${RANGE}\s*(?:hours?|hrs?|h)\b\s*${EVERY}?\s*(?:week|wk)\b`).exec(s);
   if (m) return upper(m[1], m[2]);
   m = new RegExp(String.raw`${RANGE}\s*(?:hours?|hrs?|h)\b\s*${EVERY}?\s*(?:moon|month)\b`).exec(s);
@@ -100,6 +102,8 @@ export function loadCheck(roles: readonly LoadRoleIn[]): LoadCheck {
       notCounted.push({ name: r.name, why: LOAD_WORDS.noTime });
       continue;
     }
+    // A commitment is not hours and is not added up or named as unreadable (audit M2).
+    if (/^commitment\b/i.test(time)) continue;
     const h = hoursAWeek(time);
     if (h === null || !Number.isFinite(h)) notCounted.push({ name: r.name, why: LOAD_WORDS.notHours(time) });
     else counted.push({ name: r.name, hours: Math.round(h * 10) / 10 });

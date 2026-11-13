@@ -29,12 +29,12 @@ export function DiffText({ here, sera }: { here: string; sera: string }) {
           {p.side === "here" ? (
             <>
               <span className="sr-only"><Trans context="sera compare">removed:</Trans>{" "}</span>
-              <del className="text-coral line-through">{p.text}</del>
+              <del className="text-destructive line-through">{p.text}</del>
             </>
           ) : p.side === "sera" ? (
             <>
               <span className="sr-only"><Trans context="sera compare">added:</Trans>{" "}</span>
-              <ins className="text-sage underline decoration-2 underline-offset-2">{p.text}</ins>
+              <ins className="text-open underline decoration-2 underline-offset-2">{p.text}</ins>
             </>
           ) : (
             p.text
@@ -87,7 +87,7 @@ export function CompareBlocks({ d, agent, layout }: Props) {
       type="button"
       aria-expanded={full}
       onClick={() => setFull((f) => !f)}
-      className="self-start min-h-[44px] text-sm font-semibold text-teal-deep underline hover:text-teal-deep-dark"
+      className="self-start min-h-[44px] text-sm font-semibold text-notice underline hover:text-foreground"
     >
       {full ? t({ message: "Show less", context: "sera compare" }) : t({ message: "Read both in full", context: "sera compare" })}
     </button>
@@ -161,7 +161,7 @@ export default function SeraCompare({
       <button
         type="button"
         onClick={onBack}
-        className="self-start inline-flex items-center min-h-[44px] text-sm text-teal-deep underline hover:text-teal-deep-dark"
+        className="self-start inline-flex items-center min-h-[44px] text-sm text-notice underline hover:text-foreground"
       >
         {backWords}
       </button>

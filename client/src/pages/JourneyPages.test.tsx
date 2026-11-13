@@ -159,7 +159,7 @@ const show = (Page: ComponentType) =>
 
 /** The steps the page drew, by their titles, in order. */
 const stepTitles = (spec: PageSpec, doc: Record<string, any>): string[] =>
-  (doc.steps?.items ?? []).map((row: Record<string, string>) => row.title).filter(Boolean);
+  [...(doc.getToKnow?.items ?? doc.steps?.items ?? [])].map((row: Record<string, string>) => row.title).filter(Boolean);
 
 /**
  * Everything a visitor can reach on the page: its text, every link's address
@@ -229,15 +229,7 @@ const PAGES = [
     name: "/steward",
     spec: STEWARD_JOURNEY,
     Page: StewardJourney,
-    skip: [
-      "hero.highlight",
-      // A phrase inside the footnote, checked by "links the footnote's phrase".
-      "nextStep.footnoteLink",
-      // Shown once the form is sent, checked by "says what the village wrote once the form is sent".
-      "nextStep.thanksHeading",
-      "nextStep.thanksBody",
-      "nextStep.thanksCta",
-    ],
+    skip: ["hero.highlight"],
   },
   {
     name: "/resident",
@@ -416,56 +408,6 @@ describe("/investor", () => {
       "href",
       "mailto:team@example.org?subject=Investment%20Commitment",
     );
-  });
-});
-
-describe("/steward", () => {
-  it("sends Learn About Our Seasons to the seasonal festivals page", async () => {
-    show(StewardJourney);
-    expect(await screen.findByRole("link", { name: /Learn About Our Seasons/ })).toHaveAttribute("href", "/seasonal-festivals");
-  });
-
-  it("draws the path of growth with no token promise and no pay line", async () => {
-    show(StewardJourney);
-    const [first, ...rest] = listDefault(STEWARD_JOURNEY, "ladder", "items");
-    expect(await screen.findByText(first.benefits)).toBeInTheDocument();
-    for (const level of rest) expect(screen.getByText(level.benefits)).toBeInTheDocument();
-    expect(document.body.textContent).not.toMatch(/compensation/i);
-  });
-
-  it("says nowhere that a quest pays what its card says (Rye, 2026-10-23)", async () => {
-    show(StewardJourney);
-    fireEvent.click(await screen.findByText(stepDefault("steward", "quests").title));
-    await screen.findByText(stepDefault("steward", "quests").bullet1);
-    expect(document.body.textContent).not.toMatch(/get paid|what each quest's card says/i);
-  });
-
-  it("links the footnote's phrase to the events page", async () => {
-    show(StewardJourney);
-    expect(
-      await screen.findByRole("link", { name: fieldDefault(STEWARD_JOURNEY, "nextStep", "footnoteLink") }),
-    ).toHaveAttribute("href", "https://example.org/events");
-  });
-
-  it("says what the village wrote once the form is sent", async () => {
-    state.pages[pageSectionKey(STEWARD_JOURNEY)] = {
-      nextStep: { thanksHeading: "Glad you wrote.", thanksBody: "A steward answers by the new moon.", thanksCta: "See our gatherings" },
-    };
-    show(StewardJourney);
-    fireEvent.change(await screen.findByLabelText(/your name/i), { target: { value: "Juno" } });
-    fireEvent.change(screen.getByLabelText(/^email/i), { target: { value: "juno@example.test" } });
-    fireEvent.submit(screen.getByRole("button", { name: /Begin My Stewardship Journey/ }).closest("form")!);
-    expect(await screen.findByRole("heading", { name: "Glad you wrote." })).toBeInTheDocument();
-    expect(screen.getByText("A steward answers by the new moon.")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /See our gatherings/ })).toHaveAttribute("href", "https://example.org/events");
-  });
-
-  it("uses the village's commitment name where the page said Love Letter", async () => {
-    show(StewardJourney);
-    const step = stepDefault("steward", "love-letter");
-    fireEvent.click(await screen.findByText(filled(step.title)));
-    expect(filled(step.actionLabel)).toBe("Read the Village Pact");
-    expect(await screen.findByRole("link", { name: /Read the Village Pact/ })).toHaveAttribute("href", "/love-letter");
   });
 });
 

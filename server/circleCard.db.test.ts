@@ -11,7 +11,11 @@
  *   - a visitor gets no holder card links and one line saying why; a reader
  *     who sees the member holder rows gets one link per member holder, named
  *     by the role, at `/profile/:handle#role-<id>`;
- *   - no holder's name is anywhere in the payload, at either tier;
+ *   - no holder's name reaches a visitor, and no surname reaches anybody;
+ *   - a signed-in member whose account is live reads each holder's FIRST name
+ *     (lead, 12 Nov 2026); an erased holder is never named, a holder who left
+ *     only by the name their seating kept, and a reader who left, an erased
+ *     reader or a signed-up account not yet let in reads none;
  *   - the adoption record counts published drafts that wrote the circle's
  *     words, newest first, says which one the village voted in, and leaves a
  *     reverted draft out;
@@ -34,6 +38,7 @@ const CIRCLES = [
   { id: "c-root", name: "Coordinating circle", purpose: "Where the circles meet.", status: "active", parentCircleId: null },
   { id: "c-garden", name: "Garden circle", purpose: "Grow food together for every household.", status: "active", parentCircleId: "c-root" },
   { id: "c-new", name: "New circle", purpose: null, status: "forming", parentCircleId: "c-root" },
+  { id: "c-orchard", name: "Orchard circle", purpose: "Tend the fruit trees.", status: "active", parentCircleId: "c-root" },
 ];
 
 describe.skipIf(!configured)("the circle card, on a real schema", () => {
@@ -42,6 +47,8 @@ describe.skipIf(!configured)("the circle card, on a real schema", () => {
   let handler: Handler;
   let admin = false;
   let terms = true;
+  /** The signed-in reader when set; otherwise the admin flag decides, as before. */
+  let reader: any = null;
   const q = (sql: string, params: unknown[] = []) => pool.query(sql, params); // module-review-ok: fixture SQL against the S5 scratch schema this suite provisioned, never a production table
 
   async function read(id: string): Promise<{ status: number; body: any }> {
@@ -67,7 +74,7 @@ describe.skipIf(!configured)("the circle card, on a real schema", () => {
     const handlers = new Map<string, Handler>();
     const app: any = { get: (p: string, h: Handler) => handlers.set(`GET ${p}`, h), post: () => undefined };
     register(app, {
-      authedUser: async () => (admin ? { id: "m-ana", name: "Ana Reyes" } : null),
+      authedUser: async () => reader ?? (admin ? { id: "m-ana", name: "Ana Reyes" } : null),
       isAdmin: async () => admin,
       capabilityCtx: async () => ({ stageIndex: 0, stageIndexOf: () => 0, roleCapabilities: [], isAdmin: admin }) as any,
       getPool: () => pool as any,
@@ -94,6 +101,26 @@ describe.skipIf(!configured)("the circle card, on a real schema", () => {
     await q(
       "INSERT INTO `org_role_assignments` (`id`, `org_role_id`, `holder_kind`, `user_id`, `holder_key`) VALUES " +
         "('ora-cai', 'seat-water', 'member', 'm-cai', 'm-cai'), ('ora-gil', 'seat-bees', 'member', 'm-gil', 'm-gil')",
+    );
+    // The orchard: a live holder, an erased one, a leaver whose seating kept their name and one whose did not.
+    await q(
+      "INSERT INTO `users` (`id`, `name`, `email`, `password_hash`, `handle`, `membership_granted`) VALUES " +
+        "('m-ivy', 'Ivy Lindqvist', 'ivy@example.test', 'x', 'ivy', 1), " +
+        "('m-eve', 'A departed member', 'deleted-m-eve@anonymized.invalid', 'x', NULL, 0), " +
+        "('m-fay', 'Fay Lund', 'fay@example.test', 'x', 'fay', 0), " +
+        "('m-hal', 'Hal Oduya', 'hal@example.test', 'x', 'hal', 0)",
+    );
+    await q(
+      "INSERT INTO `exits` (`id`, `user_id`, `status`, `opened_by`) VALUES ('x-fay', 'm-fay', 'resolved', 'm-fay'), ('x-hal', 'm-hal', 'resolved', 'm-hal')",
+    );
+    await q(
+      "INSERT INTO `org_roles` (`id`, `circle_id`, `name`, `seats`, `active`, `is_example`, `sort_order`) VALUES " +
+        "('seat-pick', 'c-orchard', 'Harvest Keeper', 5, 1, 0, 1), ('seat-prune', 'c-orchard', 'Pruner', 1, 1, 0, 2)",
+    );
+    await q(
+      "INSERT INTO `org_role_assignments` (`id`, `org_role_id`, `holder_kind`, `user_id`, `holder_key`, `display_name`) VALUES " +
+        "('ora-ivy', 'seat-pick', 'member', 'm-ivy', 'm-ivy', NULL), ('ora-eve', 'seat-pick', 'member', 'm-eve', 'm-eve', NULL), " +
+        "('ora-fay', 'seat-pick', 'member', 'm-fay', 'm-fay', 'Fay Lund'), ('ora-hal', 'seat-pick', 'member', 'm-hal', 'm-hal', NULL)",
     );
     await q(
       "INSERT INTO `circle_charters` (`circle_id`, `exists_while`, `accountabilities`, `domains`, `circle_values`) VALUES (?, ?, ?, ?, ?)",
@@ -144,7 +171,8 @@ describe.skipIf(!configured)("the circle card, on a real schema", () => {
     const acc = section(card, "accountabilities") as Extract<CircleSection, { kind: "list" }>;
     expect(acc.slot).toEqual({ kind: "shown", value: ["Every household has fresh food each week", "The soil is richer each season"] });
     expect(acc.note).toBe("2 lines written. A circle answers for 3 to 6 things.");
-    expect(section(card, "authorities").slot).toEqual({ kind: "empty", words: "Not written yet" });
+    // QA2-06: a visitor sees only the headings that have words; an unwritten list draws nothing.
+    expect(section(card, "authorities").slot).toEqual({ kind: "unread" });
     expect(section(card, "values").slot).toEqual({
       kind: "shown",
       value: [{ value: "Reciprocity", practice: "We share every harvest before we sell any of it." }],
@@ -183,7 +211,7 @@ describe.skipIf(!configured)("the circle card, on a real schema", () => {
     expect(text).not.toContain("Gil");
   });
 
-  it("links each member holder's card for a reader who sees the holder rows, and still names nobody", async () => {
+  it("links each member holder's card for a reader who sees the holder rows, and names no surname", async () => {
     admin = true;
     const { body } = await read("c-garden");
     const roles = section(body.card, "roles") as Extract<CircleSection, { kind: "roles" }>;
@@ -216,8 +244,20 @@ describe.skipIf(!configured)("the circle card, on a real schema", () => {
     expect(adoption.term).toBe("CCOS: Signatures");
   });
 
-  it("an unwritten circle reads its empty words, and the terms can be turned off", async () => {
+  it("QA2-06: a visitor reads an unwritten circle with no empty headings, and keeps the facts that are true", async () => {
+    admin = false;
+    const { body } = await read("c-new");
+    const card: CircleCard = body.card;
+    expect(card.header.existsWhile).toEqual({ kind: "unread" });
+    expect(card.sections.find((s) => s.key === "purpose")).toBeUndefined();
+    for (const s of card.sections) if (s.kind === "list" || s.kind === "values") expect(s.slot, s.key).toEqual({ kind: "unread" });
+    expect(JSON.stringify(card)).not.toMatch(/not written yet|No purpose written yet/i);
+    expect(section(card, "roles").slot).toEqual({ kind: "empty", words: "No roles in this circle yet" });
+  });
+
+  it("an unwritten circle reads its empty words to those who may propose them, and the terms can be turned off", async () => {
     terms = false;
+    admin = true;
     const { body } = await read("c-new");
     const card: CircleCard = body.card;
     expect(card.header.status).toBe("Forming");
@@ -228,6 +268,62 @@ describe.skipIf(!configured)("the circle card, on a real schema", () => {
     expect(section(card, "adoption").slot).toEqual({ kind: "empty", words: "No words for this circle have been adopted by consent yet." });
     expect(card.sections.every((s) => s.term === null)).toBe(true);
     terms = true;
+    admin = false;
+  });
+
+  describe("holders' first names (lead, 12 Nov 2026)", () => {
+    const rowsOf = async (id: string) => {
+      const roles = section((await read(id)).body.card, "roles") as Extract<CircleSection, { kind: "roles" }>;
+      return roles.slot.kind === "shown" ? roles.slot.value : [];
+    };
+    const live = { id: "m-ivy", name: "Ivy Lindqvist", email: "ivy@example.test", membershipGranted: true };
+    const withReader = async <T,>(who: any, fn: () => Promise<T>): Promise<T> => {
+      reader = who;
+      try {
+        return await fn();
+      } finally {
+        reader = null;
+      }
+    };
+
+    it("a signed-in member whose account is live reads each holder by first name, and no surname", async () => {
+      const garden = await withReader(live, () => rowsOf("c-garden"));
+      expect(garden.map((r) => [r.id, r.holderLine])).toEqual([
+        ["seat-water", "Held by Cai"],
+        ["seat-bees", "Held by Gil"],
+        ["seat-seed", null],
+      ]);
+      const orchard = await withReader(live, () => read("c-orchard"));
+      const rows = (section(orchard.body.card, "roles") as any).slot.value as { id: string; holderLine: string | null }[];
+      // Ivy is live; Fay left and her seating kept her name; Eve was erased and Hal left with no kept name.
+      expect(rows.find((r) => r.id === "seat-pick")?.holderLine).toBe("Held by Fay and Ivy");
+      expect(rows.find((r) => r.id === "seat-prune")?.holderLine).toBeNull();
+      const text = JSON.stringify(orchard.body);
+      for (const never of ["Lindqvist", "Lund", "Moreno", "Hal", "Oduya", "departed", "anonymized", "@example.test"]) expect(text).not.toContain(never);
+    });
+
+    it("a visitor reads roles only, with no name anywhere", async () => {
+      for (const id of ["c-garden", "c-orchard"]) {
+        const { body } = await withReader(null, () => read(id));
+        const rows = (section(body.card, "roles") as any).slot.value as { holderLine: string | null }[];
+        expect(rows.every((r) => r.holderLine === null)).toBe(true);
+        const text = JSON.stringify(body);
+        for (const name of ["Cai", "Gil", "Ivy", "Fay", "Hal", "departed"]) expect(text).not.toContain(name);
+      }
+    });
+
+    it("a reader whose account is not live reads no names: erased, left, or never let in", async () => {
+      const notLive = [
+        { id: "m-eve", name: "A departed member", email: "deleted-m-eve@anonymized.invalid", membershipGranted: true },
+        { id: "m-fay", name: "Fay Lund", email: "fay@example.test", membershipGranted: false },
+        { id: "m-new", name: "Nia Park", email: "nia@example.test", membershipGranted: false },
+        { id: "m-ex", name: "Example", email: "ex@example.test", membershipGranted: true, isExample: true },
+      ];
+      for (const who of notLive) {
+        const rows = await withReader(who, () => rowsOf("c-orchard"));
+        expect(rows.every((r) => r.holderLine === null), who.id).toBe(true);
+      }
+    });
   });
 
   it("answers 404 for a circle that does not exist", async () => {

@@ -20,13 +20,15 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/compone
 import { ROLE_CARD_FIELDS } from "@shared/roleCardText";
 import { CONVERSATION_MODES, interviewMinutesTotal, TRACKS, TRACK_WORDS, WHERE_WORKED, type Interviewer } from "@shared/roleParameters";
 import { PAY_KINDS, type PaySettings } from "@shared/seatSettings";
+import type { HeldBy } from "@shared/agentHolders";
 import type { WordValue } from "@shared/roleProposals";
 import { FOCUS, INPUT, LEDE, PANEL, PRIMARY, QUIET, SECONDARY } from "@/components/roleProposal/parts";
 import { openEditor, saveEditor, type EditorOpen, type EditorState, type SaveBody } from "./roleEditApi";
 import BringInCard from "./BringInCard";
 import SeraPanel from "./SeraPanel";
 import HistoryPanel from "./HistoryPanel";
-import CharacterTags from "./CharacterTags";
+import RootPicker from "@/components/roots/RootPicker";
+import SectionsFields, { sectionsFormOf, sectionsOf, type SectionsForm } from "./SectionsFields";
 
 const text = (v: WordValue | undefined): string => (Array.isArray(v) ? v.join("\n") : (v ?? ""));
 const lines = (s: string): string[] => s.split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
@@ -38,6 +40,12 @@ const WORD_SPECS = ROLE_CARD_FIELDS.filter((f) => !String(f.key).startsWith("par
 interface Form {
   words: Record<string, string>;
   listed: boolean;
+  alwaysChecked: boolean;
+  /** Who may hold it (0374): "" is a card that has not said, which reads as either. */
+  heldBy: "" | HeldBy;
+  /** The commitment the role asks (0383), a percent as typed; "" is not said. */
+  commitmentPct: string;
+  commitmentRequired: boolean;
   recruiting: boolean;
   track: string;
   whereWorked: string;
@@ -53,6 +61,8 @@ interface Form {
   conversationMode: string;
   pay: PaySettings | null;
   tags: string[];
+  /** The founding sections, as the editor holds them (lines as text). */
+  sections: SectionsForm;
 }
 
 function formOf(s: EditorState): Form {
@@ -60,6 +70,10 @@ function formOf(s: EditorState): Form {
   return {
     words: Object.fromEntries(Object.entries(s.words).map(([k, v]) => [k, text(v)])),
     listed: p.listed ?? true,
+    alwaysChecked: p.alwaysChecked ?? false,
+    heldBy: p.heldBy ?? "",
+    commitmentPct: typeof p.commitmentPct === "number" ? String(p.commitmentPct) : "",
+    commitmentRequired: p.commitmentRequired ?? false,
     recruiting: p.recruiting ?? false,
     track: p.track ?? "",
     whereWorked: p.whereWorked ?? "",
@@ -75,6 +89,7 @@ function formOf(s: EditorState): Form {
     conversationMode: p.conversationMode ?? "",
     pay: s.pay,
     tags: [...s.archetypes],
+    sections: sectionsFormOf(s.sections),
   };
 }
 
@@ -83,6 +98,10 @@ function bodyOf(f: Form, s: EditorState): SaveBody {
   const has = (k: string) => (s.parameterKeys as string[]).includes(k);
   const parameters: Record<string, unknown> = { recruiting: f.recruiting };
   if (has("listed")) parameters.listed = f.listed;
+  if (has("alwaysChecked")) parameters.alwaysChecked = f.alwaysChecked;
+  if (has("heldBy")) parameters.heldBy = f.heldBy || null;
+  if (has("commitmentPct")) parameters.commitmentPct = f.commitmentPct.trim() ? Number(f.commitmentPct) : null;
+  if (has("commitmentRequired")) parameters.commitmentRequired = f.commitmentRequired;
   if (has("track")) parameters.track = f.track || null;
   if (has("whereWorked")) parameters.whereWorked = f.whereWorked || null;
   if (has("languages")) parameters.languages = lines(f.languages);
@@ -95,7 +114,8 @@ function bodyOf(f: Form, s: EditorState): SaveBody {
   if (has("bookingUrl")) parameters.bookingUrl = f.bookingUrl.trim() || null;
   if (has("conversations")) parameters.conversations = f.interviewers;
   if (has("conversationMode")) parameters.conversationMode = f.conversationMode || null;
-  return { words: f.words, parameters, pay: f.pay, archetypes: f.tags };
+  // The sections go only to a server that sent them, so an older server never meets a key it refuses.
+  return { words: f.words, parameters, pay: f.pay, archetypes: f.tags, ...(s.sections ? { sections: sectionsOf(f.sections) } : {}) };
 }
 
 /** A field's gold frame: it differs from the role as it stands, and the words as they stand are a tap away. */
@@ -259,6 +279,59 @@ export default function RoleEditor({ roleId, onClose, onSaved }: { roleId: strin
               )}
             </Frame>
           )}
+          {has("alwaysChecked") && (
+            <Frame label={t({ message: "Background check", context: "role editor" })} changed={form.alwaysChecked !== start.alwaysChecked}>
+              <label className="flex min-h-[44px] items-center gap-2">
+                <input type="checkbox" className="size-5 accent-dash-gold" checked={form.alwaysChecked} onChange={(e) => set("alwaysChecked", e.target.checked)} />
+                <span><Trans context="role editor">Always background-checked, whatever the references say (roles that hold money or work near children)</Trans></span>
+              </label>
+            </Frame>
+          )}
+          {has("heldBy") && (
+            <Frame label={t({ message: "Who can hold it", context: "role editor" })} changed={form.heldBy !== start.heldBy}>
+              <select className={INPUT} value={form.heldBy} onChange={(e) => set("heldBy", e.target.value as Form["heldBy"])} aria-label={t({ message: "Who can hold it", context: "role editor" })}>
+                <option value="">{t({ message: "Not said (a person or an agent)", context: "role editor: who can hold a role" })}</option>
+                <option value="person">{t({ message: "A person", context: "role editor: who can hold a role" })}</option>
+                <option value="agent">{t({ message: "An agent", context: "role editor: who can hold a role" })}</option>
+                <option value="either">{t({ message: "A person or an agent", context: "role editor: who can hold a role" })}</option>
+              </select>
+              <p className="mt-1 text-xs text-muted-foreground"><Trans context="role editor">An agent is proposed by the member who keeps it, and the circle decides by consent, as for a person.</Trans></p>
+            </Frame>
+          )}
+          {has("commitmentPct") && (
+            <Frame label={t({ message: "Commitment it asks", context: "role editor" })} changed={form.commitmentPct !== start.commitmentPct || form.commitmentRequired !== start.commitmentRequired}>
+              <div className="flex flex-wrap items-center gap-3">
+                <label className="flex min-h-[44px] items-center gap-2">
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min={1}
+                    max={100}
+                    step={5}
+                    className={`${INPUT} w-24`}
+                    value={form.commitmentPct}
+                    onChange={(e) => set("commitmentPct", e.target.value)}
+                    aria-label={t({ message: "Commitment it asks, in percent", context: "role editor" })}
+                    data-role-commitment-pct=""
+                  />
+                  <span aria-hidden="true">%</span>
+                </label>
+                {has("commitmentRequired") && (
+                  <select
+                    className={INPUT}
+                    value={form.commitmentRequired ? "required" : "flexible"}
+                    onChange={(e) => set("commitmentRequired", e.target.value === "required")}
+                    aria-label={t({ message: "Is the whole commitment needed", context: "role editor" })}
+                    data-role-commitment-required=""
+                  >
+                    <option value="flexible">{t({ message: "Flexible: less can work", context: "role editor: commitment" })}</option>
+                    <option value="required">{t({ message: "Required: the role needs all of it", context: "role editor: commitment" })}</option>
+                  </select>
+                )}
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground"><Trans context="role editor">A required role is hidden from members who say they can give less. Nothing that pays reads this.</Trans></p>
+            </Frame>
+          )}
           <Frame label={t({ message: "Door", context: "role editor" })} changed={form.recruiting !== start.recruiting}>
             <label className="flex min-h-[44px] items-center gap-2">
               <input type="checkbox" className="size-5 accent-dash-gold" checked={form.recruiting} onChange={(e) => set("recruiting", e.target.checked)} />
@@ -385,7 +458,12 @@ export default function RoleEditor({ roleId, onClose, onSaved }: { roleId: strin
           </Frame>
         </section>
 
-        <CharacterTags value={form.tags} onChange={(v) => set("tags", v)} changed={!same([...form.tags].sort(), [...start.tags].sort())} />
+        {base.sections && <SectionsFields value={form.sections} start={start.sections} onChange={(v) => set("sections", v)} />}
+
+        {/* The roots it grows from: one to three, saved with the rest by the person's save. */}
+        <section className={`${PANEL} ${!same([...form.tags].sort(), [...start.tags].sort()) ? "border-dash-gold" : ""}`.trim()} data-changed={same([...form.tags].sort(), [...start.tags].sort()) ? "false" : "true"}>
+          <RootPicker value={form.tags} onChange={(v) => set("tags", v)} />
+        </section>
 
         {error && <p role="alert" className="text-sm font-semibold text-coral">{error}</p>}
         <div className="sticky bottom-0 flex flex-wrap gap-2 bg-card py-2">

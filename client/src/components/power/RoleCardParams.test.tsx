@@ -17,10 +17,11 @@ const card = {
 };
 
 describe("RoleCardParams", () => {
-  it("draws the parameters, hours as Roughly, the interviews in order, and the pay range for a visitor", () => {
-    render(<RoleCardParams seat={{ id: "r", timeCommitment: "40 hours a week", card }} />);
-    expect(screen.getByText("Roughly 40 hours a week")).toBeTruthy();
-    expect(screen.getByText("1. Human Operations Lead, 1 hour")).toBeTruthy();
+  it("draws the parameters, the commitment as a percentage with no hours, the interviews in order, and the pay range for a visitor", () => {
+    render(<RoleCardParams seat={{ id: "r", timeCommitment: "40 hours a week", card: { ...card, commitmentPct: 40 } }} />);
+    expect(screen.getByText("40%")).toBeTruthy();
+    expect(screen.queryByText(/Roughly|hours a week/)).toBeNull();
+    expect(screen.getByText("1. Human Operations Lead, 60 minutes")).toBeTruthy();
     expect(screen.getByText("2. Visionary Channel, 20 minutes, final approval")).toBeTruthy();
     expect(screen.getByTestId("public-pay").textContent).toContain("Depends on funding");
   });

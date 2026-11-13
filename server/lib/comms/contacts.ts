@@ -25,6 +25,7 @@
  */
 import crypto from "node:crypto";
 import type { Pool } from "mysql2/promise";
+import { offeredLocaleTags } from "../../../shared/i18nLocales";
 import { addressProblem, emailKeyOf } from "../../../shared/comms/address";
 import { setContactTimezone, upsertContact } from "../../repos/commsContacts";
 
@@ -40,6 +41,8 @@ export interface EnsureContactInput {
   source: string;
   /** An IANA zone from the person's own device, such as `Europe/Lisbon`. */
   timezone?: string | null;
+  /** The site language tag the person was using (`es`), as the page sent it. */
+  locale?: string | null;
 }
 
 const newContactId = (): string => `ct_${crypto.randomBytes(12).toString("hex")}`;
@@ -59,6 +62,12 @@ export function validTimezone(tz: unknown): string | null {
   } catch {
     return null;
   }
+}
+
+/** A language tag the site offers, or null: only a language we can write in is kept. */
+export function validLocale(v: unknown): string | null {
+  const tag = typeof v === "string" ? v.trim() : "";
+  return tag && offeredLocaleTags().includes(tag) ? tag : null;
 }
 
 /**
@@ -85,6 +94,7 @@ export async function ensureContact(
     userId,
     source,
     timezone,
+    locale: validLocale(input.locale),
   });
   // The upsert keeps the first zone it heard; a newer reading from the
   // person's own device replaces it.

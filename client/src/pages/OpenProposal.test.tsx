@@ -169,6 +169,70 @@ describe("the open proposal page", () => {
     expect(asked).toContain(`POST /api/governance/open-proposals/${ID}/adopt`);
   });
 
+  it("audit M10: Adopt is disabled while a conversation is not written up, and names whose, with the chart for a role nobody holds", async () => {
+    const conversations = [
+      { roleId: "r-a", role: "Channel Role", unheld: false, words: DECIDE_WORDS.conversationMissing("Channel Role") },
+      { roleId: "r-b", role: "Data Role", unheld: true, words: DECIDE_WORDS.conversationUnheld("Data Role") },
+    ];
+    answer = () => json({ proposal: served({ you: POWER, beforeAdopt: { conversations, seatsFull: [], seatsWords: null } }) });
+    render(<OpenProposal />);
+    const adopt = (await screen.findByRole("button", { name: DECIDE_WORDS.adopt })) as HTMLButtonElement;
+    expect(adopt.disabled).toBe(true);
+    expect(screen.getByText(DECIDE_WORDS.conversationMissing("Channel Role"))).toBeTruthy();
+    expect(screen.getByRole("link", { name: DECIDE_WORDS.chartLink }).getAttribute("href")).toBe("/map/circles");
+  });
+
+  it("audit B3: every place filled says the count, and Adopt goes only for when a place opens, chosen on purpose", async () => {
+    const seatsWords = DECIDE_WORDS.seatsFull([{ name: "Gate Keeper", seats: 1, taken: 1 }]);
+    answer = () => json({ proposal: served({ you: POWER, beforeAdopt: { conversations: [], seatsFull: [{ name: "Gate Keeper", seats: 1, taken: 1 }], seatsWords } }) });
+    render(<OpenProposal />);
+    const adopt = (await screen.findByRole("button", { name: DECIDE_WORDS.adoptWhenASeatOpens })) as HTMLButtonElement;
+    expect(screen.getByText(seatsWords)).toBeTruthy();
+    expect(adopt.disabled).toBe(true);
+    fireEvent.click(screen.getByRole("checkbox", { name: "Adopt them for when a place opens" }));
+    expect(adopt.disabled).toBe(false);
+    fireEvent.click(adopt);
+    await waitFor(() => expect(asked).toContain(`POST /api/governance/open-proposals/${ID}/adopt`));
+    const call = (fetch as unknown as { mock: { calls: Array<[string, { body?: string }]> } }).mock.calls.find(([u]) => u.endsWith("/adopt"));
+    expect(JSON.parse(String(call?.[1]?.body))).toMatchObject({ whenASeatOpens: true });
+  });
+
+  it("verify B153 B8: an agent's proposal never shows a person's terms (pay, allowance, commitment), a person's does", async () => {
+    const offer = {
+      revision: 0,
+      rows: [{ key: "allowance", label: "Allowance", suggested: "Paid for.", current: null, theirs: null, state: "waiting", changed: false }],
+      theirCommitment: 60,
+      roleCommitment: 100,
+      ourCommitment: null,
+      history: [],
+      openTalks: ["Allowance"],
+    };
+    const agent = { name: "Scribe", what: "Keeps the minutes.", keeper: "Kai", reach: [], stillAnAgent: true, switchOff: "Revoke its token.", switchOffPlatform: "An admin can end it." };
+    answer = () => json({ proposal: served({ you: { ...POWER, mayEditTerms: true }, offer, agent }) });
+    const { container, unmount } = render(<OpenProposal />);
+    const adopt = (await screen.findByRole("button", { name: DECIDE_WORDS.adopt })) as HTMLButtonElement;
+    expect(container.querySelector("[data-terms-we-offer]")).toBeNull();
+    expect(container.querySelector("[data-open-talks]")).toBeNull();
+    // Nothing about terms holds Adopt back for an agent.
+    expect(adopt.disabled).toBe(false);
+    unmount();
+    answer = () => json({ proposal: served({ you: { ...POWER, mayEditTerms: true }, offer }) });
+    const person = render(<OpenProposal />);
+    await screen.findByRole("button", { name: DECIDE_WORDS.adopt });
+    expect(person.container.querySelector("[data-terms-we-offer]")).not.toBeNull();
+  });
+
+  it("the decision sits in one side panel, with one set of buttons, beside the proposal", async () => {
+    answer = () => json({ proposal: served({ you: POWER }) });
+    const { container } = render(<OpenProposal />);
+    await screen.findByRole("button", { name: DECIDE_WORDS.adopt });
+    const panel = container.querySelector("[data-decide-panel]");
+    expect(panel?.tagName).toBe("ASIDE");
+    expect(panel?.querySelector("[data-decider-card]")).not.toBeNull();
+    expect(screen.getAllByRole("button", { name: DECIDE_WORDS.adopt })).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: DECIDE_WORDS.decline })).toHaveLength(1);
+  });
+
   it("once the circle has consented, the same click reads Record the adoption", async () => {
     answer = () => json({ proposal: served({ you: POWER }, "consented") });
     render(<OpenProposal />);
@@ -234,6 +298,55 @@ describe("the open proposal page", () => {
   });
 });
 
+describe("the founding application, for the decider (design G2, D-08 and D-29)", () => {
+  const FOUNDING = { review: { stage: "review", conversations: [] }, founding: { knowUs: [], rampUp: false }, term: { kind: "moon", startsOn: "2026-11-09", endsOn: "2026-12-08" } };
+
+  it("titles it as an application for the role, names no moon's dates, and reads in one line", async () => {
+    answer = () => json({ proposal: served({ ...FOUNDING, you: { ...POWER, mayReview: true } }) });
+    render(<OpenProposal />);
+    expect(await screen.findByRole("heading", { level: 1, name: "Rowan applies for Gate Keeper" })).toBeTruthy();
+    expect(document.querySelector("header")?.textContent).not.toMatch(/this moon|new moon|9 November/);
+    expect(screen.getByText("Read it through, then answer.")).toBeTruthy();
+  });
+
+  it("Invite to the conversations is the one gold act, and the not-invited letter is edged", async () => {
+    answer = () => json({ proposal: served({ ...FOUNDING, you: { ...POWER, mayReview: true } }) });
+    render(<OpenProposal />);
+    const invite = await screen.findByRole("button", { name: DECIDE_WORDS.review.invite });
+    expect(invite.className).toContain("bg-notice");
+    expect(screen.getByRole("button", { name: DECIDE_WORDS.review.notInvite }).className).not.toContain("bg-notice");
+    expect(document.querySelectorAll("[data-decide-panel] .bg-notice")).toHaveLength(1);
+  });
+
+  it("keeps the two columns after adoption, the panel saying what was decided", async () => {
+    answer = () => json({ proposal: served({ ...FOUNDING, status: "adopted", statusWords: "Adopted on 2 Nov", decided: "Adopted on 2 Nov", you: { ...POWER, mayAdopt: false, mayDecline: false } }) });
+    const { container } = render(<OpenProposal />);
+    await screen.findByRole("heading", { level: 1 });
+    const article = container.querySelector("article[data-open-proposal]") as HTMLElement;
+    expect(article.className).toContain("lg:grid-cols-");
+    expect(container.querySelector("[data-decide-panel] [data-decision-outcome=adopted]")?.textContent).toContain("Adopted on 2 Nov");
+  });
+
+  it("the terms to talk through sit in one tile, each with its note, and the accepted ones in one line", async () => {
+    const card = {
+      roles: [{ roleId: "role-gate", moves: [], firstMoon: [{ quest: "Open the gate", doneWhen: "it is open", serves: "" }] }],
+      serves: [],
+      agreed: { nda: true },
+      terms: { choice: "talk", note: "Allowance: tools. Bonus: how.", answers: { term: { choice: "accept", note: "" }, allowance: { choice: "talk", note: "Could it cover my software?" }, bonus: { choice: "talk", note: "" } } },
+    };
+    answer = () => json({ proposal: served({ ...FOUNDING, card, roles: [{ id: "role-gate", name: "Gate Keeper", circle: "Land Circle", note: "", accountabilities: ["Open at dawn"] }] }) });
+    render(<OpenProposal />);
+    await screen.findByRole("heading", { name: "Their card beside the open card" });
+    const tiles = document.querySelectorAll("[data-terms-flag]");
+    expect(tiles).toHaveLength(1);
+    expect(Array.from(tiles[0].querySelectorAll("[data-terms-talk]")).map((li) => li.getAttribute("data-terms-talk"))).toEqual(["allowance", "bonus"]);
+    expect(tiles[0].textContent).toContain("Could it cover my software?");
+    expect(document.querySelector("[data-terms-answers]")?.textContent).toBe("Accepts: Term");
+    expect(document.body.textContent?.match(/[Ww]ants? to talk/g) ?? []).toEqual([]);
+    expect(document.body.textContent).not.toMatch(/not picked/);
+  });
+});
+
 describe("the two cards side by side (Rye, 9 Nov 2026)", () => {
   it("sets what the role asks beside what they offer, and names the gaps", async () => {
     answer = () =>
@@ -247,12 +360,14 @@ describe("the two cards side by side (Rye, 9 Nov 2026)", () => {
     expect(await screen.findByRole("heading", { name: "Their card beside the open card" })).toBeTruthy();
     const row = document.querySelector('[data-side-by-side="role-gate"]') as HTMLElement;
     expect(within(row).getByText(/I'll move: Open at dawn/)).toBeTruthy();
-    expect(within(row).getByText("(not picked)")).toBeTruthy();
+    // D-08: a role's ask they did not take is shown plainly, never marked "(not picked)".
+    expect(within(row).queryByText(/not picked/)).toBeNull();
     const gaps = document.querySelector("[data-card-gaps]") as HTMLElement;
-    expect(gaps.textContent).toContain("No first task for Gate Keeper");
+    expect(gaps.textContent).toContain("No goal for Gate Keeper");
     expect(gaps.textContent).toContain("No season goal served");
-    expect(gaps.textContent).toContain("They want to talk about the terms");
-    expect((document.querySelector("[data-terms-flag]") as HTMLElement).textContent).toBe("Wants to talk about the terms: The rate");
+    // The terms to talk about are said once, in their own tile, and not again among the gaps.
+    expect(gaps.textContent).not.toMatch(/talk about the terms/);
+    expect((document.querySelector("[data-terms-flag]") as HTMLElement).textContent).toBe("Terms to talk throughThe rate");
     expect(screen.getByText("Time zone: America/Costa_Rica")).toBeTruthy();
   });
 

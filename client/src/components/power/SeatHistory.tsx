@@ -33,11 +33,13 @@
  *
  * ── AND THE ONE THING IT REFUSES TO GUESS ────────────────────────────────
  *
- * Every sentence below comes from a row. A holder whose name was taken off
- * the record (`releaseSeatingsForUser` clears `display_name` on every row,
- * live and ended) is skipped in the passing sentence rather than named as
- * "someone", because a handover the page cannot attribute is a handover it
- * should not describe.
+ * Every sentence below comes from a row. A holder whose name was removed at
+ * their request (an erasure, which clears `display_name` on every row they
+ * held, live and ended, or `forgetDocumentedHolder`) is skipped in the passing
+ * sentence rather than named as "someone", because a handover the page cannot
+ * attribute is a handover it should not describe. A member who simply leaves
+ * the village keeps their name here (lead, 12 Nov 2026: "we can keep names on
+ * record"; `releaseSeatingsForUser` with `keepName`).
  */
 import { useEffect, useState } from "react";
 import { History } from "lucide-react";
@@ -211,11 +213,12 @@ export default function SeatHistory({
 
       {/* A SEAT NOBODY HAS HELD AND A SEAT WHOSE NAMES ARE GONE ARE NOT THE
           SAME SEAT, and they arrive here looking alike: `holderOrder` returns
-          an empty list for both. `releaseSeatingsForUser` clears
-          `display_name` on every row a departing member held, live and ended,
-          so a seat two people carried for four years can come back with no
-          names on it at all. Saying nobody has ever held it would be the page
-          erasing them a second time. */}
+          an empty list for both. An erasure clears `display_name` on every
+          row the person held, live and ended, so a seat two people carried
+          for four years can come back with no names on it at all. Saying
+          nobody has ever held it would be the page erasing them a second
+          time, so it says what happened: the role was held, and the names
+          were removed when the people asked. */}
       {rows.length === 0 ? (
         <p className="text-sm text-muted-foreground leading-relaxed">
           Nobody has been recorded in this role yet. That is what a role looks like before somebody
@@ -223,21 +226,21 @@ export default function SeatHistory({
         </p>
       ) : names.length === 0 ? (
         <p className="text-sm text-muted-foreground leading-relaxed">
-          This role has been held. The names on its record have been taken off, and the dates below are
-          what it keeps.
+          This role has been held. The people who held it asked for their names to be removed, so its
+          record keeps the dates below.
         </p>
       ) : names.length === 1 ? (
         <p className="text-sm text-foreground leading-relaxed">
           {names[0]} is the first person on this role's record.
         </p>
       ) : (
-        <p className="text-sm text-foreground leading-relaxed">This role has been held by {chain(names)}.</p>
+        <p className="text-sm text-foreground leading-relaxed">This role has been held by: {chain(names)}.</p>
       )}
 
       {passed && (
         <p className="mt-1.5 text-sm text-foreground leading-relaxed">
           It passed from {passed.from} to {passed.to} on {day(passed.on)}. A role that outlasts the
-          person holding it is the reason a village writes its roles down.
+          person holding it is one of the many reasons our village writes its roles down.
         </p>
       )}
 
@@ -245,7 +248,7 @@ export default function SeatHistory({
         <ul className="mt-2 space-y-1">
           {newestFirst.map((r) => (
             <li key={r.id} className="text-xs text-muted-foreground">
-              <span className="text-foreground">{r.name ?? "A name taken off the record"}</span>
+              <span className="text-foreground">{r.name ?? "Name removed at their request"}</span>
               {r.focus && <span> · {r.focus}</span>}
               <span>
                 {" · "}

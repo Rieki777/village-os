@@ -19,13 +19,13 @@ const ORDER = [
 const NAMES = ["Human Operations & Onboarding Lead Steward", "Technical Operations Steward", "A Role To Confirm", "Visionary Channel"];
 
 describe("the ordered conversations", () => {
-  it("keeps the order, each length and the final approval, and totals two hours", () => {
+  it("keeps the order, each length and the final approval, and totals 120 minutes", () => {
     const r = parseInterviewSteps(ORDER);
     expect(r).toEqual({ ok: true, value: ORDER });
-    expect(interviewTotalWords(ORDER)).toBe("2 hours");
+    expect(interviewTotalWords(ORDER)).toBe("120 minutes");
     expect(conversationMinutes(ORDER)).toBe(120);
     const lines = interviewLines(ORDER.map((s, i) => ({ ...s, roleName: NAMES[i] })));
-    expect(lines[0]).toBe("1. Human Operations & Onboarding Lead Steward, 1 hour");
+    expect(lines[0]).toBe("1. Human Operations & Onboarding Lead Steward, 60 minutes");
     expect(lines[3]).toBe("4. Visionary Channel, 20 minutes, final approval");
   });
   it("reads a bare list of role ids as twenty minutes each, and a stored string", () => {
@@ -74,8 +74,11 @@ describe("the tolerant reader", () => {
 });
 
 describe("the mode", () => {
-  it("reads NULL as one block, and refuses an unknown mode", () => {
-    expect(conversationModeOf(null)).toBe("block");
+  it("reads NULL or an unknown value as separately (the one booking story), and refuses an unknown mode on a write", () => {
+    expect(conversationModeOf(null)).toBe("separate");
+    expect(conversationModeOf("")).toBe("separate");
+    expect(conversationModeOf("scatter")).toBe("separate");
+    expect(conversationModeOf("block"), "control: a stored block is still read as written").toBe("block");
     expect(conversationModeOf("separate")).toBe("separate");
     expect(parseConversationMode("separate")).toEqual({ ok: true, value: "separate" });
     expect(parseConversationMode(null)).toEqual({ ok: true, value: null });

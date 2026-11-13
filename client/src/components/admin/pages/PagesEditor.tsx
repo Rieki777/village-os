@@ -12,7 +12,9 @@
  * following the platform's default, and "Reset" hands a box back to it.
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, ExternalLink, Plus, RefreshCw, RotateCcw, Save, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, ExternalLink, Plus, RefreshCw, RotateCcw, Trash2 } from "lucide-react";
+import SaveBar, { type SaveResult } from "@/components/SaveBar";
+import { changedKeys } from "@/lib/unsavedChanges";
 import { API_BASE, authHeaders, refusal } from "../adminApi";
 import { PAGE_SPECS } from "@shared/pageContent";
 import {
@@ -327,7 +329,9 @@ export default function PagesEditor({ password }: { password: string }) {
   const problems = useMemo(() => pageDocumentProblems(spec, draft), [spec, draft]);
   const dirty = JSON.stringify(draft) !== JSON.stringify(saved);
 
-  const put = async (raw: Doc, done: string) => {
+  const put = async (raw: Doc, done: string): Promise<SaveResult> => {
+    if (loadError) return { ok: false, reason: `${loadError} Saving is off until it reads, so nothing you have written gets overwritten.` };
+    if (problems.length > 0) return { ok: false, reason: problems.join(" ") };
     const doc = withoutBlanks(spec, raw);
     setSaving(true);
     setMessage(null);
@@ -342,10 +346,14 @@ export default function PagesEditor({ password }: { password: string }) {
       setSaved(doc);
       setDraft(doc);
       setMessage({ kind: "ok", text: done });
+      setSaving(false);
+      return { ok: true };
     } catch (e) {
-      setMessage({ kind: "error", text: e instanceof Error ? e.message : "Save failed." });
+      const why = e instanceof Error ? e.message : "Save failed.";
+      setMessage({ kind: "error", text: why });
+      setSaving(false);
+      return { ok: false, reason: why };
     }
-    setSaving(false);
   };
 
   return (
@@ -360,14 +368,6 @@ export default function PagesEditor({ password }: { password: string }) {
         <div className="flex shrink-0 items-center gap-2">
           <button type="button" onClick={load} aria-label="Reload the saved words" className="p-2 text-muted-foreground hover:bg-muted rounded-lg">
             <RefreshCw className="w-4 h-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => put(draft, "Saved. Open the page to see it.")}
-            disabled={saving || loading || !!loadError || !dirty || problems.length > 0}
-            className="flex items-center gap-2 px-4 py-2 bg-teal-deep text-white rounded-lg text-sm font-medium hover:bg-teal-deep-dark disabled:opacity-50 transition-colors"
-          >
-            <Save className="w-4 h-4" aria-hidden="true" /> {saving ? "Saving..." : "Save"}
           </button>
         </div>
       </div>
@@ -439,6 +439,13 @@ export default function PagesEditor({ password }: { password: string }) {
           </div>
         </div>
       )}
+      {/* Every changed section on this page, saved together from the bar. */}
+      <SaveBar
+        count={loading ? 0 : changedKeys(saved, draft).length}
+        onSave={() => put(draft, "Saved. Open the page to see it.")}
+        onDiscard={() => { setDraft(saved); setMessage(null); }}
+        what={spec.label}
+      />
     </div>
   );
 }

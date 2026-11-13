@@ -66,3 +66,12 @@ describe("the whole check", () => {
     expect(loadCheck([]).lines).toEqual([LOAD_WORDS.noRoles]);
   });
 });
+
+describe("a commitment is never hours (audit M2)", () => {
+  it("reads null and is left out of the load check", () => {
+    expect(hoursAWeek("Commitment: 60%")).toBeNull();
+    const c = loadCheck([{ name: "Steward", time: "Commitment: 60%" }]);
+    expect(c.counted).toEqual([]);
+    expect(c.notCounted).toEqual([]);
+  });
+});

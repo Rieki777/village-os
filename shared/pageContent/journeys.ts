@@ -456,202 +456,309 @@ export const INVESTOR_JOURNEY: PageSpec = buildJourney({
 
 // ── /steward ─────────────────────────────────────────────────────────────
 
+/**
+ * ONE FLOW, TWO PATHS (build list section 8, 11 Nov 2026). The page used to
+ * carry "Getting to know us" and an eleven-step journey that overlapped. It is
+ * now one flow: the first steps everyone takes, then the path divides into
+ * the steward path (hold a role) and the resident path (live here), and the
+ * steward path ends by inviting a role holder onto the resident path too.
+ *
+ * EXPAND ONLY. The section ids a village has already saved keep their meaning
+ * and are still read: `getToKnow` is the shared first steps (with a new
+ * `exceptions` line), `steps` is the steward path. The new sections (`tracks`,
+ * `crossover`, `foundingTeam`, `extras`) start from their defaults,
+ * so a village that saved the old page keeps its words and gains the new parts.
+ *
+ * SHARED WITH /resident. `getToKnow` and `tracks` are read by the resident page
+ * as well, so the first steps and the fork are written once, here.
+ */
+
+/** The stage labels the steward path uses, so the page can tell whose move a step is. */
+export const STEWARD_STAGE_YOURS = "Your move";
+export const STEWARD_STAGE_CIRCLE = "The circle's move";
+export const STEWARD_STAGE_TOGETHER = "Together";
+
 const STEWARD_STEPS: StepDefault[] = [
   {
-    legacyId: "community-call",
-    stage: "Visitor",
-    title: "Come to an Event",
-    description: "Meet the people of {village}, learn the basics and ask your first questions.",
-    bullets: ["Meet the team", "Learn what the village is building", "Ask questions live", "Connect with other visitors"],
-    label: "See Upcoming Events",
-    target: JOURNEY_TARGETS.events,
-  },
-  {
-    legacyId: "events",
-    stage: "Guest",
-    title: "Take Part in Village Life",
-    description: "Join gatherings, workshops and work days to get to know the community.",
-    bullets: ["Shared meals and gatherings", "Workshops", "Work days on shared projects", "Celebrations"],
-    label: "View Events",
-    target: JOURNEY_TARGETS.events,
-  },
-  {
-    legacyId: "immersion",
-    stage: "Immersant",
-    title: "Spend Time in the Village",
-    description:
-      "If it calls you, spend a longer stretch in the village: watch circles at work and find where your gifts are most needed. A good step, and an optional one.",
-    bullets: ["Optional, join if it calls you", "Shadow people in their roles", "Find where you fit"],
-    label: "Learn About Circles",
-    target: "/circles",
-  },
-  {
-    legacyId: "training",
-    stage: "Participant",
-    title: "Community Training",
-    description: "Complete {village}'s community training, or show that you already live its practices.",
-    bullets: ["Do the training, or show you already live it", "How the village communicates", "How conflict is handled", "How decisions are made"],
-    label: "Learn About Training",
-    target: "/training",
-  },
-  {
-    legacyId: "love-letter",
-    stage: "Member",
-    title: "Sign the {commitment}",
-    description: "Read the {commitment}, take your time with it, and sign it to become a member of {village}.",
-    bullets: ["Read it closely", "Reflect on your commitment", "Sign the {commitment}", "Welcome to membership"],
-    label: "Read the {commitment}",
-    target: "/love-letter",
-  },
-  {
-    legacyId: "circle",
-    stage: "Contributor",
-    title: "Join a Circle",
-    description: "Join a circle and take part in the decisions about its work.",
-    bullets: ["Choose a circle aligned with your gifts", "Attend circle meetings", "Take part in its decisions", "Build relationships with circle members"],
-    label: "Explore Circles",
-    target: "/circles",
-  },
-  {
-    legacyId: "quests",
-    stage: "Quest Seeker",
-    title: "Explore Quests",
-    description:
-      "Take on quests to contribute meaningfully to the village, or propose your own quest if you don't see your gift. A great way to show your commitment.",
-    bullets: ["Browse available quests", "Choose quests matching your skills", "Submit your own quest proposal"],
-    label: "View Quests",
-    target: "/quests",
-  },
-  {
-    legacyId: "passage",
-    stage: "Initiate",
-    title: "Become a Co-Creator",
-    description: "When you are ready, the village recognizes you as a Co-Creator, in the way it has chosen to decide.",
-    bullets: ["Show steady commitment", "Talk with the village about your path", "Receive the village's consent", "Celebrate the step"],
-    label: "Read the Co-Creators Guide",
-    target: "/co-creators-guide",
-  },
-  {
-    legacyId: "roles",
-    stage: "Co-Creator",
-    title: "Explore & Apply for Roles",
-    description: "Find a role that fits your gifts and propose yourself for it.",
-    bullets: ["Review available roles", "Propose yourself for a role", "Receive the village's agreement", "Begin your role's term"],
-    label: "Explore Roles",
+    legacyId: "start",
+    stage: STEWARD_STAGE_YOURS,
+    title: "Find the role that is yours",
+    description: "Read the open roles. Each card says what the role holds, the background we hope for, and what it asks of you.",
+    bullets: [],
+    label: "See the open roles",
     target: "/roles",
   },
+  {
+    legacyId: "apply",
+    stage: STEWARD_STAGE_YOURS,
+    title: "Apply for the role",
+    description: "Apply from the role's own card. Tell us about you and the value you would bring, then confirm your email.",
+    bullets: [],
+    label: "",
+    target: "",
+  },
+  {
+    legacyId: "review",
+    stage: STEWARD_STAGE_CIRCLE,
+    title: "We read every application",
+    description: "We invite some applicants to a conversation, and write to everyone else with a warm reply.",
+    bullets: [],
+    label: "",
+    target: "",
+  },
+  {
+    legacyId: "meet",
+    stage: STEWARD_STAGE_TOGETHER,
+    title: "Conversations, one at a time",
+    description: "You meet the people the role works with most. You can ask them anything too.",
+    bullets: [],
+    label: "",
+    target: "",
+  },
+  {
+    legacyId: "consent",
+    stage: STEWARD_STAGE_CIRCLE,
+    title: "The circle decides by consent",
+    description: "The circle weighs your application together. People choose people, and we tell you what the circle decided.",
+    bullets: [],
+    label: "",
+    target: "",
+  },
+  {
+    legacyId: "first-cycle",
+    stage: STEWARD_STAGE_TOGETHER,
+    title: "A first cycle together",
+    description: "You begin the role for one cycle, so both sides can see how it fits. Either side may end it there.",
+    bullets: [],
+    label: "",
+    target: "",
+  },
+  {
+    legacyId: "seated",
+    stage: STEWARD_STAGE_YOURS,
+    title: "Take up the role",
+    description: "When it fits, the role is yours, held with the circle that holds it.",
+    bullets: [],
+    label: "",
+    target: "",
+  },
 ];
+
+/** One card of the first steps: a few points, a button, and an optional mark. */
+function knowRow(r: { stage: string; title: string; mark: string; description: string; bullets: readonly string[]; label: string; target: string }): Record<string, string> {
+  const row: Record<string, string> = { stage: r.stage, title: r.title, mark: r.mark, description: r.description };
+  for (let i = 0; i < BULLETS; i++) row[`bullet${i + 1}`] = r.bullets[i] ?? "";
+  row.actionLabel = r.label;
+  row.actionTarget = r.target;
+  return row;
+}
+
+/**
+ * The first steps, shared by both paths: optional to visit, asked of anyone
+ * applying for a role, with the exceptions line beside them (build list 8.2
+ * and 1.12). They never lock an application. Platform defaults name no
+ * village's own gathering; a village writes its own in Admin, Pages.
+ */
+function getToKnowSection(): SectionSpec {
+  return {
+    id: "getToKnow",
+    label: "First steps (both paths)",
+    shows:
+      "The first steps everyone takes, in order, before the path divides. Shown on this page and on the resident page, so they are written once, here. A visitor can tick each one off.",
+    hideable: true,
+    fields: [
+      text("heading", "Heading", 40, "Get to know us"),
+      long("body", "Paragraph", 240, "Optional to visit, and asked of anyone applying for a role. Take them in this order, and tick each one off as you go."),
+      long(
+        "exceptions",
+        "When someone may apply without them",
+        420,
+        "We encourage you to take these first steps. If you have not, you can still apply, especially if we invited you, if you live far away and the next call is more than a week off, or if you feel you are an incredibly strong candidate.",
+        {
+          optional: true,
+          help: "Shown on this page under the first steps, beside the role application. Leave blank for none. The resident page does not show it.",
+        },
+      ),
+    ],
+    lists: [
+      {
+        key: "items",
+        label: "First steps",
+        help: "Read top to bottom. Opening a step shows its points and its button. Words in Mark show as a small label, for example Required to apply.",
+        itemLabel: "Step",
+        titleKey: "title",
+        minItems: 0,
+        maxItems: 8,
+        fields: [
+          text("stage", "Stage (the small label)", 20, ""),
+          text("title", "Title", 48, ""),
+          text("mark", "Mark (for example Optional)", 20, "", { optional: true }),
+          long("description", "Description", 420, ""),
+          ...Array.from({ length: BULLETS }, (_, i) => text(`bullet${i + 1}`, `Point ${i + 1}`, 44, "", { optional: true })),
+          text("actionLabel", "Button words", 32, "", { optional: true }),
+          target("actionTarget", "Button goes to", "", TARGET_HELP),
+        ],
+        default: [
+          knowRow({
+            stage: "First",
+            title: "Come to an open call",
+            mark: "",
+            description: "Join an online call, live or as a recording. Hear what {village} is building and ask your first questions.",
+            bullets: ["Meet the people", "Hear the vision", "Ask anything"],
+            label: "See upcoming events",
+            target: JOURNEY_TARGETS.events,
+          }),
+          knowRow({
+            stage: "Second",
+            title: "Walk the land with us",
+            mark: "",
+            description: "Come on a tour of the land with someone who knows it well. Ask us if you need another time.",
+            bullets: [],
+            label: "See upcoming events",
+            target: JOURNEY_TARGETS.events,
+          }),
+          knowRow({
+            stage: "Third",
+            title: "Share a meal with the village",
+            mark: "",
+            description: "Come to a shared meal or gathering and meet {village} as it lives.",
+            bullets: [],
+            label: "See upcoming events",
+            target: JOURNEY_TARGETS.events,
+          }),
+        ],
+      },
+    ],
+  };
+}
+
+/** The fork after the first steps: the two paths, side by side. Read by both pages. */
+function tracksSection(): SectionSpec {
+  return {
+    id: "tracks",
+    label: "Two paths (both pages)",
+    shows: "Where the path divides after the first steps: holding a role, or living here. Shown on this page and the resident page, each marking the one a visitor is on.",
+    fields: [
+      text("heading", "Heading", 40, "Two paths from here"),
+      long("body", "Paragraph", 200, "After the first steps the path divides. Walk one, or both."),
+      text("stewardTitle", "Role path: title", 32, "Hold a role"),
+      long("stewardLine", "Role path: one line", 160, "Join the team that builds {village}, in a role that is yours."),
+      text("residentTitle", "Home path: title", 32, "Live here"),
+      long("residentLine", "Home path: one line", 160, "Make {village} your home, one stage at a time."),
+      text("hereLabel", "Label on the path a visitor is on", 20, "You are here"),
+    ],
+  };
+}
+
+/**
+ * The end of the steward path: an optional step onto the resident path too.
+ * THE LEAD'S RULING (11 Nov, final): the role path carries this one optional
+ * step, which links across to the resident path. A village's early
+ * supporters programme (the first village calls it Founding Seeders) sits
+ * inside the resident path only, as a step in that page's own list, and is
+ * never its own step here.
+ */
+function crossoverSection(): SectionSpec {
+  return {
+    id: "crossover",
+    label: "Optional step: join the resident path too",
+    shows: "The last step of the role path: an optional invitation to walk the resident path as well, linking across to it.",
+    hideable: true,
+    fields: [
+      text("mark", "Mark", 20, "Optional", { optional: true, help: "A small label beside the title. Leave blank for none." }),
+      text("title", "Title", 60, "Join the resident path too"),
+      long("body", "Paragraph", 240, "Many who hold a role here also make {village} home. You can walk the resident path alongside your role."),
+      ...button("cta", "Button", "See the resident path", "/resident"),
+    ],
+  };
+}
+
+/** The founding team invitation: the page's one main act, in the quieter founding register. */
+function foundingTeamSection(): SectionSpec {
+  return {
+    id: "foundingTeam",
+    label: "Join the founding team",
+    shows: "The quiet band after the role path, in the founding team's own look, with the page's one main button. Hide it while no role is open.",
+    hideable: true,
+    fields: [
+      text("eyebrow", "Small label", 30, "Join the founding team"),
+      text("heading", "Heading", 60, "The team that builds {village}"),
+      long(
+        "body",
+        "Paragraph",
+        360,
+        "We are bringing together the few people who will carry {village} from an idea to a living village. Each role is a long commitment, held with care. Read the open roles and apply for the one that is yours.",
+        { help: "{foundingRoles} becomes the founding roles open now, by name, from the Roles page. With none open, the sentence holding it is left out." },
+      ),
+      ...button("cta", "Button", "Join the founding team", "/roles"),
+    ],
+  };
+}
+
+/** Optional extras: deeper ways in, none of them needed to apply. */
+function extrasSection(): SectionSpec {
+  return {
+    id: "extras",
+    label: "Optional extras",
+    shows: "A short quiet list of deeper ways to know you, none of them needed to apply.",
+    hideable: true,
+    fields: [
+      text("heading", "Heading", 40, "Optional, whenever you like"),
+      long("body", "Paragraph", 200, "None of these is needed to apply. Each is a deeper way to know us."),
+    ],
+    lists: [
+      {
+        key: "items",
+        label: "Extras",
+        help: "Up to six, top to bottom. When (for example Later) shows as a small label.",
+        itemLabel: "Extra",
+        titleKey: "title",
+        maxItems: 6,
+        fields: [
+          text("title", "Title", 48, ""),
+          text("when", "When (small label)", 20, "", { optional: true }),
+          long("description", "Description", 240, ""),
+          text("actionLabel", "Button words", 32, "", { optional: true }),
+          target("actionTarget", "Button goes to", "", TARGET_HELP),
+        ],
+        default: [
+          { title: "Other events", when: "", description: "Gatherings, workshops and celebrations on the land.", actionLabel: "See upcoming events", actionTarget: JOURNEY_TARGETS.events },
+          { title: "Village immersion", when: "", description: "Spend unhurried time in the village and see how it lives day to day.", actionLabel: "", actionTarget: "" },
+          { title: "Community training", when: "Later", description: "The village's own practices for living and deciding together, once you have joined.", actionLabel: "Learn about training", actionTarget: "/training/steward" },
+        ],
+      },
+    ],
+  };
+}
 
 export const STEWARD_JOURNEY: PageSpec = buildJourney({
   id: "steward",
   label: "Steward journey",
   path: "/steward",
   hero: {
-    eyebrow: "Village Steward Journey",
-    headline: "Steward the Village",
-    highlight: "Village",
+    eyebrow: "Holding a role",
+    headline: "Steward the village",
+    highlight: "village",
     intro:
-      "Village Stewards look after the whole village: its work, its decisions and its people. Join a circle, take on quests and roles, and help shape {village}.",
-    primary: ["Come to an Event", JOURNEY_TARGETS.events],
-    secondary: ["Learn How We Create", "/how-we-create"],
+      "Roles are how the work of {village} gets done, and each one is held by a person. Everyone starts on the same first steps. Then the path divides: hold a role, live here, or both.",
+    primary: ["See the first steps", "#first-steps"],
+    secondary: ["Ask us a question", JOURNEY_TARGETS.contact],
   },
-  beforeSteps: [],
+  beforeSteps: [getToKnowSection(), tracksSection()],
   steps: {
-    heading: "Your Journey to Co-Creation",
-    intro: "Each step deepens your connection with the community and helps you find where your gifts fit.",
+    heading: "The role path",
+    intro: "From your application to the role, in {count} steps. Some are your moves and some are the circle's, and each one says which.",
     items: STEWARD_STEPS,
   },
   afterSteps: [
-    {
-      id: "ladder",
-      label: "Path of growth",
-      shows: "The green band of levels a steward grows through.",
-      hideable: true,
-      fields: [
-        text("heading", "Heading", 40, "The Path of Growth"),
-        long("intro", "Sentence under the heading", 160, "Every role has a term. As you grow, you take on more responsibility for the whole."),
-      ],
-      lists: [
-        {
-          key: "items",
-          label: "Levels",
-          help: "Up to six. Each gets the next icon in a fixed set.",
-          itemLabel: "Level",
-          titleKey: "level",
-          maxItems: 6,
-          fields: [
-            text("level", "Name", 16, ""),
-            text("requirement", "How someone gets here", 60, ""),
-            text("benefits", "What it brings", 64, ""),
-          ],
-          default: [
-            { level: "Role Holder", requirement: "Take on a role and carry it for its term", benefits: "Responsibility for your role's work" },
-            { level: "Guide", requirement: "Recognized after steady service in roles", benefits: "Mentoring newer stewards" },
-            { level: "Sage", requirement: "Recognized after long service as a Guide", benefits: "Keeping the long view for the village" },
-          ],
-        },
-      ],
-    },
-    {
-      id: "arc",
-      label: "Long-term growth",
-      shows: "The two cards under the path of growth.",
-      hideable: true,
-      fields: [
-        text("heading", "Heading", 40, "Long-Term Growth"),
-        long("intro", "Sentence under the heading", 160, "Your part in the village deepens with each season."),
-      ],
-      lists: [
-        {
-          key: "items",
-          label: "Cards",
-          help: "Up to four. Each gets the next icon in a fixed set.",
-          itemLabel: "Card",
-          titleKey: "level",
-          maxItems: 4,
-          fields: [text("level", "Name", 16, ""), text("description", "Description", 60, "")],
-          default: [
-            { level: "Guide", description: "Mentor to newer stewards and circle facilitators" },
-            { level: "Sage", description: "Keeper of the village's long view" },
-          ],
-        },
-      ],
-    },
-    ctaBand("seasons", "Seasons", "The band about how seasons turn here.", {
-      heading: "Seasonal Rhythm",
-      body: "{village} moves through the year in seasons, each with its own focus. When a season turns, the village looks back, celebrates, and sets the focus for the next one.",
-      bodyMax: 420,
-      cta: ["Learn About Our Seasons", "/seasonal-festivals"],
+    crossoverSection(),
+    foundingTeamSection(),
+    extrasSection(),
+    ctaBand("rights", "Rights and responsibilities", "The band pointing to the steward rights page.", {
+      heading: "Your rights and responsibilities",
+      body: "Read what we ask of you, what you can count on from us, and how leaving a role works.",
+      cta: ["Read rights and responsibilities", "/steward-rights"],
     }),
-    ctaBand("rights", "Rights and responsibilities", "The band pointing to the steward covenant.", {
-      heading: "Your Rights and Responsibilities",
-      body: "Read what you hold as a steward, and what the village counts on you to carry.",
-      cta: ["Read Rights and Responsibilities", "/steward-rights"],
-    }),
-    {
-      id: "nextStep",
-      label: "Your next step form",
-      shows: "The form a would-be steward sends, and what they see once it is sent. Its call buttons go to your Events page URL and hide when that is blank.",
-      hideable: true,
-      fields: [
-        text("heading", "Heading", 40, "Your Next Step"),
-        long("body", "Paragraph", 200, "Tell us where you're coming from and what calls you here. We'll reach out with the right invitation."),
-        text("giftsLabel", "First question", 60, "What gifts do you bring? (skills, time, passion)"),
-        text("giftsHint", "Hint inside the first box", 80, "e.g. farming, facilitation, building, web development...", { optional: true }),
-        text("questionLabel", "Second question", 60, "What called you to stewardship?"),
-        text("questionHint", "Hint inside the second box", 100, "Share what resonated, what you're looking for, or any questions on your heart...", { optional: true }),
-        text("submitLabel", "Send button", 40, "Begin My Stewardship Journey"),
-        text("thanksHeading", "Heading once it is sent", 40, "Welcome, future Steward."),
-        long("thanksBody", "Paragraph once it is sent", 200, "We've received your message and will be in touch soon with your next invitation into the village.", {
-          help: "A promise to the visitor: say only what your team will keep.",
-        }),
-        text("thanksCta", "Call button once it is sent", 32, "See Upcoming Events"),
-        long("footnote", "Line under the send button", 120, "Or come to an event to learn more first."),
-        text("footnoteLink", "Words in that line that link to your events", 40, "come to an event", {
-          help: "Exactly as they appear in the line above.",
-        }),
-      ],
-    },
     faqSection("Common Questions"),
   ],
 });
@@ -659,24 +766,6 @@ export const STEWARD_JOURNEY: PageSpec = buildJourney({
 // ── /resident ────────────────────────────────────────────────────────────
 
 const RESIDENT_STEPS: StepDefault[] = [
-  {
-    legacyId: "community-call",
-    stage: "Visitor",
-    title: "Come to an Event",
-    description: "Meet the people of {village}, learn the basics and ask your first questions about living here.",
-    bullets: ["Meet the people who live here", "Learn what the village is building", "Ask questions live", "Connect with other visitors"],
-    label: "See Upcoming Events",
-    target: JOURNEY_TARGETS.events,
-  },
-  {
-    legacyId: "events",
-    stage: "Guest",
-    title: "Take Part in Village Life",
-    description: "Come to gatherings and tours to get a feel for daily life at {village}.",
-    bullets: ["Shared meals and gatherings", "Tours of the land", "Community celebrations", "Family gatherings"],
-    label: "View Events",
-    target: JOURNEY_TARGETS.events,
-  },
   {
     legacyId: "founding-seeder",
     stage: "Interested",
@@ -693,7 +782,8 @@ const RESIDENT_STEPS: StepDefault[] = [
     description: "Complete {village}'s community training, or show that you already live its practices.",
     bullets: ["Do the training, or show you already live it", "How the village communicates", "How conflict is handled", "How decisions are made"],
     label: "Learn About Training",
-    target: "/training",
+    // Each path's training step points at its own training page (the lead, 11 Nov 2026).
+    target: "/training/resident",
   },
   {
     legacyId: "love-letter",
@@ -801,6 +891,17 @@ export const RESIDENT_JOURNEY: PageSpec = buildJourney({
     secondary: ["Explore Housing", "/housing"],
   },
   beforeSteps: [
+    {
+      id: "entry",
+      label: "First steps",
+      shows:
+        "The heading over the first steps everyone takes. The steps themselves, and the two paths after them, are written once on the Steward journey page and shown here as well.",
+      hideable: true,
+      fields: [
+        text("heading", "Heading", 40, "Start with the first steps"),
+        long("body", "Paragraph", 200, "Everyone begins here, whichever path you walk. Tick each one off as you go."),
+      ],
+    },
     {
       id: "tenure",
       label: "How residents hold their homes",

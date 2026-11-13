@@ -40,6 +40,8 @@ export interface CircleView {
   grownFromOrgRoleId: string | null;
   order: number;
   isExample: boolean;
+  /** 0372: marked as the anchor circle by an admin. */
+  isAnchor: boolean;
   /** The wayfinding pair. Dropped by the old `/api/org` projection. */
   icon: string | null;
   color: string | null;
@@ -112,6 +114,7 @@ export function circleView(c: any): CircleView {
     grownFromOrgRoleId: str(c?.grownFromOrgRoleId),
     order: Number(c?.order ?? 0),
     isExample: !!c?.isExample,
+    isAnchor: !!c?.isAnchor,
     icon: str(c?.icon),
     color: str(c?.color),
     aliases: strArray(c?.aliases),

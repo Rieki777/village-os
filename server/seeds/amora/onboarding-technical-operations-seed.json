@@ -1,0 +1,16 @@
+{
+  "_what": "SUPERSEDED by onboarding-path-seed.json (Phase B, 11 Nov 2026), which holds the whole of our first 14 days. Kept so a person who applied this one step knows what moved: the Technical Operations conversation is now due on day 3, after the lead's ruling that it happens on day 2 or 3 after the hire. Apply the whole document instead. Nothing loads this file.",
+  "phase": {
+    "key": "first-days",
+    "name": "Your first days",
+    "fromDay": 1,
+    "toDay": 14,
+    "items": [
+      { "key": "companion", "kind": "companion", "title": "Meet your role's companion", "owner": "holder", "dueDay": 7, "doneWhen": "You have made a first request" },
+      { "key": "guide", "kind": "guide", "title": "Ask the guide three questions", "owner": "holder", "dueDay": 7, "doneWhen": "Three answers with sources" },
+      { "key": "access", "kind": "access", "title": "Book your access", "owner": "access", "dueDay": 7, "doneWhen": "Your access session is booked" },
+      { "key": "technical-operations-conversation", "kind": "plain", "title": "A conversation with the Technical Operations Steward: the tools, systems and access your role runs on", "owner": "holder", "dueDay": 3, "doneWhen": "The conversation is held" }
+    ]
+  },
+  "item": { "key": "technical-operations-conversation", "kind": "plain", "title": "A conversation with the Technical Operations Steward: the tools, systems and access your role runs on", "owner": "holder", "dueDay": 3, "doneWhen": "The conversation is held" }
+}
