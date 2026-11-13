@@ -42,11 +42,11 @@ hosting provider such as Railway. Both run the same software.
 ### 2. Get the files
 
 Either download `village-os-starter-<version>.zip` from the latest release at
-<https://github.com/Rieki777/village-os/releases> and unzip it, or clone the
+<https://github.com/ReGen-Civics/village-os/releases> and unzip it, or clone the
 whole repository if you mean to change the code:
 
 ```
-git clone --branch v1.2.0 https://github.com/Rieki777/village-os.git
+git clone --branch v1.3.0 https://github.com/ReGen-Civics/village-os.git
 ```
 
 That is the release this file belongs to. Never clone without `--branch`: the
@@ -141,7 +141,7 @@ in your Admin.
 ## Part B: a hosting provider (Railway)
 
 1. Create a project with three things: a MySQL service, a service that runs
-   the image `ghcr.io/rieki777/village-os:1.2.0`, and a volume on that service
+   the image `ghcr.io/regen-civics/village-os:1.3.0`, and a volume on that service
    mounted at `/app/data`.
 2. On your own computer, get the files (step 2 above) and run
    `node scripts/fork-init.mjs --village-name "Your Village" --admin-email you@example.org --domain village.example.org`.
@@ -229,7 +229,7 @@ drifts, the harder each upgrade is to merge.
 
 ## Help
 
-- Questions and bugs: <https://github.com/Rieki777/village-os/issues>. Say
+- Questions and bugs: <https://github.com/ReGen-Civics/village-os/issues>. Say
   what you did and what you saw, never a password or a key.
 - About the project: <https://regencivics.earth/village-os>.
 - A security problem: [`SECURITY.md`](SECURITY.md), privately, never in a

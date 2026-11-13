@@ -22,13 +22,13 @@ blank_issues_enabled: true
 # report was going.
 contact_links:
   - name: Security problem, reported to the Village OS maintainers
-    url: https://github.com/Rieki777/village-os/security/advisories/new
+    url: https://github.com/ReGen-Civics/village-os/security/advisories/new
     about: Goes privately to the platform maintainers, NOT to your village. A flaw here reaches every village, so it is fixed once for all of them. A public issue is a disclosure, and it reaches the villages last.
 
   - name: How to contribute to Village OS
-    url: https://github.com/Rieki777/village-os/blob/main/CONTRIBUTING.md
+    url: https://github.com/ReGen-Civics/village-os/blob/main/CONTRIBUTING.md
     about: The platform's own guide, not your village's. The gates, the writing rules, the migration rules, and how a module is reviewed.
 
   - name: Standing up or running a village
-    url: https://github.com/Rieki777/village-os/blob/main/docs/PROVISIONING.md
+    url: https://github.com/ReGen-Civics/village-os/blob/main/docs/PROVISIONING.md
     about: The platform's walkthrough from nothing to a running instance with your own name on it. If your village has edited its own copy, read that one first.

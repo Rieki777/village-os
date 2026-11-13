@@ -49,7 +49,7 @@ export interface TemplateVariable {
 /** 32 random bytes as 64 lowercase hex characters, the recipe fork-init and sealedBox use. */
 export const HEX64 = '${{secret(64, "0123456789abcdef")}}';
 
-export const TEMPLATE_IMAGE = "ghcr.io/rieki777/village-os:1.2.0"; // brand-ok: the upstream platform image's own address, never a village's brand
+export const TEMPLATE_IMAGE = "ghcr.io/regen-civics/village-os:1.3.0"; // brand-ok: the upstream platform image's own address, never a village's brand
 
 export const TEMPLATE_SERVICES = [
   {

@@ -18,7 +18,7 @@
  * `servedVillageSourceUrl`, so a bad value in the setting can never become a
  * broken or hostile link.
  */
-export const UPSTREAM_SOURCE_URL = "https://github.com/Rieki777/village-os";
+export const UPSTREAM_SOURCE_URL = "https://github.com/ReGen-Civics/village-os"; // brand-ok: the upstream platform's own repository or image address, never a village's brand
 
 /** The village's own setting in the game-variable registry (shared/gameVariables.ts). */
 export const VILLAGE_SOURCE_URL_KEY = "village.source_url";

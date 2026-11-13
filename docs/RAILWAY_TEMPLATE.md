@@ -34,7 +34,7 @@ generates, so it cannot quietly forget a variable.
 | Service | Source | Notes |
 |---|---|---|
 | `MySQL` | Railway's own MySQL database service | The app references its connection string. |
-| `village` | Docker image `ghcr.io/rieki777/village-os:1.2.0`, a pinned release, never `:edge` | Public networking on. Volume mounted at `/app/data` for member uploads. |
+| `village` | Docker image `ghcr.io/regen-civics/village-os:1.3.0`, a pinned release, never `:edge` | Public networking on. Volume mounted at `/app/data` for member uploads. |
 
 **Variables on the `village` service**
 
@@ -84,7 +84,7 @@ follow-up, not part of this spike.
 
 1. In Railway, open Workspace settings, then Templates, then New Template.
 2. Add a MySQL database service and name it `MySQL`.
-3. Add a service from the Docker image `ghcr.io/rieki777/village-os:1.2.0`, name it `village`,
+3. Add a service from the Docker image `ghcr.io/regen-civics/village-os:1.3.0`, name it `village`,
    turn on public networking, and attach a volume at `/app/data`.
 4. On `village`, add every variable in the table above with the value shown. Mark
    `BREAK_GLASS_ADMIN_EMAIL` as required, with the description "Your own email address".
