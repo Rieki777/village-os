@@ -473,12 +473,14 @@ jobs:
         # because a missing one of those is a silent degradation rather than a
         # crash and /health would still say ok.
         #   /                           dist/public, the SPA shell
-        #   /grounds/manifest.json      docs/prototypes/grounds-v0.html
+        #   docs/prototypes/grounds-v0.html is checked as a file in the image:
+        #   its routes are gated on the map module (R056), which a fresh village
+        #   has off, so /grounds/manifest.json answers 404 here by design.
         #   /api/agent/v1/openapi.json  docs/skills/references
         #   /images/avatars/...webp     server/assets/avatars
         run: |
           set -euo pipefail
-          for path in / /grounds/manifest.json /api/agent/v1/openapi.json /images/avatars/building-f-deep.webp; do
+          for path in / /api/agent/v1/openapi.json /images/avatars/building-f-deep.webp; do
             code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:3000${path}")
             echo "${code}  ${path}"
             if [ "$code" != "200" ]; then
@@ -486,6 +488,11 @@ jobs:
               exit 1
             fi
           done
+          if ! docker exec village test -s docs/prototypes/grounds-v0.html; then
+            echo "::error::docs/prototypes/grounds-v0.html is missing from the image. The Dockerfile copies it by hand."
+            exit 1
+          fi
+          echo "ok  docs/prototypes/grounds-v0.html is in the image"
 
       - name: Container logs
         if: always()
